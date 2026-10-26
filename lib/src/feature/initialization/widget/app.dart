@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_close/widgets/app_close_guard.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -35,7 +36,7 @@ class _AppState extends State<App> {
     theme: _theme(Brightness.light),
     darkTheme: _theme(Brightness.dark),
 
-    home: const WorkspaceConfigWidget(),
+    home: const AppCloseGuard(child: WorkspaceConfigWidget()),
     builder: (context, child) => MediaQuery(
       key: builderKey,
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
