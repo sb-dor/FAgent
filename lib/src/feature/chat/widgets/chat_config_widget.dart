@@ -4,6 +4,9 @@ import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.d
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_screen.dart';
+import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
+import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
+import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/controller/permission_answer_controller.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/data/permission_answer_repository.dart';
@@ -53,6 +56,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final PromptSendingController promptController;
   late final PermissionAnswerController permissionController;
   late final SessionConfigController configController;
+  late final FileMentionController fileMentionController;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
 
@@ -61,7 +65,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   @override
   void initState() {
     super.initState();
-    final hub = Dependencies.of(context).agentHub;
+    final dependencies = Dependencies.of(context);
+    final hub = dependencies.agentHub;
     chatController = ChatController(repository: ChatRepositoryImpl(hub: hub))..open(sessionId);
     recoveryController = ChatRecoveryController(repository: ChatRepositoryImpl(hub: hub));
     promptController = PromptSendingController(repository: PromptSendingRepositoryImpl(hub: hub));
@@ -69,6 +74,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       repository: PermissionAnswerRepositoryImpl(hub: hub),
     );
     configController = SessionConfigController(repository: SessionConfigRepositoryImpl(hub: hub));
+    fileMentionController = FileMentionController(
+      repository: ProjectFilesRepositoryImpl(environment: dependencies.shellEnvironment),
+    );
   }
 
   @override
@@ -78,12 +86,17 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     promptController.dispose();
     permissionController.dispose();
     configController.dispose();
+    fileMentionController.dispose();
     textController.dispose();
     composerFocus.dispose();
     super.dispose();
   }
 
-  /// Sends the composer text; the first prompt in a folder asks for trust.
+  /// Refreshes the file list (the agent may have added files).
+  void refreshFiles() => fileMentionController.load(widget.project.path);
+
+  /// Sends the composer text with the mentioned files as `resource_link`s;
+  /// the first prompt in a folder asks for trust.
   Future<void> send() async {
     final text = textController.text.trim();
     if (text.isEmpty) return;
@@ -91,8 +104,13 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
     }
+    final mentioned = mentionedFiles(text, fileMentionController.files.toSet());
     textController.clear();
-    promptController.send(sessionId, text);
+    promptController.send(
+      sessionId,
+      text,
+      resources: resourceLinks(widget.project.path, mentioned),
+    );
   }
 
   void stop() => promptController.stop(sessionId).ignore();

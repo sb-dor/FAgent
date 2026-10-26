@@ -2,8 +2,13 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 
 /// Sends prompts and stops turns.
 abstract interface class IPromptSendingRepository {
-  /// Sends [text] to chat [sessionId]; completes when the turn ends.
-  Future<void> send(int sessionId, String text);
+  /// Sends [text] with ACP content blocks [resources] (e.g. `resource_link`)
+  /// to chat [sessionId]; completes when the turn ends.
+  Future<void> send(
+    int sessionId,
+    String text, {
+    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
+  });
 
   /// Repeats the last prompt (after a login).
   Future<void> repeat(int sessionId);
@@ -23,7 +28,11 @@ final class PromptSendingRepositoryImpl implements IPromptSendingRepository {
   final AgentHub _hub;
 
   @override
-  Future<void> send(int sessionId, String text) => _hub.prompt(sessionId, text);
+  Future<void> send(
+    int sessionId,
+    String text, {
+    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
+  }) => _hub.prompt(sessionId, text, resources: resources);
 
   @override
   Future<void> repeat(int sessionId) => _hub.retryPrompt(sessionId);

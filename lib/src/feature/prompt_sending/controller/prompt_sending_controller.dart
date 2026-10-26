@@ -27,9 +27,13 @@ final class PromptSendingController extends StateController<PromptSendingState>
 
   final IPromptSendingRepository _repository;
 
-  void send(int sessionId, String text) => handle(() async {
+  void send(
+    int sessionId,
+    String text, {
+    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
+  }) => handle(() async {
     setState(const PromptSendingState.inProgress());
-    await _repository.send(sessionId, text);
+    await _repository.send(sessionId, text, resources: resources);
     setState(const PromptSendingState.completed());
   }, error: (error, stackTrace) async => setState(PromptSendingState.error(error: error)));
 

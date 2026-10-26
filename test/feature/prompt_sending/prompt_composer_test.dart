@@ -24,6 +24,8 @@ void main() {
     required bool canStop,
     VoidCallback? onSend,
     VoidCallback? onStop,
+    List<String>? mentionFiles,
+    VoidCallback? onMentionStart,
   }) => testApp(
     PromptComposer(
       controller: text,
@@ -32,6 +34,8 @@ void main() {
       canStop: canStop,
       onSend: onSend ?? () {},
       onStop: onStop ?? () {},
+      mentionFiles: mentionFiles,
+      onMentionStart: onMentionStart,
     ),
   );
 
@@ -66,5 +70,78 @@ void main() {
     await tester.pumpWidget(composer(canSend: false, canStop: true, onStop: () => stopped = true));
     await tester.tap(find.byTooltip('Stop'));
     expect(stopped, isTrue);
+  });
+
+  group('@ mentions', () {
+    const files = <String>[
+      'lib/main.dart',
+      'lib/src/app.dart',
+      'pubspec.yaml',
+      'test/app_test.dart',
+    ];
+
+    testWidgets('typing @ suggests files, arrows choose and Enter inserts', (tester) async {
+      var started = 0;
+      var sent = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          onSend: () => sent++,
+          mentionFiles: files,
+          onMentionStart: () => started++,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'look at @app');
+      await tester.pump();
+
+      expect(started, 1);
+      expect(find.text('app.dart'), findsOneWidget);
+      expect(find.text('app_test.dart'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(sent, 0);
+      expect(text.text, 'look at @test/app_test.dart ');
+      expect(find.text('app.dart'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(sent, 1);
+    });
+
+    testWidgets('Escape closes the list and Enter sends again', (tester) async {
+      var sent = 0;
+      await tester.pumpWidget(
+        composer(canSend: true, canStop: false, onSend: () => sent++, mentionFiles: files),
+      );
+      await tester.enterText(find.byType(TextField), '@pub');
+      await tester.pump();
+      expect(find.text('pubspec.yaml'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('pubspec.yaml'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(sent, 1);
+    });
+
+    testWidgets('suggestions appear when the file list arrives', (tester) async {
+      await tester.pumpWidget(
+        composer(canSend: true, canStop: false, mentionFiles: const <String>[]),
+      );
+      await tester.enterText(find.byType(TextField), '@main');
+      await tester.pump();
+      expect(find.text('main.dart'), findsNothing);
+
+      await tester.pumpWidget(composer(canSend: true, canStop: false, mentionFiles: files));
+      expect(find.text('main.dart'), findsOneWidget);
+    });
+
+    testWidgets('an e-mail address is not a mention', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false, mentionFiles: files));
+      await tester.enterText(find.byType(TextField), 'mail me@app');
+      await tester.pump();
+      expect(find.text('app.dart'), findsNothing);
+    });
   });
 }

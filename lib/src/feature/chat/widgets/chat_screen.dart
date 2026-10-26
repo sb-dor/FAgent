@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.d
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
+import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/bypass_gate_banner.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/session_config_bar.dart';
@@ -57,20 +58,25 @@ class _ChatScreenState extends State<ChatScreen> {
               enabled: view.status == SessionStatus.idle || view.status == SessionStatus.running,
               onChanged: _scope.setConfig,
             ),
-          PromptComposer(
-            controller: _scope.textController,
-            focusNode: _scope.composerFocus,
-            canSend:
-                !view.bypassBlocked &&
-                switch (view.status) {
-                  SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
-                  _ => false,
-                },
-            canStop:
-                view.status == SessionStatus.running ||
-                view.status == SessionStatus.awaitingPermission,
-            onSend: _scope.send,
-            onStop: _scope.stop,
+          StateConsumer<FileMentionController, FileMentionState>(
+            controller: _scope.fileMentionController,
+            builder: (context, _, _) => PromptComposer(
+              controller: _scope.textController,
+              focusNode: _scope.composerFocus,
+              canSend:
+                  !view.bypassBlocked &&
+                  switch (view.status) {
+                    SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
+                    _ => false,
+                  },
+              canStop:
+                  view.status == SessionStatus.running ||
+                  view.status == SessionStatus.awaitingPermission,
+              onSend: _scope.send,
+              onStop: _scope.stop,
+              mentionFiles: _scope.fileMentionController.files,
+              onMentionStart: _scope.refreshFiles,
+            ),
           ),
         ],
       ),
