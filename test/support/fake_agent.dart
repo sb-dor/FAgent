@@ -12,6 +12,8 @@
 // Run with `--cli auth login <method>` it prints a line and exits 0 (login).
 // session/load replays one user and one agent message for the loaded session;
 // loading the id `missing` fails with -32002 like the real adapter.
+// Sessions have a `mode` select option (default, acceptEdits, bypassPermissions)
+// that session/set_config_option changes.
 
 import 'dart:async';
 import 'dart:io';
@@ -26,6 +28,22 @@ Future<void> main(List<String> arguments) async {
   }
   var nextSession = 0;
   final cancels = <String, Completer<void>>{};
+  final modes = <String, String>{};
+
+  List<Map<String, Object?>> configOptions(String session) => <Map<String, Object?>>[
+    <String, Object?>{
+      'id': 'mode',
+      'name': 'Mode',
+      'category': 'mode',
+      'type': 'select',
+      'currentValue': modes[session] ?? 'default',
+      'options': <Map<String, Object?>>[
+        <String, Object?>{'value': 'default', 'name': 'Manual'},
+        <String, Object?>{'value': 'acceptEdits', 'name': 'Accept edits'},
+        <String, Object?>{'value': 'bypassPermissions', 'name': 'Bypass permissions'},
+      ],
+    },
+  ];
 
   Future<void> say(AcpAgentContext client, SessionId session, String text, {String? id}) =>
       client.updateSession(
@@ -55,7 +73,21 @@ Future<void> main(List<String> arguments) async {
               auth: AgentAuthCapabilities(),
             ),
           )
-          .onNewSession((_) => NewSessionResponse(sessionId: SessionId('s${nextSession++}')))
+          .onNewSession((_) {
+            final session = 's${nextSession++}';
+            return NewSessionResponse.fromJson(<String, Object?>{
+              'sessionId': session,
+              'configOptions': configOptions(session),
+            });
+          })
+          .onSetSessionConfigOption((context) {
+            final session = context.params.sessionId.value;
+            final request = context.params.toJson();
+            if (request['configId'] == 'mode') modes[session] = '${request['value']}';
+            return SetSessionConfigOptionResponse.fromJson(<String, Object?>{
+              'configOptions': configOptions(session),
+            });
+          })
           .onLoadSession((context) async {
             final session = context.params.sessionId;
             if (session.value == 'missing') {

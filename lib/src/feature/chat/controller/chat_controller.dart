@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_transcript.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
+import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'chat_controller.freezed.dart';
@@ -61,6 +62,8 @@ final class ChatController extends StateController<ChatState> with SequentialCon
   void _emit() {
     final session = _session;
     if (session == null || isDisposed) return;
+    final configOptions = ConfigOption.parseAll(session.configOptions.value);
+    final mode = permissionModeOf(configOptions)?.currentValue;
     setState(
       ChatState.completed(
         ChatView(
@@ -74,6 +77,8 @@ final class ChatController extends StateController<ChatState> with SequentialCon
           problem: session.problem.value,
           canForceStop: session.canForceStop.value,
           canRetryPrompt: session.canRetryPrompt.value,
+          configOptions: configOptions,
+          bypassBlocked: mode == bypassPermissionMode && !session.bypassAcknowledged.value,
         ),
       ),
     );
@@ -84,6 +89,8 @@ final class ChatController extends StateController<ChatState> with SequentialCon
     session.problem,
     session.canForceStop,
     session.canRetryPrompt,
+    session.configOptions,
+    session.bypassAcknowledged,
   ];
 
   void _detach() {

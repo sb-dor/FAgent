@@ -137,6 +137,21 @@ void main() {
     expect(live.store.events.last.payload, containsPair('stopReason', 'end_turn'));
   });
 
+  test('a config option change returns the agent\'s new options', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    await hub.prompt(chat, 'echo hi');
+    expect(live.configOptions.value.single, containsPair('currentValue', 'default'));
+
+    await hub.setConfigOption(chat, 'mode', 'acceptEdits');
+
+    expect(live.configOptions.value.single, containsPair('currentValue', 'acceptEdits'));
+    expect(live.bypassAcknowledged.value, isFalse);
+    await hub.acknowledgeBypass(chat);
+    expect(live.bypassAcknowledged.value, isTrue);
+  });
+
   test('permission requests wait for the user and are journaled', () async {
     final hub = newHub();
     final chat = await newChat();

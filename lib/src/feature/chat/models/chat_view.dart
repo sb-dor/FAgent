@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:meta/meta.dart';
 
 /// {@template chat_view}
@@ -17,6 +18,8 @@ class ChatView {
     this.problem,
     this.canForceStop = false,
     this.canRetryPrompt = false,
+    this.configOptions = const <ConfigOption>[],
+    this.bypassBlocked = false,
   });
 
   /// `sessions.id`.
@@ -39,4 +42,11 @@ class ChatView {
 
   /// The last prompt can be repeated after a login.
   final bool canRetryPrompt;
+
+  /// Agent settings (mode, model, …), once the agent session exists.
+  final List<ConfigOption> configOptions;
+
+  /// The mode is `bypassPermissions` and the user has not allowed it for this
+  /// chat: prompts are blocked.
+  final bool bypassBlocked;
 }

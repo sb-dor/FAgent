@@ -113,6 +113,10 @@ final class LiveSession {
   final ValueNotifier<List<Map<String, Object?>>> configOptions =
       ValueNotifier<List<Map<String, Object?>>>(const <Map<String, Object?>>[]);
 
+  /// The user allowed `bypassPermissions` for this chat (in this run). Until
+  /// then a chat whose mode is bypass does not accept prompts.
+  final ValueNotifier<bool> bypassAcknowledged = ValueNotifier<bool>(false);
+
   /// Raw `availableCommands` (slash commands). Kept in memory only.
   final ValueNotifier<List<Map<String, Object?>>> availableCommands =
       ValueNotifier<List<Map<String, Object?>>>(const <Map<String, Object?>>[]);
@@ -140,6 +144,7 @@ final class LiveSession {
     canForceStop.dispose();
     canRetryPrompt.dispose();
     configOptions.dispose();
+    bypassAcknowledged.dispose();
     availableCommands.dispose();
   }
 

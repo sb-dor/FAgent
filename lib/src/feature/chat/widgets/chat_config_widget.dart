@@ -11,6 +11,8 @@ import 'package:flutter_code_agent/src/feature/project_trust/widgets/project_tru
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/session_config/controller/session_config_controller.dart';
+import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 
 /// Gives the chat widgets access to [ChatConfigWidgetState].
 class ChatConfigInhWidget extends InheritedWidget {
@@ -50,6 +52,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final ChatRecoveryController recoveryController;
   late final PromptSendingController promptController;
   late final PermissionAnswerController permissionController;
+  late final SessionConfigController configController;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
 
@@ -65,6 +68,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     permissionController = PermissionAnswerController(
       repository: PermissionAnswerRepositoryImpl(hub: hub),
     );
+    configController = SessionConfigController(repository: SessionConfigRepositoryImpl(hub: hub));
   }
 
   @override
@@ -73,6 +77,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     recoveryController.dispose();
     promptController.dispose();
     permissionController.dispose();
+    configController.dispose();
     textController.dispose();
     composerFocus.dispose();
     super.dispose();
@@ -100,6 +105,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       permissionController.answer(sessionId: sessionId, requestId: requestId, optionId: optionId);
 
   void retry() => recoveryController.retry(sessionId);
+
+  void setConfig(String configId, Object value) => configController.set(sessionId, configId, value);
+
+  void allowBypass() => configController.acknowledgeBypass(sessionId);
 
   void login(String agentId) => recoveryController.login(agentId);
 

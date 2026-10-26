@@ -90,5 +90,9 @@
         "type": "int"
       }
     }
-  }
+  },
+  "bypassTitle": "Allow bypassing permissions?",
+  "bypassBody": "In this mode the agent runs commands and edits files without asking you. Use it only in a folder you can restore (for example a clean git checkout).",
+  "bypassAllow": "Allow for this chat",
+  "bypassInherited": "This chat starts in \"bypass permissions\" mode (from your Claude settings): the agent will not ask before acting. Allow it for this chat to continue, or pick another mode."
 }

@@ -405,6 +405,10 @@ final class AgentHub {
     });
   }
 
+  /// Records that the user allowed `bypassPermissions` in chat [sessionId].
+  Future<void> acknowledgeBypass(int sessionId) async =>
+      (await session(sessionId)).bypassAcknowledged.value = true;
+
   /// Answers permission request [requestId] of chat [sessionId] (control
   /// lane). Returns `false` for an unknown, finished or foreign request.
   bool resolvePermission(int sessionId, String requestId, String optionId) =>
