@@ -122,6 +122,7 @@ final class AgentHub {
   final Duration cancelTimeout;
 
   final Map<int, Future<LiveSession>> _sessions = <int, Future<LiveSession>>{};
+  final Map<int, LiveSession> _opened = <int, LiveSession>{};
   final Map<int, Future<void>> _setupLanes = <int, Future<void>>{};
   final StreamController<HubNotice> _notices = StreamController<HubNotice>.broadcast();
   bool _disposing = false;
@@ -140,6 +141,10 @@ final class AgentHub {
           case final LiveSession live)
         live,
   ];
+
+  /// The chat's runtime state if it was opened in this run, without opening
+  /// it (the sidebar shows statuses without loading every journal).
+  LiveSession? opened(int sessionId) => _opened[sessionId];
 
   /// Chats with a turn or setup in flight.
   Future<List<LiveSession>> busySessions() async =>
@@ -167,7 +172,7 @@ final class AgentHub {
     if (!_slots.containsKey(record.agentId)) {
       throw StateError('Session $sessionId uses unknown agent ${record.agentId}');
     }
-    return LiveSession(
+    return _opened[sessionId] = LiveSession(
       id: sessionId,
       agentId: record.agentId,
       cwd: project.path,

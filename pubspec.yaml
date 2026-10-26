@@ -37,10 +37,12 @@ dependencies:
   dart_acp_sdk: 0.1.1
   drift: ^2.35.3
   drift_flutter: ^0.3.1
+  file_selector: ^1.1.0
   flutter:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
+  flutter_markdown_plus: ^1.0.12
   freezed_annotation: ^3.1.0
   intl: any
   l: ^5.0.1
