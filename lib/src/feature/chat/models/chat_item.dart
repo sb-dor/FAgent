@@ -242,6 +242,29 @@ final class PermissionItem extends ChatItem {
   );
 }
 
+/// One file a turn changed.
+@immutable
+final class TurnFile {
+  /// Creates a changed file.
+  const TurnFile({required this.path, required this.status});
+
+  /// Path relative to the repository root.
+  final String path;
+
+  /// Git status letters now (`??`, ` M`, `R `, ` D`) or `clean`.
+  final String status;
+}
+
+/// Files a turn changed, including changes without a diff event (shell
+/// commands, hooks, formatters). Git repositories only.
+final class TurnFilesItem extends ChatItem {
+  /// Creates the list.
+  const TurnFilesItem(super.seq, {required this.files});
+
+  /// Changed files, sorted by path.
+  final List<TurnFile> files;
+}
+
 /// A turn ended in a way worth showing (cancelled, refused, limits hit).
 final class TurnEndItem extends ChatItem {
   /// Creates a turn end marker.

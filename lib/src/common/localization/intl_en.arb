@@ -77,5 +77,18 @@
   "loginWithClaude": "Log in to Claude",
   "loggingIn": "Logging in… finish in the browser window that opened.",
   "loginFailed": "Login did not complete.",
-  "details": "Details"
+  "details": "Details",
+  "filesChanged": "{count, plural, =1{1 file changed} other{{count} files changed}}",
+  "fileStatusAdded": "new",
+  "fileStatusModified": "modified",
+  "fileStatusDeleted": "deleted",
+  "fileStatusRenamed": "renamed",
+  "fileStatusReverted": "reverted",
+  "@filesChanged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

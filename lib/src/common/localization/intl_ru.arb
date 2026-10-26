@@ -56,5 +56,11 @@
   "loginWithClaude": "Войти в Claude",
   "loggingIn": "Вход… завершите его в открывшемся окне браузера.",
   "loginFailed": "Вход не завершён.",
-  "details": "Подробности"
+  "details": "Подробности",
+  "filesChanged": "{count, plural, =1{Изменён 1 файл} few{Изменено {count} файла} other{Изменено {count} файлов}}",
+  "fileStatusAdded": "новый",
+  "fileStatusModified": "изменён",
+  "fileStatusDeleted": "удалён",
+  "fileStatusRenamed": "переименован",
+  "fileStatusReverted": "возвращён"
 }

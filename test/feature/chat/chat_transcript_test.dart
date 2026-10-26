@@ -225,4 +225,18 @@ void main() {
     expect(item.text, 'Fix the bug in ');
     expect(item.resources, <String>['file:///p/lib/main.dart']);
   });
+
+  test('changed files of a turn become one item', () {
+    final items = ChatTranscript.fold(<SessionEvent>[
+      _app(0, SessionEventKind.turnFiles, <String, Object?>{
+        'files': <Object?>[
+          <String, Object?>{'path': 'lib/main.dart', 'status': ' M'},
+          <String, Object?>{'path': 'README.md', 'status': '??'},
+        ],
+      }),
+    ]);
+
+    final files = (items.single as TurnFilesItem).files;
+    expect(files.map((f) => f.path), <String>['lib/main.dart', 'README.md']);
+  });
 }

@@ -71,8 +71,12 @@ abstract final class ChatTranscript {
             items.add(SystemItem(event.seq, type: type, message: _string(payload['message'])));
           }
         case SessionEventKind.turnFiles:
-          // Rendered by the turn_files feature (later); nothing in the feed yet.
-          break;
+          final files = <TurnFile>[
+            for (final file in (_list(payload['files']) ?? const <Object?>[]).map(_map))
+              if (_string(file?['path']) case final String path)
+                TurnFile(path: path, status: _string(file?['status']) ?? ''),
+          ];
+          if (files.isNotEmpty) items.add(TurnFilesItem(event.seq, files: files));
         default:
           final update = _map(_map(payload['params'])?['update']);
           if (update == null) {

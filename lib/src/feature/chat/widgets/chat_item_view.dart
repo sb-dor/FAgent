@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/plan_card.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_call_card.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
+import 'package:flutter_code_agent/src/feature/turn_files/widgets/turn_files_card.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 /// {@template chat_item_view}
@@ -65,6 +66,7 @@ class ChatItemView extends StatelessWidget {
         item: permission,
         onAnswer: (optionId) => onAnswerPermission(permission.requestId, optionId),
       ),
+      TurnFilesItem(:final files) => TurnFilesCard(files: files),
       TurnEndItem(:final stopReason) => Center(
         child: Text(switch (stopReason) {
           'cancelled' => localization.turnCancelled,
