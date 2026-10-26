@@ -110,6 +110,14 @@ final class AgentConnection {
             // notification as handled.
             .onSessionUpdate((_) {});
 
+    // The initialize response passes the tap before anyone else can listen.
+    final initializeResult = Completer<Map<String, Object?>>();
+    final initializeWatch = incoming.stream.listen((message) {
+      final result = message.result;
+      if (!initializeResult.isCompleted && message.isResponse && result != null) {
+        if (result.containsKey('agentCapabilities')) initializeResult.complete(result);
+      }
+    });
     final connection = AgentConnection._(
       definition,
       process,
@@ -122,6 +130,9 @@ final class AgentConnection {
         connection._connection.lifecycle.ready,
         process.exitCode.then<void>((code) => throw StateError('agent exited with code $code')),
       ]).timeout(initializeTimeout);
+      connection.initializeResult = initializeResult.isCompleted
+          ? await initializeResult.future
+          : const <String, Object?>{};
       return connection;
     } on Object catch (error) {
       await connection.close();
@@ -131,6 +142,8 @@ final class AgentConnection {
             : '${definition.displayName} failed to start: $error',
         stderrTail: stderr.items,
       );
+    } finally {
+      await initializeWatch.cancel();
     }
   }
 
@@ -143,6 +156,9 @@ final class AgentConnection {
 
   /// The agent this connection runs.
   final AgentDefinition definition;
+
+  /// Raw `initialize` result: `agentCapabilities`, `authMethods`, `agentInfo`.
+  late final Map<String, Object?> initializeResult;
 
   final GroupedProcess _process;
   final AcpClientConnection _connection;
@@ -162,10 +178,13 @@ final class AgentConnection {
   /// Completes when the agent process exits.
   Future<int> get exitCode => _process.exitCode;
 
-  /// Closes the connection and stops the process group: stdin EOF first (the
-  /// adapter shuts its sessions down), then SIGTERM, then SIGKILL.
+  /// Closes the connection and stops the process group.
+  ///
+  /// The Claude adapter does not exit on stdin EOF (measured with 0.96.0) but
+  /// shuts down cleanly on SIGTERM within a second, together with the MCP
+  /// servers it started, so the EOF wait is short.
   Future<void> close({Duration gracePeriod = const Duration(seconds: 5)}) async {
     _connection.close();
-    await _process.stop(gracePeriod: gracePeriod);
+    await _process.stop(exitAfterEof: const Duration(milliseconds: 300), gracePeriod: gracePeriod);
   }
 }

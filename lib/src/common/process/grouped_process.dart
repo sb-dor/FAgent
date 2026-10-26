@@ -92,30 +92,51 @@ final class GroupedProcess {
   /// group no longer exists.
   bool signalGroup(io.ProcessSignal signal) => io.Process.killPid(-pgid, signal);
 
+  /// Whether any process of the group is still alive.
+  ///
+  /// Dart cannot send signal 0, so this probes with SIGCONT, which does
+  /// nothing to a running process.
+  bool get isGroupAlive => signalGroup(io.ProcessSignal.sigcont);
+
   /// Stops the job and everything in its group.
   ///
-  /// Closes stdin and waits up to [gracePeriod] for a clean exit, then sends
-  /// SIGTERM to the group and SIGKILL after another [gracePeriod]. The group
-  /// is signalled even after a clean exit: background processes the job left
-  /// behind are still members.
-  Future<void> stop({Duration gracePeriod = const Duration(seconds: 5)}) async {
+  /// Closes stdin and waits up to [exitAfterEof] for the job to exit by
+  /// itself (tools that do not exit on EOF should pass a short value), then
+  /// sends SIGTERM to the group and waits up to [gracePeriod] for **every**
+  /// member to exit; survivors get SIGKILL. The group is signalled even after
+  /// a clean exit: background processes the job left behind are still members.
+  Future<void> stop({
+    Duration exitAfterEof = const Duration(seconds: 5),
+    Duration gracePeriod = const Duration(seconds: 5),
+  }) async {
     try {
       await _process.stdin.close();
     } on Object catch (error) {
       l.v('GroupedProcess | stdin already closed: $error');
     }
-    final exited = await _waitForExit(gracePeriod);
+    final exited = await _waitForExit(exitAfterEof);
     if (!signalGroup(io.ProcessSignal.sigterm)) {
       if (!exited) _process.kill(io.ProcessSignal.sigkill);
       return;
     }
-    await _waitForExit(gracePeriod);
+    if (await _waitForGroupExit(gracePeriod)) return;
     if (signalGroup(io.ProcessSignal.sigkill)) {
-      l.w('GroupedProcess | group $pgid ignored SIGTERM, sent SIGKILL');
+      l.w(
+        'GroupedProcess | group $pgid still alive ${gracePeriod.inMilliseconds} ms after SIGTERM, sent SIGKILL',
+      );
     }
-    await _waitForExit(gracePeriod);
+    await _waitForGroupExit(gracePeriod);
   }
 
   Future<bool> _waitForExit(Duration timeout) =>
       _process.exitCode.then((_) => true).timeout(timeout, onTimeout: () => false);
+
+  Future<bool> _waitForGroupExit(Duration timeout) async {
+    final deadline = DateTime.now().add(timeout);
+    while (isGroupAlive) {
+      if (DateTime.now().isAfter(deadline)) return false;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    return true;
+  }
 }

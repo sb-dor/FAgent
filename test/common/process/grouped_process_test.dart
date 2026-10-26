@@ -7,8 +7,9 @@ import 'package:path/path.dart' as p;
 
 bool _isAlive(int pid) => Process.runSync('kill', <String>['-0', '$pid']).exitCode == 0;
 
-bool _isGroupAlive(int pgid) =>
-    Process.runSync('kill', <String>['-0', '--', '-$pgid']).exitCode == 0;
+/// Waits until the script printed `ready`, i.e. its `trap` is installed.
+Future<void> _ready(GroupedProcess process) =>
+    process.stdout.transform(utf8.decoder).firstWhere((line) => line.contains('ready'));
 
 void main() {
   late Directory temp;
@@ -64,21 +65,45 @@ sleep 300
     await process.stop(gracePeriod: const Duration(milliseconds: 500));
 
     expect(_isAlive(grandchild), isFalse);
-    expect(_isGroupAlive(process.pgid), isFalse);
+    expect(process.isGroupAlive, isFalse);
   });
 
   test('stop escalates to SIGKILL when the job ignores SIGTERM', () async {
     final stubborn = script('stubborn.sh', '''
 trap '' TERM
+echo ready
 while true; do sleep 1; done
 ''');
     final process = await GroupedProcess.start(stubborn.path, const <String>[]);
+    await _ready(process);
     final stopwatch = Stopwatch()..start();
-    await process.stop(gracePeriod: const Duration(milliseconds: 300));
+    await process.stop(
+      exitAfterEof: const Duration(milliseconds: 100),
+      gracePeriod: const Duration(milliseconds: 300),
+    );
 
     expect(await process.exitCode.timeout(const Duration(seconds: 2)), isNot(0));
-    expect(_isGroupAlive(process.pgid), isFalse);
+    expect(process.isGroupAlive, isFalse);
     expect(stopwatch.elapsed, lessThan(const Duration(seconds: 3)));
+  });
+
+  test('stop waits for every group member to finish its SIGTERM handler', () async {
+    final marker = File(p.join(temp.path, 'graceful.done'));
+    final slow = script('slow.sh', '''
+trap 'sleep 1; touch "${marker.path}"; exit 0' TERM
+echo ready
+while true; do sleep 0.1; done
+''');
+    final process = await GroupedProcess.start(slow.path, const <String>[]);
+    await _ready(process);
+
+    await process.stop(
+      exitAfterEof: const Duration(milliseconds: 100),
+      gracePeriod: const Duration(seconds: 3),
+    );
+
+    expect(marker.existsSync(), isTrue, reason: 'the handler should finish, not be SIGKILLed');
+    expect(process.isGroupAlive, isFalse);
   });
 
   test('a clean exit still cleans up background leftovers', () async {
