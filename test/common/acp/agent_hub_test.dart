@@ -152,6 +152,36 @@ void main() {
     expect(live.bypassAcknowledged.value, isTrue);
   });
 
+  test('a session in bypass mode holds the prompt until the user allows it', () async {
+    final hub = newHub();
+    final chat = await newChat(acpSessionId: 'bypass-1');
+    final live = await hub.session(chat);
+
+    await expectLater(hub.prompt(chat, 'echo hi'), throwsA(isA<BypassNotAllowedException>()));
+
+    expect(live.status.value, SessionStatus.idle);
+    expect(live.bypassBlocked, isTrue);
+    expect(live.canRetryPrompt.value, isTrue);
+    expect(live.store.events.where((e) => e.kind == SessionEventKind.prompt), isEmpty);
+    await hub.acknowledgeBypass(chat);
+    await hub.retryPrompt(chat);
+    expect(_agentText(live).join(), 'hi');
+  });
+
+  test('choosing bypass as the mode allows it for the chat', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    await hub.prompt(chat, 'echo hi');
+
+    await hub.setConfigOption(chat, 'mode', 'bypassPermissions');
+
+    expect(live.bypassAcknowledged.value, isTrue);
+    expect(live.bypassBlocked, isFalse);
+    await hub.prompt(chat, 'echo again');
+    expect(_agentText(live).join(), 'hiagain');
+  });
+
   test('permission requests wait for the user and are journaled', () async {
     final hub = newHub();
     final chat = await newChat();

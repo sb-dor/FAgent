@@ -21,6 +21,8 @@ sealed class AppCloseState with _$AppCloseState {
 
 /// Quits right away when nothing runs, otherwise asks first. Quitting stops
 /// the agents (their turns are cancelled) before the window closes.
+/// Sequential, not Droppable: a close request must not swallow the user's
+/// answer to the dialog; each step re-checks the state instead.
 final class AppCloseController extends StateController<AppCloseState>
     with SequentialControllerHandler {
   AppCloseController({
@@ -29,6 +31,9 @@ final class AppCloseController extends StateController<AppCloseState>
   });
 
   final IAppCloseRepository _repository;
+
+  /// Longest wait for the agents to stop before quitting anyway.
+  static const Duration shutdownTimeout = Duration(seconds: 30);
   StreamSubscription<void>? _requests;
 
   /// Starts intercepting window close requests.
@@ -55,18 +60,20 @@ final class AppCloseController extends StateController<AppCloseState>
 
   /// Keeps the app open.
   void cancel() => handle(() async {
-    if (state is AppClose$ConfirmingState) setState(const AppCloseState.initial());
+    if (state is! AppClose$ConfirmingState) return;
+    setState(const AppCloseState.initial());
+    await _repository.cancelQuit();
   });
 
   Future<void> _quit() async {
     setState(const AppCloseState.inProgress());
     try {
-      await _repository.shutdown();
+      await _repository.shutdown().timeout(shutdownTimeout);
     } on Object catch (error, stackTrace) {
-      // Quit anyway: the processes die with their process groups.
+      // Quit anyway rather than hang behind the barrier.
       l.w('App close | shutdown failed: $error', stackTrace);
     }
-    await _repository.closeWindow();
+    await _repository.quit();
   }
 
   @override

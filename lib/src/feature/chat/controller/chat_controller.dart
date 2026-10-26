@@ -63,7 +63,6 @@ final class ChatController extends StateController<ChatState> with SequentialCon
     final session = _session;
     if (session == null || isDisposed) return;
     final configOptions = ConfigOption.parseAll(session.configOptions.value);
-    final mode = permissionModeOf(configOptions)?.currentValue;
     setState(
       ChatState.completed(
         ChatView(
@@ -78,7 +77,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
           canForceStop: session.canForceStop.value,
           canRetryPrompt: session.canRetryPrompt.value,
           configOptions: configOptions,
-          bypassBlocked: mode == bypassPermissionMode && !session.bypassAcknowledged.value,
+          bypassBlocked: session.bypassBlocked,
         ),
       ),
     );

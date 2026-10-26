@@ -210,6 +210,12 @@ final class AgentHub {
       if (live.status.value != SessionStatus.idle) {
         throw StateError('The agent stopped while the session was being prepared');
       }
+      // The mode is only known once the agent session exists; the prompt waits
+      // for the user's consent and can be repeated after it.
+      if (live.bypassBlocked) {
+        live.canRetryPrompt.value = true;
+        throw const BypassNotAllowedException();
+      }
       // Reserve the turn before leaving the lane: a second prompt now sees
       // `running` and is rejected.
       _move(live, SessionStatus.running);
@@ -386,22 +392,36 @@ final class AgentHub {
     });
   }
 
-  /// Sets a config option (mode, model, …) of a live chat.
+  /// Sets a config option (mode, model, …) of a live chat. Choosing
+  /// `bypassPermissions` as the mode also allows it for the chat (the UI asks
+  /// the user first); a failed change takes that back.
   Future<void> setConfigOption(int sessionId, String configId, Object value) async {
     final live = await session(sessionId);
     await _setupLane(live, () async {
       final connection = _slots[live.agentId]!.connection;
       final acpId = live.acpSessionId;
       if (connection == null || acpId == null) throw StateError('The session is not live');
-      final response = await connection.agent.setSessionConfigOption(
-        SetSessionConfigOptionRequest.fromJson(<String, Object?>{
-          'sessionId': acpId,
-          'configId': configId,
-          if (value is bool) ...<String, Object?>{'type': 'boolean', 'value': value} else
-            'value': '$value',
-        }),
-      );
-      live.configOptions.value = _objects(_plain(response.toJson())['configOptions']);
+      final allowsBypass =
+          value == LiveSession.bypassMode &&
+          live.configOptions.value.any((o) => o['id'] == configId && LiveSession.isModeOption(o));
+      final acknowledged = live.bypassAcknowledged.value;
+      if (allowsBypass) live.bypassAcknowledged.value = true;
+      try {
+        final response = await connection.agent
+            .setSessionConfigOption(
+              SetSessionConfigOptionRequest.fromJson(<String, Object?>{
+                'sessionId': acpId,
+                'configId': configId,
+                if (value is bool) ...<String, Object?>{'type': 'boolean', 'value': value} else
+                  'value': '$value',
+              }),
+            )
+            .timeout(setupTimeout);
+        live.configOptions.value = _objects(_plain(response.toJson())['configOptions']);
+      } on Object {
+        if (allowsBypass) live.bypassAcknowledged.value = acknowledged;
+        rethrow;
+      }
     });
   }
 
@@ -936,4 +956,15 @@ final class AgentHub {
     ],
     _ => const <Map<String, Object?>>[],
   };
+}
+
+/// A prompt was not sent: the chat's mode is `bypassPermissions` and the user
+/// has not allowed it ([AgentHub.acknowledgeBypass]). The prompt can be
+/// repeated afterwards.
+final class BypassNotAllowedException implements Exception {
+  /// Creates the exception.
+  const BypassNotAllowedException();
+
+  @override
+  String toString() => 'BypassNotAllowedException: bypassPermissions is not allowed for this chat';
 }

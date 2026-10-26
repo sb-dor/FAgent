@@ -13,7 +13,8 @@
 // session/load replays one user and one agent message for the loaded session;
 // loading the id `missing` fails with -32002 like the real adapter.
 // Sessions have a `mode` select option (default, acceptEdits, bypassPermissions)
-// that session/set_config_option changes.
+// that session/set_config_option changes; a loaded session whose id starts
+// with `bypass` is in bypassPermissions mode (as a session saved in it).
 
 import 'dart:async';
 import 'dart:io';
@@ -104,7 +105,10 @@ Future<void> main(List<String> arguments) async {
               ),
             );
             await say(context.client, session, 'earlier answer');
-            return LoadSessionResponse();
+            if (session.value.startsWith('bypass')) modes[session.value] = 'bypassPermissions';
+            return LoadSessionResponse.fromJson(<String, Object?>{
+              'configOptions': configOptions(session.value),
+            });
           })
           .onCancelSession((context) {
             cancels.remove(context.params.sessionId.value)?.complete();

@@ -55,7 +55,12 @@ class _ChatScreenState extends State<ChatScreen> {
           if (view.configOptions.isNotEmpty)
             SessionConfigBar(
               options: view.configOptions,
-              enabled: view.status == SessionStatus.idle || view.status == SessionStatus.running,
+              enabled: switch (view.status) {
+                SessionStatus.idle ||
+                SessionStatus.running ||
+                SessionStatus.awaitingPermission => true,
+                _ => false,
+              },
               onChanged: _scope.setConfig,
             ),
           StateConsumer<FileMentionController, FileMentionState>(

@@ -1,6 +1,5 @@
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
-import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'session_config_controller.freezed.dart';
@@ -28,17 +27,14 @@ final class SessionConfigController extends StateController<SessionConfigState>
   final ISessionConfigRepository _repository;
 
   /// Sets [configId] to [value]. Choosing `bypassPermissions` is allowed only
-  /// after the UI asked the user; it also allows bypass for the chat.
+  /// after the UI asked the user; the hub then allows bypass for the chat.
   void set(int sessionId, String configId, Object value) => handle(() async {
     setState(const SessionConfigState.inProgress());
-    if (value == bypassPermissionMode) await _repository.acknowledgeBypass(sessionId);
     await _repository.set(sessionId, configId, value);
     setState(const SessionConfigState.completed());
   }, error: (error, stackTrace) async => setState(SessionConfigState.error(error: error)));
 
   /// Allows the bypass mode the chat already has (from the user's settings).
-  void acknowledgeBypass(int sessionId) => handle(() async {
-    await _repository.acknowledgeBypass(sessionId);
-    setState(const SessionConfigState.completed());
-  }, error: (error, stackTrace) async => setState(SessionConfigState.error(error: error)));
+  /// Not a handled operation: a setting change in flight must not drop it.
+  Future<void> acknowledgeBypass(int sessionId) => _repository.acknowledgeBypass(sessionId);
 }

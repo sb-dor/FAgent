@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
@@ -135,6 +136,18 @@ void main() {
 
       await tester.pumpWidget(composer(canSend: true, canStop: false, mentionFiles: files));
       expect(find.text('main.dart'), findsOneWidget);
+    });
+
+    testWidgets('clicking a suggestion inserts it and keeps the caret', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false, mentionFiles: files));
+      await tester.enterText(find.byType(TextField), '@main');
+      await tester.pump();
+
+      await tester.tap(find.text('main.dart'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+
+      expect(text.text, '@lib/main.dart ');
+      expect(focus.hasFocus, isTrue);
     });
 
     testWidgets('an e-mail address is not a mention', (tester) async {

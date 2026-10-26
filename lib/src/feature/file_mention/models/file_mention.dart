@@ -3,7 +3,6 @@ import 'package:path/path.dart' as p;
 // `@` mentions in the prompt text.
 
 final RegExp _query = RegExp(r'(?:^|\s)@([^\s@]*)$');
-final RegExp _mention = RegExp(r'(?:^|\s)@([^\s@]+)');
 
 /// The mention being typed right before [cursor]: its start (the `@`) and
 /// the query after it. `null` when the cursor is not in a mention.
@@ -50,20 +49,31 @@ bool _inOrder(String path, String needle) {
   return i == needle.length;
 }
 
-final RegExp _trailingPunctuation = RegExp(r'''[.,;:!?)\]}'"]+$''');
-
 /// Mentioned paths of [text] that are among [files], in order, once each.
-/// Punctuation right after a path (`@main.dart,`) is not part of it.
-List<String> mentionedFiles(String text, Set<String> files) => <String>{
-  for (final match in _mention.allMatches(text))
-    if (_known(match.group(1)!, files) case final String path) path,
-}.toList();
-
-String? _known(String mention, Set<String> files) {
-  if (files.contains(mention)) return mention;
-  final trimmed = mention.replaceFirst(_trailingPunctuation, '');
-  return files.contains(trimmed) ? trimmed : null;
+/// A mention is `@` at the start or after whitespace followed by the longest
+/// known path, so paths with spaces or `@` (`Icon@2x.png`) work and
+/// punctuation after a path (`@main.dart,`) is not part of it.
+List<String> mentionedFiles(String text, Set<String> files) {
+  final found = <String>{};
+  for (var at = text.indexOf('@'); at != -1; at = text.indexOf('@', at + 1)) {
+    if (at > 0 && !_isSpace(text.codeUnitAt(at - 1))) continue;
+    String? longest;
+    for (final file in files) {
+      if (file.length > (longest?.length ?? 0) &&
+          text.startsWith(file, at + 1) &&
+          _endsMention(text, at + 1 + file.length)) {
+        longest = file;
+      }
+    }
+    if (longest != null) found.add(longest);
+  }
+  return found.toList();
 }
+
+bool _isSpace(int unit) => unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;
+
+bool _endsMention(String text, int end) =>
+    end == text.length || _isSpace(text.codeUnitAt(end)) || '.,;:!?)]}\'"'.contains(text[end]);
 
 /// ACP `resource_link` blocks for [paths] relative to [root].
 List<Map<String, Object?>> resourceLinks(String root, List<String> paths) => <Map<String, Object?>>[

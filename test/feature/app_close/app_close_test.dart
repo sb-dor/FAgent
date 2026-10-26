@@ -31,7 +31,10 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
   }
 
   @override
-  Future<void> closeWindow() async => calls.add('closeWindow');
+  Future<void> quit() async => calls.add('quit');
+
+  @override
+  Future<void> cancelQuit() async => calls.add('cancelQuit');
 }
 
 void main() {
@@ -59,7 +62,7 @@ void main() {
     await tester.pump();
 
     expect(find.byType(AlertDialog), findsNothing);
-    expect(repository.calls, <String>['shutdown', 'closeWindow']);
+    expect(repository.calls, <String>['shutdown', 'quit']);
     await disposeTestApp(tester, dependencies);
   });
 
@@ -75,7 +78,7 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.byType(AlertDialog), findsNothing);
-    expect(repository.calls, isEmpty);
+    expect(repository.calls, <String>['cancelQuit']);
 
     repository.close();
     await tester.pump();
@@ -84,7 +87,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('Quit stops the agents behind a barrier, then closes the window', (tester) async {
+  testWidgets('Quit stops the agents behind a barrier, then quits', (tester) async {
     final repository = await pumpGuard(tester, busy: 1)
       ..shutdownGate = Completer<void>()
       ..close();
@@ -104,7 +107,7 @@ void main() {
     repository.shutdownGate!.complete();
     await tester.pump();
     await tester.pump();
-    expect(repository.calls, <String>['shutdown', 'closeWindow']);
+    expect(repository.calls, <String>['shutdown', 'quit']);
     await disposeTestApp(tester, dependencies);
   });
 }

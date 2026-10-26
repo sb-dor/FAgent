@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io' as io;
 
+import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:l/l.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Closing the app while agents work.
@@ -17,8 +20,11 @@ abstract interface class IAppCloseRepository {
   /// Stops the agents and closes the database.
   Future<void> shutdown();
 
-  /// Closes the window, which quits the app.
-  Future<void> closeWindow();
+  /// Quits the app (answering a pending ⌘Q or logout on macOS).
+  Future<void> quit();
+
+  /// Keeps the app open, declining a pending ⌘Q or logout.
+  Future<void> cancelQuit();
 }
 
 /// window_manager-backed [IAppCloseRepository].
@@ -28,6 +34,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
 
   final AgentHub _hub;
   final AppDatabase _database;
+
+  /// macOS: `AppDelegate` waits for the answer to a quit request.
+  static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
 
   @override
   Stream<void> closeRequests() {
@@ -59,9 +68,25 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   }
 
   @override
-  Future<void> closeWindow() async {
-    await windowManager.setPreventClose(false);
-    await windowManager.close();
+  Future<void> quit() async {
+    try {
+      if (io.Platform.isMacOS) {
+        await _channel.invokeMethod<void>('quit');
+      } else {
+        await windowManager.setPreventClose(false);
+        await windowManager.destroy();
+      }
+    } on Object catch (error, stackTrace) {
+      // Never leave the user with a window that cannot close.
+      l.w('App close | quitting through the window failed: $error', stackTrace);
+      io.exit(0);
+    }
+  }
+
+  @override
+  Future<void> cancelQuit() async {
+    if (!io.Platform.isMacOS) return;
+    await _channel.invokeMethod<void>('cancelQuit');
   }
 }
 

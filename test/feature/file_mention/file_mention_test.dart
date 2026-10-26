@@ -48,6 +48,17 @@ void main() {
     );
   });
 
+  test('mentionedFiles takes the longest known path, with spaces or @ in it', () {
+    const files = <String>{'lib/a', 'lib/a b.dart', 'ios/Runner/Icon-App-20x20@2x.png'};
+
+    expect(
+      mentionedFiles('fix @lib/a b.dart and @ios/Runner/Icon-App-20x20@2x.png.', files),
+      <String>['lib/a b.dart', 'ios/Runner/Icon-App-20x20@2x.png'],
+    );
+    expect(mentionedFiles('@lib/a', files), <String>['lib/a']);
+    expect(mentionedFiles('@lib/abc', files), isEmpty);
+  });
+
   test('resourceLinks point at absolute file URIs', () {
     expect(resourceLinks('/work/my app', <String>['lib/main.dart']), <Map<String, Object?>>[
       <String, Object?>{

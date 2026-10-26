@@ -126,7 +126,13 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
 
   void setConfig(String configId, Object value) => configController.set(sessionId, configId, value);
 
-  void allowBypass() => configController.acknowledgeBypass(sessionId);
+  /// Allows bypass for this chat and sends the prompt that was held back.
+  Future<void> allowBypass() async {
+    await configController.acknowledgeBypass(sessionId);
+    if (chatController.state case Chat$CompletedState(:final view) when view.canRetryPrompt) {
+      repeatPrompt();
+    }
+  }
 
   void login(String agentId) => recoveryController.login(agentId);
 

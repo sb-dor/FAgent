@@ -33,18 +33,28 @@ final class ProjectFilesRepositoryImpl implements IProjectFilesRepository {
 
   @override
   Future<List<String>> list(String root, {int limit = 5000}) async {
-    final result = await io.Process.run(
-      _environment.which('git') ?? 'git',
-      <String>['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-      environment: _environment.variables,
-      includeParentEnvironment: false,
-    );
-    if (result.exitCode == 0) {
-      final files = '${result.stdout}'.split('\u0000').where((f) => f.isNotEmpty).toSet().toList()
-        ..sort();
-      return files.take(limit).toList();
+    final io.ProcessResult result;
+    try {
+      result = await io.Process.run(
+        _environment.which('git') ?? 'git',
+        <String>['-C', root, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+        environment: _environment.variables,
+        includeParentEnvironment: false,
+      );
+    } on io.ProcessException {
+      // No git on this machine.
+      return Isolate.run(() => walk(root, limit: limit));
     }
-    return Isolate.run(() => walk(root, limit: limit));
+    if (result.exitCode != 0) return Isolate.run(() => walk(root, limit: limit));
+    final output = '${result.stdout}';
+    return Isolate.run(() => parseLsFiles(output, limit: limit));
+  }
+
+  /// Sorted unique paths of `git ls-files -z` output.
+  @visibleForTesting
+  static List<String> parseLsFiles(String output, {int limit = 5000}) {
+    final files = output.split('\u0000').where((f) => f.isNotEmpty).toSet().toList()..sort();
+    return files.take(limit).toList();
   }
 
   /// Files under [root] without following links, skipping [skippedFolders]

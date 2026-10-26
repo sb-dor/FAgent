@@ -21,7 +21,8 @@ sealed class FileMentionState with _$FileMentionState {
 }
 
 /// The project's files for `@` mentions. Reloaded when a mention starts, so
-/// files the agent created show up.
+/// files the agent created show up. Droppable, not Sequential: each `@`
+/// asks for a reload, and one already running gives the same answer.
 final class FileMentionController extends StateController<FileMentionState>
     with DroppableControllerHandler {
   FileMentionController({

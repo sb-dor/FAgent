@@ -169,11 +169,14 @@ class _PromptComposerState extends State<PromptComposer> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                // Part of the field's tap region: a click keeps the caret.
                 if (_suggestions.isNotEmpty)
-                  _MentionSuggestions(
-                    files: _suggestions,
-                    highlighted: _highlighted,
-                    onSelected: _insert,
+                  TextFieldTapRegion(
+                    child: _MentionSuggestions(
+                      files: _suggestions,
+                      highlighted: _highlighted,
+                      onSelected: _insert,
+                    ),
                   ),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,

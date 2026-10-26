@@ -57,7 +57,8 @@ class ChatProblemBanner extends StatelessWidget {
         ),
       if (view.canForceStop)
         OutlinedButton(onPressed: onForceStop, child: Text(localization.forceStop)),
-      if (view.canRetryPrompt)
+      // A prompt held back by the bypass gate is sent by its banner.
+      if (view.canRetryPrompt && !view.bypassBlocked)
         FilledButton.tonal(onPressed: onRepeatPrompt, child: Text(localization.repeatPrompt)),
     ];
     if (actions.isEmpty) return const SizedBox.shrink();

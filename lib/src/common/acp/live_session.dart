@@ -117,6 +117,20 @@ final class LiveSession {
   /// then a chat whose mode is bypass does not accept prompts.
   final ValueNotifier<bool> bypassAcknowledged = ValueNotifier<bool>(false);
 
+  /// The agent's permission mode is `bypassPermissions` (e.g. from the user's
+  /// Claude settings or a loaded session) and the user has not allowed it in
+  /// this run.
+  bool get bypassBlocked =>
+      !bypassAcknowledged.value &&
+      configOptions.value.any((o) => isModeOption(o) && o['currentValue'] == bypassMode);
+
+  /// Permission mode that accepts every permission.
+  static const String bypassMode = 'bypassPermissions';
+
+  /// Whether raw config option [option] is the permission mode.
+  static bool isModeOption(Map<String, Object?> option) =>
+      option['id'] == 'mode' || option['category'] == 'mode';
+
   /// Raw `availableCommands` (slash commands). Kept in memory only.
   final ValueNotifier<List<Map<String, Object?>>> availableCommands =
       ValueNotifier<List<Map<String, Object?>>>(const <Map<String, Object?>>[]);
