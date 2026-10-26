@@ -18,6 +18,7 @@ analyzer:
     - "lib/src/common/constants/pubspec.yaml.g.dart"
     - "lib/src/common/model/generated/**"
     - "**.g.dart"
+    - "test/generated_migrations/**"
     - "**.gql.dart"
     - "**.freezed.dart"
     - "**.config.dart"
