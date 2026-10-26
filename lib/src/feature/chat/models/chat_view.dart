@@ -11,6 +11,7 @@ class ChatView {
   /// {@macro chat_view}
   const ChatView({
     required this.sessionId,
+    required this.agentId,
     required this.items,
     required this.status,
     this.problem,
@@ -20,6 +21,9 @@ class ChatView {
 
   /// `sessions.id`.
   final int sessionId;
+
+  /// Agent that runs the chat.
+  final String agentId;
 
   /// The feed.
   final List<ChatItem> items;

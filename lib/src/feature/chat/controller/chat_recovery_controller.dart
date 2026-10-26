@@ -32,6 +32,15 @@ final class ChatRecoveryController extends StateController<ChatRecoveryState>
     setState(const ChatRecoveryState.completed());
   }, error: (error, stackTrace) async => setState(ChatRecoveryState.error(error: error)));
 
+  void login(String agentId) => handle(() async {
+    setState(const ChatRecoveryState.inProgress());
+    if (await _repository.login(agentId)) {
+      setState(const ChatRecoveryState.completed());
+    } else {
+      setState(const ChatRecoveryState.error());
+    }
+  }, error: (error, stackTrace) async => setState(ChatRecoveryState.error(error: error)));
+
   void startNewAgentSession(int sessionId) => handle(() async {
     setState(const ChatRecoveryState.inProgress());
     await _repository.startNewAgentSession(sessionId);

@@ -14,6 +14,10 @@ abstract interface class IChatRepository {
 
   /// Destructive: a new agent session; the agent loses the chat's context.
   Future<void> startNewAgentSession(int sessionId);
+
+  /// Logs in to [agentId] with its first login method; `true` on success.
+  /// Chats waiting for the login continue by themselves.
+  Future<bool> login(String agentId);
 }
 
 /// AgentHub-backed [IChatRepository].
@@ -34,4 +38,10 @@ final class ChatRepositoryImpl implements IChatRepository {
 
   @override
   Future<void> startNewAgentSession(int sessionId) => _hub.startNewAgentSession(sessionId);
+
+  @override
+  Future<bool> login(String agentId) async {
+    final method = _hub.agents.firstWhere((a) => a.id == agentId).loginArguments.keys.first;
+    return (await _hub.login(agentId, method)).succeeded;
+  }
 }

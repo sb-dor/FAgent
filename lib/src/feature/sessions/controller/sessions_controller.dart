@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -40,6 +42,10 @@ final class SessionsController extends StateController<SessionsState>
           onError: (Object error) => setState(SessionsState.error(error: error)),
         );
   }, error: (error, stackTrace) async => setState(SessionsState.error(error: error)));
+
+  /// Live status of chat [sessionId], or `null` while it was not opened in
+  /// this run.
+  ValueListenable<SessionStatus>? statusOf(int sessionId) => _repository.statusOf(sessionId);
 
   @override
   void dispose() {

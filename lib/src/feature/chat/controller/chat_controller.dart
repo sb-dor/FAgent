@@ -65,6 +65,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
       ChatState.completed(
         ChatView(
           sessionId: session.id,
+          agentId: session.agentId,
           items: ChatTranscript.fold(
             session.store.events,
             openPermissionIds: _repository.openPermissionIds(session.id),

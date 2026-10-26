@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 /// {@template app}
@@ -35,7 +35,7 @@ class _AppState extends State<App> {
     theme: _theme(Brightness.light),
     darkTheme: _theme(Brightness.dark),
 
-    home: const WorkspaceWidget(),
+    home: const WorkspaceConfigWidget(),
     builder: (context, child) => MediaQuery(
       key: builderKey,
       data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
