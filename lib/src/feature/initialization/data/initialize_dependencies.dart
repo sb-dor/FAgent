@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
@@ -39,4 +40,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.database = AppDatabase.defaults(name: 'app_database'),
   'Resolve shell environment': (dependencies) async =>
       dependencies.shellEnvironment = await ShellEnvironment.resolve(),
+  'Create agent hub': (dependencies) => dependencies.agentHub = AgentHub(
+    database: dependencies.database,
+    environment: dependencies.shellEnvironment,
+  ),
 };

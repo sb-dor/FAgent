@@ -125,6 +125,13 @@ final class AgentConnection {
       incoming,
       stderr,
     );
+    unawaited(process.exitCode.then((_) => connection._alive = false));
+    unawaited(
+      connection._connection.closed.then(
+        (_) => connection._alive = false,
+        onError: (Object _) => connection._alive = false,
+      ),
+    );
     try {
       await Future.any<void>(<Future<void>>[
         connection._connection.lifecycle.ready,
@@ -178,12 +185,18 @@ final class AgentConnection {
   /// Completes when the agent process exits.
   Future<int> get exitCode => _process.exitCode;
 
+  bool _alive = true;
+
+  /// `false` once the process exited or the connection closed.
+  bool get isAlive => _alive;
+
   /// Closes the connection and stops the process group.
   ///
   /// The Claude adapter does not exit on stdin EOF (measured with 0.96.0) but
   /// shuts down cleanly on SIGTERM within a second, together with the MCP
   /// servers it started, so the EOF wait is short.
   Future<void> close({Duration gracePeriod = const Duration(seconds: 5)}) async {
+    _alive = false;
     _connection.close();
     await _process.stop(exitAfterEof: const Duration(milliseconds: 300), gracePeriod: gracePeriod);
   }

@@ -7,7 +7,11 @@ import 'package:l/l.dart';
 // ignore: experimental_member_use
 void appZone(Future<void> Function() fn) => l.capture<void>(
   () => runZonedGuarded<void>(() => fn(), ErrorUtil.logError),
-  const LogOptions(messageFormatting: _messageFormatting, handlePrint: true, outputInRelease: false),
+  const LogOptions(
+    messageFormatting: _messageFormatting,
+    handlePrint: true,
+    outputInRelease: false,
+  ),
 );
 
 /// Formats the log message.

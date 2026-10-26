@@ -29,6 +29,9 @@ Future<AgentDefinition> compileFakeAgent(
     id: 'fake',
     displayName: 'Fake agent',
     executable: output,
+    loginArguments: const <String, List<String>>{
+      'claude-ai-login': <String>['--cli', 'auth', 'login', '--claudeai'],
+    },
     environment: environment,
   );
 }

@@ -9,14 +9,21 @@
 //   auth          fail with authRequired (-32000)
 //   stderr <text> write <text> to stderr, then reply `ok`
 //   crash         exit the process with code 3
-// session/load replays one user and one agent message for the loaded session.
+// Run with `--cli auth login <method>` it prints a line and exits 0 (login).
+// session/load replays one user and one agent message for the loaded session;
+// loading the id `missing` fails with -32002 like the real adapter.
 
 import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_acp_sdk/dart_acp_sdk.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> arguments) async {
+  // `--cli auth login …` pretends to be the adapter's login command.
+  if (arguments.isNotEmpty && arguments.first == '--cli') {
+    stdout.writeln('Logged in (${arguments.last})');
+    exit(0);
+  }
   var nextSession = 0;
   final cancels = <String, Completer<void>>{};
 
@@ -51,6 +58,11 @@ Future<void> main() async {
           .onNewSession((_) => NewSessionResponse(sessionId: SessionId('s${nextSession++}')))
           .onLoadSession((context) async {
             final session = context.params.sessionId;
+            if (session.value == 'missing') {
+              throw JsonRpcRequestException(
+                JsonRpcErrorObject(code: -32002, message: 'Resource not found: missing'),
+              );
+            }
             await context.client.updateSession(
               SessionNotification(
                 sessionId: session,
