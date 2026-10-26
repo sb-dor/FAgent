@@ -21,8 +21,11 @@ final class GroupedProcess {
   // "$0" "$@" keep every argument intact: nothing is re-parsed by the shell.
   // `set +m` right after the fork: the job already has its own group, and job
   // control off keeps "[1]+ Done" notifications out of the child's stderr.
+  // `wait … 2>/dev/null` hides the shell's own "Terminated: 15" report; the
+  // job's stderr is a separate descriptor and is not affected.
   static const String _script =
-      r'set -m; "$0" "$@" & pid=$!; set +m; echo "__FLUTTER_CODE_AGENT_PGID__ $pid" >&2; wait $pid';
+      r'set -m; "$0" "$@" & pid=$!; set +m; echo "__FLUTTER_CODE_AGENT_PGID__ $pid" >&2; '
+      r'wait $pid 2>/dev/null';
 
   /// Starts [executable] with [arguments] in a new process group.
   ///
