@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 
 /// {@template dependencies}
@@ -20,6 +21,9 @@ class Dependencies {
 
   /// Database
   late final AppDatabase database;
+
+  /// Login-shell environment for every child process (agents, `flutter`, `git`).
+  late final ShellEnvironment shellEnvironment;
 
   @override
   String toString() => 'Dependencies{}';

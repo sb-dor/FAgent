@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:l/l.dart';
@@ -36,4 +37,6 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   'Observer state management': (_) => Controller.observer = const ControllerObserver(),
   'Connect to database': (dependencies) =>
       dependencies.database = AppDatabase.defaults(name: 'app_database'),
+  'Resolve shell environment': (dependencies) async =>
+      dependencies.shellEnvironment = await ShellEnvironment.resolve(),
 };
