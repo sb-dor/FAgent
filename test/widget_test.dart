@@ -1,30 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:flutter_agent/main.dart';
-
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  Widget app(Locale locale) => MaterialApp(
+    locale: locale,
+    localizationsDelegates: const <LocalizationsDelegate<Object?>>[
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+      Localization.delegate,
+    ],
+    supportedLocales: Localization.supportedLocales,
+    home: const WorkspaceWidget(),
+  );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() {
+    final binding = TestWidgetsFlutterBinding.ensureInitialized();
+    binding.platformDispatcher.views.first
+      ..physicalSize = const Size(1280, 800)
+      ..devicePixelRatio = 1;
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+  testWidgets('Workspace shows the three empty panes', (tester) async {
+    await tester.pumpWidget(app(const Locale('en')));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('Projects'), findsOneWidget);
+    expect(find.text('No projects yet'), findsOneWidget);
+    expect(find.text('Open a project and start a chat with an agent'), findsOneWidget);
+    expect(find.text('Run'), findsOneWidget);
+  });
+
+  testWidgets('Workspace is localized to Russian', (tester) async {
+    await tester.pumpWidget(app(const Locale('ru')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Проекты'), findsOneWidget);
+    expect(find.text('Запуск'), findsOneWidget);
   });
 }

@@ -18,7 +18,7 @@ Flutter-проект и работает с ним в одном окне: ча�
 | Первый агент | Claude Code через `@agentclientprotocol/claude-agent-acp` | Самый сильный в коде, у вас уже есть подписка |
 | Платформы | macOS сначала; Linux/Windows — папки оставляем, код без привязки к macOS, сборка через CI позже. `web/` удаляем | Web не умеет запускать процессы; iOS-симулятор только на Mac |
 | Структура | Один Flutter-проект, ядро без зависимости от UI | Workspace — когда появится реальная причина |
-| Стек | control, octopus, drift, freezed, l, window_manager, intl_utils; архитектура по `AI_INSTRUCTIONS.md` | Ваш привычный стек; репо становится эталоном правил |
+| Стек | control (git, закреплён на коммите), drift, freezed, l, window_manager, встроенный gen-l10n; octopus — когда понадобится навигация; архитектура по `docs/AI_INSTRUCTIONS.md` | Ваш привычный стек; репо становится эталоном правил |
 | Знания для агента | Свой MCP-сервер приложения + Dart MCP-сервер, передаются в каждую ACP-сессию (`session/new` → `mcpServers`) | Один механизм для всех агентов, проект пользователя не засоряется |
 | История сессий | drift (проекты, сессии, сообщения) + ACP `session/load` для продолжения, где агент это умеет | История не зависит от агента |
 | Лицензия | MIT | |
@@ -36,9 +36,10 @@ lib/
     │   ├── shell_env/        # PATH из login shell (GUI-приложение macOS его не наследует)
     │   ├── database/         # drift: projects, sessions, messages
     │   ├── localization/     # intl_en.arb, intl_ru.arb
-    │   ├── dependencies/     # Dependencies + DependenciesScope
     │   └── widget/
     └── feature/
+        ├── initialization/       # Dependencies, DependenciesScope, шаги инициализации
+        ├── workspace/            # каркас окна: сайдбар, чат, панель запуска
         ├── projects/             # список проектов и сессий (сайдбар)
         ├── project_creation/     # мастер нового проекта
         ├── chat/                 # сессия с агентом: поток сообщений, отправка промпта, отмена
@@ -70,13 +71,13 @@ knowledge/                        # Markdown: правила и skills, отда
 
 Это этап 1 старого плана, применённый к этому репо.
 
-- [ ] `git init`, `.gitignore` для сгенерированных файлов, LICENSE (MIT)
-- [ ] Переименовать пакет в `flutter_code_agent`, удалить `web/`
-- [ ] macOS: выключить App Sandbox в `DebugProfile.entitlements` и `Release.entitlements` (иначе нельзя запускать процессы)
-- [ ] Зависимости стека, `Dependencies`/`DependenciesScope`, drift, локализация en/ru, `window_manager`
-- [ ] Каркас окна: сайдбар проектов, область чата, нижняя панель запуска (пока пустые)
-- [ ] CLAUDE.md из `AI_INSTRUCTIONS.md` с отличиями выше; хук `dart format` после правки `.dart`, `flutter analyze` в хуке `Stop`; Dart MCP-сервер в `.mcp.json`
-- [ ] Субагенты «тестировщик» и «ревьюер» (по CLAUDE.md)
+- [x] `git init`, `.gitignore` для сгенерированных файлов, LICENSE (MIT)
+- [x] Переименовать пакет в `flutter_code_agent`, удалить `web/`
+- [x] macOS: выключить App Sandbox в `DebugProfile.entitlements` и `Release.entitlements` (иначе нельзя запускать процессы)
+- [x] Зависимости стека, `Dependencies`/`DependenciesScope`, drift, локализация en/ru (gen-l10n: `intl_utils` discontinued), `window_manager`
+- [x] Каркас окна: сайдбар проектов, область чата, нижняя панель запуска (пока пустые)
+- [x] CLAUDE.md из `AI_INSTRUCTIONS.md` с отличиями выше; хук `dart format` после правки `.dart`, `flutter analyze` в хуке `Stop`; Dart MCP-сервер в `.mcp.json`
+- [x] Субагенты «тестировщик» и «ревьюер» (по CLAUDE.md)
 
 Готово, когда: приложение запускается на macOS с пустым каркасом, `flutter analyze` чистый.
 

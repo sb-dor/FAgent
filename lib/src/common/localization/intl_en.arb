@@ -1,0 +1,11 @@
+{
+  "@@locale": "en",
+  "appTitle": "Flutter Code Agent",
+  "projects": "Projects",
+  "noProjectsYet": "No projects yet",
+  "openProject": "Open project",
+  "chatPlaceholder": "Open a project and start a chat with an agent",
+  "runPanel": "Run",
+  "runPanelPlaceholder": "Devices, hot reload and logs will appear here",
+  "somethingWentWrong": "Something went wrong"
+}
