@@ -15,9 +15,17 @@ abstract interface class IChatRepository {
   /// Destructive: a new agent session; the agent loses the chat's context.
   Future<void> startNewAgentSession(int sessionId);
 
-  /// Logs in to [agentId] with its first login method; `true` on success.
-  /// Chats waiting for the login continue by themselves.
-  Future<bool> login(String agentId);
+  /// Login methods of [agentId] (`claude-ai-login`, `console-login`, …).
+  List<String> loginMethods(String agentId);
+
+  /// Logs in to [agentId] with [methodId]; `true` on success. [onOutput]
+  /// gets the login command's output lines (bounded) as they come. Chats
+  /// waiting for the login continue by themselves.
+  Future<bool> login(
+    String agentId,
+    String methodId, {
+    required void Function(List<String> lines) onOutput,
+  });
 }
 
 /// AgentHub-backed [IChatRepository].
@@ -40,8 +48,23 @@ final class ChatRepositoryImpl implements IChatRepository {
   Future<void> startNewAgentSession(int sessionId) => _hub.startNewAgentSession(sessionId);
 
   @override
-  Future<bool> login(String agentId) async {
-    final method = _hub.agents.firstWhere((a) => a.id == agentId).loginArguments.keys.first;
-    return (await _hub.login(agentId, method)).succeeded;
+  List<String> loginMethods(String agentId) =>
+      _hub.agents.firstWhere((a) => a.id == agentId).loginArguments.keys.toList();
+
+  @override
+  Future<bool> login(
+    String agentId,
+    String methodId, {
+    required void Function(List<String> lines) onOutput,
+  }) async {
+    final login = await _hub.login(agentId, methodId);
+    void listener() => onOutput(login.output.value);
+    login.output.addListener(listener);
+    listener();
+    try {
+      return await login.succeeded;
+    } finally {
+      login.output.removeListener(listener);
+    }
   }
 }

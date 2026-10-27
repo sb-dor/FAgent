@@ -9,6 +9,10 @@ import 'package:path/path.dart' as p;
 abstract interface class IProjectFilesRepository {
   /// Paths relative to [root], at most [limit] of them.
   Future<List<String>> list(String root, {int limit});
+
+  /// Those of [paths] (relative to [root]) that exist and, with links
+  /// resolved, stay inside [root]. A tracked link to `~/.ssh` is dropped.
+  Future<List<String>> insideProject(String root, List<String> paths);
 }
 
 /// Uses `git ls-files` (tracked plus untracked, without ignored files) and
@@ -48,6 +52,26 @@ final class ProjectFilesRepositoryImpl implements IProjectFilesRepository {
     if (result.exitCode != 0) return Isolate.run(() => walk(root, limit: limit));
     final output = '${result.stdout}';
     return Isolate.run(() => parseLsFiles(output, limit: limit));
+  }
+
+  @override
+  Future<List<String>> insideProject(String root, List<String> paths) async {
+    final String canonicalRoot;
+    try {
+      canonicalRoot = await io.Directory(root).resolveSymbolicLinks();
+    } on io.FileSystemException {
+      return const <String>[];
+    }
+    final inside = <String>[];
+    for (final path in paths) {
+      try {
+        final resolved = await io.File(p.join(root, path)).resolveSymbolicLinks();
+        if (p.isWithin(canonicalRoot, resolved)) inside.add(path);
+      } on io.FileSystemException {
+        // Gone since the list was read.
+      }
+    }
+    return inside;
   }
 
   /// Sorted unique paths of `git ls-files -z` output.

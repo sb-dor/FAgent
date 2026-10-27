@@ -78,6 +78,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
           canRetryPrompt: session.canRetryPrompt.value,
           configOptions: configOptions,
           bypassBlocked: session.bypassBlocked,
+          preparingTurn: session.preparingTurn.value,
         ),
       ),
     );
@@ -90,6 +91,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
     session.canRetryPrompt,
     session.configOptions,
     session.bypassAcknowledged,
+    session.preparingTurn,
   ];
 
   void _detach() {

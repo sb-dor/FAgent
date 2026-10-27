@@ -53,7 +53,6 @@
   "turnLimit": "Агент упёрся в лимит и остановился",
   "contextLost": "Начата новая сессия агента: прежние сообщения он не помнит.",
   "unknownEvent": "Неподдерживаемое событие: {kind}",
-  "loginWithClaude": "Войти в Claude",
   "loggingIn": "Вход… завершите его в открывшемся окне браузера.",
   "loginFailed": "Вход не завершён.",
   "details": "Подробности",
@@ -70,5 +69,8 @@
   "quitWhileBusyTitle": "Выйти, пока агенты работают?",
   "quitWhileBusyBody": "{count, plural, =1{Агент ещё работает в 1 чате.} one{Агенты ещё работают в {count} чате.} other{Агенты ещё работают в {count} чатах.}} Выход остановит их ходы; чаты сохранятся, и их можно будет продолжить.",
   "quit": "Выйти",
-  "stoppingAgents": "Останавливаю агентов…"
+  "stoppingAgents": "Останавливаю агентов…",
+  "loginWithClaudeAi": "Войти через Claude.ai",
+  "loginWithConsole": "Войти через Anthropic Console",
+  "preparingTurn": "Готовлю ход…"
 }

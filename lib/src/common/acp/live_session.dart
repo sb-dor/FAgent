@@ -113,9 +113,13 @@ final class LiveSession {
   final ValueNotifier<List<Map<String, Object?>>> configOptions =
       ValueNotifier<List<Map<String, Object?>>>(const <Map<String, Object?>>[]);
 
-  /// The user allowed `bypassPermissions` for this chat (in this run). Until
-  /// then a chat whose mode is bypass does not accept prompts.
+  /// The user allowed `bypassPermissions` for this chat (stored with the
+  /// chat). Until then a chat whose mode is bypass does not accept prompts.
   final ValueNotifier<bool> bypassAcknowledged = ValueNotifier<bool>(false);
+
+  /// The turn is reserved but its prompt is not sent yet (snapshots of the
+  /// project are being taken).
+  final ValueNotifier<bool> preparingTurn = ValueNotifier<bool>(false);
 
   /// The agent's permission mode is `bypassPermissions` (e.g. from the user's
   /// Claude settings or a loaded session) and the user has not allowed it in
@@ -159,6 +163,7 @@ final class LiveSession {
     canRetryPrompt.dispose();
     configOptions.dispose();
     bypassAcknowledged.dispose();
+    preparingTurn.dispose();
     availableCommands.dispose();
   }
 

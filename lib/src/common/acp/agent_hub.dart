@@ -178,7 +178,7 @@ final class AgentHub {
       cwd: project.path,
       store: await SessionEventStore.open(_database, sessionId),
       acpSessionId: record.acpSessionId,
-    );
+    )..bypassAcknowledged.value = record.bypassAllowedAt != null;
   }
 
   // --- Prompt, stop, retry ---------------------------------------------------------
@@ -237,6 +237,7 @@ final class AgentHub {
     live.turn = turn.future;
     final tokens = <Object?>[];
     var sent = false;
+    live.preparingTurn.value = true;
     try {
       for (final observer in _observers) {
         tokens.add(
@@ -271,6 +272,7 @@ final class AgentHub {
         _plain(request.toJson()),
       );
       if (live.status.value != SessionStatus.running) return;
+      live.preparingTurn.value = false;
       unawaited(
         _touchSession(
           live,
@@ -301,6 +303,7 @@ final class AgentHub {
     } on Object catch (error) {
       await _failOnce(live, SessionProblem(SessionProblemKind.transient, '$error'));
     } finally {
+      live.preparingTurn.value = false;
       // Stop arrived before the prompt went out: nothing to wait for.
       if (!sent && live.status.value == SessionStatus.cancelling) _move(live, SessionStatus.idle);
       live
@@ -422,12 +425,22 @@ final class AgentHub {
         if (allowsBypass) live.bypassAcknowledged.value = acknowledged;
         rethrow;
       }
+      if (allowsBypass && !acknowledged) await _saveBypassAllowed(live.id);
     });
   }
 
   /// Records that the user allowed `bypassPermissions` in chat [sessionId].
-  Future<void> acknowledgeBypass(int sessionId) async =>
-      (await session(sessionId)).bypassAcknowledged.value = true;
+  /// The consent is stored with the chat and survives restarts.
+  Future<void> acknowledgeBypass(int sessionId) async {
+    final live = await session(sessionId);
+    await _saveBypassAllowed(sessionId);
+    live.bypassAcknowledged.value = true;
+  }
+
+  Future<void> _saveBypassAllowed(int sessionId) =>
+      (_database.update(_database.sessionsTable)..where((s) => s.id.equals(sessionId))).write(
+        SessionsTableCompanion(bypassAllowedAt: Value<DateTime>(DateTime.now())),
+      );
 
   /// Answers permission request [requestId] of chat [sessionId] (control
   /// lane). Returns `false` for an unknown, finished or foreign request.

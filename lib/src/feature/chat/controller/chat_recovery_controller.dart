@@ -8,9 +8,13 @@ part 'chat_recovery_controller.freezed.dart';
 sealed class ChatRecoveryState with _$ChatRecoveryState {
   const factory ChatRecoveryState.initial() = ChatRecovery$InitialState;
 
-  const factory ChatRecoveryState.inProgress() = ChatRecovery$InProgressState;
+  /// [output]: lines of a running login.
+  const factory ChatRecoveryState.inProgress({@Default(<String>[]) List<String> output}) =
+      ChatRecovery$InProgressState;
 
-  const factory ChatRecoveryState.error({Object? error}) = ChatRecovery$ErrorState;
+  /// [output]: lines of the failed login, for the user to read.
+  const factory ChatRecoveryState.error({Object? error, @Default(<String>[]) List<String> output}) =
+      ChatRecovery$ErrorState;
 
   const factory ChatRecoveryState.completed() = ChatRecovery$CompletedState;
 }
@@ -32,14 +36,30 @@ final class ChatRecoveryController extends StateController<ChatRecoveryState>
     setState(const ChatRecoveryState.completed());
   }, error: (error, stackTrace) async => setState(ChatRecoveryState.error(error: error)));
 
-  void login(String agentId) => handle(() async {
-    setState(const ChatRecoveryState.inProgress());
-    if (await _repository.login(agentId)) {
-      setState(const ChatRecoveryState.completed());
-    } else {
-      setState(const ChatRecoveryState.error());
-    }
-  }, error: (error, stackTrace) async => setState(ChatRecoveryState.error(error: error)));
+  /// Login methods of [agentId].
+  List<String> loginMethods(String agentId) => _repository.loginMethods(agentId);
+
+  void login(String agentId, String methodId) {
+    var output = const <String>[];
+    handle(
+      () async {
+        setState(const ChatRecoveryState.inProgress());
+        final succeeded = await _repository.login(
+          agentId,
+          methodId,
+          onOutput: (lines) {
+            output = lines;
+            if (!isDisposed) setState(ChatRecoveryState.inProgress(output: lines));
+          },
+        );
+        setState(
+          succeeded ? const ChatRecoveryState.completed() : ChatRecoveryState.error(output: output),
+        );
+      },
+      error: (error, stackTrace) async =>
+          setState(ChatRecoveryState.error(error: error, output: output)),
+    );
+  }
 
   void startNewAgentSession(int sessionId) => handle(() async {
     setState(const ChatRecoveryState.inProgress());

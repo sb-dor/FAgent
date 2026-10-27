@@ -74,7 +74,6 @@
       }
     }
   },
-  "loginWithClaude": "Log in to Claude",
   "loggingIn": "Logging in… finish in the browser window that opened.",
   "loginFailed": "Login did not complete.",
   "details": "Details",
@@ -105,5 +104,8 @@
     }
   },
   "quit": "Quit",
-  "stoppingAgents": "Stopping agents…"
+  "stoppingAgents": "Stopping agents…",
+  "loginWithClaudeAi": "Log in with Claude.ai",
+  "loginWithConsole": "Log in with Anthropic Console",
+  "preparingTurn": "Preparing the turn…"
 }

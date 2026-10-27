@@ -20,6 +20,7 @@ class ChatView {
     this.canRetryPrompt = false,
     this.configOptions = const <ConfigOption>[],
     this.bypassBlocked = false,
+    this.preparingTurn = false,
   });
 
   /// `sessions.id`.
@@ -49,4 +50,7 @@ class ChatView {
   /// The mode is `bypassPermissions` and the user has not allowed it for this
   /// chat: prompts are blocked.
   final bool bypassBlocked;
+
+  /// The turn's prompt is not sent yet.
+  final bool preparingTurn;
 }

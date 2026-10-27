@@ -107,6 +107,27 @@ void main() {
       ]);
     });
 
+    test('mentions that lead out of the project through a link are dropped', () async {
+      final outside = Directory.systemTemp.createTempSync('outside');
+      addTearDown(() => outside.deleteSync(recursive: true));
+      File('${outside.path}/id_rsa').createSync();
+      Link('${root.path}/key').createSync('${outside.path}/id_rsa');
+      Link('${root.path}/main_link.dart').createSync('lib/main.dart');
+      final repository = ProjectFilesRepositoryImpl(
+        environment: const ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'}),
+      );
+
+      expect(
+        await repository.insideProject(root.path, <String>[
+          'lib/main.dart',
+          'key',
+          'main_link.dart',
+          'gone.dart',
+        ]),
+        <String>['lib/main.dart', 'main_link.dart'],
+      );
+    });
+
     test('the walk never follows a link out of the project', () {
       final outside = Directory.systemTemp.createTempSync('outside');
       addTearDown(() => outside.deleteSync(recursive: true));

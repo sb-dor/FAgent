@@ -2,13 +2,16 @@
 //
 // The first word of the prompt selects the behaviour:
 //   echo <text>   reply with <text> in two chunks of one message
-//   permission    ask for permission, reply with the selected option id or `cancelled`
+//   permission [n] ask for permission n times (default 1), reply with each selected
+//                 option id or `cancelled`
 //   hang          never finish until the client sends session/cancel
 //   spawn         start a background process re-parented to launchd; its pid goes
 //                 to the file named by FAKE_AGENT_PID_FILE
 //   auth          fail with authRequired (-32000)
 //   stderr <text> write <text> to stderr, then reply `ok`
 //   crash         exit the process with code 3
+//   say-crash <t> reply with <t>, then exit with code 3
+//   garbage       write a line that is not JSON to stdout, then reply `ok`
 // Run with `--cli auth login <method>` it prints a line and exits 0 (login).
 // session/load replays one user and one agent message for the loaded session;
 // loading the id `missing` fails with -32002 like the real adapter.
@@ -127,31 +130,34 @@ Future<void> main(List<String> arguments) async {
                 await say(context.client, session, rest.substring(0, half), id: 'm1');
                 await say(context.client, session, rest.substring(half), id: 'm1');
               case 'permission':
-                final response = await context.client.requestPermission(
-                  RequestPermissionRequest(
-                    sessionId: session,
-                    toolCall: ToolCallUpdate(
-                      toolCallId: ToolCallId('call-1'),
-                      title: const AcpPatch<String>.set('Run `rm -rf build`'),
+                final count = int.tryParse(rest) ?? 1;
+                for (var asked = 0; asked < count; asked++) {
+                  final response = await context.client.requestPermission(
+                    RequestPermissionRequest(
+                      sessionId: session,
+                      toolCall: ToolCallUpdate(
+                        toolCallId: ToolCallId('call-${asked + 1}'),
+                        title: const AcpPatch<String>.set('Run `rm -rf build`'),
+                      ),
+                      options: <PermissionOption>[
+                        PermissionOption(
+                          optionId: PermissionOptionId('allow'),
+                          name: 'Allow',
+                          kind: PermissionOptionKind.allowOnce,
+                        ),
+                        PermissionOption(
+                          optionId: PermissionOptionId('reject'),
+                          name: 'Reject',
+                          kind: PermissionOptionKind.rejectOnce,
+                        ),
+                      ],
                     ),
-                    options: <PermissionOption>[
-                      PermissionOption(
-                        optionId: PermissionOptionId('allow'),
-                        name: 'Allow',
-                        kind: PermissionOptionKind.allowOnce,
-                      ),
-                      PermissionOption(
-                        optionId: PermissionOptionId('reject'),
-                        name: 'Reject',
-                        kind: PermissionOptionKind.rejectOnce,
-                      ),
-                    ],
-                  ),
-                );
-                await say(context.client, session, switch (response.outcome) {
-                  RequestPermissionOutcomeSelected(:final value) => value.optionId.value,
-                  _ => 'cancelled',
-                });
+                  );
+                  await say(context.client, session, switch (response.outcome) {
+                    RequestPermissionOutcomeSelected(:final value) => value.optionId.value,
+                    _ => 'cancelled',
+                  });
+                }
               case 'hang':
                 final cancelled = Completer<void>();
                 cancels[session.value] = cancelled;
@@ -173,6 +179,15 @@ Future<void> main(List<String> arguments) async {
                 await say(context.client, session, 'ok');
               case 'crash':
                 exit(3);
+              case 'say-crash':
+                await say(context.client, session, rest);
+                // Let the frame reach the client before dying.
+                await Future<void>.delayed(const Duration(milliseconds: 200));
+                exit(3);
+              case 'garbage':
+                stdout.writeln('{this is not json');
+                await stdout.flush();
+                await say(context.client, session, 'ok');
               default:
                 await say(context.client, session, 'unknown command: $command');
             }

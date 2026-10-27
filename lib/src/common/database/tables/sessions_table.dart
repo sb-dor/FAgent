@@ -21,6 +21,10 @@ class SessionsTable extends Table {
   /// First 60 characters of the first prompt.
   TextColumn get title => text().withDefault(const Constant(''))();
 
+  /// When the user allowed `bypassPermissions` for this chat; `null` until
+  /// then (a chat in that mode does not accept prompts).
+  DateTimeColumn get bypassAllowedAt => dateTime().nullable()();
+
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();

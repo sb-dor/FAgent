@@ -31,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -42,6 +42,9 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(schema.projects, schema.projects.trustedAt);
         await m.createTable(schema.sessions);
         await m.createTable(schema.sessionEvents);
+      },
+      from2To3: (m, schema) async {
+        await m.addColumn(schema.sessions, schema.sessions.bypassAllowedAt);
       },
     ),
     // SQLite ignores foreign keys (and ON DELETE CASCADE) unless enabled per connection.

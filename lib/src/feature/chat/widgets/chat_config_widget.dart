@@ -104,7 +104,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
     }
-    final mentioned = mentionedFiles(text, fileMentionController.files.toSet());
+    final mentioned = await fileMentionController.insideProject(
+      widget.project.path,
+      mentionedFiles(text, fileMentionController.files.toSet()),
+    );
+    if (!mounted) return;
     textController.clear();
     promptController.send(
       sessionId,
@@ -134,7 +138,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     }
   }
 
-  void login(String agentId) => recoveryController.login(agentId);
+  List<String> loginMethods(String agentId) => recoveryController.loginMethods(agentId);
+
+  void login(String agentId, String methodId) => recoveryController.login(agentId, methodId);
 
   /// Destructive; asks first.
   Future<void> startNewAgentSession() async {

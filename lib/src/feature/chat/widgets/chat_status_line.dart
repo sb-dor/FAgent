@@ -7,10 +7,13 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 /// {@endtemplate}
 class ChatStatusLine extends StatelessWidget {
   /// {@macro chat_status_line}
-  const ChatStatusLine({required this.status, super.key});
+  const ChatStatusLine({required this.status, this.preparing = false, super.key});
 
   /// Session status.
   final SessionStatus status;
+
+  /// A running turn has not sent its prompt yet.
+  final bool preparing;
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +22,7 @@ class ChatStatusLine extends StatelessWidget {
       SessionStatus.starting => localization.statusStarting,
       SessionStatus.loading => localization.statusLoading,
       SessionStatus.creating => localization.statusCreating,
+      SessionStatus.running when preparing => localization.preparingTurn,
       SessionStatus.running => localization.statusRunning,
       SessionStatus.awaitingPermission => localization.statusAwaitingPermission,
       SessionStatus.cancelling => localization.statusCancelling,

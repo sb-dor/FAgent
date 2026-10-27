@@ -40,6 +40,12 @@ final class FileMentionController extends StateController<FileMentionState>
     FileMention$CompletedState(:final files) => files,
   };
 
+  /// Those of [paths] that are files inside [root] (links resolved). A query,
+  /// not a state change: sending a prompt waits for it.
+  Future<List<String>> insideProject(String root, List<String> paths) => paths.isEmpty
+      ? Future<List<String>>.value(const <String>[])
+      : _repository.insideProject(root, paths);
+
   /// Loads the files of [root]; a load already running wins.
   void load(String root) => handle(
     () async {

@@ -168,6 +168,20 @@ void main() {
     expect(_agentText(live).join(), 'hi');
   });
 
+  test('bypass consent is stored with the chat and survives a restart', () async {
+    final chat = await newChat(acpSessionId: 'bypass-2');
+    await newHub().acknowledgeBypass(chat);
+    final record = await (database.select(
+      database.sessionsTable,
+    )..where((s) => s.id.equals(chat))).getSingle();
+    expect(record.bypassAllowedAt, isNotNull);
+
+    final restarted = newHub();
+    final live = await restarted.session(chat);
+    await restarted.prompt(chat, 'echo hi');
+    expect(_agentText(live).join(), 'hi');
+  });
+
   test('choosing bypass as the mode allows it for the chat', () async {
     final hub = newHub();
     final chat = await newChat();
@@ -203,6 +217,50 @@ void main() {
     expect(_agentText(live), <String>['allow']);
     // The raw request frame is not journaled twice.
     expect(live.store.events.where((e) => e.kind == 'session/request_permission'), isEmpty);
+  });
+
+  test('several permission requests in one turn are answered one by one', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    List<String> requests() => <String>[
+      for (final e in live.store.events)
+        if (e.kind == SessionEventKind.permissionRequest) e.payload['requestId']! as String,
+    ];
+
+    final turn = hub.prompt(chat, 'permission 2');
+    await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
+    expect(hub.resolvePermission(chat, requests().single, 'allow'), isTrue);
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (requests().length < 2) {
+      if (DateTime.now().isAfter(deadline)) fail('the second request never came');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+    expect(requests().toSet(), hasLength(2), reason: 'each request has its own id');
+    expect(hub.resolvePermission(chat, requests().first, 'reject'), isFalse, reason: 'answered');
+    expect(hub.resolvePermission(chat, requests().last, 'reject'), isTrue);
+    await turn;
+
+    expect(_agentText(live), <String>['allow', 'reject']);
+    expect(
+      live.store.events.where((e) => e.kind == SessionEventKind.permissionResolution),
+      hasLength(2),
+    );
+  });
+
+  test('a prompt whose journal write fails is not sent', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    await hub.prompt(chat, 'echo one');
+    await live.store.flush();
+
+    await database.customStatement('DROP TABLE session_events');
+    await hub.prompt(chat, 'echo two');
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+
+    expect(live.status.value, SessionStatus.error);
+    expect(_agentText(live).join(), 'one', reason: 'the agent never got the second prompt');
   });
 
   test('stop ends a long turn without waiting for the setup lane', () async {
@@ -308,6 +366,53 @@ void main() {
     expect(live.canRetryPrompt.value, isTrue);
     await hub.prompt(chat, 'echo after login');
     expect(_agentText(live).join(), 'after login');
+  });
+
+  test('a login continues every chat of the agent that waits for it', () async {
+    final hub = newHub();
+    final first = await newChat();
+    final second = await newChat();
+    final lives = <LiveSession>[await hub.session(first), await hub.session(second)];
+    await hub.prompt(first, 'auth');
+    await hub.prompt(second, 'auth');
+    expect(lives.map((l) => l.status.value), everyElement(SessionStatus.needsAuth));
+
+    expect(await (await hub.login('fake', 'claude-ai-login')).succeeded, isTrue);
+    for (final live in lives) {
+      await _until(live.status, (s) => s == SessionStatus.cold);
+      expect(live.canRetryPrompt.value, isTrue);
+    }
+
+    await hub.retryPrompt(first);
+    await hub.prompt(second, 'echo second');
+    expect(_agentText(lives.last).join(), 'second');
+  });
+
+  test('agent output before a crash is saved', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'say-crash last words');
+    await _until(live.status, (s) => s == SessionStatus.error);
+
+    final rows = await (database.select(
+      database.sessionEventsTable,
+    )..where((e) => e.sessionId.equals(chat))).get();
+    expect(rows.map((r) => r.kind), contains('agent_message_chunk'));
+  });
+
+  test('a line that is not JSON from the agent does not hang the chat', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'garbage').timeout(const Duration(seconds: 15));
+
+    expect(live.status.value, isIn(<SessionStatus>[SessionStatus.idle, SessionStatus.error]));
+    if (live.status.value == SessionStatus.error) expect(live.problem.value, isNotNull);
+    await hub.prompt(chat, 'echo still works');
+    expect(_agentText(live).join(), endsWith('still works'));
   });
 
   test('an agent crash moves the busy chat to error and the next prompt restarts it', () async {

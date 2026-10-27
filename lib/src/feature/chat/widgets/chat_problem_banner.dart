@@ -19,6 +19,8 @@ class ChatProblemBanner extends StatelessWidget {
     required this.onForceStop,
     required this.onLogin,
     required this.onRepeatPrompt,
+    this.loginMethods = const <String>[],
+    this.loginOutput = const <String>[],
     super.key,
   });
 
@@ -34,7 +36,15 @@ class ChatProblemBanner extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onStartNewAgentSession;
   final VoidCallback onForceStop;
-  final VoidCallback onLogin;
+
+  /// Logs in with a method id.
+  final ValueChanged<String> onLogin;
+
+  /// Login methods offered when the agent needs a login.
+  final List<String> loginMethods;
+
+  /// Output of the running or failed login (it may show a link or a code).
+  final List<String> loginOutput;
   final VoidCallback onRepeatPrompt;
 
   @override
@@ -51,10 +61,15 @@ class ChatProblemBanner extends StatelessWidget {
           child: Text(localization.startNewAgentSession),
         ),
       if (status == SessionStatus.needsAuth)
-        FilledButton.tonal(
-          onPressed: busy ? null : onLogin,
-          child: Text(localization.loginWithClaude),
-        ),
+        for (final method in loginMethods)
+          FilledButton.tonal(
+            onPressed: busy ? null : () => onLogin(method),
+            child: Text(switch (method) {
+              'claude-ai-login' => localization.loginWithClaudeAi,
+              'console-login' => localization.loginWithConsole,
+              _ => method,
+            }),
+          ),
       if (view.canForceStop)
         OutlinedButton(onPressed: onForceStop, child: Text(localization.forceStop)),
       // A prompt held back by the bypass gate is sent by its banner.
@@ -102,6 +117,19 @@ class ChatProblemBanner extends StatelessWidget {
                         ],
                       ),
                     ),
+                  if (status == SessionStatus.needsAuth && loginOutput.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 160),
+                      child: SingleChildScrollView(
+                        reverse: true,
+                        child: SelectableText(
+                          loginOutput.join('\n'),
+                          style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'Menlo'),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Wrap(spacing: 8, runSpacing: 8, children: actions),
                 ],

@@ -43,14 +43,20 @@ class _ChatScreenState extends State<ChatScreen> {
               view: view,
               busy: recovery is ChatRecovery$InProgressState,
               loginFailed: recovery is ChatRecovery$ErrorState,
+              loginOutput: switch (recovery) {
+                ChatRecovery$InProgressState(:final output) => output,
+                ChatRecovery$ErrorState(:final output) => output,
+                _ => const <String>[],
+              },
+              loginMethods: _scope.loginMethods(view.agentId),
               onRetry: _scope.retry,
               onStartNewAgentSession: _scope.startNewAgentSession,
               onForceStop: () => _scope.forceStop(view.agentId),
-              onLogin: () => _scope.login(view.agentId),
+              onLogin: (method) => _scope.login(view.agentId, method),
               onRepeatPrompt: _scope.repeatPrompt,
             ),
           ),
-          ChatStatusLine(status: view.status),
+          ChatStatusLine(status: view.status, preparing: view.preparingTurn),
           if (view.bypassBlocked) BypassGateBanner(onAllow: _scope.allowBypass),
           if (view.configOptions.isNotEmpty)
             SessionConfigBar(
