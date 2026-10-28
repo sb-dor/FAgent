@@ -67,7 +67,7 @@ void main() {
     await tester.tap(find.text('Pick'));
     await tester.pumpAndSettle();
 
-    await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    // A is highlighted first; one step down must jump over disabled B to C.
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
@@ -147,6 +147,76 @@ void main() {
     await tester.tap(find.text('Plain'));
     await tester.pumpAndSettle();
     expect(pressed, 1);
+  });
+
+  group('placement', () {
+    Widget chipAt(Alignment alignment, {List<AppMenuSection<String>> sections = modelSections}) =>
+        testApp(
+          Align(
+            alignment: alignment,
+            child: SelectorChip<String>(label: 'Opus', sections: sections),
+          ),
+        );
+
+    testWidgets('opens above a chip near the bottom edge', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(chipAt(Alignment.bottomLeft));
+      final chipTop = tester.getTopLeft(find.byType(SelectorChip<String>)).dy;
+      await tester.tap(find.byType(SelectorChip<String>));
+      await tester.pumpAndSettle();
+
+      final menu = tester.getRect(find.text('Sonnet'));
+      expect(menu.bottom, lessThanOrEqualTo(chipTop));
+    });
+
+    testWidgets('opens below a chip near the top edge', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(chipAt(Alignment.topLeft));
+      final chipBottom = tester.getBottomLeft(find.byType(SelectorChip<String>)).dy;
+      await tester.tap(find.byType(SelectorChip<String>));
+      await tester.pumpAndSettle();
+
+      expect(tester.getRect(find.text('Sonnet')).top, greaterThanOrEqualTo(chipBottom));
+    });
+
+    testWidgets('stays inside the view for a chip near the right edge', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(chipAt(Alignment.centerRight));
+      await tester.tap(find.byType(SelectorChip<String>));
+      await tester.pumpAndSettle();
+
+      final menu = tester.getRect(
+        find.ancestor(of: find.text('Sonnet'), matching: find.byType(DecoratedBox)).last,
+      );
+      final view = tester.view.physicalSize / tester.view.devicePixelRatio;
+      expect(find.text('Sonnet'), findsOneWidget);
+      expect(menu.right, lessThanOrEqualTo(view.width));
+    });
+
+    testWidgets('a tall menu in a short view never covers the anchor', (tester) async {
+      tester.view
+        ..physicalSize = const Size(800, 300)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final tall = <AppMenuSection<String>>[
+        AppMenuSection<String>(
+          items: <AppMenuItem<String>>[
+            for (var i = 0; i < 30; i++) AppMenuItem<String>(value: 'v$i', title: 'Item $i'),
+          ],
+        ),
+      ];
+      await tester.pumpWidget(chipAt(Alignment.centerLeft, sections: tall));
+      final chip = tester.getRect(find.byType(SelectorChip<String>));
+      await tester.tap(find.byType(SelectorChip<String>));
+      await tester.pumpAndSettle();
+
+      final card = tester.getRect(
+        find.ancestor(of: find.text('Item 0'), matching: find.byType(DecoratedBox)).last,
+      );
+      expect(card.overlaps(chip), isFalse);
+      expect(card.top, greaterThanOrEqualTo(0));
+      expect(card.bottom, lessThanOrEqualTo(300));
+    });
   });
 
   testWidgets('danger tone paints the chip red', (tester) async {

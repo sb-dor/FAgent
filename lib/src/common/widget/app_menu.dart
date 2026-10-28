@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 
 /// One selectable row of an [AppMenuSection].
@@ -131,24 +132,29 @@ class _MenuLayout extends SingleChildLayoutDelegate {
   final Rect anchor;
   final double width;
 
+  double _spaceBelow(double height) => height - _margin - (anchor.bottom + _gap);
+
+  double get _spaceAbove => anchor.top - _gap - _margin;
+
+  /// The menu may use the larger of the two sides of the anchor, so it never
+  /// covers the anchor: it is then placed on the side where it fits.
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) => BoxConstraints(
     minWidth: width,
     maxWidth: width,
-    maxHeight: math.max(0, constraints.maxHeight - 2 * _margin),
+    maxHeight: math.max(0, math.max(_spaceBelow(constraints.maxHeight), _spaceAbove)),
   );
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
     final maxX = math.max(_margin, size.width - childSize.width - _margin);
     final x = anchor.left.clamp(_margin, maxX);
-    final below = anchor.bottom + _gap;
-    final fitsBelow = below + childSize.height <= size.height - _margin;
     final double y;
-    if (fitsBelow) {
-      y = below;
+    if (childSize.height <= _spaceBelow(size.height)) {
+      y = anchor.bottom + _gap;
     } else {
-      y = math.max(_margin, anchor.top - _gap - childSize.height);
+      // The height is capped by the larger side, so it fits above here.
+      y = anchor.top - _gap - childSize.height;
     }
     return Offset(x, y);
   }
@@ -260,7 +266,7 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.bg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(AppRadius.large),
           border: Border.all(color: colors.border),
           boxShadow: const <BoxShadow>[
             BoxShadow(color: Color(0x1F000000), blurRadius: 32, offset: Offset(0, 12)),
@@ -269,7 +275,7 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
         child: Material(
           type: MaterialType.transparency,
           child: Padding(
-            padding: const EdgeInsets.all(6),
+            padding: const EdgeInsets.all(4),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -300,7 +306,7 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+    padding: const EdgeInsets.fromLTRB(8, 8, 8, 4),
     child: Text(
       title,
       style: Theme.of(context).textTheme.bodySmall!
@@ -349,15 +355,15 @@ class _MenuRow<T> extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: highlighted ? colors.surface : Colors.transparent,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.small),
               ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 child: Row(
                   children: <Widget>[
                     if (item.icon != null) ...<Widget>[
                       Icon(item.icon, size: 16, color: toneColor ?? colors.muted),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 8),
                     ],
                     Expanded(
                       child: Column(
@@ -377,7 +383,7 @@ class _MenuRow<T> extends StatelessWidget {
                       const SizedBox(width: 8),
                       DecoratedBox(
                         decoration: BoxDecoration(color: toneColor, shape: BoxShape.circle),
-                        child: const SizedBox.square(dimension: 6),
+                        child: const SizedBox.square(dimension: 8),
                       ),
                     ],
                     if (shortcut != null) ...<Widget>[

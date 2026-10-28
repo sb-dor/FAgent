@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 
 /// Emphasis of a [SelectorChip] or an [AppMenuItem].
@@ -15,7 +16,7 @@ enum AppTone {
 }
 
 /// {@template selector_chip}
-/// A 28 px pill that shows the current choice (agent, model, mode, …).
+/// A 28 px pill (radius `AppRadius.medium`) that shows the current choice (agent, model, mode, …).
 ///
 /// With [sections] it opens an [AppMenu] under (or above) itself on tap and
 /// reports the picked value through [onSelected]; without them it is a plain
@@ -72,7 +73,7 @@ class SelectorChip<T> extends StatelessWidget {
       AppTone.danger => (colors.dangerSoft, colors.danger),
     };
     final menu = sections;
-    final radius = BorderRadius.circular(8);
+    final radius = BorderRadius.circular(AppRadius.medium);
     final textStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: foreground, fontSize: 12, height: 16 / 12, fontWeight: FontWeight.w500);
 
@@ -91,13 +92,13 @@ class SelectorChip<T> extends StatelessWidget {
           child: SizedBox(
             height: 28,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   if (icon != null) ...<Widget>[
                     Icon(icon, size: 14, color: foreground),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                   ],
                   Flexible(
                     child: Text(
@@ -108,7 +109,7 @@ class SelectorChip<T> extends StatelessWidget {
                     ),
                   ),
                   if (menu != null) ...<Widget>[
-                    const SizedBox(width: 2),
+                    const SizedBox(width: 4),
                     Icon(Icons.arrow_drop_down, size: 16, color: foreground),
                   ],
                 ],
