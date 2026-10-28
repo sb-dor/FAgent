@@ -131,6 +131,8 @@
   "skillsAndRules": "Skills and rules",
   "rules": "Rules",
   "search": "Search",
+  "searchChats": "Search chats…",
+  "noSearchResults": "No chats found",
   "addProject": "Project",
   "openFolder": "Open folder…",
   "newFlutterProject": "New Flutter project…",

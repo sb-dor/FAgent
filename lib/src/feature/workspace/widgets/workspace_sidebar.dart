@@ -78,13 +78,12 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
               onTap: _scope.createChat,
             ),
             const SizedBox(height: 4),
-            // Opens the chat search with the chat search feature.
             WorkspaceSidebarRow(
               icon: Icons.search,
               label: localization.search,
               shortcut: '⌘K',
               muted: true,
-              onTap: null,
+              onTap: _scope.openChatSearch,
             ),
             const SizedBox(height: 8),
             Expanded(

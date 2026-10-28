@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/chat_search/widgets/chat_search_dialog.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
@@ -167,6 +168,17 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     if (project == null) return;
     dataController.selectProject(project);
     sessionCreationController.create(projectId: project, agentId: 'claude');
+  }
+
+  /// Asks which chat to open, then opens it: its project and the chat become selected and the
+  /// window leaves Skills or Settings for the chat.
+  Future<void> openChatSearch() async {
+    final result = await showChatSearch(context);
+    if (result == null || !mounted) return;
+    dataController
+      ..selectProject(result.projectId)
+      ..selectSession(result.sessionId);
+    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
   }
 
   /// Shows [project]'s folder in Finder.

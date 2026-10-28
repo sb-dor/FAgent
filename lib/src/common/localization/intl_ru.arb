@@ -96,6 +96,8 @@
   "skillsAndRules": "Скиллы и правила",
   "rules": "Правила",
   "search": "Поиск",
+  "searchChats": "Поиск по чатам…",
+  "noSearchResults": "Чаты не найдены",
   "addProject": "Проект",
   "openFolder": "Открыть папку…",
   "newFlutterProject": "Новый Flutter-проект…",
