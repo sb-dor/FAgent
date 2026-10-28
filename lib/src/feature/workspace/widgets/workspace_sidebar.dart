@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chat_
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_project_group.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_footer.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_row.dart';
 
 enum _ProjectAction { reveal, settings, remove }
@@ -45,7 +46,8 @@ final class _HintItem extends _ListItem {
 /// add-project button and the footer.
 ///
 /// Projects are ordered by their most recent chat; projects without chats follow in the order of
-/// the project list. A group can be collapsed; that is remembered only while the window lives.
+/// the project list. A group can be collapsed; that is remembered only while the window lives
+/// (in [WorkspaceDataController], so hiding the sidebar does not forget it).
 /// {@endtemplate}
 class WorkspaceSidebar extends StatefulWidget {
   /// {@macro workspace_sidebar}
@@ -57,7 +59,6 @@ class WorkspaceSidebar extends StatefulWidget {
 
 class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
   late final _scope = WorkspaceConfigInhWidget.of(context);
-  final Set<int> _collapsed = <int>{};
 
   @override
   Widget build(BuildContext context) {
@@ -136,9 +137,7 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
           key: ValueKey<String>('project-${project.id}'),
           project: project,
           collapsed: collapsed,
-          onToggle: () => setState(() {
-            if (!_collapsed.remove(project.id)) _collapsed.add(project.id);
-          }),
+          onToggle: () => _scope.dataController.toggleCollapsed(project.id),
           onNewChat: () => _scope.createChat(projectId: project.id),
           onMenu: (anchor) => _openProjectMenu(project, anchor),
         ),
@@ -161,18 +160,11 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
     for (final session in sessions) {
       (chatsOf[session.projectId] ??= <ChatSession>[]).add(session);
     }
-    DateTime latest(Project project) =>
-        chatsOf[project.id]!.map((chat) => chat.updatedAt).reduce((a, b) => a.isAfter(b) ? a : b);
-    final withChats = projects.where((p) => chatsOf.containsKey(p.id)).toList()
-      ..sort((a, b) {
-        final byTime = latest(b).compareTo(latest(a));
-        return byTime != 0 ? byTime : projects.indexOf(a).compareTo(projects.indexOf(b));
-      });
-    final ordered = <Project>[...withChats, ...projects.where((p) => !chatsOf.containsKey(p.id))];
+    final collapsedProjects = _scope.dataController.collapsedProjects;
     return <_ListItem>[
-      for (final project in ordered) ...<_ListItem>[
-        _HeaderItem(project, collapsed: _collapsed.contains(project.id)),
-        if (!_collapsed.contains(project.id))
+      for (final project in orderProjectsForSidebar(projects, sessions)) ...<_ListItem>[
+        _HeaderItem(project, collapsed: collapsedProjects.contains(project.id)),
+        if (!collapsedProjects.contains(project.id))
           if (chatsOf[project.id] case final chats?)
             for (final chat in chats) _ChatItem(chat)
           else

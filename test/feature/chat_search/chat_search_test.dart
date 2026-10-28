@@ -88,11 +88,12 @@ void main() {
       final underscore = await addChat(project, 'a_b');
       await addChat(project, 'ab');
       await addChat(project, r'back\slash');
+      final apostrophe = await addChat(project, "it's");
 
       expect((await repository.search('%')).map((r) => r.sessionId), <int>[percent]);
       expect((await repository.search('_')).map((r) => r.sessionId), <int>[underscore]);
       expect(await repository.search(r'\'), hasLength(1));
-      expect(await repository.search("'"), isEmpty);
+      expect((await repository.search("'")).map((r) => r.sessionId), <int>[apostrophe]);
     });
 
     test('an empty query lists recent chats, newest first, up to the limit', () async {

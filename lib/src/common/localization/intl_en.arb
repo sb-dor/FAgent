@@ -113,6 +113,7 @@
       }
     }
   },
+  "comingSoon": "Coming soon",
   "toggleSidebar": "Show or hide the sidebar",
   "toggleRightPane": "Show or hide the side panel",
   "backToChat": "Back to chat",

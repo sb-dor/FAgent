@@ -28,6 +28,11 @@ class _AppState extends State<App> {
   @override
   Widget build(BuildContext context) => StateConsumer<AppSettingsController, AppSettingsState>(
     controller: _settings,
+    // Only the theme mode and the language show in MaterialApp; a panel setting must not rebuild
+    // it (and the whole window with it).
+    buildWhen: (previous, current) =>
+        previous.settings.themeMode != current.settings.themeMode ||
+        previous.settings.locale != current.settings.locale,
     builder: (context, state, _) => _buildApp(),
   );
 

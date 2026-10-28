@@ -55,7 +55,7 @@ class WorkspaceTitleBar extends StatelessWidget {
       _ => null,
     };
     if (session == null) return project.name;
-    final title = session.title.isEmpty ? localization.newChat : session.title;
+    final title = session.title.isEmpty ? localization.untitledChat : session.title;
     return '$title · ${project.name}';
   }
 }

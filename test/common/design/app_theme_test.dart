@@ -37,6 +37,11 @@ void main() {
     expect(AppTheme.dark().colorScheme.brightness, Brightness.dark);
   });
 
+  test('the themes are built once, so an equal theme is never a new one', () {
+    expect(identical(AppTheme.light(), AppTheme.light()), isTrue);
+    expect(identical(AppTheme.dark(), AppTheme.dark()), isTrue);
+  });
+
   test('lerp halfway mixes colors', () {
     final mixed = AppColors.light.lerp(AppColors.dark, .5);
     expect(mixed.bg, Color.lerp(AppColors.light.bg, AppColors.dark.bg, .5));

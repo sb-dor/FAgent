@@ -167,6 +167,30 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    testWidgets(r'a collapsed project stays collapsed after hiding the sidebar with ⌘\', (
+      tester,
+    ) async {
+      useWindow(tester, 1280, 800);
+      await tester.runAsync(() async {
+        final avera = await addProject('avera-hotel');
+        await addChat(avera, 'Booking screen');
+      });
+      await pumpSidebar(tester);
+
+      await tester.tap(find.text('avera-hotel'));
+      await tester.pump();
+      expect(find.text('Booking screen'), findsNothing);
+
+      await pressWithMeta(tester, LogicalKeyboardKey.backslash);
+      expect(find.byType(WorkspaceSidebar), findsNothing);
+      await pressWithMeta(tester, LogicalKeyboardKey.backslash);
+      expect(find.byType(WorkspaceSidebar), findsOneWidget);
+
+      expect(find.text('avera-hotel'), findsOneWidget);
+      expect(find.text('Booking screen'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
     testWidgets('picking a chat selects it with its project', (tester) async {
       useWindow(tester, 1280, 800);
       late int shop;
@@ -424,13 +448,76 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('⌘N without a selected project does nothing', (tester) async {
+    testWidgets('⌘N with projects but nothing selected starts a chat in the first group', (
+      tester,
+    ) async {
       useWindow(tester, 1280, 800);
-      await tester.runAsync(() => addProject('avera-hotel'));
+      late int avera;
+      late int shop;
+      await tester.runAsync(() async {
+        // The sidebar order: shop_app (the latest chat), avera-hotel (older), empty-one (no chats).
+        avera = await addProject('avera-hotel');
+        shop = await addProject('shop_app');
+        await addProject('empty-one');
+        await addChat(avera, 'Booking screen', minutes: 1);
+        await addChat(shop, 'Dark theme', minutes: 9);
+      });
+      await pumpSidebar(tester);
+      expect(scopeOf(tester).dataController.projectId, isNull);
+
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+
+      final rows = await sessions(tester);
+      expect(rows.where((r) => r.projectId == shop), hasLength(2));
+      expect(rows.where((r) => r.projectId == avera), hasLength(1));
+      final created = rows.firstWhere((r) => r.projectId == shop && r.title != 'Dark theme');
+      expect(scopeOf(tester).dataController.projectId, shop);
+      expect(scopeOf(tester).dataController.sessionId, created.id);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the New chat button with nothing selected starts a chat too', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int avera;
+      await tester.runAsync(() async {
+        avera = await addProject('avera-hotel');
+      });
+      await pumpSidebar(tester);
+
+      await tester.tap(find.text('New chat'));
+      await settle(tester);
+
+      expect((await sessions(tester)).single.projectId, avera);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('⌘N without any project does nothing', (tester) async {
+      useWindow(tester, 1280, 800);
       await pumpSidebar(tester);
 
       await pressWithMeta(tester, LogicalKeyboardKey.keyN);
       expect(await sessions(tester), isEmpty);
+      expect(scopeOf(tester).dataController.projectId, isNull);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('⌘N on Settings starts a chat and returns to the chat screen', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int avera;
+      await tester.runAsync(() async {
+        avera = await addProject('avera-hotel');
+      });
+      await pumpSidebar(tester);
+      scopeOf(tester).dataController
+        ..selectProject(avera)
+        ..openView(WorkspaceView.settings);
+      await tester.pump();
+
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+
+      final created = (await sessions(tester)).single;
+      expect(scopeOf(tester).dataController.view, WorkspaceView.chat);
+      expect(scopeOf(tester).dataController.sessionId, created.id);
       await disposeTestApp(tester, dependencies);
     });
 

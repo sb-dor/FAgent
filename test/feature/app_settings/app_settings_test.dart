@@ -195,6 +195,23 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    testWidgets('a panel setting rebuilds neither the app nor its theme', (tester) async {
+      final dependencies = testDependencies();
+      await pumpApp(tester, dependencies);
+      final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+      final theme = Theme.of(appContext(tester));
+      final controller = AppSettingsConfigInhWidget.of(appContext(tester)).controller
+        ..update((current) => current.copyWith(sidebarVisible: false))
+        ..update((current) => current.copyWith(rightPaneWidth: 500));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(controller.settings.sidebarVisible, isFalse);
+
+      expect(identical(tester.widget<MaterialApp>(find.byType(MaterialApp)), app), isTrue);
+      expect(identical(Theme.of(appContext(tester)), theme), isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
     testWidgets('switching the language applies at once', (tester) async {
       final dependencies = testDependencies();
       await pumpApp(tester, dependencies);

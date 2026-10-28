@@ -208,7 +208,7 @@ class SectionPlaceholder extends StatelessWidget {
   const SectionPlaceholder({
     required this.icon,
     required this.title,
-    required this.milestone,
+    this.milestone,
     super.key,
   });
 
@@ -218,14 +218,16 @@ class SectionPlaceholder extends StatelessWidget {
   /// Name of the section.
   final String title;
 
-  /// When the section is delivered, e.g. `M3`.
-  final String milestone;
+  /// When the section is delivered, e.g. `M3`; `null` when there is no milestone yet.
+  final String? milestone;
 
   @override
   Widget build(BuildContext context) => EmptyState(
     icon: icon,
     title: title,
-    message: Localization.of(context).comingInMilestone(milestone),
+    message: milestone == null
+        ? Localization.of(context).comingSoon
+        : Localization.of(context).comingInMilestone(milestone!),
     badge: const PreviewBadge(),
   );
 }

@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
@@ -140,6 +141,23 @@ void main() {
 
       await openChat(tester);
       expect(find.text('Add a booking screen · avera-hotel'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the right pane paints surfaceAlt and its placeholder says coming soon', (
+      tester,
+    ) async {
+      useWindow(tester, 1280, 800);
+      await pumpShell(tester);
+
+      final paint = tester.widget<DecoratedBox>(
+        find
+            .descendant(of: find.byType(WorkspaceRightPane), matching: find.byType(DecoratedBox))
+            .first,
+      );
+      expect((paint.decoration as BoxDecoration).color, AppColors.light.surfaceAlt);
+      expect(find.text('Coming soon'), findsOneWidget);
+      expect(find.textContaining('UI stage'), findsNothing);
       await disposeTestApp(tester, dependencies);
     });
 
@@ -378,7 +396,8 @@ void main() {
       dataOf(tester).openView(WorkspaceView.settings);
       await tester.pump();
 
-      expect(find.text('Coming in UI stage 6'), findsOneWidget);
+      expect(find.text('Coming soon'), findsOneWidget);
+      expect(find.textContaining('UI stage'), findsNothing);
       await tester.tap(find.text('Agents'));
       await tester.pump();
       expect(dataOf(tester).section, 'agents');

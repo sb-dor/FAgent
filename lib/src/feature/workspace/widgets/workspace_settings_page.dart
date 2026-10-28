@@ -11,7 +11,7 @@ class WorkspaceSettingsPage extends StatelessWidget {
   /// {@macro workspace_settings_page}
   const WorkspaceSettingsPage({super.key});
 
-  /// Where each section comes from; the rest arrive with the UI stage 6 plan.
+  /// Where each section comes from; the rest have no milestone yet and say "coming soon".
   static const Map<String, String> _milestones = <String, String>{
     'agents': 'M5',
     'mcp': 'M5',
@@ -46,7 +46,7 @@ class WorkspaceSettingsPage extends StatelessWidget {
           child: SectionPlaceholder(
             icon: selected.$2,
             title: selected.$3,
-            milestone: _milestones[selected.$1] ?? 'UI stage 6',
+            milestone: _milestones[selected.$1],
           ),
         );
       },

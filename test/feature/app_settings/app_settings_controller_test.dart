@@ -141,6 +141,41 @@ void main() {
     await until(() => repository.written.isNotEmpty);
     expect(repository.written.single, const AppSettings(sidebarVisible: false));
   });
+
+  test(
+    'a value that does not survive storage is normalized, so later external changes still arrive',
+    () async {
+      final dependencies = testDependencies();
+      addTearDown(dependencies.database.close);
+      final repository = AppSettingsRepositoryImpl(database: dependencies.database);
+      final controller = AppSettingsController(repository: repository)..watch();
+      addTearDown(controller.dispose);
+      await until(() => controller.state is AppSettings$CompletedState);
+
+      controller.update(
+        (current) => current.copyWith(rightPaneWidth: 900, locale: const Locale('ru', 'RU')),
+      );
+      await until(() => !controller.isProcessing);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      expect(controller.settings.rightPaneWidth, AppSettings.maxRightPaneWidth);
+      expect(controller.settings.locale, const Locale('ru'));
+
+      // Another writer: the echo filter must not be stuck waiting for the un-normalized value.
+      await repository.update(controller.settings.copyWith(themeMode: ThemeMode.dark));
+      await until(() => controller.settings.themeMode == ThemeMode.dark);
+    },
+  );
+
+  test('disposing with an update waiting for a load that never comes releases it', () async {
+    final controller = AppSettingsController(repository: _SilentRepository())
+      ..update((current) => current.copyWith(sidebarVisible: false));
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(controller.isProcessing, isTrue);
+
+    controller.dispose();
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(controller.isProcessing, isFalse);
+  });
 }
 
 final class _FailingOnceRepository implements IAppSettingsRepository {
@@ -158,4 +193,13 @@ final class _FailingOnceRepository implements IAppSettingsRepository {
     }
     written.add(settings);
   }
+}
+
+/// Never emits, like a stream whose first row never arrives.
+final class _SilentRepository implements IAppSettingsRepository {
+  @override
+  Stream<AppSettings> watch() => StreamController<AppSettings>().stream;
+
+  @override
+  Future<void> update(AppSettings settings) async {}
 }

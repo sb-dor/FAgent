@@ -21,6 +21,7 @@ import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_cont
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 
 /// Gives the workspace widgets access to [WorkspaceConfigWidgetState].
@@ -147,26 +148,34 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   );
 
   /// The project a new chat goes to by default: the one of the selected chat, else the selected
-  /// project, else none.
+  /// project, else the first group of the sidebar, else none.
   int? get newChatProjectId {
+    final chats = switch (sessionsController.state) {
+      Sessions$CompletedState(:final sessions) => sessions,
+      _ => const <ChatSession>[],
+    };
     final sessionId = dataController.sessionId;
     if (sessionId != null) {
-      final chats = switch (sessionsController.state) {
-        Sessions$CompletedState(:final sessions) => sessions,
-        _ => const <ChatSession>[],
-      };
       final chat = chats.where((chat) => chat.id == sessionId).firstOrNull;
       if (chat != null) return chat.projectId;
     }
-    return dataController.projectId;
+    final selected = dataController.projectId;
+    if (selected != null) return selected;
+    final projects = switch (projectsController.state) {
+      Projects$CompletedState(:final projects) => projects,
+      _ => const <Project>[],
+    };
+    return orderProjectsForSidebar(projects, chats).firstOrNull?.id;
   }
 
   /// Starts a new chat in [projectId], by default in [newChatProjectId]; does nothing without a
-  /// project. The project becomes selected, the new chat follows when it is created.
+  /// project. The project becomes selected and the window leaves Skills or Settings for the chat;
+  /// the new chat is selected when it is created.
   void createChat({int? projectId}) {
     final project = projectId ?? newChatProjectId;
     if (project == null) return;
     dataController.selectProject(project);
+    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
     sessionCreationController.create(projectId: project, agentId: 'claude');
   }
 

@@ -20,6 +20,16 @@ sealed class AppSettingsState with _$AppSettingsState {
       AppSettings$CompletedState;
 }
 
+/// The settings a state carries, or the defaults before the first load.
+extension AppSettingsStateX on AppSettingsState {
+  /// The settings of this state.
+  AppSettings get settings => switch (this) {
+    AppSettings$ErrorState(:final settings) ||
+    AppSettings$CompletedState(:final settings) => settings,
+    _ => const AppSettings(),
+  };
+}
+
 /// Keeps the window-level settings in sync with the database.
 ///
 /// Sequential for changes too: a pane width stored while another change is in flight must not be lost.
@@ -49,11 +59,7 @@ final class AppSettingsController extends StateController<AppSettingsState>
   bool _awaitingEcho = false;
 
   /// The latest known settings, or the defaults before the first load.
-  AppSettings get settings => switch (state) {
-    AppSettings$ErrorState(:final settings) ||
-    AppSettings$CompletedState(:final settings) => settings,
-    _ => const AppSettings(),
-  };
+  AppSettings get settings => state.settings;
 
   /// Starts following the stored settings.
   void watch() => handle(() async {
@@ -90,6 +96,9 @@ final class AppSettingsController extends StateController<AppSettingsState>
 
   /// Stores the settings [change] returns for the latest intended ones.
   ///
+  /// The result is normalized the way storing and reading it does (pane width within its range,
+  /// language without a country), so state, write and the database echo agree.
+  ///
   /// Waits for the stored row to load first, so a change never builds on (and writes) the defaults.
   void update(AppSettings Function(AppSettings current) change) {
     _pendingWrites++;
@@ -99,7 +108,9 @@ final class AppSettingsController extends StateController<AppSettingsState>
         await _firstLoad.future;
         final base = _intended;
         if (base == null) throw StateError('The stored settings could not be loaded');
-        final next = change(base);
+        if (isDisposed) return;
+        // What the database will hand back: the echo filter compares against exactly this.
+        final next = AppSettings.fromJson(change(base).toJson());
         _intended = next;
         setState(AppSettingsState.completed(settings: next));
         await _repository.update(next);
@@ -117,6 +128,8 @@ final class AppSettingsController extends StateController<AppSettingsState>
   @override
   void dispose() {
     _subscription?.cancel().ignore();
+    // An update still waiting for the first load must not hang forever.
+    if (!_firstLoad.isCompleted) _firstLoad.complete();
     super.dispose();
   }
 }

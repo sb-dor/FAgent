@@ -72,7 +72,9 @@ void main() {
 
     expect(find.text('avera-hotel'), findsOneWidget);
     expect(find.text('Add a booking screen'), findsOneWidget);
-    expect(find.text('Open a project and start a chat with an agent'), findsOneWidget);
+    // There are projects, so the hint is about picking a chat, not about opening a project.
+    expect(find.text('Pick a chat or start a new one'), findsOneWidget);
+    expect(find.text('Open a project and start a chat with an agent'), findsNothing);
 
     await tester.tap(find.text('Add a booking screen'));
     // The composer's blinking cursor never lets pumpAndSettle settle.

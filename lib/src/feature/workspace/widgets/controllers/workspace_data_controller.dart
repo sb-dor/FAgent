@@ -31,6 +31,7 @@ class WorkspaceDataController with ChangeNotifier {
   WorkspaceView _view = WorkspaceView.chat;
   String? _section;
   RightPaneTab _paneTab = RightPaneTab.changes;
+  final Set<int> _collapsedProjects = <int>{};
 
   /// Selected project.
   int? get projectId => _projectId;
@@ -46,6 +47,16 @@ class WorkspaceDataController with ChangeNotifier {
 
   /// Selected tab of the right pane.
   RightPaneTab get paneTab => _paneTab;
+
+  /// Projects whose chats the sidebar hides. Lives with the window, so hiding the sidebar does
+  /// not forget it.
+  Set<int> get collapsedProjects => Set<int>.unmodifiable(_collapsedProjects);
+
+  /// Collapses project [projectId] in the sidebar, or expands it if it is collapsed.
+  void toggleCollapsed(int projectId) {
+    if (!_collapsedProjects.remove(projectId)) _collapsedProjects.add(projectId);
+    notifyListeners();
+  }
 
   /// Selects [projectId]; the chat selection is cleared when it changes.
   void selectProject(int projectId) {

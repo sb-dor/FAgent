@@ -33,10 +33,16 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
               final project = _scope.selectedProject;
               final sessionId = _scope.dataController.sessionId;
               if (project == null || sessionId == null) {
+                // Without any project the way forward is to open one; with projects, to pick or
+                // start a chat.
+                final hasProjects = switch (_scope.projectsController.state) {
+                  Projects$CompletedState(:final projects) => projects.isNotEmpty,
+                  _ => false,
+                };
                 return _Hint(
-                  text: project == null
-                      ? Localization.of(context).chatPlaceholder
-                      : Localization.of(context).selectChat,
+                  text: hasProjects
+                      ? Localization.of(context).selectChat
+                      : Localization.of(context).chatPlaceholder,
                 );
               }
               return ChatConfigWidget(

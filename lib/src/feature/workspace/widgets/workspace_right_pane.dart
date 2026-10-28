@@ -80,7 +80,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: colors.surface,
+                color: colors.surfaceAlt,
                 border: Border(left: BorderSide(color: colors.border)),
               ),
               child: ListenableBuilder(
@@ -151,7 +151,7 @@ class _TabBody extends StatelessWidget {
     return EmptyState(
       icon: icon,
       title: title,
-      message: localization.comingInMilestone('UI stage 4'),
+      message: localization.comingSoon,
       badge: const PreviewBadge(),
     );
   }

@@ -16,12 +16,18 @@ abstract final class AppRadius {
 }
 
 /// Light and dark [ThemeData] built from [AppColors].
+///
+/// Each is built once: a fresh [ThemeData] never equals the previous one (its state properties
+/// compare by identity), so rebuilding the app with a new instance would animate the theme.
 abstract final class AppTheme {
   /// Light theme.
-  static ThemeData light() => _build(AppColors.light, Brightness.light);
+  static ThemeData light() => _light;
 
   /// Dark theme.
-  static ThemeData dark() => _build(AppColors.dark, Brightness.dark);
+  static ThemeData dark() => _dark;
+
+  static final ThemeData _light = _build(AppColors.light, Brightness.light);
+  static final ThemeData _dark = _build(AppColors.dark, Brightness.dark);
 
   static ThemeData _build(AppColors c, Brightness brightness) {
     final isLight = brightness == Brightness.light;
