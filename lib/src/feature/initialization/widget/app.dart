@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_close/widgets/app_close_guard.dart';
 import 'package:flutter_code_agent/src/feature/hub_notices/widgets/hub_notices_listener.dart';
@@ -34,8 +35,8 @@ class _AppState extends State<App> {
     supportedLocales: Localization.supportedLocales,
 
     // Theme
-    theme: _theme(Brightness.light),
-    darkTheme: _theme(Brightness.dark),
+    theme: AppTheme.light(),
+    darkTheme: AppTheme.dark(),
 
     home: const AppCloseGuard(child: HubNoticesListener(child: WorkspaceConfigWidget())),
     builder: (context, child) => MediaQuery(
@@ -45,8 +46,3 @@ class _AppState extends State<App> {
     ),
   );
 }
-
-ThemeData _theme(Brightness brightness) => ThemeData(
-  useMaterial3: true,
-  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF0175C2), brightness: brightness),
-);
