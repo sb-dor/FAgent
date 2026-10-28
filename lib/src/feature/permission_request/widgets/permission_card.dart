@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
@@ -33,7 +34,7 @@ class PermissionCard extends StatelessWidget {
           : colors.surfaceContainerLow,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: pending ? colors.tertiary : colors.outlineVariant),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -56,7 +57,7 @@ class PermissionCard extends StatelessWidget {
               DecoratedBox(
                 decoration: BoxDecoration(
                   color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8),

@@ -2,6 +2,7 @@ import 'dart:io' as io;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Desktop window setup. The app ships for desktop only.
@@ -14,8 +15,8 @@ Future<void> $platformInitialization() async {
     center: true,
     windowButtonVisibility: true,
     backgroundColor: platform.platformBrightness == Brightness.dark
-        ? ThemeData.dark().colorScheme.surface
-        : ThemeData.light().colorScheme.surface,
+        ? AppColors.dark.bg
+        : AppColors.light.bg,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden,
     title: 'Flutter Code Agent',

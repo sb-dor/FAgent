@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chat_area.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
@@ -77,7 +78,7 @@ class _WorkspaceWidgetState extends State<WorkspaceWidget> {
                 children: <Widget>[
                   if (settings.sidebarVisible) ...<Widget>[
                     const SizedBox(width: kSidebarWidth, child: WorkspaceSidebar()),
-                    VerticalDivider(width: 1, color: Theme.of(context).colorScheme.outlineVariant),
+                    VerticalDivider(width: 1, color: context.colors.border),
                   ],
                   const Expanded(child: WorkspaceChatArea()),
                   if (rightPaneVisible)

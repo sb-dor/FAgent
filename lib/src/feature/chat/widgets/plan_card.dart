@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 
@@ -18,7 +19,7 @@ class PlanCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
+      color: context.colors.surface,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
@@ -44,7 +45,7 @@ class PlanCard extends StatelessWidget {
                         style: entry.status == 'completed'
                             ? theme.textTheme.bodyMedium?.copyWith(
                                 decoration: TextDecoration.lineThrough,
-                                color: theme.colorScheme.onSurfaceVariant,
+                                color: context.colors.muted,
                               )
                             : theme.textTheme.bodyMedium,
                       ),

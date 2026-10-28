@@ -1,5 +1,6 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
@@ -60,10 +61,7 @@ class _Hint extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Center(
-      child: Text(
-        text,
-        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-      ),
+      child: Text(text, style: theme.textTheme.bodyLarge?.copyWith(color: context.colors.muted)),
     );
   }
 }

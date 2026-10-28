@@ -204,10 +204,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
             child: Text(localization.cancel),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: context.colors.danger,
-              foregroundColor: Theme.of(context).colorScheme.onError,
-            ),
+            style: FilledButton.styleFrom(backgroundColor: context.colors.danger),
             onPressed: () => Navigator.pop(context, true),
             child: Text(localization.remove),
           ),

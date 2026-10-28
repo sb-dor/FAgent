@@ -1,5 +1,6 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_close/controller/app_close_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
@@ -76,7 +77,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
       children: <Widget>[
         child!,
         if (state is AppClose$InProgressState) ...<Widget>[
-          const ModalBarrier(dismissible: false, color: Colors.black38),
+          ModalBarrier(dismissible: false, color: context.colors.bg.withValues(alpha: 0.7)),
           Center(
             child: Card(
               child: Padding(

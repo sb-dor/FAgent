@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 
@@ -95,7 +96,7 @@ class ChatProblemBanner extends StatelessWidget {
           child: Card(
             margin: EdgeInsets.zero,
             elevation: 0,
-            color: theme.colorScheme.errorContainer.withValues(alpha: 0.5),
+            color: context.colors.dangerSoft,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Column(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 
 /// {@template bypass_gate_banner}
@@ -15,7 +16,6 @@ class BypassGateBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localization = Localization.of(context);
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
       child: Center(
@@ -24,12 +24,12 @@ class BypassGateBanner extends StatelessWidget {
           child: Card(
             margin: EdgeInsets.zero,
             elevation: 0,
-            color: theme.colorScheme.errorContainer.withValues(alpha: 0.6),
+            color: context.colors.dangerSoft,
             child: Padding(
               padding: const EdgeInsets.all(12),
               child: Row(
                 children: <Widget>[
-                  Icon(Icons.warning_amber_rounded, color: theme.colorScheme.error),
+                  Icon(Icons.warning_amber_rounded, color: context.colors.danger),
                   const SizedBox(width: 10),
                   Expanded(child: Text(localization.bypassInherited)),
                   const SizedBox(width: 10),

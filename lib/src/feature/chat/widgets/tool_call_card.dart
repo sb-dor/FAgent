@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
@@ -19,14 +21,14 @@ class ToolCallCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final colors = context.colors;
     final diffs = call.diffs.toList();
     final texts = call.content.whereType<ToolTextContent>().toList();
     final output = call.rawOutput;
     final hasBody = diffs.isNotEmpty || texts.isNotEmpty || (output != null && output.isNotEmpty);
     final title = Row(
       children: <Widget>[
-        Icon(_icon(call.kind), size: 18, color: colors.onSurfaceVariant),
+        Icon(_icon(call.kind), size: 18, color: colors.muted),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -43,10 +45,10 @@ class ToolCallCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: colors.surfaceContainerLow,
+      color: colors.surface,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: colors.outlineVariant),
-        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: colors.border),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       clipBehavior: Clip.antiAlias,
       child: !hasBody
@@ -107,10 +109,10 @@ class _StatusIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final colors = context.colors;
     return switch (status) {
-      'completed' => Icon(Icons.check_circle_outline, size: 18, color: Colors.green.shade600),
-      'failed' => Icon(Icons.error_outline, size: 18, color: colors.error),
+      'completed' => Icon(Icons.check_circle_outline, size: 18, color: colors.ok),
+      'failed' => Icon(Icons.error_outline, size: 18, color: colors.danger),
       _ => const SizedBox.square(dimension: 14, child: CircularProgressIndicator(strokeWidth: 2)),
     };
   }
