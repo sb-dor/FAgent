@@ -12,8 +12,6 @@
   "untitledChat": "Новый чат",
   "chatPlaceholder": "Откройте проект и начните чат с агентом",
   "selectChat": "Выберите чат или начните новый",
-  "runPanel": "Запуск",
-  "runPanelPlaceholder": "Здесь будут устройства, hot reload и логи",
   "somethingWentWrong": "Что-то пошло не так",
   "promptHint": "Спросите агента… (Enter — отправить, Shift+Enter — новая строка)",
   "send": "Отправить",
@@ -81,5 +79,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "toggleSidebar": "Показать или скрыть боковую панель",
+  "toggleRightPane": "Показать или скрыть правую панель",
+  "backToChat": "Назад в чат",
+  "skills": "Скиллы",
+  "settings": "Настройки",
+  "paneChanges": "Изменения",
+  "paneRun": "Запуск",
+  "panePlan": "План",
+  "settingsGeneral": "Общие",
+  "settingsAgents": "Агенты",
+  "settingsMcp": "MCP-серверы",
+  "settingsPermissions": "Разрешения",
+  "settingsFlutter": "Flutter",
+  "settingsAppearance": "Внешний вид",
+  "settingsShortcuts": "Горячие клавиши",
+  "skillsAndRules": "Скиллы и правила",
+  "rules": "Правила"
 }

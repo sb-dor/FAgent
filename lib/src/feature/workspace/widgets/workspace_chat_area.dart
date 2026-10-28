@@ -1,11 +1,9 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
-import 'package:window_manager/window_manager.dart';
 
 /// {@template workspace_chat_area}
 /// The selected chat, or a hint to pick one.
@@ -25,7 +23,6 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: <Widget>[
-      const DragToMoveArea(child: SizedBox(height: kWindowTitleBarHeight)),
       Expanded(
         child: StateConsumer<ProjectsController, ProjectsState>(
           controller: _scope.projectsController,

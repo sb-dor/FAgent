@@ -1,6 +1,10 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
@@ -51,6 +55,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final SessionsController sessionsController;
   late final SessionCreationController sessionCreationController;
   final WorkspaceDataController dataController = WorkspaceDataController();
+
+  /// The window-level settings (panels, theme, language).
+  late final AppSettingsController settingsController = AppSettingsConfigInhWidget.of(context)
+      .controller;
 
   @override
   void initState() {
@@ -105,6 +113,28 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     final path = await getDirectoryPath(confirmButtonText: Localization.of(context).openProject);
     if (path != null) projectOpeningController.open(path);
   }
+
+  /// Shows or hides the sidebar and remembers the choice.
+  void toggleSidebar() => settingsController.update(
+    (current) => current.copyWith(sidebarVisible: !current.sidebarVisible),
+  );
+
+  /// Shows or hides the right pane and remembers the choice.
+  ///
+  /// While the user has not chosen, the pane is open in a wide window ([kWideWindowWidth]), so the
+  /// first toggle closes it there and opens it in a narrow one.
+  void toggleRightPane({required double windowWidth}) => settingsController.update(
+    (current) => current.copyWith(
+      rightPaneVisible: !(current.rightPaneVisible ?? windowWidth >= kWideWindowWidth),
+    ),
+  );
+
+  /// Remembers the right pane width, kept within the allowed range.
+  void setRightPaneWidth(double width) => settingsController.update(
+    (current) => current.copyWith(
+      rightPaneWidth: width.clamp(AppSettings.minRightPaneWidth, AppSettings.maxRightPaneWidth),
+    ),
+  );
 
   /// Starts a new chat in the selected project.
   void createChat() {

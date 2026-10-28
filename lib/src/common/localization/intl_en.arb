@@ -19,8 +19,6 @@
   "untitledChat": "New chat",
   "chatPlaceholder": "Open a project and start a chat with an agent",
   "selectChat": "Pick a chat or start a new one",
-  "runPanel": "Run",
-  "runPanelPlaceholder": "Devices, hot reload and logs will appear here",
   "somethingWentWrong": "Something went wrong",
   "promptHint": "Ask the agent… (Enter to send, Shift+Enter for a new line)",
   "send": "Send",
@@ -116,5 +114,22 @@
         "type": "String"
       }
     }
-  }
+  },
+  "toggleSidebar": "Show or hide the sidebar",
+  "toggleRightPane": "Show or hide the side panel",
+  "backToChat": "Back to chat",
+  "skills": "Skills",
+  "settings": "Settings",
+  "paneChanges": "Changes",
+  "paneRun": "Run",
+  "panePlan": "Plan",
+  "settingsGeneral": "General",
+  "settingsAgents": "Agents",
+  "settingsMcp": "MCP servers",
+  "settingsPermissions": "Permissions",
+  "settingsFlutter": "Flutter",
+  "settingsAppearance": "Appearance",
+  "settingsShortcuts": "Keyboard shortcuts",
+  "skillsAndRules": "Skills and rules",
+  "rules": "Rules"
 }

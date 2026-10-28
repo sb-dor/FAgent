@@ -10,7 +10,9 @@ void main() {
   testWidgets('an empty workspace invites to open a project', (tester) async {
     useDesktopView(tester);
     final dependencies = testDependencies();
-    await tester.pumpWidget(testApp(const WorkspaceConfigWidget(), dependencies: dependencies));
+    await tester.pumpWidget(
+      testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Projects'), findsOneWidget);
@@ -28,6 +30,7 @@ void main() {
         const WorkspaceConfigWidget(),
         dependencies: dependencies,
         locale: const Locale('ru'),
+        withSettings: true,
       ),
     );
     await tester.pumpAndSettle();
@@ -58,7 +61,9 @@ void main() {
           );
     });
 
-    await tester.pumpWidget(testApp(const WorkspaceConfigWidget(), dependencies: dependencies));
+    await tester.pumpWidget(
+      testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
+    );
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
     await tester.tap(find.text('avera-hotel'));

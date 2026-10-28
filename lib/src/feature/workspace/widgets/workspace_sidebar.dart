@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chats_list.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_projects_list.dart';
-import 'package:window_manager/window_manager.dart';
 
 /// {@template workspace_sidebar}
 /// Projects on top, the selected project's chats below.
@@ -30,7 +28,6 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          const DragToMoveArea(child: SizedBox(height: kWindowTitleBarHeight)),
           _SectionHeader(
             title: localization.projects,
             actionTooltip: localization.openProject,
