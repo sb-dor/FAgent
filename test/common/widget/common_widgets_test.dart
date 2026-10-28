@@ -59,13 +59,22 @@ void main() {
       ),
     );
 
+    // The label column is the SizedBox that directly wraps the label text.
+    double labelColumnWidth() => tester
+        .getSize(
+          find
+              .ancestor(of: find.text('Модель по умолчанию'), matching: find.byType(SizedBox))
+              .first,
+        )
+        .width;
+
     await tester.pumpWidget(grid(640));
     expect(tester.takeException(), isNull);
-    final width = tester.getSize(find.text('Модель по умолчанию')).width;
-    expect(width, lessThanOrEqualTo(170));
+    expect(labelColumnWidth(), 170);
 
     await tester.pumpWidget(grid(300));
     expect(tester.takeException(), isNull);
+    expect(labelColumnWidth(), 120);
   });
 
   testWidgets('PaneTabs shows an error badge and reports the picked tab', (tester) async {
