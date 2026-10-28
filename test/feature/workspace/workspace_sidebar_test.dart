@@ -285,6 +285,36 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    testWidgets('a project with a working agent is kept and the user is told why', (tester) async {
+      useWindow(tester, 1280, 800);
+      await tester.runAsync(() async {
+        final avera = await addProject('avera-hotel');
+        final chat = await addChat(avera, 'Booking screen');
+        (await dependencies.agentHub.session(chat)).status.value = SessionStatus.running;
+      });
+      await pumpSidebar(tester);
+
+      await tester.tap(find.byTooltip('Project actions'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove…'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove'));
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text("Stop the agent in this project's chats first."), findsOneWidget);
+      expect(find.text('avera-hotel'), findsOneWidget);
+      expect(find.text('Booking screen'), findsOneWidget);
+      final counts = (await tester.runAsync(
+        () async => (
+          (await database.select(database.projectsTable).get()).length,
+          (await database.select(database.sessionsTable).get()).length,
+        ),
+      ))!;
+      expect(counts, (1, 1));
+      await disposeTestApp(tester, dependencies);
+    });
+
     testWidgets('removing the selected project clears the selection', (tester) async {
       useWindow(tester, 1280, 800);
       late int avera;

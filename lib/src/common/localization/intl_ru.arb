@@ -104,6 +104,7 @@
   "showInFinder": "Показать в Finder",
   "projectSettings": "Настройки проекта",
   "removeProject": "Убрать…",
+  "removeProjectBusy": "Сначала остановите агента в чатах этого проекта.",
   "remove": "Убрать",
   "removeProjectConfirm": "Убрать {name}? Его чаты удалятся, файлы на диске останутся.",
   "@removeProjectConfirm": {

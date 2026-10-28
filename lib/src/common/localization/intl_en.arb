@@ -139,6 +139,7 @@
   "showInFinder": "Show in Finder",
   "projectSettings": "Project settings",
   "removeProject": "Remove…",
+  "removeProjectBusy": "Stop the agent in this project's chats first.",
   "remove": "Remove",
   "removeProjectConfirm": "Remove {name}? Its chats are deleted; files on disk stay.",
   "@removeProjectConfirm": {

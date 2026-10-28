@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/projects/controller/project_removal_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
@@ -54,6 +55,7 @@ class WorkspaceConfigWidget extends StatefulWidget {
 class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectsController projectsController;
   late final ProjectOpeningController projectOpeningController;
+  late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
   late final SessionCreationController sessionCreationController;
   final WorkspaceDataController dataController = WorkspaceDataController();
@@ -66,9 +68,13 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void initState() {
     super.initState();
     final dependencies = Dependencies.of(context);
-    projectsController = ProjectsController(
-      repository: ProjectsRepositoryImpl(database: dependencies.database),
-    )..watch();
+    final projectsRepository = ProjectsRepositoryImpl(
+      database: dependencies.database,
+      hub: dependencies.agentHub,
+    );
+    projectsController = ProjectsController(repository: projectsRepository)..watch();
+    projectRemovalController = ProjectRemovalController(repository: projectsRepository)
+      ..addListener(_onProjectRemoved);
     projectOpeningController = ProjectOpeningController(
       repository: ProjectOpeningRepositoryImpl(database: dependencies.database),
     )..addListener(_onProjectOpened);
@@ -92,6 +98,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..dispose();
     sessionCreationController
       ..removeListener(_onSessionCreated)
+      ..dispose();
+    projectRemovalController
+      ..removeListener(_onProjectRemoved)
       ..dispose();
     projectsController.dispose();
     sessionsController.dispose();
@@ -193,20 +202,27 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
-    try {
-      await projectsController.remove(project.id);
-    } on Object {
-      _showError();
-      return;
-    }
-    if (dataController.projectId == project.id) dataController.clearSelection();
+    if (confirmed == true) projectRemovalController.remove(project.id);
   }
 
-  void _showError() {
+  void _onProjectRemoved() {
+    switch (projectRemovalController.state) {
+      case ProjectRemoval$CompletedState(:final projectId):
+        if (dataController.projectId == projectId) dataController.clearSelection();
+      case ProjectRemoval$BusyState():
+        _showMessage(Localization.of(context).removeProjectBusy);
+      case ProjectRemoval$ErrorState():
+        _showError();
+      default:
+        break;
+    }
+  }
+
+  void _showError() => _showMessage(Localization.of(context).somethingWentWrong);
+
+  void _showMessage(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-        ?.showSnackBar(SnackBar(content: Text(Localization.of(context).somethingWentWrong)));
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _onProjectOpened() {

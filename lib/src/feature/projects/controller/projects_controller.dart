@@ -38,10 +38,6 @@ final class ProjectsController extends StateController<ProjectsState>
     );
   }, error: (error, stackTrace) async => setState(ProjectsState.error(error: error)));
 
-  /// Forgets project [projectId] with its chats; the list updates through [watch]. Throws when the
-  /// database refuses, so the caller can tell the user: it is not a state of the list.
-  Future<void> remove(int projectId) => _repository.remove(projectId);
-
   /// Shows [path] in Finder. Throws when it cannot.
   Future<void> reveal(String path) => _repository.reveal(path);
 
