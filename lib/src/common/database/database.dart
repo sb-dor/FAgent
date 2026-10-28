@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_code_agent/src/common/database/database.steps.dart';
+import 'package:flutter_code_agent/src/common/database/tables/app_settings_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/projects_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/session_events_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/sessions_table.dart';
@@ -11,7 +12,7 @@ part 'database.g.dart';
 /// {@template database}
 /// The drift-managed database configuration
 /// {@endtemplate}
-@DriftDatabase(tables: [ProjectsTable, SessionsTable, SessionEventsTable])
+@DriftDatabase(tables: [ProjectsTable, SessionsTable, SessionEventsTable, AppSettingsTable])
 class AppDatabase extends _$AppDatabase {
   /// {@macro database}
   AppDatabase(super.e);
@@ -31,7 +32,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -45,6 +46,9 @@ class AppDatabase extends _$AppDatabase {
       },
       from2To3: (m, schema) async {
         await m.addColumn(schema.sessions, schema.sessions.bypassAllowedAt);
+      },
+      from3To4: (m, schema) async {
+        await m.createTable(schema.appSettings);
       },
     ),
     // SQLite ignores foreign keys (and ON DELETE CASCADE) unless enabled per connection.

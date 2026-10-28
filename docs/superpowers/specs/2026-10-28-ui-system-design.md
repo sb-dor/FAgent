@@ -241,9 +241,10 @@ org, folder, platforms, template, gitInit, openChat}`, `CreationStep{label, stat
 - Замена на настоящую реализацию — одна строка в инициализации и удаление фейка.
 
 ### База данных (v3 → v4)
-Таблицы `app_settings` (`key` PK, `value` JSON, `updatedAt`), `skill_states` (`skillId`, `projectId`
-nullable, `enabled`; уникальный ключ `(skillId, projectId)`), `mcp_servers` (`id`, `name`, `transport`,
-`config` JSON, `projectId` nullable, `enabled`). Миграция step-by-step + тест `SchemaVerifier`, как v3.
+v4 добавляет только таблицу `app_settings` (`key` PK, `value` JSON, `updatedAt`). Таблицы `skill_states`
+(`skillId`, `projectId` nullable, `enabled`; уникальный ключ `(skillId, projectId)`) и `mcp_servers`
+(`id`, `name`, `transport`, `config` JSON, `projectId` nullable, `enabled`) добавят планы этапов 5 и 6
+своими миграциями. Миграция step-by-step + тест `SchemaVerifier`, как v3.
 
 ## 5. Локализация и доступность
 Все строки — `intl_en.arb` / `intl_ru.arb`. Все кнопки-иконки с `tooltip`, у меню — навигация
