@@ -52,3 +52,4 @@ app.*.map.json
 *.freezed.dart
 *.gen.dart
 lib/src/common/localization/generated/
+.superpowers/

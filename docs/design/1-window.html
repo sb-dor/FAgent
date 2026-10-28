@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1. Окно и дизайн-система</title>
+<style>body{margin:0;padding:24px 32px;background:#fff;color:#1f2329;font:14px/1.5 -apple-system,"SF Pro Text",sans-serif;color-scheme:light}
+h2{font-size:22px;margin:0 0 4px}h3{font-size:15px;margin:0 0 6px}.subtitle{color:#626a75;margin:0 0 18px}code{font-family:Menlo,monospace;font-size:12px}</style>
+</head><body>
+<h2>1. Окно и дизайн-система</h2>
+<p class="subtitle">Главное окно (светлая тема). Цифры — пояснения ниже. Внизу — токены для светлой и тёмной темы.</p>
+
+<style>
+  :root { --bg:#fff; --sf:#f4f6f8; --sf2:#fafbfc; --bd:#e3e6ea; --tx:#1f2329; --mu:#6b7480; --ac:#0175c2; --acs:#dceefb; --ok:#1e8e3e; --okS:#e6f4ea; --wa:#b26a00; --waS:#fff4e0; --dn:#d93025; --dnS:#fce8e6; }
+  .win { border-radius:12px; overflow:hidden; border:1px solid var(--bd); background:var(--bg); color:var(--tx); font:13px/1.45 -apple-system,"SF Pro Text",sans-serif; box-shadow:0 10px 30px rgba(0,0,0,.08); }
+  .title { height:38px; display:flex; align-items:center; gap:8px; padding:0 12px; background:var(--sf); border-bottom:1px solid var(--bd); }
+  .dot { width:11px; height:11px; border-radius:50%; }
+  .tbtn { padding:3px 9px; border-radius:7px; border:1px solid var(--bd); background:#fff; font-size:12px; }
+  .body { display:flex; height:520px; }
+  .side { width:236px; background:var(--sf); border-right:1px solid var(--bd); display:flex; flex-direction:column; padding:10px 8px; gap:2px; }
+  .row { padding:5px 8px; border-radius:7px; display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden; }
+  .row.sel { background:var(--acs); color:#0b4f85; }
+  .grp { font-size:11px; font-weight:600; color:var(--mu); padding:10px 8px 4px; display:flex; justify-content:space-between; }
+  .st { width:7px; height:7px; border-radius:50%; flex:none; }
+  .main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .feed { flex:1; padding:18px 0; overflow:hidden; }
+  .col { max-width:600px; margin:0 auto; display:flex; flex-direction:column; gap:12px; padding:0 20px; }
+  .user { align-self:flex-end; background:var(--sf); border:1px solid var(--bd); padding:8px 12px; border-radius:12px; max-width:80%; }
+  .tool { border:1px solid var(--bd); border-radius:9px; padding:7px 10px; display:flex; gap:8px; align-items:center; font-size:12px; }
+  .mono { font-family:"JetBrains Mono",Menlo,monospace; font-size:12px; }
+  .comp { max-width:600px; margin:0 auto 14px; width:calc(100% - 40px); border:1px solid var(--bd); border-radius:14px; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.04); }
+  .chips { display:flex; gap:6px; align-items:center; padding:6px 8px 8px; flex-wrap:wrap; }
+  .chip { padding:3px 9px; border-radius:8px; font-size:12px; color:var(--mu); border:1px solid transparent; }
+  .chip:hover { background:var(--sf); }
+  .send { margin-left:auto; width:28px; height:28px; border-radius:50%; background:var(--ac); color:#fff; display:flex; align-items:center; justify-content:center; }
+  .pane { width:340px; border-left:1px solid var(--bd); background:var(--sf2); display:flex; flex-direction:column; }
+  .tabs { display:flex; gap:2px; padding:8px; border-bottom:1px solid var(--bd); }
+  .tab { padding:4px 10px; border-radius:7px; font-size:12px; color:var(--mu); }
+  .tab.on { background:#fff; color:var(--tx); box-shadow:0 0 0 1px var(--bd); }
+  .file { display:flex; justify-content:space-between; padding:6px 10px; font-size:12px; border-radius:6px; }
+  .n { position:relative; }
+  .n::after { content:attr(data-n); position:absolute; top:-8px; right:-8px; width:18px; height:18px; border-radius:50%; background:#ff6b35; color:#fff; font:700 11px/18px sans-serif; text-align:center; }
+  .legend { display:grid; grid-template-columns:repeat(2,1fr); gap:6px 24px; margin-top:16px; font-size:13px; }
+  .legend b { display:inline-block; width:20px; height:20px; border-radius:50%; background:#ff6b35; color:#fff; text-align:center; line-height:20px; font-size:11px; margin-right:6px; }
+  .tokens { display:flex; gap:24px; margin-top:20px; flex-wrap:wrap; }
+  .tk { display:flex; flex-direction:column; gap:4px; font-size:11px; }
+  .sw { display:flex; gap:4px; }
+  .sw span { width:46px; height:30px; border-radius:6px; border:1px solid rgba(0,0,0,.08); display:flex; align-items:flex-end; padding:2px; font-size:9px; }
+</style>
+
+<div class="win">
+  <div class="title">
+    <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
+    <span class="tbtn n" data-n="1" style="margin-left:14px">◧</span>
+    <span style="margin-left:10px;font-weight:600">Экран бронирования</span><span style="color:var(--mu)">· avera-hotel</span>
+    <span style="margin-left:auto" class="tbtn n" data-n="2">📱 iPhone 16 Pro ▾</span>
+    <span class="tbtn" style="background:var(--ac);color:#fff;border-color:var(--ac)">▶ Run</span>
+    <span class="tbtn">⚡</span>
+    <span class="tbtn n" data-n="3">◨</span>
+  </div>
+  <div class="body">
+    <div class="side">
+      <div class="row n" data-n="4" style="background:#fff;border:1px solid var(--bd);justify-content:space-between"><span>✎ Новый чат</span><span style="color:var(--mu);font-size:11px">⌘N</span></div>
+      <div class="row" style="color:var(--mu)">⌕ Поиск <span style="margin-left:auto;font-size:11px">⌘K</span></div>
+      <div class="grp n" data-n="5"><span>avera-hotel</span><span>⋯</span></div>
+      <div class="row sel"><span class="st" style="background:var(--ac)"></span>Экран бронирования</div>
+      <div class="row"><span class="st" style="background:var(--wa)"></span>Оплата: Stripe</div>
+      <div class="row"><span class="st" style="background:transparent"></span>Фикс drift-миграции</div>
+      <div class="grp"><span>shop_app</span><span>⋯</span></div>
+      <div class="row"><span class="st" style="background:var(--dn)"></span>Тёмная тема</div>
+      <div class="row"><span class="st"></span>Push-уведомления</div>
+      <div class="row" style="color:var(--mu)">＋ Открыть проект…</div>
+      <div style="margin-top:auto"></div>
+      <div class="row n" data-n="6">🧩 Скиллы</div>
+      <div class="row">⚙ Настройки</div>
+      <div class="row" style="color:var(--mu);font-size:12px">● Claude · подписка Max</div>
+    </div>
+    <div class="main">
+      <div class="feed"><div class="col">
+        <div class="user">Добавь экран бронирования по нашей архитектуре @lib/src/feature/rooms</div>
+        <div style="color:var(--mu);font-size:12px">▸ Размышления · 12 c</div>
+        <div class="tool"><span>📖</span> Прочитал 4 файла · <span class="mono">rooms/…</span></div>
+        <div class="tool"><span>🧩</span> Скилл <b>feature-architecture</b></div>
+        <div class="tool" style="justify-content:space-between"><span>✎ <span class="mono">booking_screen.dart</span></span><span class="mono"><span style="color:var(--ok)">+84</span> <span style="color:var(--dn)">−0</span></span></div>
+        <div>Готово: добавил <span class="mono">BookingController</span> (Droppable), экран и строки локализации. Запусти hot reload, чтобы проверить.</div>
+      </div></div>
+      <div class="comp n" data-n="7">
+        <div style="padding:12px 14px;color:var(--mu)">Спроси агента… <span class="mono">@</span> файл · <span class="mono">/</span> скилл или команда</div>
+        <div class="chips">
+          <span class="chip">＋</span>
+          <span class="chip" style="color:var(--tx)">✳ Claude Code ▾</span>
+          <span class="chip">Opus 4.x ▾</span>
+          <span class="chip">⛨ Manual ▾</span>
+          <span class="chip">🧩 3</span>
+          <span class="send">↑</span>
+        </div>
+      </div>
+    </div>
+    <div class="pane n" data-n="8">
+      <div class="tabs"><span class="tab on">Изменения 3</span><span class="tab">Run</span><span class="tab">План</span></div>
+      <div style="padding:8px">
+        <div class="file" style="background:#fff;box-shadow:0 0 0 1px var(--bd)"><span class="mono">booking_screen.dart</span><span class="mono" style="color:var(--ok)">+84</span></div>
+        <div class="file"><span class="mono">booking_controller.dart</span><span class="mono" style="color:var(--ok)">+61</span></div>
+        <div class="file"><span class="mono">intl_ru.arb</span><span class="mono"><span style="color:var(--ok)">+6</span> <span style="color:var(--dn)">−1</span></span></div>
+        <div style="margin-top:8px;border:1px solid var(--bd);border-radius:8px;overflow:hidden;background:#fff">
+          <div class="mono" style="padding:2px 8px;background:var(--okS)">+ class BookingScreen extends StatefulWidget {</div>
+          <div class="mono" style="padding:2px 8px;background:var(--okS)">+   const BookingScreen({super.key});</div>
+          <div class="mono" style="padding:2px 8px;color:var(--mu)">  …</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div><b>1</b>Скрыть/показать сайдбар (⌘\)</div>
+  <div><b>2</b>Устройство для запуска + Run / ⚡ hot reload — всегда под рукой</div>
+  <div><b>3</b>Скрыть/показать правую панель (⌘J)</div>
+  <div><b>4</b>Новый чат в текущем проекте; ⌘K — поиск по чатам</div>
+  <div><b>5</b>Чаты сгруппированы по проектам; ⋯ — настройки проекта, Finder, убрать. Точка: синяя — работает, жёлтая — ждёт разрешения, красная — ошибка</div>
+  <div><b>6</b>Скиллы и Настройки открываются страницей поверх окна (Esc — назад)</div>
+  <div><b>7</b>Поле ввода: агент, модель, режим разрешений, скиллы чата, «＋» — файл/картинка</div>
+  <div><b>8</b>Правая панель: Изменения (diff), Run (логи, устройство), План агента</div>
+</div>
+
+<h3 style="margin-top:28px">Токены</h3>
+<div class="tokens">
+  <div class="tk">Светлая
+    <div class="sw"><span style="background:#fff">bg</span><span style="background:#f4f6f8">surface</span><span style="background:#e3e6ea">border</span><span style="background:#1f2329;color:#fff">text</span><span style="background:#6b7480;color:#fff">muted</span></div>
+  </div>
+  <div class="tk">Тёмная
+    <div class="sw"><span style="background:#16181b;color:#ccc">bg</span><span style="background:#1e2125;color:#ccc">surface</span><span style="background:#2e3238;color:#ccc">border</span><span style="background:#e6e8eb">text</span><span style="background:#8b939e">muted</span></div>
+  </div>
+  <div class="tk">Акцент и статусы
+    <div class="sw"><span style="background:#0175c2;color:#fff">accent</span><span style="background:#dceefb">acc.soft</span><span style="background:#1e8e3e;color:#fff">ok</span><span style="background:#b26a00;color:#fff">warn</span><span style="background:#d93025;color:#fff">danger</span></div>
+  </div>
+  <div class="tk">Типографика
+    <div style="font-size:12px;line-height:1.6">SF Pro (системный) 13/20 — текст<br>15 semibold — заголовки, 12 — подписи<br>JetBrains Mono 12 — код, пути, логи</div>
+  </div>
+  <div class="tk">Сетка
+    <div style="font-size:12px;line-height:1.6">шаг 4 px · радиусы 6 / 10 / 14<br>сайдбар 236 · лента ≤ 720 · панель 340–560 (тянется)</div>
+  </div>
+</div>
+
+</body></html>

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5. Настройки</title>
+<style>body{margin:0;padding:24px 32px;background:#fff;color:#1f2329;font:14px/1.5 -apple-system,"SF Pro Text",sans-serif;color-scheme:light}
+h2{font-size:22px;margin:0 0 4px}h3{font-size:15px;margin:0 0 6px}.subtitle{color:#626a75;margin:0 0 18px}code{font-family:Menlo,monospace;font-size:12px}</style>
+</head><body>
+<h2>5. Настройки — колонка 640 px</h2>
+<p class="subtitle">Масштаб уменьшен, пропорции настоящие: сверху окно 1280×800 (по умолчанию), снизу — минимальное 900×600.</p>
+
+<style>
+  :root { --sf:#f4f6f8; --bd:#e3e6ea; --tx:#1f2329; --mu:#6b7480; --ac:#0175c2; --acs:#dceefb; --ok:#1e8e3e; --okS:#e6f4ea; --wa:#b26a00; --waS:#fff4e0; --dn:#d93025; }
+  .rule { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; font-size:13px; margin-bottom:18px; }
+  .rule div { color:var(--tx); background:var(--sf); border-radius:10px; padding:10px 12px; }
+  .scale { zoom:.62; }
+  .win { color-scheme:light; border:1px solid var(--bd); border-radius:12px; overflow:hidden; background:#fff; color:var(--tx); font:13px/1.45 -apple-system,"SF Pro Text",sans-serif; box-shadow:0 10px 30px rgba(0,0,0,.08); display:flex; flex-direction:column; }
+  .top { height:40px; flex:none; display:flex; align-items:center; gap:8px; padding:0 14px; border-bottom:1px solid var(--bd); background:var(--sf); }
+  .d3 { width:11px; height:11px; border-radius:50%; display:inline-block; }
+  .body { flex:1; display:flex; min-height:0; }
+  .nav { width:220px; flex:none; border-right:1px solid var(--bd); background:var(--sf); padding:12px 10px; display:flex; flex-direction:column; gap:2px; }
+  .nav.rail { width:56px; align-items:center; }
+  .ni { padding:7px 10px; border-radius:7px; white-space:nowrap; }
+  .ni.on { background:var(--acs); color:#0b4f85; }
+  .scroll { flex:1; overflow:hidden; display:flex; justify-content:center; }
+  .main { width:100%; max-width:640px; padding:28px 32px; display:flex; flex-direction:column; gap:14px; box-sizing:border-box; }
+  .h { font-size:20px; font-weight:600; }
+  .sub { font-size:12px; color:var(--mu); }
+  .pcard { border:1px solid var(--bd); border-radius:12px; padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+  .ch { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .logo { width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; background:var(--sf); flex:none; }
+  .grow { flex:1; min-width:180px; }
+  .st { font-size:11px; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+  .btn { padding:5px 11px; border-radius:8px; border:1px solid var(--bd); background:#fff; font-size:12px; white-space:nowrap; }
+  .btn.p { background:var(--ac); color:#fff; border-color:var(--ac); }
+  .kv { display:grid; grid-template-columns:minmax(120px,170px) 1fr; gap:8px 14px; font-size:12px; align-items:center; border-top:1px solid var(--bd); padding-top:10px; }
+  .kv .k { color:var(--mu); }
+  .sel { border:1px solid var(--bd); border-radius:7px; padding:3px 9px; display:inline-block; margin:1px 4px 1px 0; }
+  .mono { font-family:"JetBrains Mono",Menlo,monospace; font-size:11px; }
+  .tog { width:28px; height:16px; border-radius:8px; background:var(--ac); position:relative; flex:none; }
+  .tog::after { content:""; position:absolute; right:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#fff; }
+  .tog.off { background:#cfd5dc; } .tog.off::after { right:auto; left:2px; }
+  .mrow { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--bd); }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; }
+  .lbl { font-size:12px; color:var(--mu); margin:14px 0 6px; font-weight:600; }
+</style>
+
+<div class="rule">
+  <div><b>Это не диалог, а экран окна.</b> Скиллы и Настройки заменяют сайдбар, чат и панель целиком (как Settings в Claude Desktop). «← Чат» или Esc возвращают туда же, чат продолжает работать в фоне.</div>
+  <div><b>Ширина.</b> Навигация 220 px. Контент — одна колонка по центру, <b>max 640 px</b> (лента чата остаётся 720), отступы 32. Карточки всегда в одну колонку и тянутся по ширине колонки, внутри — перенос строк, а не обрезка.</div>
+  <div><b>Узкое окно.</b> Если окно уже 1100 px, навигация сворачивается в полоску иконок 56 px. Минимум окна 900 px → контент ≈ 780 px, всё помещается. Скиллы: список 320, карточка — остальное (min 400).</div>
+</div>
+
+<div class="lbl">1280 × 800 — раздел «Агенты»</div>
+<div class="scale"><div class="win" style="width:1280px;height:800px">
+  <div class="top"><span class="d3" style="background:#ff5f57"></span><span class="d3" style="background:#febc2e"></span><span class="d3" style="background:#28c840"></span><span style="margin-left:12px;color:var(--mu)">← Чат</span><b>Настройки</b></div>
+  <div class="body">
+    <div class="nav"><div class="ni">Общие</div><div class="ni on">Агенты</div><div class="ni">MCP-серверы</div><div class="ni">Разрешения</div><div class="ni">Flutter</div><div class="ni">Внешний вид</div><div class="ni">Горячие клавиши</div></div>
+    <div class="scroll"><div class="main">
+      <div><div class="h">Агенты</div><div class="sub">Агенты работают через Agent Client Protocol. Подписка и вход — ваши; приложение только запускает агента.</div></div>
+      <div class="pcard">
+        <div class="ch"><span class="logo">✳</span><div class="grow"><b>Claude Code</b> <span class="st" style="background:var(--acs);color:#0b4f85">по умолчанию</span><div class="sub">claude-agent-acp 0.96.0 · Node 22.11</div></div>
+          <span class="st" style="background:var(--okS);color:var(--ok)">● вошли · avaz@…</span><span class="btn">Выйти</span></div>
+        <div class="kv">
+          <span class="k">Модель по умолчанию</span><span><span class="sel">Opus ▾</span><span class="sel">Среднее усилие ▾</span></span>
+          <span class="k">Режим по умолчанию</span><span><span class="sel">⛨ Manual ▾</span></span>
+          <span class="k">Настройки Claude</span><span class="sub">Также читаются ~/.claude/settings.json и .claude/ проекта — <span style="color:var(--ac)">открыть</span></span>
+        </div>
+      </div>
+      <div class="pcard">
+        <div class="ch"><span class="logo">◎</span><div class="grow"><b>Codex</b><div class="sub">codex-acp · нужен Node 22+</div></div><span class="st" style="background:var(--sf);color:var(--mu)">не установлен</span><span class="btn p">Установить</span></div>
+      </div>
+      <div class="pcard">
+        <div class="ch"><span class="logo">✦</span><div class="grow"><b>Gemini CLI</b><div class="sub">gemini --experimental-acp · 0.9.2</div></div><span class="st" style="background:var(--waS);color:var(--wa)">нужен вход</span><span class="btn">Войти с Google</span></div>
+      </div>
+      <span class="btn" style="align-self:flex-start">＋ Свой ACP-агент</span>
+    </div></div>
+  </div>
+</div></div>
+
+<div class="lbl">900 × 600 (минимум) — раздел «MCP-серверы», навигация свёрнута</div>
+<div class="scale"><div class="win" style="width:900px;height:600px">
+  <div class="top"><span class="d3" style="background:#ff5f57"></span><span class="d3" style="background:#febc2e"></span><span class="d3" style="background:#28c840"></span><span style="margin-left:12px;color:var(--mu)">← Чат</span><b>Настройки</b></div>
+  <div class="body">
+    <div class="nav rail"><div class="ni">⚙</div><div class="ni">✳</div><div class="ni on">⇄</div><div class="ni">⛨</div><div class="ni">◆</div><div class="ni">◐</div><div class="ni">⌘</div></div>
+    <div class="scroll"><div class="main">
+      <div><div class="h">MCP-серверы</div><div class="sub">Передаются агенту в каждой сессии. Встроенные выключаются только по проекту.</div></div>
+      <div class="pcard" style="gap:0;padding-top:4px;padding-bottom:4px">
+        <div class="mrow"><span class="dot" style="background:var(--ok)"></span><div class="grow"><b>flutter_code_agent</b> <span class="st" style="background:var(--sf);color:var(--mu)">встроенный</span><div class="sub">скиллы, правила, запуск, скриншот · 9 инструментов</div></div><span class="tog"></span></div>
+        <div class="mrow"><span class="dot" style="background:var(--ok)"></span><div class="grow"><b>Dart MCP</b> <span class="st" style="background:var(--sf);color:var(--mu)">встроенный</span><div class="sub">dart mcp-server · hot reload, анализ, pub.dev · 18 инструментов</div></div><span class="tog"></span></div>
+        <div class="mrow" style="border-bottom:none"><span class="dot" style="background:var(--dn)"></span><div class="grow"><b>figma</b><div class="sub mono">https://mcp.figma.com/mcp · <span style="color:var(--dn)">нужна авторизация</span></div></div><span class="btn">Войти</span><span class="tog off"></span></div>
+      </div>
+      <div class="ch"><span class="btn">＋ stdio (команда)</span><span class="btn">＋ HTTP (URL)</span><span class="btn">Импорт из .mcp.json</span></div>
+    </div></div>
+  </div>
+</div></div>
+
+</body></html>
