@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chat_area.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_page_scaffold.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_right_pane.dart';
@@ -102,13 +103,25 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('900×600 fits with every panel open', (tester) async {
+    testWidgets('900×600 fits with a chat open, the widest stored pane and the sidebar', (
+      tester,
+    ) async {
       useWindow(tester, 900, 600);
-      await pumpShell(tester, stored: const AppSettings(rightPaneVisible: true));
+      await pumpShell(
+        tester,
+        stored: const AppSettings(rightPaneVisible: true, rightPaneWidth: 560),
+        withChat: true,
+      );
+      await openChat(tester);
 
       expect(find.byType(WorkspaceSidebar), findsOneWidget);
       expect(find.byType(WorkspaceRightPane), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+      expect(tester.getSize(find.byType(WorkspaceChatArea)).width, greaterThanOrEqualTo(320));
+      expect(tester.getSize(find.byType(WorkspaceRightPane)).width, greaterThanOrEqualTo(340));
       expect(tester.takeException(), isNull);
+      // The window only limits what is shown; the preference stays.
+      expect(settingsOf(tester).settings.rightPaneWidth, 560);
       await disposeTestApp(tester, dependencies);
     });
 
@@ -254,6 +267,22 @@ void main() {
       await gesture.up();
       await settle(tester);
       expect(settingsOf(tester).settings.rightPaneWidth, live);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('dragging wider at 900 px stops where the chat would drop below 320', (
+      tester,
+    ) async {
+      useWindow(tester, 900, 600);
+      await pumpShell(tester, stored: const AppSettings(rightPaneVisible: true), withChat: true);
+      await openChat(tester);
+
+      await tester.drag(handle, const Offset(-400, 0));
+      await settle(tester);
+      expect(tester.getSize(find.byType(WorkspaceChatArea)).width, 320);
+      expect(tester.getSize(find.byType(WorkspaceRightPane)).width, 343);
+      expect(settingsOf(tester).settings.rightPaneWidth, 343);
+      expect(tester.takeException(), isNull);
       await disposeTestApp(tester, dependencies);
     });
 

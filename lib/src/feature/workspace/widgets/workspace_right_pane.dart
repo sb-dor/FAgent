@@ -16,7 +16,11 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 /// {@endtemplate}
 class WorkspaceRightPane extends StatefulWidget {
   /// {@macro workspace_right_pane}
-  const WorkspaceRightPane({super.key});
+  const WorkspaceRightPane({required this.maxWidth, super.key});
+
+  /// The widest the pane may be right now: the chat keeps its minimum width. The stored width is
+  /// not changed by this, it only limits what is shown and dragged.
+  final double maxWidth;
 
   @override
   State<WorkspaceRightPane> createState() => _WorkspaceRightPaneState();
@@ -31,10 +35,10 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
 
   double get _storedWidth => _scope.settingsController.settings.rightPaneWidth;
 
-  double _width() => (_dragWidth ?? _storedWidth).clamp(
-    AppSettings.minRightPaneWidth,
-    AppSettings.maxRightPaneWidth,
-  );
+  double _width() {
+    final max = widget.maxWidth.clamp(AppSettings.minRightPaneWidth, AppSettings.maxRightPaneWidth);
+    return (_dragWidth ?? _storedWidth).clamp(AppSettings.minRightPaneWidth, max);
+  }
 
   @override
   void initState() {

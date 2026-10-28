@@ -9,3 +9,6 @@ const double kSidebarWidth = 236;
 
 /// From this window width on the right pane is open unless the user chose otherwise.
 const double kWideWindowWidth = 1100;
+
+/// The chat never gets narrower than this; the right pane gives way first.
+const double kMinChatWidth = 320;

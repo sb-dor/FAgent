@@ -69,16 +69,24 @@ class _WorkspaceWidgetState extends State<WorkspaceWidget> {
       children: <Widget>[
         const WorkspaceTitleBar(),
         Expanded(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              if (settings.sidebarVisible) ...<Widget>[
-                const SizedBox(width: kSidebarWidth, child: WorkspaceSidebar()),
-                VerticalDivider(width: 1, color: Theme.of(context).colorScheme.outlineVariant),
-              ],
-              const Expanded(child: WorkspaceChatArea()),
-              if (rightPaneVisible) const WorkspaceRightPane(),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final sidebarWidth = settings.sidebarVisible ? kSidebarWidth + 1 : 0;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  if (settings.sidebarVisible) ...<Widget>[
+                    const SizedBox(width: kSidebarWidth, child: WorkspaceSidebar()),
+                    VerticalDivider(width: 1, color: Theme.of(context).colorScheme.outlineVariant),
+                  ],
+                  const Expanded(child: WorkspaceChatArea()),
+                  if (rightPaneVisible)
+                    WorkspaceRightPane(
+                      maxWidth: constraints.maxWidth - sidebarWidth - kMinChatWidth,
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ],
