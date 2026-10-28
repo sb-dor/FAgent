@@ -1,7 +1,6 @@
 {
   "@@locale": "en",
   "appTitle": "Flutter Code Agent",
-  "projects": "Projects",
   "noProjectsYet": "No projects yet",
   "openProject": "Open project",
   "openProjectFailed": "Could not open the folder: {error}",
@@ -13,7 +12,6 @@
     }
   },
   "flutterProject": "Flutter",
-  "chats": "Chats",
   "newChat": "New chat",
   "noChatsYet": "No chats yet",
   "untitledChat": "New chat",
@@ -131,5 +129,23 @@
   "settingsAppearance": "Appearance",
   "settingsShortcuts": "Keyboard shortcuts",
   "skillsAndRules": "Skills and rules",
-  "rules": "Rules"
+  "rules": "Rules",
+  "search": "Search",
+  "addProject": "Project",
+  "openFolder": "Open folder…",
+  "newFlutterProject": "New Flutter project…",
+  "cloneFromGit": "Clone from git…",
+  "projectActions": "Project actions",
+  "showInFinder": "Show in Finder",
+  "projectSettings": "Project settings",
+  "removeProject": "Remove…",
+  "remove": "Remove",
+  "removeProjectConfirm": "Remove {name}? Its chats are deleted; files on disk stay.",
+  "@removeProjectConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

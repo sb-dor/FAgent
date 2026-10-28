@@ -55,6 +55,14 @@ class WorkspaceDataController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Forgets the selected project and chat, e.g. when the project is removed.
+  void clearSelection() {
+    if (_projectId == null && _sessionId == null) return;
+    _projectId = null;
+    _sessionId = null;
+    notifyListeners();
+  }
+
   /// Selects chat [sessionId].
   void selectSession(int? sessionId) {
     if (_sessionId == sessionId) return;

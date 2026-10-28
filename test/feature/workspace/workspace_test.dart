@@ -15,10 +15,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Projects'), findsOneWidget);
     expect(find.text('No projects yet'), findsOneWidget);
     expect(find.text('Open a project and start a chat with an agent'), findsOneWidget);
-    expect(find.byTooltip('New chat'), findsOneWidget);
+    expect(find.text('New chat'), findsOneWidget);
+    expect(find.text('Project'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 
@@ -35,12 +35,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Проекты'), findsOneWidget);
-    expect(find.text('Чаты'), findsOneWidget);
+    expect(find.text('Пока нет проектов'), findsOneWidget);
+    expect(find.text('Новый чат'), findsOneWidget);
+    expect(find.text('Поиск'), findsOneWidget);
+    expect(find.text('Скиллы'), findsOneWidget);
+    expect(find.text('Настройки'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('selecting a project shows its chats and opening one shows the composer', (
+  testWidgets('the sidebar lists the chats of every project and opening one shows the composer', (
     tester,
   ) async {
     useDesktopView(tester);
@@ -66,12 +69,10 @@ void main() {
     );
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('avera-hotel'));
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
-    await tester.pumpAndSettle();
 
+    expect(find.text('avera-hotel'), findsOneWidget);
     expect(find.text('Add a booking screen'), findsOneWidget);
-    expect(find.text('Pick a chat or start a new one'), findsOneWidget);
+    expect(find.text('Open a project and start a chat with an agent'), findsOneWidget);
 
     await tester.tap(find.text('Add a booking screen'));
     // The composer's blinking cursor never lets pumpAndSettle settle.

@@ -166,7 +166,7 @@ void main() {
       final dependencies = testDependencies();
       await pumpApp(tester, dependencies);
       expect(Theme.of(appContext(tester)).brightness, Brightness.light);
-      expect(find.text('Projects'), findsOneWidget);
+      expect(find.text('Skills'), findsOneWidget);
 
       AppSettingsConfigInhWidget.of(appContext(tester)).controller
           .update((current) => current.copyWith(themeMode: ThemeMode.dark));
@@ -190,8 +190,8 @@ void main() {
       await pumpApp(tester, dependencies);
 
       expect(Theme.of(appContext(tester)).brightness, Brightness.dark);
-      expect(find.text('Проекты'), findsOneWidget);
-      expect(find.text('Projects'), findsNothing);
+      expect(find.text('Скиллы'), findsOneWidget);
+      expect(find.text('Skills'), findsNothing);
       await disposeTestApp(tester, dependencies);
     });
 
@@ -201,7 +201,7 @@ void main() {
       AppSettingsConfigInhWidget.of(appContext(tester)).controller
           .update((current) => current.copyWith(locale: const Locale('ru')));
       await tester.pumpAndSettle();
-      expect(find.text('Проекты'), findsOneWidget);
+      expect(find.text('Скиллы'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
   });

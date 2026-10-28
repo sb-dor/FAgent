@@ -79,10 +79,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Selects the seeded project and chat; the composer's cursor never settles, so pump by hand.
+  /// Opens the seeded chat (which selects its project); the composer's cursor never settles, so
+  /// pump by hand.
   Future<void> openChat(WidgetTester tester) async {
-    await tester.tap(find.text('avera-hotel'));
-    await settle(tester);
     await tester.tap(find.text('Add a booking screen'));
     for (var i = 0; i < 5; i++) {
       await settle(tester);

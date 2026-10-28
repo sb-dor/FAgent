@@ -1,12 +1,10 @@
 {
   "@@locale": "ru",
   "appTitle": "Flutter Code Agent",
-  "projects": "Проекты",
   "noProjectsYet": "Пока нет проектов",
   "openProject": "Открыть проект",
   "openProjectFailed": "Не удалось открыть папку: {error}",
   "flutterProject": "Flutter",
-  "chats": "Чаты",
   "newChat": "Новый чат",
   "noChatsYet": "Пока нет чатов",
   "untitledChat": "Новый чат",
@@ -96,5 +94,23 @@
   "settingsAppearance": "Внешний вид",
   "settingsShortcuts": "Горячие клавиши",
   "skillsAndRules": "Скиллы и правила",
-  "rules": "Правила"
+  "rules": "Правила",
+  "search": "Поиск",
+  "addProject": "Проект",
+  "openFolder": "Открыть папку…",
+  "newFlutterProject": "Новый Flutter-проект…",
+  "cloneFromGit": "Клонировать из git…",
+  "projectActions": "Действия с проектом",
+  "showInFinder": "Показать в Finder",
+  "projectSettings": "Настройки проекта",
+  "removeProject": "Убрать…",
+  "remove": "Убрать",
+  "removeProjectConfirm": "Убрать {name}? Его чаты удалятся, файлы на диске останутся.",
+  "@removeProjectConfirm": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

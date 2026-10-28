@@ -5,8 +5,11 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 
-/// Chats of a project.
+/// Chats of every project.
 abstract interface class ISessionsRepository {
+  /// Chats of all projects, most recently active first. Closes when cancelled.
+  Stream<List<ChatSession>> watchAllSessions();
+
   /// Chats of [projectId], most recently active first. Closes when cancelled.
   Stream<List<ChatSession>> watchSessions(int projectId);
 
@@ -22,6 +25,14 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
 
   final AppDatabase _database;
   final AgentHub _hub;
+
+  @override
+  Stream<List<ChatSession>> watchAllSessions() =>
+      (_database.select(_database.sessionsTable)..orderBy(
+            <OrderClauseGenerator<$SessionsTableTable>>[(s) => OrderingTerm.desc(s.updatedAt)],
+          ))
+          .watch()
+          .map((rows) => rows.map(ChatSession.fromRow).toList(growable: false));
 
   @override
   Stream<List<ChatSession>> watchSessions(int projectId) =>

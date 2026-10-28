@@ -48,8 +48,10 @@ class WorkspaceTitleBar extends StatelessWidget {
     final sessionId = scope.dataController.sessionId;
     if (sessionId == null) return project.name;
     final session = switch (scope.sessionsController.state) {
-      Sessions$CompletedState(projectId: final id, :final sessions) when id == project.id =>
-        sessions.where((session) => session.id == sessionId).firstOrNull,
+      Sessions$CompletedState(:final sessions) =>
+        sessions
+            .where((session) => session.id == sessionId && session.projectId == project.id)
+            .firstOrNull,
       _ => null,
     };
     if (session == null) return project.name;

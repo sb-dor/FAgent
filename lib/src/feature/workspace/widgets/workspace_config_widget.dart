@@ -1,6 +1,8 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
@@ -15,6 +17,7 @@ import 'package:flutter_code_agent/src/feature/session_creation/controller/sessi
 import 'package:flutter_code_agent/src/feature/session_creation/data/session_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
+import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 
@@ -38,8 +41,7 @@ class WorkspaceConfigInhWidget extends InheritedWidget {
 
 /// {@template workspace_config_widget}
 /// Owns the sidebar controllers and the selection, and wires them: an opened
-/// project becomes selected, a created chat becomes selected, a selected
-/// project shows its chats.
+/// project becomes selected, a created chat becomes selected.
 /// {@endtemplate}
 class WorkspaceConfigWidget extends StatefulWidget {
   /// {@macro workspace_config_widget}
@@ -79,14 +81,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     sessionCreationController = SessionCreationController(
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
     )..addListener(_onSessionCreated);
-    dataController.addListener(_onSelectionChanged);
+    sessionsController.watchAll();
   }
 
   @override
   void dispose() {
-    dataController
-      ..removeListener(_onSelectionChanged)
-      ..dispose();
+    dataController.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
       ..dispose();
@@ -136,10 +136,77 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     ),
   );
 
-  /// Starts a new chat in the selected project.
-  void createChat() {
-    final project = dataController.projectId;
-    if (project != null) sessionCreationController.create(projectId: project, agentId: 'claude');
+  /// The project a new chat goes to by default: the one of the selected chat, else the selected
+  /// project, else none.
+  int? get newChatProjectId {
+    final sessionId = dataController.sessionId;
+    if (sessionId != null) {
+      final chats = switch (sessionsController.state) {
+        Sessions$CompletedState(:final sessions) => sessions,
+        _ => const <ChatSession>[],
+      };
+      final chat = chats.where((chat) => chat.id == sessionId).firstOrNull;
+      if (chat != null) return chat.projectId;
+    }
+    return dataController.projectId;
+  }
+
+  /// Starts a new chat in [projectId], by default in [newChatProjectId]; does nothing without a
+  /// project. The project becomes selected, the new chat follows when it is created.
+  void createChat({int? projectId}) {
+    final project = projectId ?? newChatProjectId;
+    if (project == null) return;
+    dataController.selectProject(project);
+    sessionCreationController.create(projectId: project, agentId: 'claude');
+  }
+
+  /// Shows [project]'s folder in Finder.
+  Future<void> revealProject(Project project) async {
+    try {
+      await projectsController.reveal(project.path);
+    } on Object {
+      _showError();
+    }
+  }
+
+  /// Asks, then forgets [project] with its chats; the folder on disk stays.
+  Future<void> removeProject(Project project) async {
+    final localization = Localization.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.large)),
+        content: Text(localization.removeProjectConfirm(project.name)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(localization.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: context.colors.danger,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(localization.remove),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await projectsController.remove(project.id);
+    } on Object {
+      _showError();
+      return;
+    }
+    if (dataController.projectId == project.id) dataController.clearSelection();
+  }
+
+  void _showError() {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(Localization.of(context).somethingWentWrong)));
   }
 
   void _onProjectOpened() {
@@ -158,16 +225,6 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _onSessionCreated() {
     if (sessionCreationController.state case SessionCreation$CompletedState(:final sessionId)) {
       dataController.selectSession(sessionId);
-    }
-  }
-
-  int? _watchedProject;
-
-  void _onSelectionChanged() {
-    final project = dataController.projectId;
-    if (project != null && project != _watchedProject) {
-      _watchedProject = project;
-      sessionsController.watch(project);
     }
   }
 
