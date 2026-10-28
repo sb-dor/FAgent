@@ -107,5 +107,14 @@
   "stoppingAgents": "Stopping agents…",
   "loginWithClaudeAi": "Log in with Claude.ai",
   "loginWithConsole": "Log in with Anthropic Console",
-  "preparingTurn": "Preparing the turn…"
+  "preparingTurn": "Preparing the turn…",
+  "preview": "Preview",
+  "comingInMilestone": "Coming in {milestone}",
+  "@comingInMilestone": {
+    "placeholders": {
+      "milestone": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -72,5 +72,14 @@
   "stoppingAgents": "Останавливаю агентов…",
   "loginWithClaudeAi": "Войти через Claude.ai",
   "loginWithConsole": "Войти через Anthropic Console",
-  "preparingTurn": "Готовлю ход…"
+  "preparingTurn": "Готовлю ход…",
+  "preview": "Preview",
+  "comingInMilestone": "Появится в {milestone}",
+  "@comingInMilestone": {
+    "placeholders": {
+      "milestone": {
+        "type": "String"
+      }
+    }
+  }
 }
