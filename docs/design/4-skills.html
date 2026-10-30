@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>4. Скиллы и правила</title>
+<style>body{margin:0;padding:24px 32px;background:#fff;color:#1f2329;font:14px/1.5 -apple-system,"SF Pro Text",sans-serif;color-scheme:light}
+h2{font-size:22px;margin:0 0 4px}h3{font-size:15px;margin:0 0 6px}.subtitle{color:#626a75;margin:0 0 18px}code{font-family:Menlo,monospace;font-size:12px}</style>
+</head><body>
+<h2>4. Скиллы и правила</h2>
+<p class="subtitle">Страница поверх окна (из сайдбара «🧩 Скиллы» или из чипа скиллов). Esc — назад к чату.</p>
+
+<style>
+  :root { --bg:#fff; --sf:#f4f6f8; --sf2:#fafbfc; --bd:#e3e6ea; --tx:#1f2329; --mu:#6b7480; --ac:#0175c2; --acs:#dceefb; --ok:#1e8e3e; --okS:#e6f4ea; --wa:#b26a00; --waS:#fff4e0; --dn:#d93025; }
+  .win { border:1px solid var(--bd); border-radius:12px; overflow:hidden; background:#fff; color:var(--tx); font:13px/1.45 -apple-system,"SF Pro Text",sans-serif; box-shadow:0 10px 30px rgba(0,0,0,.08); }
+  .top { height:44px; display:flex; align-items:center; gap:10px; padding:0 14px; border-bottom:1px solid var(--bd); background:var(--sf); }
+  .body { display:flex; height:540px; }
+  .nav { width:190px; border-right:1px solid var(--bd); background:var(--sf); padding:10px 8px; display:flex; flex-direction:column; gap:2px; }
+  .ni { padding:6px 10px; border-radius:7px; display:flex; justify-content:space-between; }
+  .ni.on { background:var(--acs); color:#0b4f85; }
+  .ni .c { color:var(--mu); font-size:12px; }
+  .gl { font-size:11px; color:var(--mu); font-weight:600; padding:12px 10px 4px; }
+  .list { width:360px; border-right:1px solid var(--bd); display:flex; flex-direction:column; }
+  .lh { padding:10px; display:flex; gap:8px; border-bottom:1px solid var(--bd); }
+  .inp { flex:1; border:1px solid var(--bd); border-radius:8px; padding:5px 10px; color:var(--mu); }
+  .btn { padding:5px 11px; border-radius:8px; border:1px solid var(--bd); background:#fff; font-size:12px; white-space:nowrap; }
+  .btn.p { background:var(--ac); color:#fff; border-color:var(--ac); }
+  .sk { padding:10px 12px; border-bottom:1px solid var(--bd); display:flex; gap:10px; }
+  .sk.on { background:#f2f8fd; box-shadow:inset 3px 0 0 var(--ac); }
+  .sk .t { font-weight:600; display:flex; gap:6px; align-items:center; }
+  .sk .d { font-size:12px; color:var(--mu); }
+  .tag { font-size:10px; padding:1px 6px; border-radius:6px; background:var(--sf); color:var(--mu); font-weight:400; }
+  .tog { width:28px; height:16px; border-radius:8px; background:var(--ac); position:relative; margin-left:auto; flex:none; align-self:center; }
+  .tog::after { content:""; position:absolute; right:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#fff; }
+  .tog.off { background:#cfd5dc; } .tog.off::after { right:auto; left:2px; }
+  .det { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .dh { padding:12px 16px; border-bottom:1px solid var(--bd); }
+  .fld { display:grid; grid-template-columns:110px 1fr; gap:6px 10px; padding:12px 16px; border-bottom:1px solid var(--bd); font-size:12px; align-items:center; }
+  .fld .k { color:var(--mu); }
+  .fv { border:1px solid var(--bd); border-radius:7px; padding:4px 8px; }
+  .md { flex:1; padding:12px 16px; font-family:"JetBrains Mono",Menlo,monospace; font-size:12px; line-height:1.6; color:#3c4350; overflow:hidden; }
+  .md .h { color:var(--ac); font-weight:600; }
+  .pop { position:absolute; background:#fff; border:1px solid var(--bd); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.14); padding:6px; width:250px; }
+  .it { display:flex; gap:10px; padding:7px 10px; border-radius:8px; align-items:center; }
+  .it .d { font-size:11px; color:var(--mu); }
+  .scope { display:flex; gap:6px; flex-wrap:wrap; }
+  .pc { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--acs); color:#0b4f85; }
+</style>
+
+<div class="win">
+  <div class="top"><span style="color:var(--mu)">← Чат</span><b style="margin-left:6px">Скиллы и правила</b>
+    <span style="margin-left:auto;font-size:12px;color:var(--mu)">Проект: <b style="color:var(--tx)">avera-hotel ▾</b></span></div>
+  <div class="body">
+    <div class="nav">
+      <div class="ni on">🧩 Скиллы <span class="c">14</span></div>
+      <div class="ni">📏 Правила <span class="c">6</span></div>
+      <div class="gl">ИСТОЧНИКИ</div>
+      <div class="ni">Встроенные <span class="c">9</span></div>
+      <div class="ni">Мои <span class="c">3</span></div>
+      <div class="ni">Проект (.claude/skills) <span class="c">1</span></div>
+      <div class="ni">github.com/sb-dor/flutter-skills <span class="c">1</span></div>
+      <div class="ni" style="color:var(--ac)">＋ Добавить источник…</div>
+    </div>
+    <div class="list" style="position:relative">
+      <div class="lh"><span class="inp">⌕ Найти скилл</span><span class="btn p">＋ Добавить ▾</span></div>
+      <div class="sk on"><div><div class="t">feature-architecture <span class="tag">встроенный</span></div><div class="d">Новая фича: config-widget, StateController, репозиторий, freezed-состояния</div></div><span class="tog"></span></div>
+      <div class="sk"><div><div class="t">drift-migration <span class="tag">встроенный</span></div><div class="d">Новая версия схемы, step-by-step, тест SchemaVerifier</div></div><span class="tog"></span></div>
+      <div class="sk"><div><div class="t">pub-freshness <span class="tag">встроенный</span></div><div class="d">Перед добавлением пакета — pub.dev, статус, changelog</div></div><span class="tog"></span></div>
+      <div class="sk"><div><div class="t">widget-test <span class="tag">встроенный</span></div><div class="d">Тесты виджетов с локализацией en/ru</div></div><span class="tog off"></span></div>
+      <div class="sk"><div><div class="t">avera-api-client <span class="tag" style="background:var(--okS);color:var(--ok)">мой</span></div><div class="d">Как ходить в API Avera: ApiClient, ошибки, пагинация</div></div><span class="tog"></span></div>
+      <div class="sk"><div><div class="t">release-checklist <span class="tag" style="background:var(--acs);color:#0b4f85">проект</span></div><div class="d">Из репо: версия, changelog, сборки</div></div><span class="tog"></span></div>
+      <div class="pop" style="right:10px;top:44px">
+        <div class="it">✎ <div>Создать<div class="d">пустой SKILL.md в «Мои»</div></div></div>
+        <div class="it">📁 <div>Из папки…<div class="d">папка со SKILL.md</div></div></div>
+        <div class="it">⎇ <div>Из git-репозитория…<div class="d">URL, обновляется по кнопке</div></div></div>
+        <div class="it">✳ <div>Сгенерировать с агентом<div class="d">опиши — агент напишет скилл</div></div></div>
+      </div>
+    </div>
+    <div class="det">
+      <div class="dh"><div style="display:flex;align-items:center;gap:8px"><b style="font-size:15px">feature-architecture</b><span class="tag">встроенный · v1.3</span>
+        <span style="margin-left:auto;display:flex;gap:6px"><span class="btn">Дублировать в «Мои»</span><span class="btn">Попробовать в чате</span></span></div>
+        <div style="font-size:12px;color:var(--mu);margin-top:4px">Встроенные только для чтения — чтобы изменить, продублируй.</div></div>
+      <div class="fld">
+        <span class="k">Описание</span><span class="fv">Новая фича по архитектуре проекта: config-widget…</span>
+        <span class="k">Когда применять</span><span class="fv">Пользователь просит новый экран, фичу или контроллер</span>
+        <span class="k">Включён</span><span class="scope"><span class="pc">Все проекты</span><span class="pc" style="background:var(--sf);color:var(--mu)">кроме shop_app ✕</span><span style="font-size:11px;color:var(--ac)">＋ исключение</span></span>
+        <span class="k">Файлы</span><span style="font-family:Menlo;font-size:11px">SKILL.md · templates/controller.dart · templates/repository.dart</span>
+      </div>
+      <div class="md">
+        <div class="h">---</div>
+        <div>name: feature-architecture</div>
+        <div>description: New feature per project rules…</div>
+        <div class="h">---</div>
+        <div class="h"># Feature architecture</div>
+        <div>1. Create <span style="color:var(--wa)">lib/src/feature/&lt;name&gt;/</span> with data/,</div>
+        <div>   controller/, models/, widgets/.</div>
+        <div>2. Repository: abstract interface + Impl…</div>
+        <div>3. Controller: Sequential for load/watch,</div>
+        <div>   Droppable for mutations…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;font-size:13px">
+  <div class="section"><h3>Скилл vs правило</h3>
+    <p><b>Скилл</b> — инструкция «как сделать X» (папка с <code>SKILL.md</code>, формат Anthropic Skills — работает и в обычном Claude Code). Агент подгружает его сам, когда задача подходит, или по «/имя».<br>
+    <b>Правило</b> — best practice, которое действует всегда (архитектура, стиль, «проверяй версию пакета»). Короткий Markdown, уходит агенту в начале каждой сессии.</p></div>
+  <div class="section"><h3>Источники и область</h3>
+    <p>Встроенные (с приложением, только чтение) · Мои (в папке приложения) · Проект (<code>.claude/skills</code> в репо — общие с командой) · git-репозитории. Каждый скилл/правило включается глобально, с исключениями по проектам; чип 🧩 в чате меняет только этот чат.</p></div>
+</div>
+
+</body></html>

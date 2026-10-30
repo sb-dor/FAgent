@@ -1,0 +1,72 @@
+import 'package:control/control.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
+import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:window_manager/window_manager.dart';
+
+/// {@template workspace_chat_area}
+/// The selected chat, or a hint to pick one.
+/// {@endtemplate}
+class WorkspaceChatArea extends StatefulWidget {
+  /// {@macro workspace_chat_area}
+  const WorkspaceChatArea({super.key});
+
+  @override
+  State<WorkspaceChatArea> createState() => _WorkspaceChatAreaState();
+}
+
+class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
+  late final _scope = WorkspaceConfigInhWidget.of(context);
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: <Widget>[
+      const DragToMoveArea(child: SizedBox(height: kWindowTitleBarHeight)),
+      Expanded(
+        child: StateConsumer<ProjectsController, ProjectsState>(
+          controller: _scope.projectsController,
+          builder: (context, _, _) => ListenableBuilder(
+            listenable: _scope.dataController,
+            builder: (context, _) {
+              final project = _scope.selectedProject;
+              final sessionId = _scope.dataController.sessionId;
+              if (project == null || sessionId == null) {
+                return _Hint(
+                  text: project == null
+                      ? Localization.of(context).chatPlaceholder
+                      : Localization.of(context).selectChat,
+                );
+              }
+              return ChatConfigWidget(
+                key: ValueKey<int>(sessionId),
+                sessionId: sessionId,
+                project: project,
+              );
+            },
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Text(
+        text,
+        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+      ),
+    );
+  }
+}

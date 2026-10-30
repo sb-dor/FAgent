@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>2. Чат и поле ввода</title>
+<style>body{margin:0;padding:24px 32px;background:#fff;color:#1f2329;font:14px/1.5 -apple-system,"SF Pro Text",sans-serif;color-scheme:light}
+h2{font-size:22px;margin:0 0 4px}h3{font-size:15px;margin:0 0 6px}.subtitle{color:#626a75;margin:0 0 18px}code{font-family:Menlo,monospace;font-size:12px}</style>
+</head><body>
+<h2>2. Чат и поле ввода</h2>
+<p class="subtitle">Всплывающие меню у чипов поля ввода и карточка разрешения в ленте.</p>
+
+<style>
+  :root { --bg:#fff; --sf:#f4f6f8; --bd:#e3e6ea; --tx:#1f2329; --mu:#6b7480; --ac:#0175c2; --acs:#dceefb; --ok:#1e8e3e; --wa:#b26a00; --waS:#fff4e0; --dn:#d93025; --dnS:#fce8e6; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:22px; font:13px/1.45 -apple-system,"SF Pro Text",sans-serif; color:var(--tx); }
+  .cap { font-size:12px; color:var(--mu); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .pop { background:#fff; border:1px solid var(--bd); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.12); padding:6px; }
+  .sec { font-size:11px; color:var(--mu); padding:8px 10px 4px; font-weight:600; }
+  .it { display:flex; align-items:center; gap:10px; padding:7px 10px; border-radius:8px; }
+  .it.on { background:var(--acs); }
+  .it .d { font-size:12px; color:var(--mu); }
+  .kb { margin-left:auto; font-size:11px; color:var(--mu); font-family:Menlo,monospace; }
+  .seg { display:flex; background:var(--sf); border-radius:8px; padding:2px; margin:4px 10px 8px; }
+  .seg span { flex:1; text-align:center; padding:4px; border-radius:6px; font-size:12px; color:var(--mu); }
+  .seg .on { background:#fff; color:var(--tx); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .mono { font-family:"JetBrains Mono",Menlo,monospace; font-size:12px; }
+  .comp { border:1px solid var(--bd); border-radius:14px; background:#fff; margin-top:8px; }
+  .chips { display:flex; gap:6px; padding:6px 8px 8px; }
+  .chip { padding:3px 9px; border-radius:8px; font-size:12px; color:var(--mu); }
+  .chip.act { background:var(--sf); color:var(--tx); }
+  .card { border:1px solid #f3d9a4; background:var(--waS); border-radius:12px; padding:12px 14px; }
+  .btn { padding:5px 12px; border-radius:8px; border:1px solid var(--bd); background:#fff; font-size:12px; }
+  .btn.p { background:var(--ac); color:#fff; border-color:var(--ac); }
+  .tag { font-size:10px; padding:1px 6px; border-radius:6px; background:var(--sf); color:var(--mu); }
+  .tog { width:28px; height:16px; border-radius:8px; background:var(--ac); position:relative; margin-left:auto; flex:none; }
+  .tog::after { content:""; position:absolute; right:2px; top:2px; width:12px; height:12px; border-radius:50%; background:#fff; }
+  .tog.off { background:#cfd5dc; } .tog.off::after { right:auto; left:2px; }
+</style>
+
+<div class="grid">
+  <div>
+    <div class="cap">A · Агент и модель</div>
+    <div class="pop">
+      <div class="sec">АГЕНТ</div>
+      <div class="it on">✳ <div><b>Claude Code</b><div class="d">подписка Max · вошли</div></div><span class="kb">✓</span></div>
+      <div class="it">◎ <div>Codex<div class="d">не установлен · <span style="color:var(--ac)">Установить…</span></div></div></div>
+      <div class="it">✦ <div>Gemini CLI<div class="d">нужен вход</div></div></div>
+      <div class="sec">МОДЕЛЬ <span style="font-weight:400">— список отдаёт агент</span></div>
+      <div class="it on"><div><b>Opus</b><div class="d">самая сильная, медленнее</div></div><span class="kb">✓</span></div>
+      <div class="it"><div>Sonnet<div class="d">баланс скорости и качества</div></div></div>
+      <div class="it"><div>Haiku<div class="d">быстрые мелкие правки</div></div></div>
+      <div class="sec">УСИЛИЕ</div>
+      <div class="seg"><span>Низкое</span><span class="on">Среднее</span><span>Высокое</span><span>Макс</span></div>
+      <div class="it" style="border-top:1px solid var(--bd);border-radius:0;color:var(--mu);font-size:12px">☐ Сделать по умолчанию для новых чатов</div>
+    </div>
+    <p style="font-size:12px;color:var(--mu)">Агента можно сменить только до первого сообщения (у каждого агента своя сессия). Модель и усилие — в любой момент.</p>
+  </div>
+
+  <div>
+    <div class="cap">B · Режим разрешений</div>
+    <div class="pop">
+      <div class="it on">⛨ <div><b>Manual</b><div class="d">спрашивать перед правками и командами</div></div><span class="kb">✓</span></div>
+      <div class="it">✎ <div>Accept edits<div class="d">правки без вопросов, команды — спросить</div></div><span class="tag" style="background:var(--waS);color:var(--wa)">внимание</span></div>
+      <div class="it">☰ <div>Plan<div class="d">только читать и составить план</div></div></div>
+      <div class="it">⟳ <div>Auto<div class="d">агент решает сам, опасное — спросит</div></div><span class="tag" style="background:var(--waS);color:var(--wa)">внимание</span></div>
+      <div class="it" style="color:var(--dn)">⚠ <div>Bypass permissions<div class="d">всё без вопросов — только с подтверждением</div></div></div>
+    </div>
+    <p style="font-size:12px;color:var(--mu)">Чип режима окрашивается: жёлтый для Accept edits / Auto, красный для Bypass. Shift+Tab — переключить режим с клавиатуры.</p>
+  </div>
+
+  <div>
+    <div class="cap">C · «/» — скиллы и команды</div>
+    <div class="pop">
+      <div class="sec">СКИЛЛЫ ПРОЕКТА</div>
+      <div class="it on">🧩 <div><b>/feature-architecture</b><div class="d">фича по правилам: config-widget, контроллер, репозиторий</div></div></div>
+      <div class="it">🧩 <div>/drift-migration<div class="d">новая версия схемы + тест SchemaVerifier</div></div></div>
+      <div class="it">🧩 <div>/widget-test<div class="d">тест виджета с en/ru</div></div></div>
+      <div class="sec">ПРИЛОЖЕНИЕ</div>
+      <div class="it">▶ <div>/run · /reload · /restart<div class="d">управление запуском</div></div></div>
+      <div class="it">📷 <div>/screenshot<div class="d">снимок экрана устройства в сообщение</div></div></div>
+      <div class="sec">АГЕНТ</div>
+      <div class="it">⌘ <div>/compact · /init · /review<div class="d">команды Claude Code</div></div></div>
+    </div>
+    <div class="comp"><div style="padding:10px 14px" class="mono">/feat<span style="border-left:1.5px solid var(--ac);margin-left:1px"></span></div></div>
+  </div>
+
+  <div>
+    <div class="cap">D · «@» — контекст</div>
+    <div class="pop">
+      <div class="sec">ФАЙЛЫ</div>
+      <div class="it on">📄 <div><b>booking_screen.dart</b><div class="d mono">lib/src/feature/booking/widgets</div></div></div>
+      <div class="it">📄 <div>booking_controller.dart<div class="d mono">lib/src/feature/booking/controller</div></div></div>
+      <div class="sec">ИЗ ЗАПУСКА</div>
+      <div class="it">🎯 <div>Выбранный виджет<div class="d">BookingCard · booking_card.dart:42</div></div></div>
+      <div class="it">⚠ <div>Последняя ошибка<div class="d">RenderFlex overflowed by 24 px</div></div></div>
+      <div class="it">📷 <div>Скриншот устройства</div></div>
+    </div>
+    <div class="comp"><div style="padding:10px 14px">Почему переполняется <span style="background:var(--acs);color:#0b4f85;border-radius:6px;padding:1px 6px" class="mono">@booking_screen.dart</span> на <span style="background:var(--waS);color:var(--wa);border-radius:6px;padding:1px 6px">⚠ ошибка</span></div>
+      <div class="chips"><span class="chip">＋</span><span class="chip act">✳ Claude</span><span class="chip">Opus ▾</span><span class="chip">⛨ Manual</span><span class="chip">🧩 3</span></div></div>
+  </div>
+
+  <div>
+    <div class="cap">E · Разрешение в ленте</div>
+    <div class="card">
+      <div style="display:flex;gap:8px;align-items:center"><b>Выполнить команду?</b><span class="tag">Bash</span></div>
+      <div class="mono" style="background:#fff;border:1px solid var(--bd);border-radius:8px;padding:8px 10px;margin:8px 0">dart run build_runner build --delete-conflicting-outputs</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span class="btn p">Разрешить <span style="opacity:.7">↵</span></span>
+        <span class="btn">Всегда в этом проекте</span>
+        <span class="btn">Отклонить <span style="opacity:.6">Esc</span></span>
+        <span class="btn" style="border:none;color:var(--mu)">Отклонить и сказать…</span>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--mu)">Правка файла показывает diff прямо в карточке. Пока карточка ждёт — поле ввода закреплено над ней, ↵ / Esc работают с клавиатуры.</p>
+  </div>
+
+  <div>
+    <div class="cap">F · 🧩 Скиллы этого чата</div>
+    <div class="pop">
+      <div class="sec">ВКЛЮЧЕНЫ ДЛЯ avera-hotel</div>
+      <div class="it">🧩 feature-architecture <span class="tog"></span></div>
+      <div class="it">🧩 drift-migration <span class="tog"></span></div>
+      <div class="it">🧩 pub-freshness <span class="tag">по умолчанию</span><span class="tog"></span></div>
+      <div class="it">🧩 bloc-patterns <span class="tog off"></span></div>
+      <div class="it" style="border-top:1px solid var(--bd);border-radius:0;color:var(--ac)">Открыть библиотеку скиллов →</div>
+    </div>
+    <p style="font-size:12px;color:var(--mu)">Агент видит включённые скиллы через MCP-сервер приложения и подгружает их сам, когда задача подходит. «/скилл» — вызвать явно.</p>
+  </div>
+</div>
+
+</body></html>

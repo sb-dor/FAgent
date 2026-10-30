@@ -1,0 +1,6 @@
+tags:
+  adapter:
+    skip: >-
+      Talks to the real Claude ACP adapter: needs network, Node.js 22+ and a
+      logged-in Claude Code. Run with: flutter test --tags adapter --run-skipped
+    timeout: 5m

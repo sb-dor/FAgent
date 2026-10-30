@@ -1,5 +1,5 @@
-name: flutter_agent
-description: "A new Flutter project."
+name: flutter_code_agent
+description: "Open-source desktop app for Flutter development with AI coding agents (Claude Code, Codex, Gemini CLI) via Agent Client Protocol."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -28,13 +28,33 @@ environment:
 # the latest version available on pub.dev. To see which dependencies have newer
 # versions available, run `flutter pub outdated`.
 dependencies:
+  async: ^2.13.1
+  collection: ^1.19.1
+  control:
+    git:
+      url: https://github.com/PlugFox/control.git
+      ref: 685a9bc6ef60c987b99b5526e125813adba54e2a
+  crypto: ^3.0.8
+  dart_acp_sdk: 0.1.1
+  drift: ^2.35.3
+  drift_flutter: ^0.3.1
+  file_selector: ^1.1.0
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  flutter_markdown_plus: ^1.0.12
+  freezed_annotation: ^3.1.0
+  intl: any
+  l: ^5.0.1
+  meta: ^1.19.0
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  platform_info: ^5.0.0
+  window_manager: ^0.5.2
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
-
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -45,12 +65,16 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  build_runner: ^2.17.1
+  drift_dev: ^2.35.2
+  freezed: ^4.0.3
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

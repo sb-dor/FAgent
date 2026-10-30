@@ -1,0 +1,111 @@
+{
+  "@@locale": "en",
+  "appTitle": "Flutter Code Agent",
+  "projects": "Projects",
+  "noProjectsYet": "No projects yet",
+  "openProject": "Open project",
+  "openProjectFailed": "Could not open the folder: {error}",
+  "@openProjectFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "flutterProject": "Flutter",
+  "chats": "Chats",
+  "newChat": "New chat",
+  "noChatsYet": "No chats yet",
+  "untitledChat": "New chat",
+  "chatPlaceholder": "Open a project and start a chat with an agent",
+  "selectChat": "Pick a chat or start a new one",
+  "runPanel": "Run",
+  "runPanelPlaceholder": "Devices, hot reload and logs will appear here",
+  "somethingWentWrong": "Something went wrong",
+  "promptHint": "Ask the agent… (Enter to send, Shift+Enter for a new line)",
+  "send": "Send",
+  "stop": "Stop",
+  "forceStop": "Force stop",
+  "retry": "Retry",
+  "repeatPrompt": "Repeat the last prompt",
+  "startNewAgentSession": "Start a new agent session",
+  "startNewAgentSessionConfirm": "The agent will lose this chat's context. The chat history stays. Continue?",
+  "cancel": "Cancel",
+  "continueAction": "Continue",
+  "thinking": "Thinking",
+  "statusStarting": "Starting the agent…",
+  "statusLoading": "Restoring the agent's context…",
+  "statusCreating": "Creating the agent session…",
+  "statusRunning": "Working…",
+  "statusAwaitingPermission": "Waiting for your permission",
+  "statusCancelling": "Stopping…",
+  "problemTitle": "The agent cannot continue",
+  "problemNeedsAuth": "Claude needs you to log in.",
+  "problemNotFound": "The agent no longer has this chat's session.",
+  "trustTitle": "Trust this folder?",
+  "trustBody": "The agent will run in {path} and execute the folder's own Claude settings and hooks.",
+  "@trustBody": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "trustFiles": "Found in the folder:",
+  "trustNoFiles": "No Claude settings or hooks found in the folder.",
+  "trustAllow": "Trust and continue",
+  "permissionTitle": "The agent asks for permission",
+  "permissionAllowed": "Allowed",
+  "permissionRejected": "Rejected",
+  "permissionCancelled": "Cancelled",
+  "permissionStale": "Expired: the app was closed before an answer",
+  "toolOutput": "Output",
+  "newFile": "new file",
+  "plan": "Plan",
+  "turnCancelled": "Stopped",
+  "turnRefused": "The agent refused to continue",
+  "turnLimit": "The agent hit a limit and stopped",
+  "contextLost": "A new agent session was started; the agent does not remember the earlier messages.",
+  "unknownEvent": "Unsupported event: {kind}",
+  "@unknownEvent": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "loggingIn": "Logging in… finish in the browser window that opened.",
+  "loginFailed": "Login did not complete.",
+  "details": "Details",
+  "filesChanged": "{count, plural, =1{1 file changed} other{{count} files changed}}",
+  "fileStatusAdded": "new",
+  "fileStatusModified": "modified",
+  "fileStatusDeleted": "deleted",
+  "fileStatusRenamed": "renamed",
+  "fileStatusReverted": "reverted",
+  "@filesChanged": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bypassTitle": "Allow bypassing permissions?",
+  "bypassBody": "In this mode the agent runs commands and edits files without asking you. Use it only in a folder you can restore (for example a clean git checkout).",
+  "bypassAllow": "Allow for this chat",
+  "bypassInherited": "This chat starts in \"bypass permissions\" mode (from your Claude settings): the agent will not ask before acting. Allow it for this chat to continue, or pick another mode.",
+  "quitWhileBusyTitle": "Quit while agents work?",
+  "quitWhileBusyBody": "{count, plural, =1{An agent is still working in 1 chat.} other{Agents are still working in {count} chats.}} Quitting stops their turns; the chats stay and can be continued later.",
+  "@quitWhileBusyBody": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "quit": "Quit",
+  "stoppingAgents": "Stopping agents…",
+  "loginWithClaudeAi": "Log in with Claude.ai",
+  "loginWithConsole": "Log in with Anthropic Console",
+  "preparingTurn": "Preparing the turn…"
+}

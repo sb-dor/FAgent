@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3. Панель Run</title>
+<style>body{margin:0;padding:24px 32px;background:#fff;color:#1f2329;font:14px/1.5 -apple-system,"SF Pro Text",sans-serif;color-scheme:light}
+h2{font-size:22px;margin:0 0 4px}h3{font-size:15px;margin:0 0 6px}.subtitle{color:#626a75;margin:0 0 18px}code{font-family:Menlo,monospace;font-size:12px}</style>
+</head><body>
+<h2>3. Панель Run</h2>
+<p class="subtitle">Правая панель, вкладка Run. Слева — приложение запущено и упало с ошибкой; справа — выбор устройства, сборка и выбор виджета.</p>
+
+<style>
+  :root { --bg:#fff; --sf:#f4f6f8; --sf2:#fafbfc; --bd:#e3e6ea; --tx:#1f2329; --mu:#6b7480; --ac:#0175c2; --acs:#dceefb; --ok:#1e8e3e; --okS:#e6f4ea; --wa:#b26a00; --waS:#fff4e0; --dn:#d93025; --dnS:#fce8e6; }
+  .row2 { display:flex; gap:24px; align-items:flex-start; font:13px/1.45 -apple-system,"SF Pro Text",sans-serif; color:var(--tx); flex-wrap:wrap; }
+  .pane { width:400px; border:1px solid var(--bd); border-radius:12px; background:var(--sf2); overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.06); }
+  .tabs { display:flex; gap:2px; padding:8px; border-bottom:1px solid var(--bd); }
+  .tab { padding:4px 10px; border-radius:7px; font-size:12px; color:var(--mu); }
+  .tab.on { background:#fff; color:var(--tx); box-shadow:0 0 0 1px var(--bd); }
+  .badge { background:var(--dn); color:#fff; border-radius:8px; font-size:10px; padding:0 5px; margin-left:4px; }
+  .hdr { padding:10px; display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--bd); background:#fff; }
+  .line { display:flex; gap:6px; align-items:center; }
+  .sel { border:1px solid var(--bd); border-radius:8px; padding:4px 9px; font-size:12px; background:#fff; }
+  .ib { width:28px; height:26px; border:1px solid var(--bd); border-radius:7px; display:flex; align-items:center; justify-content:center; background:#fff; font-size:13px; }
+  .ib.p { background:var(--ac); color:#fff; border-color:var(--ac); }
+  .ib.st { color:var(--dn); }
+  .meta { font-size:11px; color:var(--mu); display:flex; gap:10px; align-items:center; }
+  .live { width:7px; height:7px; border-radius:50%; background:var(--ok); display:inline-block; }
+  .tools { display:flex; gap:6px; padding:6px 10px; border-bottom:1px solid var(--bd); font-size:11px; color:var(--mu); align-items:center; }
+  .seg { display:flex; background:var(--sf); border-radius:7px; padding:2px; }
+  .seg span { padding:2px 8px; border-radius:5px; }
+  .seg .on { background:#fff; color:var(--tx); box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .logs { padding:8px 10px; display:flex; flex-direction:column; gap:3px; height:250px; overflow:hidden; }
+  .l { font-family:"JetBrains Mono",Menlo,monospace; font-size:11px; color:#3c4350; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .l.mu { color:var(--mu); }
+  .err { border:1px solid #f5c6c1; background:var(--dnS); border-radius:9px; padding:8px 10px; margin:4px 0; }
+  .btn { padding:4px 10px; border-radius:7px; border:1px solid var(--bd); background:#fff; font-size:12px; }
+  .btn.p { background:var(--ac); color:#fff; border-color:var(--ac); }
+  .pop { background:#fff; border:1px solid var(--bd); border-radius:12px; box-shadow:0 12px 32px rgba(0,0,0,.12); padding:6px; width:330px; }
+  .sec { font-size:11px; color:var(--mu); padding:8px 10px 4px; font-weight:600; }
+  .it { display:flex; align-items:center; gap:10px; padding:6px 10px; border-radius:8px; }
+  .it.on { background:var(--acs); }
+  .d { font-size:11px; color:var(--mu); }
+  .cap { font-size:12px; color:var(--mu); margin:4px 0 6px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .prog { height:4px; background:var(--sf); border-radius:2px; overflow:hidden; } .prog i { display:block; width:62%; height:100%; background:var(--ac); }
+  .tog { width:26px; height:15px; border-radius:8px; background:var(--ac); position:relative; display:inline-block; vertical-align:middle; }
+  .tog::after { content:""; position:absolute; right:2px; top:2px; width:11px; height:11px; border-radius:50%; background:#fff; }
+</style>
+
+<div class="row2">
+  <div class="pane">
+    <div class="tabs"><span class="tab">Изменения</span><span class="tab on">Run<span class="badge">1</span></span><span class="tab">План</span></div>
+    <div class="hdr">
+      <div class="line">
+        <span class="sel">📱 iPhone 16 Pro (Sim) ▾</span><span class="sel">debug ▾</span><span class="sel" style="font-family:Menlo;font-size:11px">main.dart ▾</span>
+      </div>
+      <div class="line">
+        <span class="ib st">■</span><span class="ib p">⚡</span><span class="ib">⟳</span><span class="ib">🎯</span><span class="ib">📷</span><span class="ib">↗</span>
+        <span class="meta" style="margin-left:auto"><span class="live"></span> работает 4:12 · reload 180 мс</span>
+      </div>
+      <div class="meta"><span class="tog"></span> Hot reload после каждого хода агента</div>
+    </div>
+    <div class="tools"><div class="seg"><span class="on">Все</span><span>Ошибки 1</span><span>Агенту</span></div><span style="margin-left:auto">⌕ поиск</span><span>⌫</span></div>
+    <div class="logs">
+      <div class="l mu">Launching lib/main.dart on iPhone 16 Pro in debug mode…</div>
+      <div class="l mu">Xcode build done. 21,4s</div>
+      <div class="l">flutter: Booking loaded 12 rooms</div>
+      <div class="l mu">Reloaded 3 of 812 libraries in 180ms.</div>
+      <div class="err">
+        <div class="l" style="color:var(--dn);font-weight:600">══╡ RENDERING LIBRARY ╞══</div>
+        <div class="l">A RenderFlex overflowed by 24 pixels on the right.</div>
+        <div class="l mu">booking_card.dart:42:12 · Row ← Padding ← BookingCard</div>
+        <div style="display:flex;gap:6px;margin-top:6px"><span class="btn p">→ Отправить агенту</span><span class="btn">Открыть файл</span><span class="btn" style="border:none;color:var(--mu)">Подробнее ▾</span></div>
+      </div>
+      <div class="l">flutter: tap BookingCard #3</div>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <div class="cap">Выбор устройства</div>
+      <div class="pop">
+        <div class="sec">ЗАПУЩЕНЫ</div>
+        <div class="it on">📱 <div>iPhone 16 Pro<div class="d">iOS 19 · симулятор</div></div></div>
+        <div class="it">🖥 <div>macOS<div class="d">desktop</div></div></div>
+        <div class="it">🌐 <div>Chrome<div class="d">web</div></div></div>
+        <div class="sec">МОЖНО ЗАПУСТИТЬ</div>
+        <div class="it" style="color:var(--mu)">▷ <div>Pixel 9 API 35<div class="d">эмулятор Android</div></div></div>
+        <div class="it" style="color:var(--mu)">▷ <div>iPad Air (M3)<div class="d">симулятор iOS</div></div></div>
+        <div class="it" style="border-top:1px solid var(--bd);border-radius:0;color:var(--ac);font-size:12px">⚙ Аргументы запуска (--flavor, --dart-define)…</div>
+      </div>
+    </div>
+    <div>
+      <div class="cap">Сборка идёт</div>
+      <div class="pop" style="padding:12px">
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span>Xcode build…</span><span class="d">34 с</span></div>
+        <div class="prog" style="margin:8px 0"><i></i></div>
+        <div class="d">Сборка падает → ошибка с кнопкой «Отправить агенту», как в логах</div>
+      </div>
+    </div>
+    <div>
+      <div class="cap">🎯 Выбор виджета</div>
+      <div class="pop" style="padding:12px">
+        <div style="font-size:12px;color:var(--mu)">Кликни виджет в запущенном приложении…</div>
+        <div style="margin-top:8px;border:1px solid var(--bd);border-radius:9px;padding:8px 10px">
+          <b>BookingCard</b> <span class="d" style="font-family:Menlo">booking_card.dart:42</span>
+          <div class="d">Row › Padding › BookingCard › ListView › BookingScreen</div>
+          <div style="display:flex;gap:6px;margin-top:8px"><span class="btn p">＋ В сообщение</span><span class="btn">Открыть файл</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p style="font-size:12px;color:var(--mu);margin-top:16px">
+Одно приложение на проект: запуск привязан к проекту, а не к чату — все чаты проекта видят тот же запуск, агент управляет им через MCP (hot_reload, get_runtime_errors, скриншот). Кнопки ▶/⚡ в шапке окна — короткий путь к тому же запуску. Ошибки во время хода агента он видит сам; «→ Отправить агенту» — вручную в текущий чат.
+</p>
+
+</body></html>
