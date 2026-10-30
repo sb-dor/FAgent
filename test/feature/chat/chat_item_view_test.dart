@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
@@ -185,4 +186,61 @@ void main() {
     expect(width, lessThanOrEqualTo(kChatColumnWidth));
     expect(width, greaterThan(600));
   });
+
+  testWidgets('an expanded read group stays open when a new item arrives', (tester) async {
+    useDesktopView(tester);
+    final dependencies = testDependencies();
+    List<ChatItem> items(int extra) => <ChatItem>[
+      for (var i = 0; i < 3; i++)
+        ToolCallItem(
+          i,
+          toolCallId: 't$i',
+          title: 'Read f$i.dart',
+          kind: 'read',
+          status: 'completed',
+          locations: <String>['/p/lib/f$i.dart'],
+        ),
+      for (var i = 0; i < extra; i++) AgentMessageItem(10 + i, text: 'message $i'),
+    ];
+    Widget feed(int extra) => testApp(
+      ChatFeed(items: items(extra), onAnswerPermission: (_, _) {}),
+      dependencies: dependencies,
+    );
+
+    await tester.pumpWidget(feed(0));
+    await tester.tap(find.text('Read 3 files'));
+    await tester.pumpAndSettle();
+    expect(find.text('/p/lib/f1.dart'), findsOneWidget);
+
+    await tester.pumpWidget(feed(1));
+    await tester.pumpWidget(feed(2));
+
+    expect(find.text('message 1'), findsOneWidget);
+    expect(find.text('/p/lib/f1.dart'), findsOneWidget);
+  });
+
+  testWidgets('rebuilding a tool call with the same diff reuses the computed lines', (
+    tester,
+  ) async {
+    useDesktopView(tester);
+    final dependencies = testDependencies();
+    ToolCallItem call() => const ToolCallItem(
+      0,
+      toolCallId: 't',
+      title: 'Edit a.dart',
+      kind: 'edit',
+      status: 'completed',
+      content: <ToolContent>[ToolDiffContent(path: '/p/a.dart', oldText: 'a\nb', newText: 'a\nc')],
+    );
+    List<Object?> shownLines() => tester.widget<DiffView>(find.byType(DiffView)).lines!;
+
+    await tester.pumpWidget(testApp(_card(call()), dependencies: dependencies));
+    final first = shownLines();
+    // A refolded feed holds equal but new objects.
+    await tester.pumpWidget(testApp(_card(call()), dependencies: dependencies));
+
+    expect(shownLines(), same(first));
+  });
 }
+
+Widget _card(ToolCallItem call) => ChatItemView(item: call, onAnswerPermission: (_, _) {});

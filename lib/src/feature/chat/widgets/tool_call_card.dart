@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/utils/line_diff.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/diff_lines_cache.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart';
 
 /// {@template tool_call_card}
@@ -12,20 +13,42 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart'
 /// `+N −M` counter for edits and the status. Expands to diffs and output;
 /// edits start expanded, everything else collapsed.
 /// {@endtemplate}
-class ToolCallCard extends StatelessWidget {
+class ToolCallCard extends StatefulWidget {
   /// {@macro tool_call_card}
   const ToolCallCard({required this.call, super.key});
 
   /// The tool call.
   final ToolCallItem call;
 
+  /// Icon for an ACP tool [kind].
+  static IconData toolIcon(String? kind) => switch (kind) {
+    'read' => Icons.description_outlined,
+    'edit' => Icons.edit_note,
+    'delete' => Icons.delete_outline,
+    'move' => Icons.drive_file_move_outline,
+    'search' => Icons.search,
+    'execute' => Icons.terminal,
+    'think' => Icons.psychology_outlined,
+    'fetch' => Icons.public,
+    _ => Icons.build_outlined,
+  };
+
+  @override
+  State<ToolCallCard> createState() => _ToolCallCardState();
+}
+
+class _ToolCallCardState extends State<ToolCallCard> {
   static const int _maxOutputChars = 4000;
+
+  final DiffLinesCache _diffLines = DiffLinesCache();
 
   @override
   Widget build(BuildContext context) {
+    final call = widget.call;
     final theme = Theme.of(context);
     final colors = context.colors;
     final diffs = call.diffs.toList();
+    final lines = _diffLines.resolve(diffs);
     final texts = call.content.whereType<ToolTextContent>().toList();
     final output = call.rawOutput;
     final hasBody = diffs.isNotEmpty || texts.isNotEmpty || (output != null && output.isNotEmpty);
@@ -35,7 +58,7 @@ class ToolCallCard extends StatelessWidget {
       initiallyExpanded: diffs.isNotEmpty,
       header: Row(
         children: <Widget>[
-          Icon(toolIcon(call.kind), size: 16, color: colors.muted),
+          Icon(ToolCallCard.toolIcon(call.kind), size: 16, color: colors.muted),
           const SizedBox(width: 8),
           Flexible(
             flex: 3,
@@ -54,7 +77,7 @@ class ToolCallCard extends StatelessWidget {
             ),
           ],
           const Spacer(),
-          if (diffs.isNotEmpty) ...<Widget>[_DiffCounter(diffs: diffs), const SizedBox(width: 8)],
+          if (diffs.isNotEmpty) ...<Widget>[_DiffCounter(lines: lines), const SizedBox(width: 8)],
           _StatusIcon(status: call.status),
         ],
       ),
@@ -63,10 +86,15 @@ class ToolCallCard extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                for (final diff in diffs)
+                for (var i = 0; i < diffs.length; i++)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: DiffView(path: diff.path, oldText: diff.oldText, newText: diff.newText),
+                    child: DiffView(
+                      path: diffs[i].path,
+                      oldText: diffs[i].oldText,
+                      newText: diffs[i].newText,
+                      lines: lines[i],
+                    ),
                   ),
                 for (final text in texts)
                   SelectableText(text.text, style: theme.textTheme.bodySmall),
@@ -84,34 +112,21 @@ class ToolCallCard extends StatelessWidget {
             ),
     );
   }
-
-  /// Icon for an ACP tool [kind].
-  static IconData toolIcon(String? kind) => switch (kind) {
-    'read' => Icons.description_outlined,
-    'edit' => Icons.edit_note,
-    'delete' => Icons.delete_outline,
-    'move' => Icons.drive_file_move_outline,
-    'search' => Icons.search,
-    'execute' => Icons.terminal,
-    'think' => Icons.psychology_outlined,
-    'fetch' => Icons.public,
-    _ => Icons.build_outlined,
-  };
 }
 
 /// `+N −M` summed over all diffs of a call.
 class _DiffCounter extends StatelessWidget {
-  const _DiffCounter({required this.diffs});
+  const _DiffCounter({required this.lines});
 
-  final List<ToolDiffContent> diffs;
+  final List<List<DiffLine>> lines;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     var added = 0;
     var removed = 0;
-    for (final diff in diffs) {
-      final stats = LineDiff.stats(LineDiff.compute(diff.oldText, diff.newText));
+    for (final diffLines in lines) {
+      final stats = LineDiff.stats(diffLines);
       added += stats.added;
       removed += stats.removed;
     }

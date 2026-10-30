@@ -49,12 +49,15 @@ bool _inOrder(String path, String needle) {
   return i == needle.length;
 }
 
-/// Mentioned paths of [text] that are among [files], in order, once each.
-/// A mention is `@` at the start or after whitespace followed by the longest
-/// known path, so paths with spaces or `@` (`Icon@2x.png`) work and
-/// punctuation after a path (`@main.dart,`) is not part of it.
-List<String> mentionedFiles(String text, Set<String> files) {
-  final found = <String>{};
+/// A mention found in a text: `text.substring(start, end)` is `@` plus [path].
+typedef MentionRange = ({int start, int end, String path});
+
+/// Mentions of [text] whose path is among [files], in order. A mention is `@`
+/// at the start or after whitespace followed by the longest known path, so
+/// paths with spaces or `@` (`Icon@2x.png`) work and punctuation after a path
+/// (`@main.dart,`) is not part of it.
+List<MentionRange> mentionRanges(String text, Iterable<String> files) {
+  final found = <MentionRange>[];
   for (var at = text.indexOf('@'); at != -1; at = text.indexOf('@', at + 1)) {
     if (at > 0 && !_isSpace(text.codeUnitAt(at - 1))) continue;
     String? longest;
@@ -65,10 +68,15 @@ List<String> mentionedFiles(String text, Set<String> files) {
         longest = file;
       }
     }
-    if (longest != null) found.add(longest);
+    if (longest != null) found.add((start: at, end: at + 1 + longest.length, path: longest));
   }
-  return found.toList();
+  return found;
 }
+
+/// Mentioned paths of [text] that are among [files], in order, once each
+/// (see [mentionRanges]).
+List<String> mentionedFiles(String text, Set<String> files) =>
+    <String>{for (final range in mentionRanges(text, files)) range.path}.toList();
 
 bool _isSpace(int unit) => unit == 0x20 || unit == 0x09 || unit == 0x0A || unit == 0x0D;
 

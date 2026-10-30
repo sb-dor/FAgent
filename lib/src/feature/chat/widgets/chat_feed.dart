@@ -23,10 +23,16 @@ class ChatFeed extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final entries = groupFeed(items);
+    final indexBySeq = <int, int>{
+      for (var i = 0; i < entries.length; i++) entries[i].seq: entries.length - 1 - i,
+    };
     return ListView.builder(
       reverse: true,
       padding: const EdgeInsets.symmetric(vertical: 16),
       itemCount: entries.length,
+      // New items shift every index of the reversed list; map keys to their
+      // new index so rows keep their state (an expanded group stays open).
+      findChildIndexCallback: (key) => key is ValueKey<int> ? indexBySeq[key.value] : null,
       itemBuilder: (context, index) {
         final entry = entries[entries.length - 1 - index];
         return Center(

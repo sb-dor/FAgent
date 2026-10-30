@@ -14,6 +14,7 @@ class DiffView extends StatelessWidget {
     required this.newText,
     this.oldText,
     this.maxLines = 400,
+    this.lines,
     super.key,
   });
 
@@ -29,11 +30,15 @@ class DiffView extends StatelessWidget {
   /// Lines rendered before the rest is summarized.
   final int maxLines;
 
+  /// The diff when the caller has already computed it (`LineDiff.compute`
+  /// of [oldText] and [newText]); computed here otherwise.
+  final List<DiffLine>? lines;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final lines = LineDiff.compute(oldText, newText);
+    final lines = this.lines ?? LineDiff.compute(oldText, newText);
     final stats = LineDiff.stats(lines);
     final mono = theme.textTheme.bodySmall?.copyWith(fontFamily: 'Menlo', height: 1.35);
     return DecoratedBox(
