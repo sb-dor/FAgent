@@ -55,17 +55,21 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage4-right-p
 - **Bugs and risks:**
   - Changes: "Open file" is also shown for directory entries (check `FileSystemEntityType.file`); symlink resolution and other FS calls are synchronous on every refold
   - Changes: file order is lost after each turn (alphabetical within a turn); a rename plus an edit shows two entries; refold and rebuild on every chunk (`ChangedFile` has no equality)
-  - Changes: `insertDraft` lacks a `mounted` guard; the diff handle stays stale if a chat leaves Completed; multi-diff edits open `diffs.first`
+  - Changes: the diff handle stays stale if a chat leaves Completed; multi-diff edits open `diffs.first`
   - Run: `choose` can't clear the device; a chosen device leaving the list keeps ▶ enabled with a stale id; `pickWidget` works with nothing running
   - Run: subscriptions may leak if disposed mid-watch (check `isDisposed` after await); run streams have no `onError`; failed run actions are not surfaced; `RunFailed` is never emitted by the fake
   - Run: restart doesn't clear the log buffer (`errorCount` accumulates); `clearLogs` assumes increasing `seq` (document it in the interface) and leaves `_atBottom` false while scrolled up
   - Run: replaying the log is 2000 separate events, O(n²) copies and a `setState` per line (batch it); every log line also costs a full-list copy, filter and badge rebuild; mentions scan the whole log per line
   - Run: log filter, search and `_atBottom` carry across projects; the badge shows a stale project's errors when `projectId` becomes null; brief idle flash on a project switch
   - Run: one publish per frame could miss a fast running-to-idle change (document it); search skips `error.message`
+  - Run: `RunActionsController` is a single Droppable: Stop pressed within a reload/start is dropped silently, and a pending real pick would block Stop/reload/Start everywhere — split pick into its own controller and never drop stop (matters once the real runner lands, M2) (`app_run/controller/run_actions_controller.dart:25-28`)
+  - Run: `RunTab` re-implements start/stop/reload/restart and active/canStart beside `WorkspaceRunLink` and trusts `widget.projectId` over `run.state.projectId` — pass the runLink callbacks/flags in (`app_run/widgets/run_tab.dart:96-124`, `run_header.dart:79-80`)
+  - Run: removing a project leaves its run running with no way to stop it — stop the run on removal or treat building/running as `ProjectBusyException` (M2) (`workspace/widgets/workspace_config_widget.dart:340-344`)
+  - Changes: `ChangesTab` reads `WorkspaceConfigInhWidget` directly (changes_pane depends on workspace) — pass selectedPath/onSelect/onOpenFile/projectRoot from `WorkspaceRightPane` like `RunTab` (`changes_pane/widgets/changes_tab.dart:19`)
 - **Test gaps:**
   - Changes: no tests pin post-frame coalescing, `selectedChangePath` reset or the chat-to-chat handle reset; reveal is untested; the '+2' test finds the `DiffView` header, not the list counter; icon-count asserts in the plan tests are weak
   - Run: no restart-during-build test; two weak tests in the controller; the timer, To-agent filter and pick tests are weak; fixed real-time waits (Changes tests use real 100 ms delays)
-  - Run to chat: the shortcut test doesn't assert composer focus; `_errorText` fallback untested; the disabled ⚡ state is not asserted
+  - Run to chat: the shortcut test doesn't assert composer focus; the disabled ⚡ state is not asserted
 - **Polish:**
   - Changes header: chevron `IconButton` taller than the header (status icon alignment), `iconSize` 18, default icon color; `Tooltip('')` is possible; `_Entry.shown` doc says "first" but keeps the latest
   - Plan card: status strings are duplicated with `PlanCard` (add `PlanEntry` getters or an enum); the `in_progress` spinner keeps spinning on a dead session
