@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
@@ -21,10 +23,10 @@ class TurnFilesCard extends StatelessWidget {
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: theme.colorScheme.surfaceContainerLow,
+      color: context.colors.surface,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: context.colors.border),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       clipBehavior: Clip.antiAlias,
       child: Theme(

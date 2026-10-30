@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 
 /// {@template chat_status_line}
@@ -43,7 +44,7 @@ class ChatStatusLine extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               else
-                Icon(Icons.pan_tool_outlined, size: 14, color: theme.colorScheme.tertiary),
+                Icon(Icons.pan_tool_outlined, size: 14, color: context.colors.warn),
               const SizedBox(width: 8),
               Text(text, style: theme.textTheme.bodySmall),
             ],

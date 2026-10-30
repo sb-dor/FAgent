@@ -213,7 +213,7 @@ px**, отступы 32; карточки только в одну колонк�
 | `app_settings` | `IAppSettingsRepository`: `watch()`, `update(AppSettings)` — агент по умолчанию, модель/усилие/режим по агенту, тема, язык, org, шаблон, «hot reload после хода», ширина панелей | Real: drift-таблица `app_settings` (ключ → JSON), схема v4 |
 | `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `install(id)`, `login(id, method)`, `logout(id)` | Claude — Real (`AgentHub`, `AgentAuth`); Codex, Gemini, свой агент — Fake до M5 |
 | `session_config` (есть) | меню модели/режима/усилия поверх текущего | Real |
-| `chat_search` | `IChatSearchRepository.search(query)` | Real: drift `LIKE` по `sessions.title` |
+| `chat_search` | `IChatSearchRepository.search(query)` | Real: drift читает чаты, совпадение по `sessions.title` считается в Dart (без учёта регистра, в том числе кириллицы; `%` и `_` ищутся буквально), т.к. SQLite `LIKE` не сворачивает регистр кириллицы |
 | `skills` | `ISkillsRepository`: `watchSkills(projectId)`, `watchRules(projectId)`, `read/write(id)`, `setEnabled(id, scope)`, `create`, `importFolder`, `addGitSource`, `duplicate` | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — Fake до M3; доставка агенту — M3 (MCP) |
 | `mcp_servers` | `IMcpServersRepository`: `watchServers(projectId)`, `add`, `remove`, `setEnabled` | Хранение — Real (drift); статус/инструменты — Fake до M3 |
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Fake до M2 (сценарий: сборка → работа → ошибка RenderFlex) |
@@ -241,9 +241,10 @@ org, folder, platforms, template, gitInit, openChat}`, `CreationStep{label, stat
 - Замена на настоящую реализацию — одна строка в инициализации и удаление фейка.
 
 ### База данных (v3 → v4)
-Таблицы `app_settings` (`key` PK, `value` JSON, `updatedAt`), `skill_states` (`skillId`, `projectId`
-nullable, `enabled`; уникальный ключ `(skillId, projectId)`), `mcp_servers` (`id`, `name`, `transport`,
-`config` JSON, `projectId` nullable, `enabled`). Миграция step-by-step + тест `SchemaVerifier`, как v3.
+v4 добавляет только таблицу `app_settings` (`key` PK, `value` JSON, `updatedAt`). Таблицы `skill_states`
+(`skillId`, `projectId` nullable, `enabled`; уникальный ключ `(skillId, projectId)`) и `mcp_servers`
+(`id`, `name`, `transport`, `config` JSON, `projectId` nullable, `enabled`) добавят планы этапов 5 и 6
+своими миграциями. Миграция step-by-step + тест `SchemaVerifier`, как v3.
 
 ## 5. Локализация и доступность
 Все строки — `intl_en.arb` / `intl_ru.arb`. Все кнопки-иконки с `tooltip`, у меню — навигация

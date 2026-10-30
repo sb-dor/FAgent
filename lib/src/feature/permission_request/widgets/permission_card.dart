@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
@@ -21,19 +23,17 @@ class PermissionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final colors = context.colors;
     final localization = Localization.of(context);
     final pending = item.state == PermissionState.pending;
     final command = item.command;
     return Card(
       margin: EdgeInsets.zero,
       elevation: 0,
-      color: pending
-          ? colors.tertiaryContainer.withValues(alpha: 0.45)
-          : colors.surfaceContainerLow,
+      color: pending ? colors.warnSoft : colors.surface,
       shape: RoundedRectangleBorder(
-        side: BorderSide(color: pending ? colors.tertiary : colors.outlineVariant),
-        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: pending ? colors.warn : colors.border),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -42,7 +42,7 @@ class PermissionCard extends StatelessWidget {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Icon(Icons.pan_tool_outlined, size: 18, color: colors.tertiary),
+                Icon(Icons.pan_tool_outlined, size: 18, color: colors.warn),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(localization.permissionTitle, style: theme.textTheme.labelLarge),
@@ -55,8 +55,8 @@ class PermissionCard extends StatelessWidget {
               const SizedBox(height: 8),
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: colors.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(6),
+                  color: colors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(AppRadius.small),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -95,7 +95,7 @@ class PermissionCard extends StatelessWidget {
             else
               Text(
                 _outcome(localization),
-                style: theme.textTheme.bodySmall?.copyWith(color: colors.onSurfaceVariant),
+                style: theme.textTheme.bodySmall?.copyWith(color: colors.muted),
               ),
           ],
         ),

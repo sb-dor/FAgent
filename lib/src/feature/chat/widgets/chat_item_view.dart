@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/plan_card.dart';
@@ -24,7 +26,8 @@ class ChatItemView extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localization = Localization.of(context);
-    final muted = theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final colors = context.colors;
+    final muted = theme.textTheme.bodySmall?.copyWith(color: colors.muted);
     return switch (item) {
       UserMessageItem(:final text, :final resources) => Align(
         alignment: Alignment.centerRight,
@@ -32,8 +35,8 @@ class ChatItemView extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 640),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: theme.colorScheme.secondaryContainer,
-              borderRadius: BorderRadius.circular(14),
+              color: colors.accentSoft,
+              borderRadius: BorderRadius.circular(AppRadius.large),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -79,7 +82,7 @@ class ChatItemView extends StatelessWidget {
           Icon(
             type == 'error' ? Icons.error_outline : Icons.info_outline,
             size: 16,
-            color: type == 'error' ? theme.colorScheme.error : theme.colorScheme.onSurfaceVariant,
+            color: type == 'error' ? colors.danger : colors.muted,
           ),
           const SizedBox(width: 8),
           Expanded(

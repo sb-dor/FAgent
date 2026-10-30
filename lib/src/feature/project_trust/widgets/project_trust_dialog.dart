@@ -1,5 +1,6 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/controller/project_trust_controller.dart';
@@ -86,7 +87,7 @@ class _ProjectTrustDialogState extends State<ProjectTrustDialog> {
                   ),
                   ProjectTrust$ErrorState(:final error) => Text(
                     '$error',
-                    style: TextStyle(color: theme.colorScheme.error),
+                    style: TextStyle(color: context.colors.danger),
                   ),
                   _ => const LinearProgressIndicator(),
                 },

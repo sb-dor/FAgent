@@ -22,6 +22,9 @@ these overrides win:
   `initialize_dependencies.dart`). Add new app-wide services as initialization steps there.
 - Agent processes and their streams are long-lived: every `Stream`-returning repository method must
   follow the "Stream-Returning Methods" rules, and every `Process` must be killed in `dispose`.
+- Design tokens live in `lib/src/common/design/`, shared widgets in `lib/src/common/widget/`. Feature
+  widgets take colors only from `context.colors` (no `Color(0x…)`, `Colors.*` or `colorScheme.*`) and
+  radii from `AppRadius`.
 
 ## Commands
 

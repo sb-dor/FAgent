@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../generated_migrations/schema.dart';
 import '../../generated_migrations/schema_v1.dart' as v1;
 import '../../generated_migrations/schema_v2.dart' as v2;
+import '../../generated_migrations/schema_v3.dart' as v3;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -49,5 +50,25 @@ void main() {
     final chat = await database.select(database.sessionsTable).getSingle();
     expect(chat.title, 'chat');
     expect(chat.bypassAllowedAt, isNull);
+  });
+
+  test('v3 → v4 matches the v4 schema and keeps chats', () async {
+    final schema = await verifier.schemaAt(3);
+    final old = v3.DatabaseAtV3(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 4);
+
+    final chat = await database.select(database.sessionsTable).getSingle();
+    expect(chat.title, 'chat');
+    expect(await database.select(database.appSettingsTable).get(), isEmpty);
   });
 }

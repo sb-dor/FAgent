@@ -1,11 +1,10 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
-import 'package:window_manager/window_manager.dart';
 
 /// {@template workspace_chat_area}
 /// The selected chat, or a hint to pick one.
@@ -25,7 +24,6 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
   Widget build(BuildContext context) => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: <Widget>[
-      const DragToMoveArea(child: SizedBox(height: kWindowTitleBarHeight)),
       Expanded(
         child: StateConsumer<ProjectsController, ProjectsState>(
           controller: _scope.projectsController,
@@ -35,10 +33,16 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
               final project = _scope.selectedProject;
               final sessionId = _scope.dataController.sessionId;
               if (project == null || sessionId == null) {
+                // Without any project the way forward is to open one; with projects, to pick or
+                // start a chat.
+                final hasProjects = switch (_scope.projectsController.state) {
+                  Projects$CompletedState(:final projects) => projects.isNotEmpty,
+                  _ => false,
+                };
                 return _Hint(
-                  text: project == null
-                      ? Localization.of(context).chatPlaceholder
-                      : Localization.of(context).selectChat,
+                  text: hasProjects
+                      ? Localization.of(context).selectChat
+                      : Localization.of(context).chatPlaceholder,
                 );
               }
               return ChatConfigWidget(
@@ -63,10 +67,7 @@ class _Hint extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Center(
-      child: Text(
-        text,
-        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-      ),
+      child: Text(text, style: theme.textTheme.bodyLarge?.copyWith(color: context.colors.muted)),
     );
   }
 }

@@ -38,6 +38,9 @@ final class ProjectsController extends StateController<ProjectsState>
     );
   }, error: (error, stackTrace) async => setState(ProjectsState.error(error: error)));
 
+  /// Shows [path] in Finder. Throws when it cannot.
+  Future<void> reveal(String path) => _repository.reveal(path);
+
   @override
   void dispose() {
     _subscription?.cancel().ignore();

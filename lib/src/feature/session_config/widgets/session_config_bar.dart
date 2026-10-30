@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 
@@ -95,7 +96,7 @@ class _SelectChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final colors = context.colors;
     final warning = option.isMode && unattendedPermissionModes.contains(option.currentValue);
     final danger = option.isMode && option.currentValue == bypassPermissionMode;
     return PopupMenuButton<String>(
@@ -118,9 +119,9 @@ class _SelectChip extends StatelessWidget {
       child: Chip(
         visualDensity: VisualDensity.compact,
         backgroundColor: danger
-            ? colors.errorContainer
+            ? colors.dangerSoft
             : warning
-            ? colors.tertiaryContainer
+            ? colors.warnSoft
             : null,
         avatar: Icon(option.isMode ? Icons.shield_outlined : Icons.tune, size: 16),
         label: Text('${option.name}: ${option.currentName}'),

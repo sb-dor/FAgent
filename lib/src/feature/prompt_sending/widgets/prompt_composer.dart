@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
 import 'package:path/path.dart' as p;
@@ -153,7 +155,7 @@ class _PromptComposerState extends State<PromptComposer> {
   @override
   Widget build(BuildContext context) {
     final localization = Localization.of(context);
-    final colors = Theme.of(context).colorScheme;
+    final colors = context.colors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       child: Center(
@@ -161,9 +163,9 @@ class _PromptComposerState extends State<PromptComposer> {
           constraints: const BoxConstraints(maxWidth: 860),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: colors.surfaceContainerLow,
-              border: Border.all(color: colors.outlineVariant),
-              borderRadius: BorderRadius.circular(14),
+              color: colors.surface,
+              border: Border.all(color: colors.border),
+              borderRadius: BorderRadius.circular(AppRadius.large),
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -243,7 +245,6 @@ class _MentionSuggestions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
       child: Column(
@@ -257,8 +258,8 @@ class _MentionSuggestions extends StatelessWidget {
                 dense: true,
                 visualDensity: VisualDensity.compact,
                 selected: index == highlighted,
-                selectedTileColor: theme.colorScheme.secondaryContainer,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                selectedTileColor: context.colors.accentSoft,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.small)),
                 leading: const Icon(Icons.description_outlined, size: 18),
                 title: Text(p.basename(file)),
                 subtitle: Text(

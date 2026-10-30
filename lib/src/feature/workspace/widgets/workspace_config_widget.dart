@@ -1,9 +1,17 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/chat_search/widgets/chat_search_dialog.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/projects/controller/project_removal_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
@@ -11,7 +19,9 @@ import 'package:flutter_code_agent/src/feature/session_creation/controller/sessi
 import 'package:flutter_code_agent/src/feature/session_creation/data/session_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
+import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 
 /// Gives the workspace widgets access to [WorkspaceConfigWidgetState].
@@ -34,8 +44,7 @@ class WorkspaceConfigInhWidget extends InheritedWidget {
 
 /// {@template workspace_config_widget}
 /// Owns the sidebar controllers and the selection, and wires them: an opened
-/// project becomes selected, a created chat becomes selected, a selected
-/// project shows its chats.
+/// project becomes selected, a created chat becomes selected.
 /// {@endtemplate}
 class WorkspaceConfigWidget extends StatefulWidget {
   /// {@macro workspace_config_widget}
@@ -48,17 +57,26 @@ class WorkspaceConfigWidget extends StatefulWidget {
 class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectsController projectsController;
   late final ProjectOpeningController projectOpeningController;
+  late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
   late final SessionCreationController sessionCreationController;
   final WorkspaceDataController dataController = WorkspaceDataController();
+
+  /// The window-level settings (panels, theme, language).
+  late final AppSettingsController settingsController = AppSettingsConfigInhWidget.of(context)
+      .controller;
 
   @override
   void initState() {
     super.initState();
     final dependencies = Dependencies.of(context);
-    projectsController = ProjectsController(
-      repository: ProjectsRepositoryImpl(database: dependencies.database),
-    )..watch();
+    final projectsRepository = ProjectsRepositoryImpl(
+      database: dependencies.database,
+      hub: dependencies.agentHub,
+    );
+    projectsController = ProjectsController(repository: projectsRepository)..watch();
+    projectRemovalController = ProjectRemovalController(repository: projectsRepository)
+      ..addListener(_onProjectRemoved);
     projectOpeningController = ProjectOpeningController(
       repository: ProjectOpeningRepositoryImpl(database: dependencies.database),
     )..addListener(_onProjectOpened);
@@ -71,19 +89,20 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     sessionCreationController = SessionCreationController(
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
     )..addListener(_onSessionCreated);
-    dataController.addListener(_onSelectionChanged);
+    sessionsController.watchAll();
   }
 
   @override
   void dispose() {
-    dataController
-      ..removeListener(_onSelectionChanged)
-      ..dispose();
+    dataController.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
       ..dispose();
     sessionCreationController
       ..removeListener(_onSessionCreated)
+      ..dispose();
+    projectRemovalController
+      ..removeListener(_onProjectRemoved)
       ..dispose();
     projectsController.dispose();
     sessionsController.dispose();
@@ -106,10 +125,122 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     if (path != null) projectOpeningController.open(path);
   }
 
-  /// Starts a new chat in the selected project.
-  void createChat() {
-    final project = dataController.projectId;
-    if (project != null) sessionCreationController.create(projectId: project, agentId: 'claude');
+  /// Shows or hides the sidebar and remembers the choice.
+  void toggleSidebar() => settingsController.update(
+    (current) => current.copyWith(sidebarVisible: !current.sidebarVisible),
+  );
+
+  /// Shows or hides the right pane and remembers the choice.
+  ///
+  /// While the user has not chosen, the pane is open in a wide window ([kWideWindowWidth]), so the
+  /// first toggle closes it there and opens it in a narrow one.
+  void toggleRightPane({required double windowWidth}) => settingsController.update(
+    (current) => current.copyWith(
+      rightPaneVisible: !(current.rightPaneVisible ?? windowWidth >= kWideWindowWidth),
+    ),
+  );
+
+  /// Remembers the right pane width, kept within the allowed range.
+  void setRightPaneWidth(double width) => settingsController.update(
+    (current) => current.copyWith(
+      rightPaneWidth: width.clamp(AppSettings.minRightPaneWidth, AppSettings.maxRightPaneWidth),
+    ),
+  );
+
+  /// The project a new chat goes to by default: the one of the selected chat, else the selected
+  /// project, else the first group of the sidebar, else none.
+  int? get newChatProjectId {
+    final chats = switch (sessionsController.state) {
+      Sessions$CompletedState(:final sessions) => sessions,
+      _ => const <ChatSession>[],
+    };
+    final sessionId = dataController.sessionId;
+    if (sessionId != null) {
+      final chat = chats.where((chat) => chat.id == sessionId).firstOrNull;
+      if (chat != null) return chat.projectId;
+    }
+    final selected = dataController.projectId;
+    if (selected != null) return selected;
+    final projects = switch (projectsController.state) {
+      Projects$CompletedState(:final projects) => projects,
+      _ => const <Project>[],
+    };
+    return orderProjectsForSidebar(projects, chats).firstOrNull?.id;
+  }
+
+  /// Starts a new chat in [projectId], by default in [newChatProjectId]; does nothing without a
+  /// project. The project becomes selected and the window leaves Skills or Settings for the chat;
+  /// the new chat is selected when it is created.
+  void createChat({int? projectId}) {
+    final project = projectId ?? newChatProjectId;
+    if (project == null) return;
+    dataController.selectProject(project);
+    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    sessionCreationController.create(projectId: project, agentId: 'claude');
+  }
+
+  /// Asks which chat to open, then opens it: its project and the chat become selected and the
+  /// window leaves Skills or Settings for the chat.
+  Future<void> openChatSearch() async {
+    final result = await showChatSearch(context);
+    if (result == null || !mounted) return;
+    dataController
+      ..selectProject(result.projectId)
+      ..selectSession(result.sessionId);
+    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+  }
+
+  /// Shows [project]'s folder in Finder.
+  Future<void> revealProject(Project project) async {
+    try {
+      await projectsController.reveal(project.path);
+    } on Object {
+      _showError();
+    }
+  }
+
+  /// Asks, then forgets [project] with its chats; the folder on disk stays.
+  Future<void> removeProject(Project project) async {
+    final localization = Localization.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.large)),
+        content: Text(localization.removeProjectConfirm(project.name)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(localization.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.colors.danger),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(localization.remove),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) projectRemovalController.remove(project.id);
+  }
+
+  void _onProjectRemoved() {
+    switch (projectRemovalController.state) {
+      case ProjectRemoval$CompletedState(:final projectId):
+        if (dataController.projectId == projectId) dataController.clearSelection();
+      case ProjectRemoval$BusyState():
+        _showMessage(Localization.of(context).removeProjectBusy);
+      case ProjectRemoval$ErrorState():
+        _showError();
+      default:
+        break;
+    }
+  }
+
+  void _showError() => _showMessage(Localization.of(context).somethingWentWrong);
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _onProjectOpened() {
@@ -128,16 +259,6 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _onSessionCreated() {
     if (sessionCreationController.state case SessionCreation$CompletedState(:final sessionId)) {
       dataController.selectSession(sessionId);
-    }
-  }
-
-  int? _watchedProject;
-
-  void _onSelectionChanged() {
-    final project = dataController.projectId;
-    if (project != null && project != _watchedProject) {
-      _watchedProject = project;
-      sessionsController.watch(project);
     }
   }
 

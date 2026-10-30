@@ -1,10 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chat_area.dart';
-import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_panel.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_right_pane.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_settings_page.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_shortcuts.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_skills_page.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_title_bar.dart';
 
 /// {@template workspace_widget}
-/// Main window layout: projects sidebar, chat area and the run panel below it.
+/// Main window layout: the title bar over [sidebar | chat | right pane], or over the Skills or
+/// Settings screen.
 /// {@endtemplate}
 class WorkspaceWidget extends StatefulWidget {
   /// {@macro workspace_widget}
@@ -15,27 +24,73 @@ class WorkspaceWidget extends StatefulWidget {
 }
 
 class _WorkspaceWidgetState extends State<WorkspaceWidget> {
+  late final _scope = WorkspaceConfigInhWidget.of(context);
+
+  /// The chat layout stays mounted under Skills and Settings, so the composer draft, scroll
+  /// position and the like survive a visit there; it is hidden, silent and cannot take focus.
   @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          const SizedBox(width: 260, child: WorkspaceSidebar()),
-          VerticalDivider(width: 1, color: colorScheme.outlineVariant),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                const Expanded(child: WorkspaceChatArea()),
-                Divider(height: 1, color: colorScheme.outlineVariant),
-                const SizedBox(height: 220, child: WorkspaceRunPanel()),
-              ],
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) => Scaffold(
+    body: WorkspaceShortcuts(
+      child: ListenableBuilder(
+        listenable: Listenable.merge(<Listenable>[
+          _scope.dataController,
+          _scope.settingsController,
+        ]),
+        builder: (context, _) {
+          final view = _scope.dataController.view;
+          final chat = view == WorkspaceView.chat;
+          return Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              Offstage(
+                offstage: !chat,
+                child: TickerMode(
+                  enabled: chat,
+                  child: ExcludeFocus(excluding: !chat, child: _buildChat(context)),
+                ),
+              ),
+              switch (view) {
+                WorkspaceView.chat => const SizedBox.shrink(),
+                WorkspaceView.skills => const WorkspaceSkillsPage(),
+                WorkspaceView.settings => const WorkspaceSettingsPage(),
+              },
+            ],
+          );
+        },
       ),
+    ),
+  );
+
+  Widget _buildChat(BuildContext context) {
+    final settings = _scope.settingsController.settings;
+    final rightPaneVisible =
+        settings.rightPaneVisible ?? MediaQuery.sizeOf(context).width >= kWideWindowWidth;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const WorkspaceTitleBar(),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final sidebarWidth = settings.sidebarVisible ? kSidebarWidth + 1 : 0;
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  if (settings.sidebarVisible) ...<Widget>[
+                    const SizedBox(width: kSidebarWidth, child: WorkspaceSidebar()),
+                    VerticalDivider(width: 1, color: context.colors.border),
+                  ],
+                  const Expanded(child: WorkspaceChatArea()),
+                  if (rightPaneVisible)
+                    WorkspaceRightPane(
+                      maxWidth: constraints.maxWidth - sidebarWidth - kMinChatWidth,
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }
