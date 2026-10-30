@@ -20,8 +20,9 @@ const String _fence = '---';
 ///
 /// Returns `null` when the text has no frontmatter: it does not start with `---` on its own line
 /// or the closing `---` is missing. Throws [FrontmatterException] when the header is broken YAML
-/// or not a map. Values that are not strings are converted with `toString()` and trimmed; a nested
-/// `metadata.version` becomes `version` when there is no top-level one.
+/// or not a map. Only scalar values (strings, numbers, booleans) are kept, as trimmed strings; lists
+/// and maps are left out. A scalar `metadata.version` becomes `version` when there is no top-level
+/// one.
 ({Map<String, String> fields, String body})? parseFrontmatter(String text) {
   final lines = text.split('\n');
   if (lines.first.trimRight() != _fence) return null;
@@ -45,19 +46,26 @@ const String _fence = '---';
     throw const FrontmatterException('The frontmatter is not a map');
   }
 
-  final fields = <String, String>{
-    if (yaml case final Map<Object?, Object?> map)
-      for (final entry in map.entries) '${entry.key}': _asString(entry.value),
-  };
-  if (!fields.containsKey('version') && yaml is Map<Object?, Object?>) {
+  final fields = <String, String>{};
+  if (yaml is Map<Object?, Object?>) {
+    for (final entry in yaml.entries) {
+      final value = _scalar(entry.value);
+      if (value != null) fields['${entry.key}'] = value;
+    }
     final metadata = yaml['metadata'];
-    final version = metadata is Map<Object?, Object?> ? metadata['version'] : null;
-    if (version != null) fields['version'] = _asString(version);
+    final version = metadata is Map<Object?, Object?> ? _scalar(metadata['version']) : null;
+    if (version != null && !fields.containsKey('version')) fields['version'] = version;
   }
   return (fields: fields, body: lines.sublist(closing + 1).join('\n'));
 }
 
-String _asString(Object? value) => (value?.toString() ?? '').trim();
+/// The trimmed text of a string, number or boolean ([value] `null` is an empty string); `null` for
+/// lists and maps, which are never expanded into text.
+String? _scalar(Object? value) => switch (value) {
+  null => '',
+  String() || num() || bool() => '$value'.trim(),
+  _ => null,
+};
 
 final RegExp _plain = RegExp(r'^[A-Za-z][A-Za-z0-9_-]*( [A-Za-z0-9_-]+)*$');
 const Set<String> _reserved = {'true', 'false', 'null', 'yes', 'no', 'on', 'off', 'y', 'n'};

@@ -44,8 +44,12 @@ final class SkillActionsController extends StateController<SkillActionsState>
       _run(() => _repository.clearException(id, projectId));
 
   /// Replaces the text of [id]; an item of a project needs its [projectRoot].
-  void save(String id, String text, {String? projectRoot}) =>
-      _run(() => _repository.write(id, text, projectRoot: projectRoot));
+  ///
+  /// With [expected] (the text the edit started from) the save fails with a
+  /// `KnowledgeConflictException` when the file holds something else by now; without it the file
+  /// is overwritten.
+  void save(String id, String text, {String? projectRoot, String? expected}) =>
+      _run(() => _repository.write(id, text, projectRoot: projectRoot, expected: expected));
 
   /// Creates a skill or rule named [name]; completes with its id.
   void create(KnowledgeKind kind, String name) => _run(() => _repository.create(kind, name));

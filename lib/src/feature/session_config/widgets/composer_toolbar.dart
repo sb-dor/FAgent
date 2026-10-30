@@ -12,8 +12,8 @@ import 'package:flutter_code_agent/src/feature/skills/widgets/chat_skills_chip.d
 
 /// {@template composer_toolbar}
 /// The chips under the prompt: attach, agent, model (with effort in its menu), permission
-/// mode and any other setting the agent offers, then the skills of the project. The mode is coloured when it acts without
-/// asking; choosing `bypassPermissions` asks first.
+/// mode and any other setting the agent offers, then the skills of the project. The mode is
+/// coloured when it acts without asking; choosing `bypassPermissions` asks first.
 /// {@endtemplate}
 class ComposerToolbar extends StatelessWidget {
   /// {@macro composer_toolbar}

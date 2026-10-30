@@ -487,6 +487,93 @@ void main() {
       expect(notified, 2);
     });
 
+    group('leaveGuard', () {
+      late WorkspaceDataController controller;
+      late List<bool> answers;
+      var asked = 0;
+
+      setUp(() {
+        asked = 0;
+        answers = [];
+        controller = WorkspaceDataController()
+          ..openView(WorkspaceView.skills)
+          ..leaveGuard = () async {
+            asked++;
+            return answers.removeAt(0);
+          };
+        addTearDown(controller.dispose);
+      });
+
+      test('every way off the screen asks, and a no keeps it', () async {
+        answers.addAll([false, false]);
+
+        controller
+          ..backToChat()
+          ..openView(WorkspaceView.settings);
+        await pumpEventQueue();
+
+        expect(asked, 2);
+        expect(controller.view, WorkspaceView.skills);
+      });
+
+      test('a yes leaves', () async {
+        answers.add(true);
+
+        controller.openView(WorkspaceView.settings);
+        await pumpEventQueue();
+
+        expect(controller.view, WorkspaceView.settings);
+      });
+
+      test('a change inside the screen and the chat are not asked about', () async {
+        controller.openView(WorkspaceView.skills, section: 'rules');
+        expect(asked, 0);
+        expect(controller.section, 'rules');
+
+        controller
+          ..leaveGuard = null
+          ..backToChat()
+          ..leaveGuard = (() async => fail('The chat is not guarded'))
+          ..openView(WorkspaceView.skills);
+        expect(controller.view, WorkspaceView.skills);
+      });
+
+      test('whenMayLeave asks once for everything the leaving does', () async {
+        answers.add(true);
+
+        controller.whenMayLeave(() {
+          controller
+            ..selectProject(3)
+            ..backToChat();
+        });
+        await pumpEventQueue();
+
+        expect(asked, 1);
+        expect((controller.view, controller.projectId), (WorkspaceView.chat, 3));
+      });
+
+      test('a leaving that waited is dropped when the window went elsewhere meanwhile', () async {
+        answers.add(true);
+
+        controller
+          ..backToChat()
+          ..openSkills(itemId: 'rule:user:x');
+        await pumpEventQueue();
+
+        expect(controller.view, WorkspaceView.skills);
+      });
+
+      test('whenMayLeave drops the leaving after a no', () async {
+        answers.add(false);
+        var left = false;
+
+        controller.whenMayLeave(() => left = true);
+        await pumpEventQueue();
+
+        expect(left, isFalse);
+      });
+    });
+
     test('selecting a pane tab', () {
       final controller = WorkspaceDataController();
       addTearDown(controller.dispose);

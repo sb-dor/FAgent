@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/skill_library.dart';
@@ -20,6 +21,10 @@ import '../../support/test_app.dart';
 const String _root = '/work/avera-hotel';
 
 const String _chipTooltip = 'Skills enabled for this project';
+
+/// [text] inside the `/` menu (the chip of the toolbar says the same word).
+Finder _inMenu(String text) =>
+    find.descendant(of: find.byType(CommandSuggestions), matching: find.text(text));
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -192,7 +197,7 @@ void main() {
 
       await tester.enterText(find.byType(TextField), '/');
       await tester.pump();
-      expect(find.text('Скиллы проекта'), findsOneWidget);
+      expect(_inMenu('Скиллы'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await disposeTestApp(tester, dependencies);
     });
@@ -205,8 +210,8 @@ void main() {
       await tester.enterText(find.byType(TextField), '/');
       await tester.pump();
 
-      expect(find.text('Project skills'), findsOneWidget);
-      final skillsY = tester.getTopLeft(find.text('Project skills')).dy;
+      expect(_inMenu('Skills'), findsOneWidget);
+      final skillsY = tester.getTopLeft(_inMenu('Skills')).dy;
       expect(skillsY, lessThan(tester.getTopLeft(find.text('App')).dy));
       // The built-in skill is dimmed and says when it comes.
       expect(find.text('/feature-architecture'), findsOneWidget);

@@ -130,9 +130,11 @@ void main() {
     expect(library.byId('skill:user:empty'), isNull);
     final bad = library.byId('skill:user:bad')!;
     expect(bad.title, 'bad');
-    expect(bad.problem, 'No frontmatter');
-    expect(library.byId('skill:user:nodesc')!.problem, 'No description');
-    expect(library.byId('skill:user:yaml')!.problem, isNotNull);
+    expect(bad.problem, KnowledgeProblem.noFrontmatter);
+    expect(library.byId('skill:user:nodesc')!.problem, KnowledgeProblem.noDescription);
+    final yaml = library.byId('skill:user:yaml')!;
+    expect(yaml.problem, KnowledgeProblem.badYaml);
+    expect(yaml.problemDetail, isNotEmpty);
   });
 
   test('a skill created on disk while watching appears', () async {
@@ -262,13 +264,117 @@ void main() {
     expect(await repository.create(KnowledgeKind.skill, 'fresh'), 'skill:user:fresh');
     expect(await repository.create(KnowledgeKind.rule, 'law'), 'rule:user:law');
     final parsed = parseFrontmatter(await userFile('skills/fresh/SKILL.md').readAsString())!;
-    expect(parsed.fields, {'name': 'fresh', 'description': ''});
+    expect(parsed.fields, {'name': 'fresh', 'description': 'Describe when to use this skill.'});
     expect(parsed.body, '# fresh\n');
+    final rule = parseFrontmatter(await userFile('rules/law.md').readAsString())!;
+    expect(rule.fields, {'name': 'law', 'description': 'Describe the rule.'});
     expect(userFile('rules/law.md').existsSync(), isTrue);
     await expectLater(
       repository.create(KnowledgeKind.rule, 'law'),
       throwsA(isA<KnowledgeExistsException>()),
     );
+  });
+
+  test('an edit that leaves the frontmatter alone still changes the revision', () async {
+    await put(userFile('skills/b/SKILL.md'), _doc('b'));
+    await put(userFile('rules/x.md'), _doc('x'));
+    final listener = _Listener(repository.watch());
+    addTearDown(listener.cancel);
+    final before = await listener.until((library) => library.byId('skill:user:b') != null);
+
+    await File('${user.path}/skills/b/SKILL.md').writeAsString('${_doc('b')}more\n');
+    await File('${user.path}/rules/x.md').writeAsString('${_doc('x')}more\n');
+
+    final after = await listener.until(
+      (library) =>
+          library.byId('skill:user:b')!.revision != before.byId('skill:user:b')!.revision &&
+          library.byId('rule:user:x')!.revision != before.byId('rule:user:x')!.revision,
+    );
+    expect(after.byId('skill:user:b')!.revision, isNotEmpty);
+    expect(after.byId('skill:builtin:a')!.revision, isEmpty);
+  });
+
+  test('a created skill and rule open without a problem', () async {
+    await repository.create(KnowledgeKind.skill, 'fresh');
+    await repository.create(KnowledgeKind.rule, 'law');
+
+    final library = await first();
+
+    expect(library.byId('skill:user:fresh')!.problem, isNull);
+    expect(library.byId('rule:user:law')!.problem, isNull);
+  });
+
+  group('write with a conflict check and atomically', () {
+    test('expected text that differs from the file throws and leaves it alone', () async {
+      await put(userFile('skills/b/SKILL.md'), 'on disk');
+
+      await expectLater(
+        repository.write('skill:user:b', 'mine', expected: 'what I loaded'),
+        throwsA(isA<KnowledgeConflictException>()),
+      );
+
+      expect(await userFile('skills/b/SKILL.md').readAsString(), 'on disk');
+    });
+
+    test('expected text that matches the file saves; no expected overwrites', () async {
+      await put(userFile('skills/b/SKILL.md'), 'on disk');
+
+      await repository.write('skill:user:b', 'mine', expected: 'on disk');
+      expect(await userFile('skills/b/SKILL.md').readAsString(), 'mine');
+
+      await repository.write('skill:user:b', 'forced');
+      expect(await userFile('skills/b/SKILL.md').readAsString(), 'forced');
+    });
+
+    test('a file that is gone is not found, even with expected text', () async {
+      await put(userFile('skills/b/SKILL.md'), 'on disk');
+      await userFile('skills/b/SKILL.md').delete();
+
+      await expectLater(
+        repository.write('skill:user:b', 'mine', expected: 'on disk'),
+        throwsA(isA<KnowledgeNotFoundException>()),
+      );
+    });
+
+    test('the write goes through a temporary file that is gone afterwards', () async {
+      await put(userFile('skills/b/SKILL.md'), 'old');
+      await put(userFile('rules/x.md'), 'old');
+
+      await repository.write('skill:user:b', 'new ' * 50000);
+      await repository.write('rule:user:x', 'new rule');
+
+      expect(await userFile('skills/b/SKILL.md').readAsString(), 'new ' * 50000);
+      expect(Directory('${user.path}/skills/b').listSync().map((e) => e.path.split('/').last), [
+        'SKILL.md',
+      ]);
+      expect(Directory('${user.path}/rules').listSync().map((e) => e.path.split('/').last), [
+        'x.md',
+      ]);
+    });
+
+    test('a write that fails leaves the old text and no temporary file', () async {
+      await put(userFile('skills/b/SKILL.md'), 'old');
+      final directory = Directory('${user.path}/skills/b');
+      // Without write access to the folder the temporary file cannot be created.
+      await Process.run('chmod', ['555', directory.path]);
+      addTearDown(() => Process.run('chmod', ['755', directory.path]));
+
+      await expectLater(repository.write('skill:user:b', 'new'), throwsA(isA<IOException>()));
+
+      expect(await userFile('skills/b/SKILL.md').readAsString(), 'old');
+      expect(directory.listSync(), hasLength(1));
+    });
+
+    test('a symlinked SKILL.md stays a link and the target is updated', () async {
+      await put(File('${temp.path}/real/SKILL.md'), 'old');
+      await Directory('${user.path}/skills/l').create(recursive: true);
+      await Link('${user.path}/skills/l/SKILL.md').create('${temp.path}/real/SKILL.md');
+
+      await repository.write('skill:user:l', 'new');
+
+      expect(FileSystemEntity.isLinkSync('${user.path}/skills/l/SKILL.md'), isTrue);
+      expect(await File('${temp.path}/real/SKILL.md').readAsString(), 'new');
+    });
   });
 
   test('duplicate picks a free name and renames frontmatter', () async {
@@ -321,6 +427,48 @@ void main() {
       repository.importFolder(empty.path),
       throwsA(isA<InvalidKnowledgeException>()),
     );
+  });
+
+  test('importFolder wants the file to be named exactly SKILL.md', () async {
+    final source = Directory('${temp.path}/outside/lower')..createSync(recursive: true);
+    await File('${source.path}/skill.md').writeAsString(_doc('lower'));
+
+    await expectLater(
+      repository.importFolder(source.path),
+      throwsA(isA<InvalidKnowledgeException>()),
+    );
+    expect(Directory('${user.path}/skills/lower').existsSync(), isFalse);
+  });
+
+  group('a failed copy leaves no half-made folder', () {
+    Future<Directory> lockedSkill(String name) async {
+      final source = Directory('${temp.path}/outside/$name')..createSync(recursive: true);
+      await File('${source.path}/SKILL.md').writeAsString(_doc(name));
+      final secret = File('${source.path}/secret.txt')..writeAsStringSync('x');
+      await Process.run('chmod', ['000', secret.path]);
+      addTearDown(() => Process.run('chmod', ['644', secret.path]));
+      return source;
+    }
+
+    test('importFolder', () async {
+      final source = await lockedSkill('locked');
+
+      await expectLater(repository.importFolder(source.path), throwsA(isA<IOException>()));
+
+      expect(Directory('${user.path}/skills/locked').existsSync(), isFalse);
+    });
+
+    test('duplicate', () async {
+      await put(userFile('skills/b/SKILL.md'), _doc('b'));
+      final secret = File('${user.path}/skills/b/secret.txt')..writeAsStringSync('x');
+      await Process.run('chmod', ['000', secret.path]);
+      addTearDown(() => Process.run('chmod', ['644', secret.path]));
+
+      await expectLater(repository.duplicate('skill:user:b'), throwsA(isA<IOException>()));
+
+      expect(Directory('${user.path}/skills/b-copy').existsSync(), isFalse);
+      expect(userFile('skills/b/SKILL.md').existsSync(), isTrue);
+    });
   });
 
   test('mutations show up in an open watch without waiting for a poll', () async {

@@ -5,8 +5,10 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skill_editor.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/skill_error_message.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skill_scope.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/source_tag.dart';
@@ -22,19 +24,39 @@ const double _kWideHeader = 640;
 /// text. Without an open item it asks to pick one.
 ///
 /// The card scrolls vertically and is meant to be at least 400 px wide.
+///
+/// While the library reloads (another project is loading), the card keeps showing the open item as
+/// it was, so its editor and the unsaved text in it survive.
 /// {@endtemplate}
-class SkillCard extends StatelessWidget {
+class SkillCard extends StatefulWidget {
   /// {@macro skill_card}
   const SkillCard({super.key});
+
+  @override
+  State<SkillCard> createState() => _SkillCardState();
+}
+
+class _SkillCardState extends State<SkillCard> {
+  /// The open item as the library last had it.
+  KnowledgeItem? _kept;
+
+  KnowledgeItem? _itemOf(SkillsConfigWidgetState scope) {
+    final id = scope.view.selectedId;
+    if (id == null) return _kept = null;
+    final found = scope.library.library.byId(id);
+    if (found != null) return _kept = found;
+    // A library that is still loading is empty; that does not mean the item is gone.
+    if (scope.library.state is SkillLibrary$LoadingState && _kept?.id == id) return _kept;
+    return _kept = null;
+  }
 
   @override
   Widget build(BuildContext context) {
     final scope = SkillsConfigInhWidget.of(context);
     return ListenableBuilder(
-      listenable: Listenable.merge(<Listenable>[scope.view, scope.library]),
+      listenable: Listenable.merge(<Listenable>[scope.view, scope.library, scope.editorResets]),
       builder: (context, _) {
-        final id = scope.view.selectedId;
-        final item = id == null ? null : scope.library.library.byId(id);
+        final item = _itemOf(scope);
         if (item == null) {
           return EmptyState(
             icon: Icons.auto_awesome_outlined,
@@ -49,7 +71,10 @@ class SkillCard extends StatelessWidget {
               _Header(item: item),
               if (item.problem case final problem?) ...<Widget>[
                 const SizedBox(height: 12),
-                _Problem(text: problem),
+                _Problem(
+                  text: skillProblemMessage(Localization.of(context), problem),
+                  detail: item.problemDetail,
+                ),
               ],
               const SizedBox(height: 16),
               _Field(
@@ -71,8 +96,12 @@ class SkillCard extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 16),
-              // The editor belongs to one item, so another item starts a new one.
-              SkillEditor(key: ValueKey<String>(item.id), item: item),
+              // The editor belongs to one item, so another item starts a new one; so do edits that
+              // were dropped on purpose.
+              SkillEditor(
+                key: ValueKey<(String, int)>((item.id, scope.editorResets.value)),
+                item: item,
+              ),
             ],
           ),
         );
@@ -164,9 +193,12 @@ class _Header extends StatelessWidget {
 }
 
 class _Problem extends StatelessWidget {
-  const _Problem({required this.text});
+  const _Problem({required this.text, this.detail});
 
   final String text;
+
+  /// The raw message behind [text]; shown in monospace under it.
+  final String? detail;
 
   @override
   Widget build(BuildContext context) {
@@ -184,9 +216,21 @@ class _Problem extends StatelessWidget {
             Icon(Icons.error_outline, size: 16, color: colors.danger),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                text,
-                style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: colors.danger),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    text,
+                    style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: colors.danger),
+                  ),
+                  if (detail case final detail? when detail.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 4),
+                    Text(
+                      detail,
+                      style: AppText.mono(context, size: 11).copyWith(color: colors.danger),
+                    ),
+                  ],
+                ],
               ),
             ),
           ],

@@ -31,7 +31,11 @@ abstract interface class ISkillsRepository {
   Future<String> read(String id, {String? projectRoot});
 
   /// Replaces the text of [id]; throws [ReadOnlyKnowledgeException] for a built-in item.
-  Future<void> write(String id, String text, {String? projectRoot});
+  ///
+  /// The file is replaced in one step, so a reader never sees half of the text. When [expected] is
+  /// given (the text the caller last read) and the file holds something else now, nothing is
+  /// written and [KnowledgeConflictException] is thrown.
+  Future<void> write(String id, String text, {String? projectRoot, String? expected});
 
   /// Turns [id] on or off for everything (`projectId == null`) or as an exception for one project.
   Future<void> setEnabled(String id, {required bool enabled, int? projectId});
@@ -48,6 +52,10 @@ abstract interface class ISkillsRepository {
   /// Copies the skill folder at [path] to the user's items and returns the new id.
   Future<String> importFolder(String path);
 }
+
+/// The description a new skill or rule starts with, so it does not open with a problem banner.
+const String _skillPlaceholder = 'Describe when to use this skill.';
+const String _rulePlaceholder = 'Describe the rule.';
 
 final RegExp _validName = RegExp(r'^[a-z0-9][a-z0-9-]{0,63}$');
 
@@ -222,13 +230,42 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
   }
 
   @override
-  Future<void> write(String id, String text, {String? projectRoot}) async {
+  Future<void> write(String id, String text, {String? projectRoot, String? expected}) async {
     final (:kind, :source, name: _) = _parse(id);
     if (source == SkillSource.builtin) throw ReadOnlyKnowledgeException(id);
-    final file = File(_mainFile(kind, _pathOf(id, projectRoot: projectRoot)));
-    if (!file.existsSync()) throw KnowledgeNotFoundException(id);
-    await file.writeAsString(text);
+    final path = _mainFile(kind, _pathOf(id, projectRoot: projectRoot));
+    // A link is followed, so the file it points to is the one that gets replaced.
+    final String target;
+    try {
+      target = await File(path).resolveSymbolicLinks();
+    } on PathNotFoundException {
+      throw KnowledgeNotFoundException(id);
+    }
+    if (expected != null) {
+      final String current;
+      try {
+        current = await File(target).readAsString();
+      } on PathNotFoundException {
+        throw KnowledgeNotFoundException(id);
+      }
+      if (current != expected) throw KnowledgeConflictException(id);
+    }
+    await _replaceFile(target, text);
     _filesChanged();
+  }
+
+  /// Writes [text] to a hidden temporary file next to [path] and renames it over [path].
+  Future<void> _replaceFile(String path, String text) async {
+    final temporary = File(
+      p.join(p.dirname(path), '.${p.basename(path)}.${DateTime.now().microsecondsSinceEpoch}.tmp'),
+    );
+    try {
+      await temporary.writeAsString(text, flush: true);
+      await temporary.rename(path);
+    } on Object {
+      if (temporary.existsSync()) await temporary.delete();
+      rethrow;
+    }
   }
 
   // --- Enablement ---
@@ -266,7 +303,12 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
     if (await _taken(kind, name)) throw KnowledgeExistsException(id);
     final file = File(_mainFile(kind, _pathOf(id)));
     await file.parent.create(recursive: true);
-    await file.writeAsString(writeFrontmatter({'name': name, 'description': ''}, '# $name\n'));
+    await file.writeAsString(
+      writeFrontmatter({
+        'name': name,
+        'description': kind == KnowledgeKind.skill ? _skillPlaceholder : _rulePlaceholder,
+      }, '# $name\n'),
+    );
     _filesChanged();
     return id;
   }
@@ -278,31 +320,36 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
     final copyId = '${kind.name}:${SkillSource.user.name}:$copyName';
     final target = _pathOf(copyId);
 
-    if (source == SkillSource.builtin) {
-      final prefix = kind == KnowledgeKind.skill ? 'skills/$name/' : 'rules/$name.md';
-      final files = {...await _builtin.load()}..removeWhere((key, _) => !key.startsWith(prefix));
-      if (files.isEmpty) throw KnowledgeNotFoundException(id);
-      for (final MapEntry(:key, :value) in files.entries) {
-        final file = File(
-          kind == KnowledgeKind.skill
-              ? p.joinAll([target, ...p.posix.split(key.substring(prefix.length))])
-              : target,
-        );
-        await file.parent.create(recursive: true);
-        await file.writeAsString(value);
-      }
-    } else {
-      final from = _pathOf(id, projectRoot: projectRoot);
-      if (kind == KnowledgeKind.skill) {
-        if (!Directory(from).existsSync()) throw KnowledgeNotFoundException(id);
-        await copyDirectory(Directory(from), Directory(target));
+    try {
+      if (source == SkillSource.builtin) {
+        final prefix = kind == KnowledgeKind.skill ? 'skills/$name/' : 'rules/$name.md';
+        final files = {...await _builtin.load()}..removeWhere((key, _) => !key.startsWith(prefix));
+        if (files.isEmpty) throw KnowledgeNotFoundException(id);
+        for (final MapEntry(:key, :value) in files.entries) {
+          final file = File(
+            kind == KnowledgeKind.skill
+                ? p.joinAll([target, ...p.posix.split(key.substring(prefix.length))])
+                : target,
+          );
+          await file.parent.create(recursive: true);
+          await file.writeAsString(value);
+        }
       } else {
-        if (!File(from).existsSync()) throw KnowledgeNotFoundException(id);
-        await Directory(p.dirname(target)).create(recursive: true);
-        await File(from).copy(target);
+        final from = _pathOf(id, projectRoot: projectRoot);
+        if (kind == KnowledgeKind.skill) {
+          if (!Directory(from).existsSync()) throw KnowledgeNotFoundException(id);
+          await copyDirectory(Directory(from), Directory(target));
+        } else {
+          if (!File(from).existsSync()) throw KnowledgeNotFoundException(id);
+          await Directory(p.dirname(target)).create(recursive: true);
+          await File(from).copy(target);
+        }
       }
+      await _renameCopy(kind, target, from: name, to: copyName);
+    } on Object {
+      await _removeCopy(kind, target);
+      rethrow;
     }
-    await _renameCopy(kind, target, from: name, to: copyName);
     _filesChanged();
     return copyId;
   }
@@ -312,16 +359,45 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
     final folder = Directory(path);
     final name = p.basename(folder.path);
     if (name.startsWith('.')) throw InvalidKnowledgeNameException(name);
-    if (!File(p.join(path, skillFileName)).existsSync()) {
-      throw InvalidKnowledgeException('$path has no $skillFileName');
-    }
+    // The scanner wants exactly `SKILL.md`, which a case-insensitive `existsSync` would not check.
+    final hasSkillFile = await _hasEntry(folder, skillFileName);
+    if (!hasSkillFile) throw InvalidKnowledgeException('$path has no $skillFileName');
     final copyName = await freeName(name, (candidate) => _taken(KnowledgeKind.skill, candidate));
     final copyId = 'skill:${SkillSource.user.name}:$copyName';
     final target = _pathOf(copyId);
-    await copyDirectory(folder, Directory(target));
-    await _renameCopy(KnowledgeKind.skill, target, from: name, to: copyName);
+    try {
+      await copyDirectory(folder, Directory(target));
+      await _renameCopy(KnowledgeKind.skill, target, from: name, to: copyName);
+    } on Object {
+      await _removeCopy(KnowledgeKind.skill, target);
+      rethrow;
+    }
     _filesChanged();
     return copyId;
+  }
+
+  /// Whether [folder] lists an entry that is named exactly [name].
+  Future<bool> _hasEntry(Directory folder, String name) async {
+    try {
+      return await folder.list().any((entity) => p.basename(entity.path) == name);
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  /// Deletes what a failed copy left at [path]; the failure being handled is the one that counts.
+  Future<void> _removeCopy(KnowledgeKind kind, String path) async {
+    try {
+      if (kind == KnowledgeKind.skill) {
+        final directory = Directory(path);
+        if (directory.existsSync()) await directory.delete(recursive: true);
+      } else {
+        final file = File(path);
+        if (file.existsSync()) await file.delete();
+      }
+    } on FileSystemException {
+      // Nothing more can be done; the original error is rethrown by the caller.
+    }
   }
 
   /// Gives a copy that got another name the same `name` in its frontmatter.

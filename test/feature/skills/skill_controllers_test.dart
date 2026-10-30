@@ -106,6 +106,16 @@ void main() {
       expect(controller.state, isA<SkillLibrary$LoadedState>());
     });
 
+    test('a watch running or queued at dispose leaves no subscription behind', () async {
+      SkillLibraryController(repository: repository)
+        ..watch(projectId: 1, projectRoot: '/a')
+        ..watch(projectId: 2, projectRoot: '/b')
+        ..dispose();
+      await pumpEventQueue();
+
+      expect(repository.activeWatchers, 0);
+    });
+
     test('dispose cancels the subscription', () async {
       final other = SkillLibraryController(repository: repository)..watch(projectId: 1);
       await pumpEventQueue();

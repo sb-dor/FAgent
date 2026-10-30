@@ -328,9 +328,9 @@ void main() {
       await pumpScreen(tester);
       expect(_skills(tester).view.projectId, averaId);
 
-      _data(tester)
-        ..openView(WorkspaceView.chat)
-        ..openSkills(itemId: 'rule:project:repo-rules', projectId: averaId);
+      _data(tester).openView(WorkspaceView.chat);
+      await tester.pump();
+      _data(tester).openSkills(itemId: 'rule:project:repo-rules', projectId: averaId);
       await tester.pump();
       await _settle(tester);
       expect(_skills(tester).view.kind, KnowledgeKind.rule);
@@ -341,9 +341,9 @@ void main() {
         isTrue,
       );
 
-      _data(tester)
-        ..openView(WorkspaceView.chat)
-        ..openSkills(projectId: shopId);
+      _data(tester).openView(WorkspaceView.chat);
+      await tester.pump();
+      _data(tester).openSkills(projectId: shopId);
       await tester.pump();
       await _settle(tester);
       expect(_skills(tester).view.projectId, shopId);

@@ -36,7 +36,7 @@ class WorkspaceShortcuts extends StatelessWidget {
           const SingleActivator(LogicalKeyboardKey.comma, meta: true): () =>
               scope.dataController.openView(WorkspaceView.settings),
           if (scope.dataController.view != WorkspaceView.chat)
-            const SingleActivator(LogicalKeyboardKey.escape): scope.dataController.leaveToChat,
+            const SingleActivator(LogicalKeyboardKey.escape): scope.dataController.backToChat,
         },
         // Something in the window must hold focus, or key events never reach the bindings above.
         child: Focus(autofocus: true, skipTraversal: true, child: child),

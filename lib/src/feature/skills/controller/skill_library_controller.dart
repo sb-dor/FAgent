@@ -47,6 +47,7 @@ final class SkillLibraryController extends StateController<SkillLibraryState>
   /// Follows the library of [projectId], whose folder is [projectRoot]: cancels the previous
   /// subscription and starts a new one. Calling it again with the same arguments changes nothing.
   void watch({int? projectId, String? projectRoot}) => handle(() async {
+    if (isDisposed) return;
     if (_watching && _projectId == projectId && _projectRoot == projectRoot) return;
     _watching = true;
     _projectId = projectId;
@@ -55,6 +56,8 @@ final class SkillLibraryController extends StateController<SkillLibraryState>
     _library = SkillLibrary.empty;
     setState(SkillLibraryState.loading(projectId: projectId));
     await _subscription?.cancel();
+    // A watch that was running or queued when the controller was disposed must not subscribe.
+    if (isDisposed) return;
     _subscription = _repository
         .watch(projectId: projectId, projectRoot: projectRoot)
         .listen(

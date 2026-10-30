@@ -93,20 +93,23 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage4-right-p
 Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage5-skills.md. Paths are under `lib/src/feature/`.
 
 - **Bugs and risks:**
-  - Library controller: `SkillLibraryController.watch` can leak a subscription when disposed while a queued or awaiting watch runs (check `isDisposed` after the cancel); `_watching` is set before `listen`, so a sync throw makes a retry with the same args a no-op; the error callback emits `failed` without `projectId` (`skills/controller/skill_library_controller.dart`)
+  - Library controller: `_watching` is set before `listen`, so a sync throw makes a retry with the same args a no-op; the error callback emits `failed` without `projectId` (`skills/controller/skill_library_controller.dart`)
   - Library: a project removed from the app stays watched by the window controller (`workspace/widgets/workspace_config_widget.dart`)
   - Repository: `lastSnapshot` is set before the rebuild, so a failed rebuild is not retried until files change; the watcher is registered before the initial states load, so the first emission has everything enabled; the drift `skill_states` listen has no `onError` (`skills/data/skills_repository.dart`)
   - Repository: `importFolder` does not apply the name rule (`My Skill` becomes an invalid id) (`skills/data/skills_repository.dart`)
   - Frontmatter: a UTF-8 BOM before `---` reads as no frontmatter; an unquoted `version: 1.10` becomes `1.1` (YAML float) (`skills/data/frontmatter.dart`)
   - Screen: with a projects `ErrorState` the library watches globally but `view.projectId` stays set (the Project source shows 0, the switch writes per project while rows show global); `setEnabled` failure shows nothing (`skills/widgets/controllers/skills_view_controller.dart`, `skills/widgets/skills_list.dart`)
-  - Screen: leaving Skills with unsaved edits via ⌘, / ⌘N / ⌘K / chat search does not ask (only "← Back to chat" and Esc do); a double Esc can open two discard dialogs
+  - Screen: a double Esc can open two discard dialogs
   - Screen: the name dialog reacts to any action's completed/failed (track its own submit); editor Save looks enabled while another action runs
-  - Screen: `chooseProject` matches `:project:` in the id and re-asks on re-picking the same project; "Try in chat" sends `/name` to a chat of another project (`skills/widgets/skills_config_widget.dart`)
-  - Chat: skills can fill the / menu's 12 rows before app commands (cap the section); project skills are probably duplicated under "Agent commands" (dedupe by name); `ChatSkills.of` is recomputed on every run notification; menu F footer link is not keyboard-reachable (`prompt_sending/models/slash_commands.dart`, `skills/widgets/chat_skills_chip.dart`)
+  - Screen: "Try in chat" sends `/name` to a chat of another project (`skills/widgets/skills_config_widget.dart`)
+  - Chat: skills can fill the / menu's 12 rows before app commands (cap the section); `ChatSkills.of` is recomputed on every run notification; menu F footer link is not keyboard-reachable (`prompt_sending/models/slash_commands.dart`, `skills/widgets/chat_skills_chip.dart`)
+  - Scanner: it follows symlinks and walks hidden folders before filtering them out; walk by hand (skip hidden directories, do not follow links, cap the number of entries) (`skills/data/knowledge_scanner.dart`: `snapshotRoot`, `_listInto`)
+  - Duplicate: a skill whose `SKILL.md` is a symlink loses the file, because `copyDirectory` skips links; copy the resolved targets (`skills/data/knowledge_copy.dart`)
+  - Enablement: `skill_states` rows outlive the deleted item, so a skill re-created under the same name starts with the old state (`skills/data/skill_states.dart`)
 - **Test gaps:**
   - Builtin: the failed-load-not-cached branch of `AssetBuiltinKnowledge` is untested; the builtin test hard-codes counts and won't catch a skill folder missing from the pubspec assets (compare with the directory listing)
   - Repository: the cancel test doesn't prove the timer stops (count `builtin.load` calls)
-  - Controllers: no test for watch A, watch B, dispose in one tick (`activeWatchers` should be 0); the init step is untested
+  - Controllers: the init step is untested
   - Screen: the failed-switch test calls `actions.setEnabled` instead of tapping the row; no RED recorded for the card tests; the name dialog's `removeRoute` branch is unreachable and untested
 - **Polish:**
   - Names: `SkillActionsState` and `SkillTextState` lack doc comments

@@ -57,3 +57,16 @@ final class InvalidKnowledgeException implements Exception {
   @override
   String toString() => 'InvalidKnowledgeException: $message';
 }
+
+/// The file of an item changed on disk since the caller read it, so a save would overwrite
+/// someone else's edit.
+final class KnowledgeConflictException implements Exception {
+  /// Creates the exception for the item [id].
+  const KnowledgeConflictException(this.id);
+
+  /// The `KnowledgeItem.id` whose file differs from the expected text.
+  final String id;
+
+  @override
+  String toString() => 'KnowledgeConflictException: $id changed on disk';
+}

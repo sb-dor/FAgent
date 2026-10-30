@@ -78,6 +78,19 @@ void main() {
       expect([for (final r in rows) r.name], <String>['run-tests']);
     });
 
+    test('an agent command named like a skill is dropped (the agent lists skills too)', () {
+      const duplicated = <SlashCommand>[
+        SlashCommand(name: 'run-tests', source: SlashSource.agent, description: 'Same skill'),
+        SlashCommand(name: 'compact', source: SlashSource.agent),
+      ];
+
+      final rows = slashMenuRows(skills: skills, agent: duplicated, query: '');
+
+      expect([for (final r in rows) r.name].where((name) => name == 'run-tests'), hasLength(1));
+      expect(rows.where((r) => r.name == 'run-tests').single.source, SlashSource.skill);
+      expect(rows.where((r) => r.source == SlashSource.agent).map((r) => r.name), ['compact']);
+    });
+
     test('without skills nothing changes for the app and the agent', () {
       final rows = slashMenuRows(skills: ChatSkills.empty, agent: agent, query: '');
 

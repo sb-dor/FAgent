@@ -65,6 +65,10 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   /// date.
   bool hasUnsavedEdits = false;
 
+  /// Changes when the unsaved edits were dropped on purpose while the item stays open (the user
+  /// agreed to lose them); the card then starts a fresh editor.
+  final ValueNotifier<int> editorResets = ValueNotifier<int>(0);
+
   /// Asks the user for a folder; the argument is the text of the confirm button. Tests replace it,
   /// because the native picker cannot be driven from a widget test.
   @visibleForTesting
@@ -134,6 +138,7 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
     text.dispose();
     actions.dispose();
     library.dispose();
+    editorResets.dispose();
     super.dispose();
   }
 
@@ -168,10 +173,10 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   void _onAction() {
     switch (actions.state) {
       case SkillActions$FailedState(:final error):
-        // The name dialog explains these two under its field.
+        // The name dialog explains these two under its field; the editor asks about a conflict.
         final nameError =
             error is InvalidKnowledgeNameException || error is KnowledgeExistsException;
-        if (!(_naming && nameError)) {
+        if (!(_naming && nameError) && error is! KnowledgeConflictException) {
           _discardAgreed = false;
           showMessage(skillErrorMessage(Localization.of(context), error));
         }
@@ -241,10 +246,17 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   }
 
   /// Makes [projectId] the project of the screen; the open item of the old project is dropped.
+  ///
+  /// Unsaved edits are asked about whenever the project really changes: the library of the new
+  /// project is loaded from scratch. After a yes the edits are dropped, even when the open item
+  /// (a Mine or built-in one) stays open.
   Future<void> chooseProject(int? projectId) async {
-    final losesItem = view.selectedId?.contains(':${SkillSource.project.name}:') ?? false;
-    if (losesItem) return guard(() => view.setProject(projectId));
-    view.setProject(projectId);
+    if (projectId == view.projectId) return;
+    final edited = hasUnsavedEdits;
+    await guard(() {
+      view.setProject(projectId);
+      if (edited) editorResets.value++;
+    });
   }
 
   /// Asks about the unsaved edits before an action that ends by opening a new item. After a yes
@@ -288,8 +300,11 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   void generateWithAgent() {
     final projectId = view.projectId;
     if (projectId == null) return;
-    final prompt = Localization.of(context).skillGeneratePrompt;
-    guard(() => _workspace.createChat(projectId: projectId, draft: prompt)).ignore();
+    // Leaving the screen asks about unsaved edits by itself.
+    _workspace.createChat(
+      projectId: projectId,
+      draft: Localization.of(context).skillGeneratePrompt,
+    );
   }
 
   /// Copies the read-only [item] among the user's items; the copy opens when it is ready.
@@ -299,11 +314,12 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   }
 
   /// Goes back to the chat and starts the composer with `/<name> `; says so when there is no chat.
-  Future<void> tryInChat(KnowledgeItem item) async {
+  void tryInChat(KnowledgeItem item) {
     final handle = _workspace.dataController.chatHandle.value;
     if (handle == null) return showMessage(Localization.of(context).noChatForSkill);
-    await guard(() {
-      _workspace.dataController.backToChat();
+    final data = _workspace.dataController;
+    data.whenMayLeave(() {
+      data.backToChat();
       // The chat takes focus once it is shown again, so the draft goes in after the frame.
       WidgetsBinding.instance.addPostFrameCallback((_) => handle.insertDraft('/${item.name} '));
     });

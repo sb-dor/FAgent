@@ -26,6 +26,24 @@ enum SkillSource {
   git,
 }
 
+/// What is wrong with a [KnowledgeItem]; the Skills screen turns it into text.
+enum KnowledgeProblem {
+  /// The file does not start with a `---` header.
+  noFrontmatter,
+
+  /// The header has no `description` (or an empty one).
+  noDescription,
+
+  /// The header is not valid YAML (or not a map); the parser's message is the detail.
+  badYaml,
+
+  /// The file could not be read; the system's message is the detail.
+  unreadable,
+
+  /// The file is not valid UTF-8.
+  notUtf8,
+}
+
 /// A skill or a rule shown on the Skills and rules screen.
 @freezed
 abstract class KnowledgeItem with _$KnowledgeItem {
@@ -55,11 +73,18 @@ abstract class KnowledgeItem with _$KnowledgeItem {
     /// Paths of the skill's files relative to [path], `SKILL.md` first; empty for rules.
     @Default(<String>[]) List<String> files,
 
+    /// Changes whenever the text of the item's file changes (a fingerprint of the file); empty for
+    /// built-in items, which never change. Lets the editor notice an edit made outside the app.
+    @Default('') String revision,
+
     /// Whether the item cannot be edited or deleted.
     @Default(false) bool readOnly,
 
     /// What is wrong with the item (for example a broken frontmatter); `null` when it is fine.
-    String? problem,
+    KnowledgeProblem? problem,
+
+    /// The raw message behind [problem] (the YAML error, the I/O error); `null` when there is none.
+    String? problemDetail,
 
     /// Whether the item is on for the project being watched.
     @Default(true) bool enabled,

@@ -44,6 +44,27 @@ void main() {
     });
   });
 
+  group('parseFrontmatter nested values', () {
+    test('only scalars are kept; lists and maps are ignored, not stringified', () {
+      final parsed = parseFrontmatter(
+        '---\nname: a\ntags: [x, y]\nmeta:\n  k: v\nflag: true\nratio: 1.5\n---\n',
+      );
+      expect(parsed!.fields, {'name': 'a', 'flag': 'true', 'ratio': '1.5'});
+    });
+
+    test('a nested list in metadata.version is ignored', () {
+      final parsed = parseFrontmatter('---\nname: a\nmetadata:\n  version: [1, 2]\n---\n');
+      expect(parsed!.fields.containsKey('version'), isFalse);
+    });
+
+    test('an alias to a big structure is not expanded into a string', () {
+      final parsed = parseFrontmatter(
+        '---\nname: a\nbig: &b [1, 2, 3]\nbigger: [*b, *b, *b]\ndescription: ok\n---\n',
+      );
+      expect(parsed!.fields, {'name': 'a', 'description': 'ok'});
+    });
+  });
+
   group('writeFrontmatter', () {
     test('round trip', () {
       final text = writeFrontmatter({'name': 'a', 'description': 'x: y'}, 'Body\n');

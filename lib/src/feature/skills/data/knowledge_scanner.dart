@@ -84,6 +84,7 @@ Future<List<KnowledgeItem>> itemsFromSnapshot({
         path: folder,
         text: await _readText(p.join(folder, skillFileName)),
         files: sortSkillFiles(files),
+        revision: snapshot[p.join(folder, skillFileName)] ?? '',
       ),
     );
   }
@@ -95,6 +96,7 @@ Future<List<KnowledgeItem>> itemsFromSnapshot({
         name: p.basenameWithoutExtension(path),
         path: path,
         text: await _readText(path),
+        revision: snapshot[path] ?? '',
       ),
     );
   }
@@ -116,7 +118,7 @@ List<KnowledgeItem> builtinItems(Map<String, String> files) {
           source: SkillSource.builtin,
           name: p.posix.basenameWithoutExtension(key),
           path: key,
-          text: (text: files[key], error: null),
+          text: (text: files[key], problem: null, detail: null),
           readOnly: true,
         ),
       );
@@ -131,7 +133,7 @@ List<KnowledgeItem> builtinItems(Map<String, String> files) {
         source: SkillSource.builtin,
         name: name,
         path: 'skills/$name',
-        text: (text: text, error: null),
+        text: (text: text, problem: null, detail: null),
         files: sortSkillFiles(relative),
         readOnly: true,
       ),
@@ -140,31 +142,35 @@ List<KnowledgeItem> builtinItems(Map<String, String> files) {
   return sortKnowledge(items);
 }
 
-/// Builds an item from the [text] of its `SKILL.md` or rule file (`error` says why it is `null`).
+/// Builds an item from the [text] of its `SKILL.md` or rule file (`problem` and `detail` say why
+/// it is `null`).
 ///
 /// A broken or incomplete header does not throw: the item gets its folder or file name as title and
-/// the reason in [KnowledgeItem.problem].
+/// the reason in [KnowledgeItem.problem] and [KnowledgeItem.problemDetail].
 KnowledgeItem buildKnowledgeItem({
   required KnowledgeKind kind,
   required SkillSource source,
   required String name,
   required String path,
-  required ({String? text, String? error}) text,
+  required ({String? text, KnowledgeProblem? problem, String? detail}) text,
   List<String> files = const [],
+  String revision = '',
   bool readOnly = false,
 }) {
   Map<String, String>? fields;
-  var problem = text.error;
+  var problem = text.problem;
+  var detail = text.detail;
   if (text.text case final content?) {
     try {
       fields = parseFrontmatter(content)?.fields;
       if (fields == null) {
-        problem = 'No frontmatter';
+        problem = KnowledgeProblem.noFrontmatter;
       } else if ((fields['description'] ?? '').isEmpty) {
-        problem = 'No description';
+        problem = KnowledgeProblem.noDescription;
       }
     } on FrontmatterException catch (error) {
-      problem = error.message;
+      problem = KnowledgeProblem.badYaml;
+      detail = error.message;
     }
   }
 
@@ -179,8 +185,10 @@ KnowledgeItem buildKnowledgeItem({
       description: '',
       path: path,
       files: files,
+      revision: revision,
       readOnly: readOnly,
       problem: problem,
+      problemDetail: detail,
     );
   }
   String? optional(String key) => (fields![key] ?? '').isEmpty ? null : fields[key];
@@ -195,6 +203,7 @@ KnowledgeItem buildKnowledgeItem({
     version: optional('version'),
     path: path,
     files: files,
+    revision: revision,
     readOnly: readOnly,
   );
 }
@@ -216,12 +225,12 @@ List<KnowledgeItem> sortKnowledge(List<KnowledgeItem> items) => [...items]
 
 bool _isHidden(String segment) => segment.startsWith('.');
 
-Future<({String? text, String? error})> _readText(String path) async {
+Future<({String? text, KnowledgeProblem? problem, String? detail})> _readText(String path) async {
   try {
-    return (text: await File(path).readAsString(), error: null);
+    return (text: await File(path).readAsString(), problem: null, detail: null);
   } on FileSystemException catch (error) {
-    return (text: null, error: 'Cannot read the file: ${error.message}');
+    return (text: null, problem: KnowledgeProblem.unreadable, detail: error.message);
   } on FormatException {
-    return (text: null, error: 'Cannot read the file: it is not valid UTF-8');
+    return (text: null, problem: KnowledgeProblem.notUtf8, detail: null);
   }
 }

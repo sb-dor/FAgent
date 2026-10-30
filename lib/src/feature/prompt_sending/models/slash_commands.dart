@@ -23,8 +23,23 @@ List<SlashCommand> skillCommands(ChatSkills skills) {
 
 /// What the `/` menu of a chat shows for [query]: its project [skills], the app's commands and the
 /// [agent]'s.
+///
+/// The agent lists the project's skills among its commands (claude-agent-acp does), so an agent
+/// command named like a skill is dropped: the skill row is the one that stays.
 List<SlashCommand> slashMenuRows({
   required ChatSkills skills,
   required List<SlashCommand> agent,
   required String query,
-}) => slashSuggestions(appCommands, agent, query, skills: skillCommands(skills));
+}) {
+  final skillRows = skillCommands(skills);
+  final skillNames = {for (final skill in skillRows) skill.name};
+  return slashSuggestions(
+    appCommands,
+    [
+      for (final command in agent)
+        if (!skillNames.contains(command.name)) command,
+    ],
+    query,
+    skills: skillRows,
+  );
+}

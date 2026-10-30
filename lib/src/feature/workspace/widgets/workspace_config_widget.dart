@@ -289,22 +289,26 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   }
 
   /// Starts a new chat in [projectId], by default in [newChatProjectId]; does nothing without a
-  /// project. The project becomes selected and the window leaves Skills or Settings for the chat;
-  /// the new chat is selected when it is created.
+  /// project. The project becomes selected and the window leaves Skills or Settings for the chat
+  /// (asking about unsaved work first); the new chat is selected when it is created.
   ///
   /// A [draft] is put into the composer of the new chat once it has opened. It is dropped when the
   /// user opens another chat first, or when the chat cannot be created.
   void createChat({int? projectId, String? draft}) {
     final project = projectId ?? newChatProjectId;
     if (project == null) return;
-    dataController.selectProject(project);
-    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
-    // A creation that is already running ignores this one, so it keeps the draft it was given.
-    if (sessionCreationController.state is! SessionCreation$InProgressState) _draft.expect(draft);
-    sessionCreationController.create(
-      projectId: project,
-      agentId: settingsController.settings.defaultAgentId,
-    );
+    dataController.whenMayLeave(() {
+      dataController.selectProject(project);
+      if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+      // A creation that is already running ignores this one, so it keeps the draft it was given.
+      if (sessionCreationController.state is! SessionCreation$InProgressState) {
+        _draft.expect(draft);
+      }
+      sessionCreationController.create(
+        projectId: project,
+        agentId: settingsController.settings.defaultAgentId,
+      );
+    });
   }
 
   /// Asks which chat to open, then opens it: its project and the chat become selected and the
@@ -312,10 +316,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   Future<void> openChatSearch() async {
     final result = await showChatSearch(context);
     if (result == null || !mounted) return;
-    dataController
-      ..selectProject(result.projectId)
-      ..selectSession(result.sessionId);
-    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    dataController.whenMayLeave(() {
+      dataController
+        ..selectProject(result.projectId)
+        ..selectSession(result.sessionId);
+      if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    });
   }
 
   /// Shows [project]'s folder in Finder.

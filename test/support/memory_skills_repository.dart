@@ -82,10 +82,44 @@ final class MemorySkillsRepository implements ISkillsRepository {
   /// How many [watch] streams are listened to.
   int get activeWatchers => _watchers.length;
 
+  /// While `true`, a new [watch] does not emit its first library, the way a repository that has to
+  /// scan folders takes a while. [release] sends the held libraries.
+  bool holdFirstEmission = false;
+
+  /// Stops holding back the first library of the watchers that wait for it and sends it.
+  void release() {
+    holdFirstEmission = false;
+    for (final watcher in _watchers.toList()) {
+      if (!watcher.emittedOnce) {
+        watcher.emittedOnce = true;
+        watcher.controller.add(_libraryOf(watcher));
+      }
+    }
+  }
+
   /// Makes every active watcher fail with [error]; the next change emits a library again.
   void addWatchError(Object error) {
     for (final watcher in _watchers.toList()) {
       watcher.controller.addError(error);
+    }
+  }
+
+  /// Changes the text of [id] the way an editor outside the app would: the item gets a new
+  /// [KnowledgeItem.revision] and the watchers get the library again.
+  void editOutside(String id, String text) {
+    _texts[id] = text;
+    _bumpRevision(id);
+    _emit();
+  }
+
+  int _revision = 0;
+
+  void _bumpRevision(String id) {
+    final revision = '${++_revision}';
+    for (final pool in [_items, ..._projectItems.values]) {
+      for (var i = 0; i < pool.length; i++) {
+        if (pool[i].id == id) pool[i] = pool[i].copyWith(revision: revision);
+      }
     }
   }
 
@@ -115,6 +149,7 @@ final class MemorySkillsRepository implements ISkillsRepository {
 
   void _emit() {
     for (final watcher in _watchers.toList()) {
+      if (!watcher.emittedOnce) continue;
       watcher.controller.add(_libraryOf(watcher));
     }
   }
@@ -126,6 +161,8 @@ final class MemorySkillsRepository implements ISkillsRepository {
     watcher.controller
       ..onListen = () {
         _watchers.add(watcher);
+        if (holdFirstEmission) return;
+        watcher.emittedOnce = true;
         watcher.controller.add(_libraryOf(watcher));
       }
       ..onCancel = () {
@@ -164,11 +201,13 @@ final class MemorySkillsRepository implements ISkillsRepository {
   }
 
   @override
-  Future<void> write(String id, String text, {String? projectRoot}) async {
+  Future<void> write(String id, String text, {String? projectRoot, String? expected}) async {
     calls.add('write $id');
     if (_parse(id).source == SkillSource.builtin) throw ReadOnlyKnowledgeException(id);
     _find(id, projectRoot);
+    if (expected != null && _texts[id] != expected) throw KnowledgeConflictException(id);
     _texts[id] = text;
+    _bumpRevision(id);
     _emit();
   }
 
@@ -217,7 +256,10 @@ final class MemorySkillsRepository implements ISkillsRepository {
     if (!_validName.hasMatch(name)) throw InvalidKnowledgeNameException(name);
     final id = '${kind.name}:${SkillSource.user.name}:$name';
     if (_taken(kind, name)) throw KnowledgeExistsException(id);
-    return _addUser(kind, name, '---\nname: $name\ndescription: \n---\n# $name\n');
+    final description = kind == KnowledgeKind.skill
+        ? 'Describe when to use this skill.'
+        : 'Describe the rule.';
+    return _addUser(kind, name, '---\nname: $name\ndescription: $description\n---\n# $name\n');
   }
 
   @override
@@ -254,6 +296,7 @@ final class _Watcher {
 
   final int? projectId;
   final String? projectRoot;
+  bool emittedOnce = false;
   // Closed by the `onCancel` that `watch` sets.
   // ignore: close_sinks
   final StreamController<SkillLibrary> controller = StreamController<SkillLibrary>();
