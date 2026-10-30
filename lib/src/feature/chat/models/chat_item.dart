@@ -272,10 +272,14 @@ final class TurnFile {
 /// commands, hooks, formatters). Git repositories only.
 final class TurnFilesItem extends ChatItem {
   /// Creates the list.
-  const TurnFilesItem(super.seq, {required this.files});
+  const TurnFilesItem(super.seq, {required this.files, this.root});
 
   /// Changed files, sorted by path.
   final List<TurnFile> files;
+
+  /// Absolute path of the git working tree the [files] are relative to; `null` in journals written
+  /// before it was recorded.
+  final String? root;
 }
 
 /// A turn ended in a way worth showing (cancelled, refused, limits hit).

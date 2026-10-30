@@ -77,7 +77,9 @@ abstract final class ChatTranscript {
               if (_string(file?['path']) case final String path)
                 TurnFile(path: path, status: _string(file?['status']) ?? ''),
           ];
-          if (files.isNotEmpty) items.add(TurnFilesItem(event.seq, files: files));
+          if (files.isNotEmpty) {
+            items.add(TurnFilesItem(event.seq, files: files, root: _string(payload['root'])));
+          }
         default:
           final update = _map(_map(payload['params'])?['update']);
           if (update == null) {

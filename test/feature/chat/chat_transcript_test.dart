@@ -263,4 +263,23 @@ void main() {
     final files = (items.single as TurnFilesItem).files;
     expect(files.map((f) => f.path), <String>['lib/main.dart', 'README.md']);
   });
+
+  test('the git root of a turn is kept; old journals have none', () {
+    final items = ChatTranscript.fold(<SessionEvent>[
+      _app(0, SessionEventKind.turnFiles, <String, Object?>{
+        'root': '/repo',
+        'files': <Object?>[
+          <String, Object?>{'path': 'a.dart', 'status': ' M'},
+        ],
+      }),
+      _app(1, SessionEventKind.turnFiles, <String, Object?>{
+        'files': <Object?>[
+          <String, Object?>{'path': 'b.dart', 'status': ' M'},
+        ],
+      }),
+    ]);
+
+    expect((items[0] as TurnFilesItem).root, '/repo');
+    expect((items[1] as TurnFilesItem).root, isNull);
+  });
 }

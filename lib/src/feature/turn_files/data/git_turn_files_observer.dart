@@ -52,6 +52,7 @@ final class GitTurnFilesObserver implements TurnObserver {
     final files = await changedSince(beforeToken);
     if (files.isEmpty) return null;
     return <String, Object?>{
+      'root': beforeToken.root,
       'files': <Object?>[
         for (final (path, status) in files) <String, Object?>{'path': path, 'status': status},
       ],

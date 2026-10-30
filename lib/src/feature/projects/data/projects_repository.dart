@@ -32,6 +32,9 @@ abstract interface class IProjectsRepository {
 
   /// Shows [path] in Finder.
   Future<void> reveal(String path);
+
+  /// Opens [path] with the application the system picks for it.
+  Future<void> openPath(String path);
 }
 
 /// Drift-backed [IProjectsRepository].
@@ -70,6 +73,14 @@ final class ProjectsRepositoryImpl implements IProjectsRepository {
     final result = await Process.run('open', <String>['-R', path]);
     if (result.exitCode != 0) {
       throw ProcessException('open', <String>['-R', path], '${result.stderr}', result.exitCode);
+    }
+  }
+
+  @override
+  Future<void> openPath(String path) async {
+    final result = await Process.run('open', <String>[path]);
+    if (result.exitCode != 0) {
+      throw ProcessException('open', <String>[path], '${result.stderr}', result.exitCode);
     }
   }
 }

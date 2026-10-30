@@ -214,6 +214,15 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     }
   }
 
+  /// Opens the file at [path] with the system's application for it.
+  Future<void> openPath(String path) async {
+    try {
+      await projectsController.openPath(path);
+    } on Object {
+      _showError();
+    }
+  }
+
   /// Asks, then forgets [project] with its chats; the folder on disk stays.
   Future<void> removeProject(Project project) async {
     final localization = Localization.of(context);

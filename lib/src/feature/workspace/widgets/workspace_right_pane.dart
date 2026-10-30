@@ -5,6 +5,9 @@ import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/common/widget/pane_tabs.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/changes_pane/controller/changed_files_notifier.dart';
+import 'package:flutter_code_agent/src/feature/changes_pane/models/changed_file.dart';
+import 'package:flutter_code_agent/src/feature/changes_pane/widgets/changes_tab.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 
@@ -33,6 +36,12 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
   double? _dragWidth;
   bool _dragging = false;
 
+  /// The files the open chat changed: one result for the tab and its counter.
+  late final ChangedFilesNotifier _changes = ChangedFilesNotifier(
+    handle: _scope.dataController.chatHandle,
+    projectRoot: () => _scope.selectedProject?.path ?? '',
+  );
+
   double get _storedWidth => _scope.settingsController.settings.rightPaneWidth;
 
   double _width() {
@@ -49,6 +58,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
   @override
   void dispose() {
     _scope.settingsController.removeListener(_onSettingsChanged);
+    _changes.dispose();
     super.dispose();
   }
 
@@ -90,22 +100,33 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      PaneTabs<RightPaneTab>(
-                        tabs: <PaneTab<RightPaneTab>>[
-                          PaneTab<RightPaneTab>(
-                            id: RightPaneTab.changes,
-                            label: localization.paneChanges,
-                          ),
-                          PaneTab<RightPaneTab>(id: RightPaneTab.run, label: localization.paneRun),
-                          PaneTab<RightPaneTab>(
-                            id: RightPaneTab.plan,
-                            label: localization.panePlan,
-                          ),
-                        ],
-                        selected: tab,
-                        onSelected: _scope.dataController.selectPaneTab,
+                      ValueListenableBuilder<List<ChangedFile>>(
+                        valueListenable: _changes,
+                        builder: (context, files, _) => PaneTabs<RightPaneTab>(
+                          tabs: <PaneTab<RightPaneTab>>[
+                            PaneTab<RightPaneTab>(
+                              id: RightPaneTab.changes,
+                              label: localization.paneChanges,
+                              count: files.isEmpty ? null : files.length,
+                            ),
+                            PaneTab<RightPaneTab>(
+                              id: RightPaneTab.run,
+                              label: localization.paneRun,
+                            ),
+                            PaneTab<RightPaneTab>(
+                              id: RightPaneTab.plan,
+                              label: localization.panePlan,
+                            ),
+                          ],
+                          selected: tab,
+                          onSelected: _scope.dataController.selectPaneTab,
+                        ),
                       ),
-                      Expanded(child: _TabBody(tab: tab)),
+                      Expanded(
+                        child: tab == RightPaneTab.changes
+                            ? ChangesTab(files: _changes)
+                            : _TabBody(tab: tab),
+                      ),
                     ],
                   );
                 },

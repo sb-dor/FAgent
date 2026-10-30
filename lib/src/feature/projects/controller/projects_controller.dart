@@ -41,6 +41,9 @@ final class ProjectsController extends StateController<ProjectsState>
   /// Shows [path] in Finder. Throws when it cannot.
   Future<void> reveal(String path) => _repository.reveal(path);
 
+  /// Opens [path] with the system's application for it. Throws when it cannot.
+  Future<void> openPath(String path) => _repository.openPath(path);
+
   @override
   void dispose() {
     _subscription?.cancel().ignore();
