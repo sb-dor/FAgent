@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:meta/meta.dart';
 
@@ -21,6 +22,7 @@ class ChatView {
     this.configOptions = const <ConfigOption>[],
     this.bypassBlocked = false,
     this.preparingTurn = false,
+    this.commands = const <SlashCommand>[],
   });
 
   /// `sessions.id`.
@@ -53,6 +55,9 @@ class ChatView {
 
   /// The turn's prompt is not sent yet.
   final bool preparingTurn;
+
+  /// Slash commands of the agent (the app's own are not included).
+  final List<SlashCommand> commands;
 
   /// Agent settings can be changed in this status.
   bool get canChangeConfig => switch (status) {

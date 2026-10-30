@@ -159,5 +159,11 @@
   "modeLabel": "Mode",
   "makeDefaultForNewChats": "Make default for new chats",
   "availableAfterStart": "Available after the agent starts",
-  "attachOutsideProject": "Only files inside the project can be attached"
+  "attachOutsideProject": "Only files inside the project can be attached",
+  "slashSectionApp": "App",
+  "slashSectionAgent": "Agent",
+  "commandRun": "Run the app",
+  "commandReload": "Hot reload",
+  "commandRestart": "Hot restart",
+  "commandScreenshot": "Screenshot of the device"
 }

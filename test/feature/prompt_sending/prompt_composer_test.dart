@@ -2,6 +2,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -30,6 +32,7 @@ void main() {
     VoidCallback? onMentionStart,
     List<Widget> toolbar = const <Widget>[],
     VoidCallback? onCycleMode,
+    List<SlashCommand> commands = const <SlashCommand>[],
   }) => testApp(
     PromptComposer(
       controller: text,
@@ -42,6 +45,7 @@ void main() {
       onMentionStart: onMentionStart,
       toolbar: toolbar,
       onCycleMode: onCycleMode,
+      commands: commands,
     ),
   );
 
@@ -249,6 +253,172 @@ void main() {
       await tester.enterText(find.byType(TextField), 'mail me@app');
       await tester.pump();
       expect(find.text('app.dart'), findsNothing);
+    });
+  });
+
+  group('/ commands', () {
+    const commands = <SlashCommand>[
+      SlashCommand(name: 'compact', description: 'Compact the chat', source: SlashSource.agent),
+      SlashCommand(name: 'init', description: 'Write AGENTS.md', source: SlashSource.agent),
+      SlashCommand(name: 'review', source: SlashSource.agent),
+    ];
+
+    Widget withCommands({VoidCallback? onSend}) =>
+        composer(canSend: true, canStop: false, onSend: onSend, commands: commands);
+
+    testWidgets('typing / at the start suggests commands and Enter inserts one', (tester) async {
+      var sent = 0;
+      await tester.pumpWidget(withCommands(onSend: () => sent++));
+      await tester.enterText(find.byType(TextField), '/comp');
+      await tester.pump();
+
+      expect(find.text('/compact'), findsOneWidget);
+      expect(find.text('Compact the chat'), findsOneWidget);
+      expect(find.text('/init'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(sent, 0);
+      expect(text.text, '/compact ');
+      expect(text.selection, const TextSelection.collapsed(offset: 9));
+      expect(find.text('/compact'), findsNothing);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(sent, 1);
+    });
+
+    testWidgets('the list has an App and an Agent section', (tester) async {
+      await tester.pumpWidget(withCommands());
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+
+      expect(find.text('App'), findsOneWidget);
+      expect(find.text('Agent'), findsOneWidget);
+      expect(find.text('/run'), findsOneWidget);
+      expect(find.text('/compact'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('/run')).dy,
+        lessThan(tester.getTopLeft(find.text('/compact')).dy),
+      );
+    });
+
+    testWidgets('an empty section is hidden', (tester) async {
+      await tester.pumpWidget(withCommands());
+      await tester.enterText(find.byType(TextField), '/comp');
+      await tester.pump();
+
+      expect(find.text('App'), findsNothing);
+      expect(find.text('Agent'), findsOneWidget);
+    });
+
+    testWidgets('arrows choose among the enabled commands, Tab inserts', (tester) async {
+      await tester.pumpWidget(withCommands());
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowUp);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+
+      expect(text.text, '/init ');
+    });
+
+    testWidgets('a / in the middle of text is not a command', (tester) async {
+      await tester.pumpWidget(withCommands());
+      await tester.enterText(find.byType(TextField), 'try /comp');
+      await tester.pump();
+      expect(find.text('/compact'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), '/compact now');
+      await tester.pump();
+      expect(find.text('/compact'), findsNothing);
+    });
+
+    testWidgets('app commands are shown but not inserted', (tester) async {
+      var sent = 0;
+      // The field itself also shows the typed `/run`.
+      final row = find.descendant(of: find.byType(CommandSuggestions), matching: find.text('/run'));
+      await tester.pumpWidget(withCommands(onSend: () => sent++));
+      await tester.enterText(find.byType(TextField), '/run');
+      await tester.pump();
+
+      expect(row, findsOneWidget);
+      expect(find.text('Coming in M2'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.tap(row, kind: PointerDeviceKind.mouse);
+      await tester.pump();
+
+      expect(text.text, '/run');
+      expect(sent, 0);
+      expect(row, findsOneWidget);
+    });
+
+    testWidgets('Escape closes the list for this /, a new one reopens it', (tester) async {
+      var sent = 0;
+      await tester.pumpWidget(withCommands(onSend: () => sent++));
+      await tester.enterText(find.byType(TextField), '/co');
+      await tester.pump();
+      expect(find.text('/compact'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pump();
+      expect(find.text('/compact'), findsNothing);
+      await tester.enterText(find.byType(TextField), '/com');
+      await tester.pump();
+      expect(find.text('/compact'), findsNothing);
+
+      await tester.enterText(find.byType(TextField), '');
+      await tester.enterText(find.byType(TextField), '/co');
+      await tester.pump();
+      expect(find.text('/compact'), findsOneWidget);
+    });
+
+    testWidgets('clicking a command inserts it and keeps the caret', (tester) async {
+      await tester.pumpWidget(withCommands());
+      await tester.enterText(find.byType(TextField), '/rev');
+      await tester.pump();
+
+      await tester.tap(find.text('/review'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+
+      expect(text.text, '/review ');
+      expect(focus.hasFocus, isTrue);
+    });
+
+    testWidgets('without matches Enter sends the text', (tester) async {
+      var sent = 0;
+      await tester.pumpWidget(withCommands(onSend: () => sent++));
+      await tester.enterText(find.byType(TextField), '/zzz');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(sent, 1);
+    });
+
+    testWidgets('new commands from the agent show up in an open list', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false));
+      await tester.enterText(find.byType(TextField), '/comp');
+      await tester.pump();
+      expect(find.text('/compact'), findsNothing);
+
+      await tester.pumpWidget(withCommands());
+      expect(find.text('/compact'), findsOneWidget);
+    });
+
+    testWidgets('@ mentions still work next to commands', (tester) async {
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          commands: commands,
+          mentionFiles: const <String>['pubspec.yaml'],
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '/compact @pub');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(text.text, '/compact @pubspec.yaml ');
     });
   });
 }

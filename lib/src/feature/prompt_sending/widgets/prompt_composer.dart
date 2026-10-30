@@ -6,13 +6,16 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 
 /// {@template prompt_composer}
 /// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs
 /// the send button becomes Stop. Shift+Tab calls [onCycleMode]. [toolbar] (the chips) sits under
 /// the field, the send button on its right. Typing `@` suggests project files (arrows
-/// choose, Enter or Tab inserts, Escape closes).
+/// choose, Enter or Tab inserts, Escape closes); a `/` at the start of the text suggests the
+/// app's and the agent's [commands] the same way.
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -27,6 +30,7 @@ class PromptComposer extends StatefulWidget {
     this.onMentionStart,
     this.toolbar = const <Widget>[],
     this.onCycleMode,
+    this.commands = const <SlashCommand>[],
     super.key,
   });
 
@@ -60,16 +64,27 @@ class PromptComposer extends StatefulWidget {
   /// Switches the permission mode (Shift+Tab); `null` leaves Shift+Tab to the focus.
   final VoidCallback? onCycleMode;
 
+  /// Commands of the agent for the `/` menu (the app's own are added by the menu).
+  final List<SlashCommand> commands;
+
   @override
   State<PromptComposer> createState() => _PromptComposerState();
 }
 
+/// What the open suggestion list completes.
+enum _Trigger { mention, command }
+
 class _PromptComposerState extends State<PromptComposer> {
-  ({int start, String query})? _mention;
-  List<String> _suggestions = const <String>[];
+  _Trigger? _trigger;
+
+  /// Where the typed `@…` or `/…` starts.
+  int _start = 0;
+  String _query = '';
+  List<String> _files = const <String>[];
+  List<SlashCommand> _commands = const <SlashCommand>[];
   int _highlighted = 0;
 
-  /// Start of a mention closed with Escape: it stays closed while typed on.
+  /// Start of a list closed with Escape: it stays closed while typed on.
   int? _dismissedAt;
 
   @override
@@ -85,10 +100,10 @@ class _PromptComposerState extends State<PromptComposer> {
       oldWidget.controller.removeListener(_onText);
       widget.controller.addListener(_onText);
     }
-    // The file list loads after the mention starts.
-    if (oldWidget.mentionFiles != widget.mentionFiles && _mention != null) {
-      _suggestions = searchFiles(widget.mentionFiles ?? const <String>[], _mention!.query);
-      _highlighted = 0;
+    // The file and command lists load after the trigger is typed.
+    if (_trigger != null &&
+        (oldWidget.mentionFiles != widget.mentionFiles || oldWidget.commands != widget.commands)) {
+      _search();
     }
   }
 
@@ -98,60 +113,111 @@ class _PromptComposerState extends State<PromptComposer> {
     super.dispose();
   }
 
+  /// Number of rows in the open list.
+  int get _count => switch (_trigger) {
+    _Trigger.mention => _files.length,
+    _Trigger.command => _commands.length,
+    null => 0,
+  };
+
+  bool _selectable(int index) => switch (_trigger) {
+    _Trigger.mention => true,
+    _Trigger.command => _commands[index].enabled,
+    null => false,
+  };
+
+  /// Fills the rows for the current trigger; the first selectable one is highlighted.
+  void _search() {
+    switch (_trigger) {
+      case _Trigger.mention:
+        _files = searchFiles(widget.mentionFiles ?? const <String>[], _query);
+      case _Trigger.command:
+        _commands = slashSuggestions(appCommands, widget.commands, _query);
+      case null:
+        break;
+    }
+    _highlighted = List<int>.generate(_count, (i) => i).firstWhere(_selectable, orElse: () => -1);
+  }
+
   void _onText() {
-    final files = widget.mentionFiles;
     final value = widget.controller.value;
-    final mention = files == null || !value.selection.isCollapsed
-        ? null
-        : mentionQueryAt(value.text, value.selection.baseOffset);
-    if (mention == null || mention.start == _dismissedAt) {
-      if (mention == null) _dismissedAt = null;
-      if (_mention != null) setState(_close);
+    final caret = value.selection.baseOffset;
+    final collapsed = value.selection.isCollapsed;
+    final command = collapsed ? slashQueryAt(value.text, caret) : null;
+    final mention = collapsed && widget.mentionFiles != null
+        ? mentionQueryAt(value.text, caret)
+        : null;
+    final trigger = command != null
+        ? (_Trigger.command, 0, command)
+        : mention != null
+        ? (_Trigger.mention, mention.start, mention.query)
+        : null;
+    if (trigger == null || trigger.$2 == _dismissedAt) {
+      if (trigger == null) _dismissedAt = null;
+      if (_trigger != null) setState(_close);
       return;
     }
-    if (_mention?.start != mention.start) widget.onMentionStart?.call();
+    if (trigger.$1 == _Trigger.mention && (_trigger != _Trigger.mention || _start != trigger.$2)) {
+      widget.onMentionStart?.call();
+    }
     setState(() {
-      _mention = mention;
-      _suggestions = searchFiles(files!, mention.query);
-      _highlighted = 0;
+      _trigger = trigger.$1;
+      _start = trigger.$2;
+      _query = trigger.$3;
+      _search();
     });
   }
 
   void _close() {
-    _mention = null;
-    _suggestions = const <String>[];
+    _trigger = null;
+    _files = const <String>[];
+    _commands = const <SlashCommand>[];
+    _highlighted = 0;
   }
 
-  /// Replaces the typed mention with `@path `.
-  void _insert(String path) {
-    final mention = _mention;
-    if (mention == null) return;
+  /// Replaces the typed `@…` or `/…` with [inserted].
+  void _insert(String inserted) {
+    if (_trigger == null) return;
     final value = widget.controller.value;
-    final end = value.selection.baseOffset;
-    final inserted = '@$path ';
     widget.controller.value = TextEditingValue(
-      text: value.text.replaceRange(mention.start, end, inserted),
-      selection: TextSelection.collapsed(offset: mention.start + inserted.length),
+      text: value.text.replaceRange(_start, value.selection.baseOffset, inserted),
+      selection: TextSelection.collapsed(offset: _start + inserted.length),
     );
     setState(_close);
+  }
+
+  /// Inserts the row at [index] unless it is disabled; the list stays open then.
+  void _pick(int index) {
+    if (index < 0 || index >= _count || !_selectable(index)) return;
+    _insert(_trigger == _Trigger.mention ? '@${_files[index]} ' : '/${_commands[index].name} ');
+  }
+
+  /// Moves the highlight [step] rows, skipping the ones that cannot be chosen.
+  void _move(int step) {
+    for (var i = 1; i <= _count; i++) {
+      final index = (_highlighted + step * i) % _count;
+      if (_selectable(index)) {
+        setState(() => _highlighted = index);
+        return;
+      }
+    }
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
-    if (_suggestions.isNotEmpty) {
+    if (_count > 0) {
       if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.arrowUp) {
-        final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
-        setState(() => _highlighted = (_highlighted + step) % _suggestions.length);
+        _move(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.tab) {
-        _insert(_suggestions[_highlighted]);
+        _pick(_highlighted);
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.escape) {
         setState(() {
-          _dismissedAt = _mention?.start;
+          _dismissedAt = _start;
           _close();
         });
         return KeyEventResult.handled;
@@ -206,13 +272,20 @@ class _PromptComposerState extends State<PromptComposer> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 // Part of the field's tap region: a click keeps the caret.
-                if (_suggestions.isNotEmpty)
+                if (_count > 0)
                   TextFieldTapRegion(
-                    child: MentionSuggestions(
-                      files: _suggestions,
-                      highlighted: _highlighted,
-                      onSelected: _insert,
-                    ),
+                    child: switch (_trigger!) {
+                      _Trigger.mention => MentionSuggestions(
+                        files: _files,
+                        highlighted: _highlighted,
+                        onSelected: (file) => _pick(_files.indexOf(file)),
+                      ),
+                      _Trigger.command => CommandSuggestions(
+                        commands: _commands,
+                        highlighted: _highlighted,
+                        onSelected: (command) => _pick(_commands.indexOf(command)),
+                      ),
+                    },
                   ),
                 Focus(
                   onKeyEvent: _onKey,

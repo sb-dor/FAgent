@@ -124,5 +124,11 @@
   "modeLabel": "Режим",
   "makeDefaultForNewChats": "Сделать по умолчанию для новых чатов",
   "availableAfterStart": "Доступно после запуска агента",
-  "attachOutsideProject": "Прикрепить можно только файлы внутри проекта"
+  "attachOutsideProject": "Прикрепить можно только файлы внутри проекта",
+  "slashSectionApp": "Приложение",
+  "slashSectionAgent": "Агент",
+  "commandRun": "Запустить приложение",
+  "commandReload": "Горячая перезагрузка",
+  "commandRestart": "Горячий перезапуск",
+  "commandScreenshot": "Снимок экрана устройства"
 }

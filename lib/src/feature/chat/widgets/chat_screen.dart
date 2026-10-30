@@ -78,6 +78,7 @@ class _ChatScreenState extends State<ChatScreen> {
               onStop: _scope.stop,
               mentionFiles: _scope.fileMentionController.files,
               onMentionStart: _scope.refreshFiles,
+              commands: view.commands,
               onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
                   ? _scope.cycleMode
                   : null,

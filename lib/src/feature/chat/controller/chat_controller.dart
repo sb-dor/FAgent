@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_transcript.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -79,6 +80,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
           configOptions: configOptions,
           bypassBlocked: session.bypassBlocked,
           preparingTurn: session.preparingTurn.value,
+          commands: agentCommands(session.availableCommands.value),
         ),
       ),
     );
@@ -92,6 +94,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
     session.configOptions,
     session.bypassAcknowledged,
     session.preparingTurn,
+    session.availableCommands,
   ];
 
   void _detach() {
