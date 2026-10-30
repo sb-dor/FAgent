@@ -60,7 +60,9 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage4-right-p
   - Run: subscriptions may leak if disposed mid-watch (check `isDisposed` after await); run streams have no `onError`; failed run actions are not surfaced; `RunFailed` is never emitted by the fake
   - Run: restart doesn't clear the log buffer (`errorCount` accumulates); `clearLogs` assumes increasing `seq` (document it in the interface) and leaves `_atBottom` false while scrolled up
   - Run: replaying the log is 2000 separate events, O(n²) copies and a `setState` per line (batch it); every log line also costs a full-list copy, filter and badge rebuild; mentions scan the whole log per line
-  - Run: log filter, search and `_atBottom` carry across projects; the badge shows a stale project's errors when `projectId` becomes null; brief idle flash on a project switch
+  - Run: the badge shows a stale project's errors when `projectId` becomes null; brief idle flash on a project switch
+  - Run: `RunTab` is keyed by project, so returning to a project whose pick is still pending loses the "Tap a widget…" hint (the widget still arrives) — revisit with the real inspector (M6)
+  - Title bar: `PreviewBadge` adds ~60 px to the run controls; the chat title shrinks with an ellipsis, but no narrow-window test covers it
   - Run: one publish per frame could miss a fast running-to-idle change (document it); search skips `error.message`
   - Run: `RunActionsController` is a single Droppable: Stop pressed within a reload/start is dropped silently, and a pending real pick would block Stop/reload/Start everywhere — split pick into its own controller and never drop stop (matters once the real runner lands, M2) (`app_run/controller/run_actions_controller.dart:25-28`)
   - Run: `RunTab` re-implements start/stop/reload/restart and active/canStart beside `WorkspaceRunLink` and trusts `widget.projectId` over `run.state.projectId` — pass the runLink callbacks/flags in (`app_run/widgets/run_tab.dart:96-124`, `run_header.dart:79-80`)
