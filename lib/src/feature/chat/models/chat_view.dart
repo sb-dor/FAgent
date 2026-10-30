@@ -59,6 +59,12 @@ class ChatView {
   /// Slash commands of the agent (the app's own are not included).
   final List<SlashCommand> commands;
 
+  /// The latest permission request that still waits for an answer (the one the keyboard answers).
+  PermissionItem? get pendingPermission => items
+      .whereType<PermissionItem>()
+      .where((item) => item.state == PermissionState.pending)
+      .lastOrNull;
+
   /// Agent settings can be changed in this status.
   bool get canChangeConfig => switch (status) {
     SessionStatus.idle || SessionStatus.running || SessionStatus.awaitingPermission => true,

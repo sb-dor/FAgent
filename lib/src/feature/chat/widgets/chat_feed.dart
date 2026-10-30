@@ -12,13 +12,21 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/read_group_row.dart'
 /// {@endtemplate}
 class ChatFeed extends StatelessWidget {
   /// {@macro chat_feed}
-  const ChatFeed({required this.items, required this.onAnswerPermission, super.key});
+  const ChatFeed({
+    required this.items,
+    required this.onAnswerPermission,
+    this.onRejectAndSay,
+    super.key,
+  });
 
   /// Feed items, oldest first.
   final List<ChatItem> items;
 
   /// Answers a permission card.
   final void Function(String requestId, String optionId) onAnswerPermission;
+
+  /// Declines a permission card and lets the user say why; `null` hides the button.
+  final void Function(PermissionItem item)? onRejectAndSay;
 
   @override
   Widget build(BuildContext context) {
@@ -45,6 +53,7 @@ class ChatFeed extends StatelessWidget {
                 SingleEntry(:final item) => ChatItemView(
                   item: item,
                   onAnswerPermission: onAnswerPermission,
+                  onRejectAndSay: onRejectAndSay,
                 ),
                 ReadGroupEntry(:final calls) => ReadGroupRow(calls: calls),
               },

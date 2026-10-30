@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_re
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_screen.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
@@ -150,6 +151,15 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
 
   void answerPermission(String requestId, String optionId) =>
       permissionController.answer(sessionId: sessionId, requestId: requestId, optionId: optionId);
+
+  /// Declines [item] with its `reject_once` option and moves the caret to the composer, so the
+  /// user can tell the agent what to do instead.
+  void rejectAndSay(PermissionItem item) {
+    final reject = item.rejectOption;
+    if (reject == null) return;
+    answerPermission(item.requestId, reject.optionId);
+    composerFocus.requestFocus();
+  }
 
   void retry() => recoveryController.retry(sessionId);
 

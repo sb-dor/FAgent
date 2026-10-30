@@ -17,13 +17,21 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 /// {@endtemplate}
 class ChatItemView extends StatelessWidget {
   /// {@macro chat_item_view}
-  const ChatItemView({required this.item, required this.onAnswerPermission, super.key});
+  const ChatItemView({
+    required this.item,
+    required this.onAnswerPermission,
+    this.onRejectAndSay,
+    super.key,
+  });
 
   /// The item.
   final ChatItem item;
 
   /// Answers a permission card.
   final void Function(String requestId, String optionId) onAnswerPermission;
+
+  /// Declines a permission card and lets the user say why; `null` hides the button.
+  final void Function(PermissionItem item)? onRejectAndSay;
 
   @override
   Widget build(BuildContext context) {
@@ -82,6 +90,7 @@ class ChatItemView extends StatelessWidget {
       final PermissionItem permission => PermissionCard(
         item: permission,
         onAnswer: (optionId) => onAnswerPermission(permission.requestId, optionId),
+        onRejectAndSay: onRejectAndSay == null ? null : () => onRejectAndSay!(permission),
       ),
       TurnFilesItem(:final files) => TurnFilesCard(files: files),
       TurnEndItem(:final stopReason) => Center(

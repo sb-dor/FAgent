@@ -16,7 +16,8 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_su
 /// the send button becomes Stop. Shift+Tab calls [onCycleMode]. [toolbar] (the chips) sits under
 /// the field, the send button on its right. Typing `@` suggests project files (arrows
 /// choose, Enter or Tab inserts, Escape closes); a `/` at the start of the text suggests the
-/// app's and the agent's [commands] the same way.
+/// app's and the agent's [commands] the same way. While a permission request waits, Enter and
+/// Escape in an empty field call [onAcceptPending] and [onRejectPending].
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -32,6 +33,8 @@ class PromptComposer extends StatefulWidget {
     this.toolbar = const <Widget>[],
     this.onCycleMode,
     this.commands = const <SlashCommand>[],
+    this.onAcceptPending,
+    this.onRejectPending,
     super.key,
   });
 
@@ -67,6 +70,12 @@ class PromptComposer extends StatefulWidget {
 
   /// Commands of the agent for the `/` menu (the app's own are added by the menu).
   final List<SlashCommand> commands;
+
+  /// Enter in an empty field allows the waiting permission request; `null` when none waits.
+  final VoidCallback? onAcceptPending;
+
+  /// Escape in an empty field rejects the waiting permission request; `null` when none waits.
+  final VoidCallback? onRejectPending;
 
   @override
   State<PromptComposer> createState() => _PromptComposerState();
@@ -246,6 +255,19 @@ class _PromptComposerState extends State<PromptComposer> {
       if (cycle == null) return KeyEventResult.ignored;
       if (event is KeyDownEvent) cycle();
       return KeyEventResult.handled;
+    }
+    // A waiting permission request is answered from an empty field only (any text, even a
+    // space, is a draft the key must not skip over).
+    if (event is KeyDownEvent && widget.controller.text.isEmpty) {
+      final answer = key == LogicalKeyboardKey.escape
+          ? widget.onRejectPending
+          : key == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed
+          ? widget.onAcceptPending
+          : null;
+      if (answer != null) {
+        answer();
+        return KeyEventResult.handled;
+      }
     }
     if (event is! KeyDownEvent || key != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
     if (HardwareKeyboard.instance.isShiftPressed) return KeyEventResult.ignored;

@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
@@ -29,6 +30,15 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   late final _scope = ChatConfigInhWidget.of(context);
 
+  /// Answers the latest waiting request with its Enter (accept) or Esc option; `null` when there
+  /// is nothing to answer.
+  VoidCallback? _answerPending(PermissionItem? pending, {required bool accept}) {
+    final option = accept ? pending?.acceptOption : pending?.rejectOption;
+    return pending == null || option == null
+        ? null
+        : () => _scope.answerPermission(pending.requestId, option.optionId);
+  }
+
   @override
   Widget build(BuildContext context) => StateConsumer<ChatController, ChatState>(
     controller: _scope.chatController,
@@ -37,7 +47,11 @@ class _ChatScreenState extends State<ChatScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Expanded(
-            child: ChatFeed(items: view.items, onAnswerPermission: _scope.answerPermission),
+            child: ChatFeed(
+              items: view.items,
+              onAnswerPermission: _scope.answerPermission,
+              onRejectAndSay: _scope.rejectAndSay,
+            ),
           ),
           StateConsumer<ChatRecoveryController, ChatRecoveryState>(
             controller: _scope.recoveryController,
@@ -79,6 +93,8 @@ class _ChatScreenState extends State<ChatScreen> {
               mentionFiles: _scope.fileMentionController.files,
               onMentionStart: _scope.refreshFiles,
               commands: view.commands,
+              onAcceptPending: _answerPending(view.pendingPermission, accept: true),
+              onRejectPending: _answerPending(view.pendingPermission, accept: false),
               onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
                   ? _scope.cycleMode
                   : null,

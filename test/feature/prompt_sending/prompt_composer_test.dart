@@ -33,6 +33,8 @@ void main() {
     List<Widget> toolbar = const <Widget>[],
     VoidCallback? onCycleMode,
     List<SlashCommand> commands = const <SlashCommand>[],
+    VoidCallback? onAcceptPending,
+    VoidCallback? onRejectPending,
   }) => testApp(
     PromptComposer(
       controller: text,
@@ -46,6 +48,8 @@ void main() {
       toolbar: toolbar,
       onCycleMode: onCycleMode,
       commands: commands,
+      onAcceptPending: onAcceptPending,
+      onRejectPending: onRejectPending,
     ),
   );
 
@@ -61,6 +65,100 @@ void main() {
 
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     expect(sent, 1);
+  });
+
+  group('pending permission', () {
+    testWidgets('with an empty composer Enter allows and Escape rejects', (tester) async {
+      var accepted = 0;
+      var rejected = 0;
+      var sent = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: false,
+          canStop: true,
+          onSend: () => sent++,
+          onAcceptPending: () => accepted++,
+          onRejectPending: () => rejected++,
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect((accepted, rejected, sent), (1, 0, 0));
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      expect((accepted, rejected, sent), (1, 1, 0));
+    });
+
+    testWidgets('with a draft in the composer Enter and Escape do not answer', (tester) async {
+      var accepted = 0;
+      var rejected = 0;
+      var sent = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          onSend: () => sent++,
+          onAcceptPending: () => accepted++,
+          onRejectPending: () => rejected++,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'wait, first');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+      expect((accepted, rejected), (0, 0));
+      expect(sent, 1);
+    });
+
+    testWidgets('Shift+Enter does not allow', (tester) async {
+      var accepted = 0;
+      await tester.pumpWidget(
+        composer(canSend: false, canStop: true, onAcceptPending: () => accepted++),
+      );
+      await tester.tap(find.byType(TextField));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+
+      expect(accepted, 0);
+    });
+
+    testWidgets('an open suggestion list takes Escape and Enter first', (tester) async {
+      var accepted = 0;
+      var rejected = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: false,
+          canStop: true,
+          mentionFiles: const <String>['lib/main.dart'],
+          onAcceptPending: () => accepted++,
+          onRejectPending: () => rejected++,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      expect(rejected, 0);
+
+      // The list is closed and the field holds a draft: still nothing is answered.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      expect((accepted, rejected), (0, 0));
+    });
+
+    testWidgets('without a pending request Enter and Escape behave as before', (tester) async {
+      var sent = 0;
+      await tester.pumpWidget(composer(canSend: true, canStop: false, onSend: () => sent++));
+      await tester.tap(find.byType(TextField));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+
+      expect(sent, 1);
+    });
   });
 
   testWidgets('the send button is off for empty text or a busy chat', (tester) async {
