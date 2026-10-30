@@ -35,6 +35,7 @@ class WorkspaceDataController with ChangeNotifier {
   final Set<int> _collapsedProjects = <int>{};
   final ValueNotifier<ChatHandle?> _chatHandle = ValueNotifier<ChatHandle?>(null);
   String? _selectedChangePath;
+  ({String? itemId, int? projectId})? _skillsTarget;
 
   /// Selected project.
   int? get projectId => _projectId;
@@ -126,6 +127,28 @@ class WorkspaceDataController with ChangeNotifier {
     _view = view;
     _section = section;
     notifyListeners();
+  }
+
+  /// Shows the Skills screen on the skill or rule [itemId] (its section follows the id) and, when
+  /// [projectId] is given, for that project instead of the selected one. The screen collects the
+  /// request with [takeSkillsTarget].
+  void openSkills({String? itemId, int? projectId}) {
+    _skillsTarget = (itemId: itemId, projectId: projectId);
+    if (itemId != null) {
+      _section = itemId.startsWith('rule:') ? 'rules' : 'skills';
+    } else if (_view != WorkspaceView.skills) {
+      _section = null;
+    }
+    _view = WorkspaceView.skills;
+    notifyListeners();
+  }
+
+  /// The pending [openSkills] request, once: the Skills screen takes it and the next call gets
+  /// `null`.
+  ({String? itemId, int? projectId})? takeSkillsTarget() {
+    final target = _skillsTarget;
+    _skillsTarget = null;
+    return target;
   }
 
   /// Returns from Skills or Settings to the same chat.

@@ -418,12 +418,14 @@ void main() {
       await pumpShell(tester);
       dataOf(tester).openView(WorkspaceView.skills);
       await tester.pump();
+      await settle(tester);
 
-      expect(find.text('Coming in M3'), findsOneWidget);
+      expect(find.text('feature-architecture'), findsOneWidget);
+      expect(find.text('dart-style'), findsNothing);
       await tester.tap(find.text('Rules'));
       await tester.pump();
-      expect(dataOf(tester).section, 'rules');
-      expect(find.text('Coming in M3'), findsOneWidget);
+      expect(find.text('dart-style'), findsOneWidget);
+      expect(find.text('feature-architecture'), findsNothing);
       await disposeTestApp(tester, dependencies);
     });
 
