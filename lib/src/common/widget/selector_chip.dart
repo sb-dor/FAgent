@@ -32,6 +32,9 @@ class SelectorChip<T> extends StatelessWidget {
     this.sections,
     this.onSelected,
     this.onPressed,
+    this.menuWidth = 320,
+    this.searchable = false,
+    this.footerBuilder,
     super.key,
   });
 
@@ -58,10 +61,26 @@ class SelectorChip<T> extends StatelessWidget {
   /// Called on tap when there is no menu ([sections] is `null` or has no items).
   final VoidCallback? onPressed;
 
+  /// Width of the menu.
+  final double menuWidth;
+
+  /// The menu has a search field (see [showAppMenu]).
+  final bool searchable;
+
+  /// Interactive content under the rows of the menu (see [showAppMenu]).
+  final AppMenuFooterBuilder<T>? footerBuilder;
+
   Future<void> _open(BuildContext context, List<AppMenuSection<T>> sections) async {
     final box = context.findRenderObject()! as RenderBox;
     final anchor = box.localToGlobal(Offset.zero) & box.size;
-    final picked = await showAppMenu<T>(context: context, anchor: anchor, sections: sections);
+    final picked = await showAppMenu<T>(
+      context: context,
+      anchor: anchor,
+      sections: sections,
+      width: menuWidth,
+      searchable: searchable,
+      footerBuilder: footerBuilder,
+    );
     if (picked != null) onSelected?.call(picked);
   }
 

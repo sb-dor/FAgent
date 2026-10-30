@@ -53,4 +53,13 @@ class ChatView {
 
   /// The turn's prompt is not sent yet.
   final bool preparingTurn;
+
+  /// Agent settings can be changed in this status.
+  bool get canChangeConfig => switch (status) {
+    SessionStatus.idle || SessionStatus.running || SessionStatus.awaitingPermission => true,
+    _ => false,
+  };
+
+  /// The chat already has a message of the user, so its agent can no longer be changed.
+  bool get agentLocked => items.any((item) => item is UserMessageItem);
 }

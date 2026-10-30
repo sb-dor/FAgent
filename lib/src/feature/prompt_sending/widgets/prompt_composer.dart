@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 
 /// {@template prompt_composer}
 /// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs
-/// the send button becomes Stop. Typing `@` suggests project files (arrows
+/// the send button becomes Stop. Shift+Tab calls [onCycleMode]. [toolbar] (the chips) sits under
+/// the field, the send button on its right. Typing `@` suggests project files (arrows
 /// choose, Enter or Tab inserts, Escape closes).
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
@@ -22,6 +24,8 @@ class PromptComposer extends StatefulWidget {
     required this.onStop,
     this.mentionFiles,
     this.onMentionStart,
+    this.toolbar = const <Widget>[],
+    this.onCycleMode,
     super.key,
   });
 
@@ -48,6 +52,12 @@ class PromptComposer extends StatefulWidget {
 
   /// A new `@` mention started (time to refresh the file list).
   final VoidCallback? onMentionStart;
+
+  /// Widgets under the field, left of the send button.
+  final List<Widget> toolbar;
+
+  /// Switches the permission mode (Shift+Tab); `null` leaves Shift+Tab to the focus.
+  final VoidCallback? onCycleMode;
 
   @override
   State<PromptComposer> createState() => _PromptComposerState();
@@ -146,11 +156,34 @@ class _PromptComposerState extends State<PromptComposer> {
         return KeyEventResult.handled;
       }
     }
+    if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
+      final cycle = widget.onCycleMode;
+      if (cycle == null) return KeyEventResult.ignored;
+      if (event is KeyDownEvent) cycle();
+      return KeyEventResult.handled;
+    }
     if (event is! KeyDownEvent || key != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
     if (HardwareKeyboard.instance.isShiftPressed) return KeyEventResult.ignored;
     if (widget.canSend) widget.onSend();
     return KeyEventResult.handled;
   }
+
+  Widget _sendButton(GeneratedLocalization localization) => widget.canStop
+      ? IconButton.filledTonal(
+          tooltip: localization.stop,
+          onPressed: widget.onStop,
+          icon: const Icon(Icons.stop_rounded),
+        )
+      : ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) => IconButton.filled(
+            tooltip: localization.send,
+            onPressed: widget.canSend && widget.controller.text.trim().isNotEmpty
+                ? widget.onSend
+                : null,
+            icon: const Icon(Icons.arrow_upward_rounded),
+          ),
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -174,103 +207,50 @@ class _PromptComposerState extends State<PromptComposer> {
                 // Part of the field's tap region: a click keeps the caret.
                 if (_suggestions.isNotEmpty)
                   TextFieldTapRegion(
-                    child: _MentionSuggestions(
+                    child: MentionSuggestions(
                       files: _suggestions,
                       highlighted: _highlighted,
                       onSelected: _insert,
                     ),
                   ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    Expanded(
-                      child: Focus(
-                        onKeyEvent: _onKey,
-                        child: TextField(
-                          controller: widget.controller,
-                          focusNode: widget.focusNode,
-                          autofocus: true,
-                          minLines: 1,
-                          maxLines: 10,
-                          keyboardType: TextInputType.multiline,
-                          decoration: InputDecoration(
-                            hintText: localization.promptHint,
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-                          ),
+                Focus(
+                  onKeyEvent: _onKey,
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    autofocus: true,
+                    minLines: 1,
+                    maxLines: 10,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      hintText: localization.promptHint,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: widget.toolbar,
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: widget.canStop
-                          ? IconButton.filledTonal(
-                              tooltip: localization.stop,
-                              onPressed: widget.onStop,
-                              icon: const Icon(Icons.stop_rounded),
-                            )
-                          : ListenableBuilder(
-                              listenable: widget.controller,
-                              builder: (context, _) => IconButton.filled(
-                                tooltip: localization.send,
-                                onPressed:
-                                    widget.canSend && widget.controller.text.trim().isNotEmpty
-                                    ? widget.onSend
-                                    : null,
-                                icon: const Icon(Icons.arrow_upward_rounded),
-                              ),
-                            ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      _sendButton(localization),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _MentionSuggestions extends StatelessWidget {
-  const _MentionSuggestions({
-    required this.files,
-    required this.highlighted,
-    required this.onSelected,
-  });
-
-  final List<String> files;
-  final int highlighted;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (final (index, file) in files.indexed)
-            Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                selected: index == highlighted,
-                selectedTileColor: context.colors.accentSoft,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.small)),
-                leading: const Icon(Icons.description_outlined, size: 18),
-                title: Text(p.basename(file)),
-                subtitle: Text(
-                  p.dirname(file) == '.' ? '' : p.dirname(file),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () => onSelected(file),
-              ),
-            ),
-        ],
       ),
     );
   }

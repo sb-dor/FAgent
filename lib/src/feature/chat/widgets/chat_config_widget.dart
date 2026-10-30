@@ -1,8 +1,11 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_screen.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
@@ -16,6 +19,9 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/controller/session_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
+import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
+import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
+import 'package:path/path.dart' as p;
 
 /// Gives the chat widgets access to [ChatConfigWidgetState].
 class ChatConfigInhWidget extends InheritedWidget {
@@ -33,18 +39,32 @@ class ChatConfigInhWidget extends InheritedWidget {
   bool updateShouldNotify(ChatConfigInhWidget oldWidget) => false;
 }
 
+/// Lets the user pick a file, starting in [initialDirectory]; `null` when they cancel.
+typedef FilePicker = Future<String?> Function(String initialDirectory);
+
+Future<String?> _pickWithDialog(String initialDirectory) async =>
+    (await openFile(initialDirectory: initialDirectory))?.path;
+
 /// {@template chat_config_widget}
 /// One chat: owns its controllers and the composer text.
 /// {@endtemplate}
 class ChatConfigWidget extends StatefulWidget {
   /// {@macro chat_config_widget}
-  const ChatConfigWidget({required this.sessionId, required this.project, super.key});
+  const ChatConfigWidget({
+    required this.sessionId,
+    required this.project,
+    this.pickFile = _pickWithDialog,
+    super.key,
+  });
 
   /// `sessions.id`.
   final int sessionId;
 
   /// The chat's project (kept current by the workspace).
   final Project project;
+
+  /// Opens the file dialog for the attach button.
+  final FilePicker pickFile;
 
   @override
   State<ChatConfigWidget> createState() => ChatConfigWidgetState();
@@ -73,7 +93,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     permissionController = PermissionAnswerController(
       repository: PermissionAnswerRepositoryImpl(hub: hub),
     );
-    configController = SessionConfigController(repository: SessionConfigRepositoryImpl(hub: hub));
+    configController = SessionConfigController(
+      repository: SessionConfigRepositoryImpl(
+        hub: hub,
+        settings: AppSettingsRepositoryImpl(database: dependencies.database),
+      ),
+    );
     fileMentionController = FileMentionController(
       repository: ProjectFilesRepositoryImpl(environment: dependencies.shellEnvironment),
     );
@@ -129,6 +154,55 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   void retry() => recoveryController.retry(sessionId);
 
   void setConfig(String configId, Object value) => configController.set(sessionId, configId, value);
+
+  ChatView? get _view => switch (chatController.state) {
+    Chat$CompletedState(:final view) => view,
+    _ => null,
+  };
+
+  /// Switches to the next permission mode (Shift+Tab); never to `bypassPermissions`.
+  void cycleMode() {
+    final view = _view;
+    if (view == null || !view.canChangeConfig) return;
+    final mode = permissionModeOf(view.configOptions);
+    final next = mode == null ? null : nextCycleMode(mode);
+    if (mode != null && next != null) setConfig(mode.id, next);
+  }
+
+  /// Stores the chat's model, effort and mode as the start of new chats of its agent.
+  void makeDefault() {
+    final view = _view;
+    if (view != null) configController.saveDefaults(view.agentId, defaultsOf(view.configOptions));
+  }
+
+  /// Lets the user pick a file and inserts `@path` at the caret. Only files inside the project
+  /// can be mentioned.
+  Future<void> attachFile() async {
+    final root = widget.project.path;
+    final picked = await widget.pickFile(root);
+    if (picked == null || !mounted) return;
+    final relative = p.relative(picked, from: root);
+    final inside = await fileMentionController.insideProject(root, <String>[relative]);
+    if (!mounted) return;
+    if (inside.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(Localization.of(context).attachOutsideProject)));
+      return;
+    }
+    final text = textController.text;
+    final selection = textController.selection;
+    final start = selection.isValid ? selection.start : text.length;
+    final end = selection.isValid ? selection.end : text.length;
+    final separator = start > 0 && !RegExp(r'\s').hasMatch(text[start - 1]) ? ' ' : '';
+    final inserted = '$separator@${inside.single} ';
+    textController.value = TextEditingValue(
+      text: text.replaceRange(start, end, inserted),
+      selection: TextSelection.collapsed(offset: start + inserted.length),
+    );
+    // The file list decides at send time which mentions become attachments.
+    refreshFiles();
+    composerFocus.requestFocus();
+  }
 
   /// Allows bypass for this chat and sends the prompt that was held back.
   Future<void> allowBypass() async {

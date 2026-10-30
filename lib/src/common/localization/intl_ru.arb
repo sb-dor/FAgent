@@ -11,7 +11,7 @@
   "chatPlaceholder": "Откройте проект и начните чат с агентом",
   "selectChat": "Выберите чат или начните новый",
   "somethingWentWrong": "Что-то пошло не так",
-  "promptHint": "Спросите агента… (Enter — отправить, Shift+Enter — новая строка)",
+  "promptHint": "Спроси агента… @ файл · / скилл или команда",
   "send": "Отправить",
   "stop": "Стоп",
   "forceStop": "Остановить принудительно",
@@ -116,5 +116,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "attach": "Прикрепить файл",
+  "agentLabel": "Агент",
+  "modelLabel": "Модель",
+  "effortLabel": "Усилие",
+  "modeLabel": "Режим",
+  "makeDefaultForNewChats": "Сделать по умолчанию для новых чатов",
+  "availableAfterStart": "Доступно после запуска агента",
+  "attachOutsideProject": "Прикрепить можно только файлы внутри проекта"
 }

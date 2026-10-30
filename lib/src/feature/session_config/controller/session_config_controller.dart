@@ -34,6 +34,13 @@ final class SessionConfigController extends StateController<SessionConfigState>
     setState(const SessionConfigState.completed());
   }, error: (error, stackTrace) async => setState(SessionConfigState.error(error: error)));
 
+  /// Makes [values] what new chats of [agentId] start with.
+  void saveDefaults(String agentId, Map<String, String> values) => handle(() async {
+    setState(const SessionConfigState.inProgress());
+    await _repository.saveDefaults(agentId, values);
+    setState(const SessionConfigState.completed());
+  }, error: (error, stackTrace) async => setState(SessionConfigState.error(error: error)));
+
   /// Allows the bypass mode the chat already has (from the user's settings).
   /// Not a handled operation: a setting change in flight must not drop it.
   Future<void> acknowledgeBypass(int sessionId) => _repository.acknowledgeBypass(sessionId);

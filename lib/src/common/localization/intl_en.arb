@@ -18,7 +18,7 @@
   "chatPlaceholder": "Open a project and start a chat with an agent",
   "selectChat": "Pick a chat or start a new one",
   "somethingWentWrong": "Something went wrong",
-  "promptHint": "Ask the agent… (Enter to send, Shift+Enter for a new line)",
+  "promptHint": "Ask the agent… @ file · / skill or command",
   "send": "Send",
   "stop": "Stop",
   "forceStop": "Force stop",
@@ -151,5 +151,13 @@
         "type": "String"
       }
     }
-  }
+  },
+  "attach": "Attach a file",
+  "agentLabel": "Agent",
+  "modelLabel": "Model",
+  "effortLabel": "Effort",
+  "modeLabel": "Mode",
+  "makeDefaultForNewChats": "Make default for new chats",
+  "availableAfterStart": "Available after the agent starts",
+  "attachOutsideProject": "Only files inside the project can be attached"
 }

@@ -27,6 +27,8 @@ void main() {
     VoidCallback? onStop,
     List<String>? mentionFiles,
     VoidCallback? onMentionStart,
+    List<Widget> toolbar = const <Widget>[],
+    VoidCallback? onCycleMode,
   }) => testApp(
     PromptComposer(
       controller: text,
@@ -37,6 +39,8 @@ void main() {
       onStop: onStop ?? () {},
       mentionFiles: mentionFiles,
       onMentionStart: onMentionStart,
+      toolbar: toolbar,
+      onCycleMode: onCycleMode,
     ),
   );
 
@@ -71,6 +75,84 @@ void main() {
     await tester.pumpWidget(composer(canSend: false, canStop: true, onStop: () => stopped = true));
     await tester.tap(find.byTooltip('Stop'));
     expect(stopped, isTrue);
+  });
+
+  testWidgets('the toolbar sits under the text field next to the send button', (tester) async {
+    await tester.pumpWidget(
+      composer(canSend: true, canStop: false, toolbar: const <Widget>[Text('chips')]),
+    );
+
+    final field = tester.getRect(find.byType(TextField));
+    final chips = tester.getRect(find.text('chips'));
+    final send = tester.getRect(find.byType(IconButton));
+    expect(chips.top, greaterThanOrEqualTo(field.bottom));
+    expect(chips.left, lessThan(send.left));
+    expect(send.top, greaterThanOrEqualTo(field.bottom));
+  });
+
+  testWidgets('the hint mentions files and commands', (tester) async {
+    await tester.pumpWidget(composer(canSend: true, canStop: false));
+    expect(find.text('Ask the agent… @ file · / skill or command'), findsOneWidget);
+  });
+
+  group('Shift+Tab', () {
+    Future<void> shiftTab(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    }
+
+    testWidgets('cycles the mode and keeps the focus in the field', (tester) async {
+      var cycled = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          onCycleMode: () => cycled++,
+          toolbar: <Widget>[TextButton(onPressed: () {}, child: const Text('chip'))],
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'hello');
+
+      await shiftTab(tester);
+
+      expect(cycled, 1);
+      expect(focus.hasFocus, isTrue);
+      expect(text.text, 'hello');
+    });
+
+    testWidgets('does nothing without a mode to cycle', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false));
+      await shiftTab(tester);
+      expect(text.text, isEmpty);
+    });
+
+    testWidgets('a plain Tab does not cycle the mode', (tester) async {
+      var cycled = 0;
+      await tester.pumpWidget(composer(canSend: true, canStop: false, onCycleMode: () => cycled++));
+      await tester.enterText(find.byType(TextField), 'hello');
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      expect(cycled, 0);
+    });
+
+    testWidgets('inside the file list Tab still inserts the file', (tester) async {
+      var cycled = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          onCycleMode: () => cycled++,
+          mentionFiles: const <String>['pubspec.yaml'],
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '@pub');
+      await tester.pump();
+
+      await shiftTab(tester);
+
+      expect(cycled, 0);
+      expect(text.text, '@pubspec.yaml ');
+    });
   });
 
   group('@ mentions', () {
