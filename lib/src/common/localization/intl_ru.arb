@@ -101,6 +101,8 @@
   "paneChanges": "Изменения",
   "paneRun": "Запуск",
   "panePlan": "План",
+  "planEmpty": "Плана пока нет",
+  "planProgress": "{done}/{total}",
   "settingsGeneral": "Общие",
   "settingsAgents": "Агенты",
   "settingsMcp": "MCP-серверы",

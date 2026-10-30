@@ -8,6 +8,9 @@ import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.
 import 'package:flutter_code_agent/src/feature/changes_pane/controller/changed_files_notifier.dart';
 import 'package:flutter_code_agent/src/feature/changes_pane/models/changed_file.dart';
 import 'package:flutter_code_agent/src/feature/changes_pane/widgets/changes_tab.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/plan_pane/widgets/plan_tab.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 
@@ -124,9 +127,15 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                         ),
                       ),
                       Expanded(
-                        child: tab == RightPaneTab.changes
-                            ? ChangesTab(files: _changes)
-                            : _TabBody(tab: tab),
+                        child: switch (tab) {
+                          RightPaneTab.changes => ChangesTab(files: _changes),
+                          RightPaneTab.plan => ValueListenableBuilder<ChatHandle?>(
+                            valueListenable: _scope.dataController.chatHandle,
+                            builder: (context, handle, _) =>
+                                PlanTab(items: handle?.view.items ?? const <ChatItem>[]),
+                          ),
+                          RightPaneTab.run => _TabBody(tab: tab),
+                        },
                       ),
                     ],
                   );
