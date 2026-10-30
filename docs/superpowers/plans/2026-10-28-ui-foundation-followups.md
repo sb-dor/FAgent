@@ -87,3 +87,39 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage4-right-p
   - `RunController.choose({deviceId, mode, target})` instead of `select`; the last picked widget lives in `RunViewState.picked` and is cleared on a project switch
   - New `onAccent` token in `AppColors` for content on accent fills (light #FFFFFF, dark = dark bg #16181B)
   - "@ from the run" sits above files in the mention menu (the mockup shows it below); ⚡ in the title bar stays visible but disabled while the app is not running
+
+## Stage 5 follow-ups
+
+Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage5-skills.md. Paths are under `lib/src/feature/`.
+
+- **Bugs and risks:**
+  - Library controller: `SkillLibraryController.watch` can leak a subscription when disposed while a queued or awaiting watch runs (check `isDisposed` after the cancel); `_watching` is set before `listen`, so a sync throw makes a retry with the same args a no-op; the error callback emits `failed` without `projectId` (`skills/controller/skill_library_controller.dart`)
+  - Library: a project removed from the app stays watched by the window controller (`workspace/widgets/workspace_config_widget.dart`)
+  - Repository: `lastSnapshot` is set before the rebuild, so a failed rebuild is not retried until files change; the watcher is registered before the initial states load, so the first emission has everything enabled; the drift `skill_states` listen has no `onError` (`skills/data/skills_repository.dart`)
+  - Repository: `importFolder` does not apply the name rule (`My Skill` becomes an invalid id) (`skills/data/skills_repository.dart`)
+  - Frontmatter: a UTF-8 BOM before `---` reads as no frontmatter; an unquoted `version: 1.10` becomes `1.1` (YAML float) (`skills/data/frontmatter.dart`)
+  - Screen: with a projects `ErrorState` the library watches globally but `view.projectId` stays set (the Project source shows 0, the switch writes per project while rows show global); `setEnabled` failure shows nothing (`skills/widgets/controllers/skills_view_controller.dart`, `skills/widgets/skills_list.dart`)
+  - Screen: leaving Skills with unsaved edits via ⌘, / ⌘N / ⌘K / chat search does not ask (only "← Back to chat" and Esc do); a double Esc can open two discard dialogs
+  - Screen: the name dialog reacts to any action's completed/failed (track its own submit); editor Save looks enabled while another action runs
+  - Screen: `chooseProject` matches `:project:` in the id and re-asks on re-picking the same project; "Try in chat" sends `/name` to a chat of another project (`skills/widgets/skills_config_widget.dart`)
+  - Chat: skills can fill the / menu's 12 rows before app commands (cap the section); project skills are probably duplicated under "Agent commands" (dedupe by name); `ChatSkills.of` is recomputed on every run notification; menu F footer link is not keyboard-reachable (`prompt_sending/models/slash_commands.dart`, `skills/widgets/chat_skills_chip.dart`)
+- **Test gaps:**
+  - Builtin: the failed-load-not-cached branch of `AssetBuiltinKnowledge` is untested; the builtin test hard-codes counts and won't catch a skill folder missing from the pubspec assets (compare with the directory listing)
+  - Repository: the cancel test doesn't prove the timer stops (count `builtin.load` calls)
+  - Controllers: no test for watch A, watch B, dispose in one tick (`activeWatchers` should be 0); the init step is untested
+  - Screen: the failed-switch test calls `actions.setEnabled` instead of tapping the row; no RED recorded for the card tests; the name dialog's `removeRoute` branch is unreachable and untested
+- **Polish:**
+  - Names: `SkillActionsState` and `SkillTextState` lack doc comments
+  - Skills widgets: `_SourceItem` duplicates `_NavItem` (~50 lines); `':project:'` string matching in `SkillsViewController`; a source filter un-highlights the Skills/Rules section (the mockup keeps it; `''` sentinel)
+  - Design: `Colors.transparent` in `skill_list_tile` and `skills_navigation` (existing convention); off-grid spacings and `fontSize` 10 in `source_tag`; vertical 6 padding in `skill_card`
+- **Rulings recorded during the stage** (revisit if they cost too much):
+  - Widget tests never use the real file-IO repository: `test/support/memory_skills_repository.dart` (`MemorySkillsRepository`) is `testDependencies`' default; the real repository is tested in plain `test` with temp dirs (real IO and polling timers hang or leak in fake-async `testWidgets`)
+  - Project items resolve against an explicit root, not repository state: `read`, `write` and `duplicate` take `projectRoot`; a project id without it throws `KnowledgeNotFoundException`; controllers pass the root per call, and two live watches for different projects (window and Skills screen) are expected
+  - Enablement of project items is per project only: `setEnabled(projectId: null)` on a `*:project:*` id throws `ArgumentError`, the card shows only the screen-project switch (ids carry no project, a global row would leak across projects sharing a skill name)
+  - Sync `stat`/`exists`/`type` calls are accepted in the scanner (`avoid_slow_async_io` is an error and must not be silenced); "all IO async" means listing, reads, writes and copies
+  - `MemorySkillsRepository.setEnabled` follows `setSkillEnabled`: global replaces and drops equal exceptions, a project value equal to global removes the row, project ids refuse global
+  - One model `KnowledgeItem` (skill or rule) instead of `Skill`/`Rule`, one `watch` stream instead of `watchSkills`/`watchRules`; list order is the source enum, then name, in both repositories
+  - Card minimum 400 px holds: the window minimum is 900x600, so the card is at least 523 px with the rail and 559 px at 1100 with the 220 px nav
+  - Leaving the Skills screen with unsaved edits via "← Back to chat" or Esc asks the same discard question as a selection change; other exits are deferred (see above)
+  - Git sources show only "＋ Add source…" with Preview and no fake skills; menu F has no per-chat choice until M3; skill folders are polled every 2 s; "Try in chat" and `/name` work for project skills only until M3
+  - `claude-agent-acp` titles a Skill tool call `Load skill: <name>` with kind `other` (`SkillReporter`), which `skill_call.dart` relies on
