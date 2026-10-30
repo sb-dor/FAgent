@@ -384,7 +384,8 @@ final class AgentHub {
   }
 
   /// Destructive: forgets the agent session and creates a new one (the agent
-  /// loses the chat's context; the journal stays).
+  /// loses the chat's context; the journal stays). The user's session defaults
+  /// apply to the new agent session like to any new chat.
   Future<void> startNewAgentSession(int sessionId) async {
     final live = await session(sessionId);
     if (live.status.value != SessionStatus.setupFailed) {
@@ -567,11 +568,17 @@ final class AgentHub {
     String? contextLostFrom,
   }) async {
     _move(live, SessionStatus.creating);
+    _AgentSlot? registered;
+    String? registeredId;
     try {
       final response = await connection.agent
           .createSession(NewSessionRequest(cwd: live.cwd, mcpServers: const <McpServer>[]))
           .timeout(setupTimeout);
       final acpId = response.sessionId.value;
+      // Registered at once: the agent may notify (commands, config) while the
+      // defaults are applied, and `_route` drops what it cannot place.
+      registered = _slots[live.agentId]!..byAcpId[acpId] = live;
+      registeredId = acpId;
       await _database.transaction(() async {
         await (_database.update(_database.sessionsTable)..where((s) => s.id.equals(live.id))).write(
           SessionsTableCompanion(
@@ -595,15 +602,17 @@ final class AgentHub {
       await _applySessionDefaults(live, connection, acpId);
       // The agent may have stopped meanwhile; the id is kept for the next load.
       if (live.status.value != SessionStatus.creating) return;
-      _slots[live.agentId]!.byAcpId[acpId] = live;
       _move(live, SessionStatus.idle);
     } on Object catch (error, stackTrace) {
+      if (registeredId != null) registered?.byAcpId.remove(registeredId);
       await _setupError(live, SessionOperation.create, error, stackTrace);
     }
   }
 
-  /// Applies the user's default model, mode, … to a freshly created session.
-  /// Never throws: a default that cannot be read or set is logged and skipped.
+  /// Applies the user's default model, mode, … to a freshly created session,
+  /// in the order of the defaults map; each response replaces the options.
+  /// Never throws: a default that cannot be read or set is logged and skipped,
+  /// and a default that times out also skips the remaining ones.
   Future<void> _applySessionDefaults(
     LiveSession live,
     AgentConnection connection,
@@ -638,6 +647,10 @@ final class AgentHub {
             )
             .timeout(setupTimeout);
         live.configOptions.value = _objects(_plain(response.toJson())['configOptions']);
+      } on TimeoutException {
+        // A silent agent would cost another timeout per default: give up.
+        l.w('AgentHub | session ${live.id}: the default $configId timed out, skipping the rest');
+        return;
       } on Object catch (error) {
         l.w('AgentHub | session ${live.id}: could not set the default $configId: $error');
       }

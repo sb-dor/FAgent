@@ -84,10 +84,12 @@ void main() {
   AgentHub newHub({
     List<TurnObserver> observers = const <TurnObserver>[],
     Future<Map<String, String>> Function(String agentId)? sessionDefaults,
+    Duration setupTimeout = const Duration(seconds: 60),
   }) {
     final hub = AgentHub(
       observers: observers,
       sessionDefaults: sessionDefaults,
+      setupTimeout: setupTimeout,
       database: database,
       environment: environment,
       agents: <String, AgentDefinition>{'fake': fakeAgent},
@@ -184,16 +186,102 @@ void main() {
     expect(_agentText(live).join(), 'hi');
   });
 
+  String? optionOf(LiveSession live, String id) => [
+    for (final o in live.configOptions.value)
+      if (o['id'] == id) o['currentValue'] as String?,
+  ].firstOrNull;
+
+  test('a failing default is skipped and the others still apply', () async {
+    final hub = newHub(
+      sessionDefaults: (_) async => <String, String>{'model': 'bad', 'mode': 'acceptEdits'},
+    );
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(optionOf(live, 'model'), 'm1');
+    expect(modeOf(live), 'acceptEdits');
+    expect(_agentText(live).join(), 'hi');
+  });
+
+  test('several defaults apply in order and each response replaces the options', () async {
+    final hub = newHub(
+      sessionDefaults: (_) async => <String, String>{
+        'effort': 'high',
+        'model': 'm2',
+        'mode': 'acceptEdits',
+      },
+    );
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    final seen = <List<String?>>[];
+    live.configOptions.addListener(
+      () => seen.add(<String?>[
+        optionOf(live, 'effort'),
+        optionOf(live, 'model'),
+        optionOf(live, 'mode'),
+      ]),
+    );
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(seen, <List<String?>>[
+      <String?>['low', 'm1', 'default'],
+      <String?>['high', 'm1', 'default'],
+      <String?>['high', 'm2', 'default'],
+      <String?>['high', 'm2', 'acceptEdits'],
+    ]);
+  });
+
+  test('a default the agent never answers stops the rest and the chat still starts', () async {
+    final hub = newHub(
+      setupTimeout: const Duration(milliseconds: 800),
+      sessionDefaults: (_) async => <String, String>{'model': 'slow', 'mode': 'acceptEdits'},
+    );
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(optionOf(live, 'model'), 'm1');
+    expect(modeOf(live), 'default');
+    expect(_agentText(live).join(), 'hi');
+  });
+
+  test('notifications sent while the defaults are applied reach the chat', () async {
+    final hub = newHub(sessionDefaults: (_) async => <String, String>{'model': 'cmd'});
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(optionOf(live, 'model'), 'cmd');
+    expect(live.availableCommands.value.map((c) => c['name']), contains('late'));
+  });
+
+  test('a new agent session after a failed load gets the defaults too', () async {
+    final hub = newHub(sessionDefaults: (_) async => <String, String>{'mode': 'acceptEdits'});
+    final chat = await newChat(acpSessionId: 'missing');
+    final live = await hub.session(chat);
+    await expectLater(hub.prompt(chat, 'echo x'), throwsA(isA<Object>()));
+
+    await hub.startNewAgentSession(chat);
+
+    expect(live.status.value, SessionStatus.idle);
+    expect(modeOf(live), 'acceptEdits');
+  });
+
   test('a config option change returns the agent\'s new options', () async {
     final hub = newHub();
     final chat = await newChat();
     final live = await hub.session(chat);
     await hub.prompt(chat, 'echo hi');
-    expect(live.configOptions.value.single, containsPair('currentValue', 'default'));
+    expect(modeOf(live), 'default');
 
     await hub.setConfigOption(chat, 'mode', 'acceptEdits');
 
-    expect(live.configOptions.value.single, containsPair('currentValue', 'acceptEdits'));
+    expect(modeOf(live), 'acceptEdits');
     expect(live.bypassAcknowledged.value, isFalse);
     await hub.acknowledgeBypass(chat);
     expect(live.bypassAcknowledged.value, isTrue);
