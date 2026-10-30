@@ -17,6 +17,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     required this.muted,
     required this.accent,
     required this.accentSoft,
+    required this.onAccent,
     required this.ok,
     required this.okSoft,
     required this.warn,
@@ -36,6 +37,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     muted: Color(0xFF626A75),
     accent: Color(0xFF0175C2),
     accentSoft: Color(0xFFDCEEFB),
+    onAccent: Color(0xFFFFFFFF),
     ok: Color(0xFF1E8E3E),
     okSoft: Color(0xFFE6F4EA),
     warn: Color(0xFFB26A00),
@@ -55,6 +57,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     muted: Color(0xFF8B939E),
     accent: Color(0xFF4FA8E8),
     accentSoft: Color(0xFF16344D),
+    onAccent: Color(0xFF16181B),
     ok: Color(0xFF4CC26A),
     okSoft: Color(0xFF183424),
     warn: Color(0xFFE0A030),
@@ -88,6 +91,9 @@ final class AppColors extends ThemeExtension<AppColors> {
   /// Selected row and chip background.
   final Color accentSoft;
 
+  /// Text and icons on a filled [accent] surface.
+  final Color onAccent;
+
   /// Added lines, signed-in state.
   final Color ok;
 
@@ -119,6 +125,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     Color? muted,
     Color? accent,
     Color? accentSoft,
+    Color? onAccent,
     Color? ok,
     Color? okSoft,
     Color? warn,
@@ -135,6 +142,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     muted: muted ?? this.muted,
     accent: accent ?? this.accent,
     accentSoft: accentSoft ?? this.accentSoft,
+    onAccent: onAccent ?? this.onAccent,
     ok: ok ?? this.ok,
     okSoft: okSoft ?? this.okSoft,
     warn: warn ?? this.warn,
@@ -156,6 +164,7 @@ final class AppColors extends ThemeExtension<AppColors> {
       muted: Color.lerp(muted, other.muted, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       accentSoft: Color.lerp(accentSoft, other.accentSoft, t)!,
+      onAccent: Color.lerp(onAccent, other.onAccent, t)!,
       ok: Color.lerp(ok, other.ok, t)!,
       okSoft: Color.lerp(okSoft, other.okSoft, t)!,
       warn: Color.lerp(warn, other.warn, t)!,
@@ -178,6 +187,7 @@ final class AppColors extends ThemeExtension<AppColors> {
           muted == other.muted &&
           accent == other.accent &&
           accentSoft == other.accentSoft &&
+          onAccent == other.onAccent &&
           ok == other.ok &&
           okSoft == other.okSoft &&
           warn == other.warn &&
@@ -196,6 +206,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     muted,
     accent,
     accentSoft,
+    onAccent,
     ok,
     okSoft,
     warn,

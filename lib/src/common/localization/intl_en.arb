@@ -212,5 +212,7 @@
   "chooseDevice": "Choose a device",
   "runChooseDeviceFirst": "Choose a device to run on",
   "runNoProject": "Select a project to run its app",
-  "runNoProjectHint": "The app runs per project, not per chat."
+  "runNoProjectHint": "The app runs per project, not per chat.",
+  "logsNewLines": "{count, plural, =1{1 new line ↓} other{{count} new lines ↓}}",
+  "@logsNewLines": {"placeholders": {"count": {"type": "int"}}}
 }

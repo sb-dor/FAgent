@@ -16,8 +16,8 @@ import 'package:flutter_code_agent/src/feature/app_run/widgets/run_logs.dart';
 /// widget, and the logs.
 ///
 /// The controllers belong to the window; the tab only shows them and asks them to act. The owner
-/// calls [RunController.watch] for the selected project. The first running device is chosen when
-/// none is, so ▶ works right away.
+/// calls [RunController.watch] for the selected project. The device to run on is chosen by the window
+/// (first running one) or by the user in the device menu.
 /// {@endtemplate}
 class RunTab extends StatefulWidget {
   /// {@macro run_tab}
@@ -68,17 +68,11 @@ class _RunTabState extends State<RunTab> {
   @override
   void initState() {
     super.initState();
-    widget.devices.addListener(_chooseDefaultDevice);
-    widget.run.addListener(_chooseDefaultDevice);
     widget.actions.addListener(_onAction);
-    // Not during the build that mounts the tab: the listeners of the controllers rebuild.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _chooseDefaultDevice());
   }
 
   @override
   void dispose() {
-    widget.devices.removeListener(_chooseDefaultDevice);
-    widget.run.removeListener(_chooseDefaultDevice);
     widget.actions.removeListener(_onAction);
     super.dispose();
   }
@@ -87,13 +81,6 @@ class _RunTabState extends State<RunTab> {
     Devices$CompletedState(:final devices) => devices,
     _ => const <Device>[],
   };
-
-  void _chooseDefaultDevice() {
-    if (!mounted || widget.run.state.projectId == null) return;
-    if (widget.run.state.selectedDeviceId != null) return;
-    final first = _devices.where((device) => device.kind == DeviceKind.running).firstOrNull;
-    if (first != null) widget.run.choose(deviceId: first.id);
-  }
 
   void _onAction() {
     final state = widget.actions.state;

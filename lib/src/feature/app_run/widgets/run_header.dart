@@ -120,7 +120,7 @@ class RunHeader extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.small)),
         backgroundColor: primary && enabled ? colors.accent : colors.bg,
         foregroundColor: primary
-            ? Theme.of(context).colorScheme.onPrimary
+            ? colors.onAccent
             : danger
             ? colors.danger
             : colors.text,

@@ -115,6 +115,7 @@ void main() {
       Dependencies? override,
       Size size = const Size(1280, 800),
       bool loadDevices = true,
+      bool chooseDevice = true,
       double width = 400,
     }) async {
       tester.view
@@ -123,6 +124,7 @@ void main() {
       addTearDown(tester.view.reset);
       if (projectId != null) run.watch(projectId);
       if (loadDevices) devices.watch();
+      if (chooseDevice) run.choose(deviceId: 'ios-sim-16-pro');
       await tester.pumpWidget(
         testApp(
           Align(
@@ -314,15 +316,15 @@ void main() {
     });
 
     testWidgets('Run is disabled until a device is chosen', (tester) async {
-      await pumpTab(tester, loadDevices: false);
-      expect(find.text('Choose a device'), findsOneWidget);
-      final run = tester.widget<IconButton>(
+      await pumpTab(tester, chooseDevice: false);
+      expect(find.text('Choose a device'), findsOneWidget, reason: 'the tab never picks for you');
+      final startButton = tester.widget<IconButton>(
         find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(IconButton)),
       );
-      expect(run.onPressed, isNull);
+      expect(startButton.onPressed, isNull);
       expect(find.byTooltip('Choose a device to run on'), findsOneWidget);
 
-      devices.watch();
+      run.choose(deviceId: 'macos');
       await elapse(tester);
       expect(find.text('Choose a device'), findsNothing);
       expect(find.byTooltip('Run'), findsOneWidget);
@@ -419,6 +421,45 @@ void main() {
         await scripted.dispose();
       });
 
+      testWidgets('past the log limit a scrolled-up list stays put and a chip jumps to the end', (
+        tester,
+      ) async {
+        await pumpScripted(tester);
+        Set<String> built() => <String>{
+          for (final element in find.textContaining('line ').evaluate())
+            (element.widget as Text).data!,
+        };
+
+        await tester.drag(find.text('line 1999'), const Offset(0, 1500));
+        await tester.pump();
+        final before = built();
+        expect(find.textContaining('new line'), findsNothing);
+
+        for (var i = 2000; i < 2003; i++) {
+          scripted.push(_line(i));
+        }
+        await tester.pump();
+        await tester.pump();
+
+        expect(run.state.logs.first.seq, 3, reason: 'the limit dropped the oldest lines');
+        expect(built(), before, reason: 'what the user reads did not slide');
+        expect(find.text('3 new lines ↓'), findsOneWidget);
+
+        await tester.tap(find.text('3 new lines ↓'));
+        await tester.pump();
+        await tester.pump();
+
+        expect(find.text('line 2002'), findsOneWidget);
+        expect(find.textContaining('new line'), findsNothing);
+
+        scripted.push(_line(2003));
+        await tester.pump();
+        await tester.pump();
+        expect(find.text('line 2003'), findsOneWidget, reason: 'following again');
+        await disposeTestApp(tester, dependencies);
+        await scripted.dispose();
+      });
+
       testWidgets('new lines follow the end only while the user is at the bottom', (tester) async {
         await pumpScripted(tester, lines: 300);
         expect(find.text('line 299'), findsOneWidget);
@@ -456,7 +497,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
 
-    Future<WorkspaceConfigWidgetState> pump(WidgetTester tester, {Size? size}) async {
+    Future<WorkspaceConfigWidgetState> pump(
+      WidgetTester tester, {
+      Size? size,
+      bool openRunTab = true,
+    }) async {
       tester.view
         ..physicalSize = size ?? const Size(1280, 800)
         ..devicePixelRatio = 1;
@@ -486,11 +531,39 @@ void main() {
         await settle(tester);
       }
       final state = WorkspaceConfigInhWidget.of(tester.element(find.byType(WorkspaceWidget)));
-      state.dataController.selectPaneTab(RightPaneTab.run);
+      if (openRunTab) state.dataController.selectPaneTab(RightPaneTab.run);
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pump();
       return state;
     }
+
+    testWidgets('the window picks the first running device even if the Run tab is never opened', (
+      tester,
+    ) async {
+      final state = await pump(tester, openRunTab: false);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      expect(find.byType(RunTab), findsNothing);
+      expect(state.runController.state.projectId, isNotNull);
+      expect(state.runController.state.selectedDeviceId, 'ios-sim-16-pro');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a device the user chose is not replaced by a later devices update', (
+      tester,
+    ) async {
+      final state = await pump(tester, openRunTab: false);
+      await tester.pump(const Duration(milliseconds: 20));
+      state.runController.choose(deviceId: 'macos');
+
+      state.devicesController.watch();
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      expect(state.devicesController.state, isA<Devices$CompletedState>());
+      expect(state.runController.state.selectedDeviceId, 'macos');
+      await disposeTestApp(tester, dependencies);
+    });
 
     testWidgets('an error in the run puts a badge on the tab', (tester) async {
       await pump(tester);

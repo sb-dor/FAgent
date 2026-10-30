@@ -56,7 +56,8 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// Follows [projectId]: drops the previous project's subscriptions, run and output. Calling it
   /// again for the same project changes nothing.
   ///
-  /// The device is not chosen for the user: it stays `null` until [choose] sets it, and the chosen
+  /// The device is not chosen here: it stays `null` until [choose] sets it (the window picks the
+  /// first running device once the devices are known, and never overrides a choice), and the chosen
   /// device survives a change of project. The mode and the target (a per-project path) go back to
   /// `debug` and `lib/main.dart`.
   void watch(int projectId) => handle(() async {
@@ -89,7 +90,6 @@ final class RunController extends StateController<RunViewState> with SequentialC
     ),
   );
 
-  /// Marks the log line [seq] as sent to the agent, here and in the repository's buffer.
   /// Remembers the widget picked in the app, so later actions do not lose it; `null` forgets it.
   void setPicked(PickedWidget? picked) => setState(state.copyWith(picked: picked));
 
@@ -102,6 +102,7 @@ final class RunController extends StateController<RunViewState> with SequentialC
     setState(state.copyWith(logs: const <LogEntry>[], errorCount: 0));
   }
 
+  /// Marks the log line [seq] as sent to the agent, here and in the repository's buffer.
   void markSent(int seq) {
     setState(
       state.copyWith(

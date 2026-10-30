@@ -33,7 +33,7 @@ abstract final class AppTheme {
     final isLight = brightness == Brightness.light;
     final scheme = ColorScheme.fromSeed(seedColor: c.accent, brightness: brightness).copyWith(
       primary: c.accent,
-      onPrimary: isLight ? Colors.white : c.bg,
+      onPrimary: c.onAccent,
       primaryContainer: c.accentSoft,
       onPrimaryContainer: c.text,
       surface: c.bg,
@@ -75,7 +75,10 @@ abstract final class AppTheme {
       ),
       dividerTheme: DividerThemeData(color: c.border, thickness: 1, space: 1),
       tooltipTheme: TooltipThemeData(
-        decoration: BoxDecoration(color: c.text, borderRadius: BorderRadius.circular(AppRadius.small)),
+        decoration: BoxDecoration(
+          color: c.text,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+        ),
         textStyle: TextStyle(fontSize: 12, height: 16 / 12, color: c.bg),
       ),
     );

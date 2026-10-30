@@ -176,5 +176,7 @@
   "chooseDevice": "Выберите устройство",
   "runChooseDeviceFirst": "Выберите устройство для запуска",
   "runNoProject": "Выберите проект, чтобы запустить его приложение",
-  "runNoProjectHint": "Приложение запускается на проект, а не на чат."
+  "runNoProjectHint": "Приложение запускается на проект, а не на чат.",
+  "logsNewLines": "{count, plural, one{{count} новая строка ↓} few{{count} новые строки ↓} many{{count} новых строк ↓} other{{count} новой строки ↓}}",
+  "@logsNewLines": {"placeholders": {"count": {"type": "int"}}}
 }

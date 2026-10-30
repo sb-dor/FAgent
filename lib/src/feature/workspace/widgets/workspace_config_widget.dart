@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
@@ -109,6 +110,8 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       runRepository: dependencies.appRunRepository,
       pickerRepository: dependencies.widgetPickerRepository,
     )..addListener(_onRunAction);
+    devicesController.addListener(_chooseDefaultDevice);
+    runController.addListener(_chooseDefaultDevice);
     dataController.addListener(_followSelectedProject);
     _followSelectedProject();
   }
@@ -118,6 +121,8 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     dataController
       ..removeListener(_followSelectedProject)
       ..dispose();
+    devicesController.removeListener(_chooseDefaultDevice);
+    runController.removeListener(_chooseDefaultDevice);
     runActionsController
       ..removeListener(_onRunAction)
       ..dispose();
@@ -141,6 +146,18 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _followSelectedProject() {
     final id = dataController.projectId;
     if (id != null) runController.watch(id);
+  }
+
+  /// Picks the first running device for the selected project while none is chosen and the devices
+  /// are known, so every way to start the app (the Run tab, the title bar) sees a device whether or
+  /// not the Run tab was ever opened. A device the user chose is never replaced.
+  void _chooseDefaultDevice() {
+    final run = runController.state;
+    if (run.projectId == null || run.selectedDeviceId != null) return;
+    if (devicesController.state case Devices$CompletedState(:final devices)) {
+      final first = devices.where((device) => device.kind == DeviceKind.running).firstOrNull;
+      if (first != null) runController.choose(deviceId: first.id);
+    }
   }
 
   /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
 import 'package:flutter_code_agent/src/common/widget/segmented_control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
@@ -22,6 +24,8 @@ enum RunLogFilter {
 /// {@template run_logs}
 /// The output of the running app: filters (all / errors / sent to the agent), a case-insensitive
 /// search, clearing, and a lazy list that follows new lines while the user is at the bottom.
+/// Once the user scrolls up the list is frozen (so that dropping the oldest lines at the log limit
+/// does not slide the lines being read) and a chip counts the new lines and jumps back to the end.
 /// Errors that carry a [RunError] are shown as error blocks.
 /// {@endtemplate}
 class RunLogs extends StatefulWidget {
@@ -64,6 +68,9 @@ class _RunLogsState extends State<RunLogs> {
   String _query = '';
   bool _atBottom = true;
 
+  /// The lines the user saw when they left the bottom; shown until they come back.
+  List<LogEntry>? _frozen;
+
   @override
   void initState() {
     super.initState();
@@ -82,13 +89,30 @@ class _RunLogsState extends State<RunLogs> {
   @override
   void didUpdateWidget(RunLogs oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.logs.isEmpty && _frozen != null) _frozen = null;
     final grew = widget.logs.lastOrNull?.seq != oldWidget.logs.lastOrNull?.seq;
     if (grew && _atBottom) _scrollToEnd();
   }
 
   void _onScroll() {
     final position = _scroll.position;
-    _atBottom = position.pixels >= position.maxScrollExtent - _bottomSlack;
+    final atBottom = position.pixels >= position.maxScrollExtent - _bottomSlack;
+    if (atBottom == _atBottom) return;
+    _atBottom = atBottom;
+    final pending = !atBottom || _frozen != null;
+    if (!pending) return;
+    // The listener can run inside layout; the frozen list changes the next build.
+    void apply() {
+      if (!mounted) return;
+      setState(() => _frozen = _atBottom ? null : (_frozen ?? widget.logs));
+      if (_atBottom) _scrollToEnd();
+    }
+
+    if (WidgetsBinding.instance.schedulerPhase == SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => apply());
+    } else {
+      apply();
+    }
   }
 
   void _onSearch() {
@@ -101,6 +125,7 @@ class _RunLogsState extends State<RunLogs> {
   /// Shows the end of the list again, e.g. after the filter changed.
   void _follow() {
     _atBottom = true;
+    setState(() => _frozen = null);
     _scrollToEnd();
   }
 
@@ -124,7 +149,18 @@ class _RunLogsState extends State<RunLogs> {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final localization = Localization.of(context);
-    final shown = widget.logs.where(_matches).toList(growable: false);
+    final frozen = _frozen;
+    final latest = frozen == null
+        ? null
+        : <int, LogEntry>{for (final entry in widget.logs) entry.seq: entry};
+    final shown = (frozen ?? widget.logs)
+        .map((entry) => latest?[entry.seq] ?? entry)
+        .where(_matches)
+        .toList(growable: false);
+    final frozenEnd = frozen?.lastOrNull?.seq;
+    final fresh = frozenEnd == null
+        ? 0
+        : widget.logs.where((entry) => entry.seq > frozenEnd && _matches(entry)).length;
     final mono = AppText.mono(context, size: 11);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -188,32 +224,51 @@ class _RunLogsState extends State<RunLogs> {
         ),
         Divider(color: colors.border),
         Expanded(
-          child: ListView.builder(
-            controller: _scroll,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            itemCount: shown.length,
-            itemBuilder: (context, index) {
-              final entry = shown[index];
-              final error = entry.error;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: error == null
-                    ? Text(
-                        entry.text,
-                        style: switch (entry.level) {
-                          LogLevel.info => mono,
-                          LogLevel.warning => mono.copyWith(color: colors.warn),
-                          LogLevel.error => mono.copyWith(color: colors.danger),
-                        },
-                      )
-                    : RunErrorBlock(
-                        error: error,
-                        sent: entry.sentToAgent,
-                        onSend: () => widget.onSend(entry),
-                        onOpenFile: widget.onOpenFile,
-                      ),
-              );
-            },
+          child: Stack(
+            children: <Widget>[
+              Positioned.fill(
+                child: ListView.builder(
+                  controller: _scroll,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  itemCount: shown.length,
+                  itemBuilder: (context, index) {
+                    final entry = shown[index];
+                    final error = entry.error;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: error == null
+                          ? Text(
+                              entry.text,
+                              style: switch (entry.level) {
+                                LogLevel.info => mono,
+                                LogLevel.warning => mono.copyWith(color: colors.warn),
+                                LogLevel.error => mono.copyWith(color: colors.danger),
+                              },
+                            )
+                          : RunErrorBlock(
+                              error: error,
+                              sent: entry.sentToAgent,
+                              onSend: () => widget.onSend(entry),
+                              onOpenFile: widget.onOpenFile,
+                            ),
+                    );
+                  },
+                ),
+              ),
+              if (fresh > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 8,
+                  child: Center(
+                    child: CompactButton(
+                      primary: true,
+                      label: localization.logsNewLines(fresh),
+                      onPressed: _follow,
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
