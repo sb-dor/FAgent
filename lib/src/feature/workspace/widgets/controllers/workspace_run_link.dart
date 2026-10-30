@@ -33,8 +33,11 @@ class WorkspaceRunLink {
   final RunActionsController _actions;
   final bool Function() _reloadAfterTurn;
 
-  /// The last status seen for each chat, to tell a finished turn from a repeated status.
-  final Map<int, SessionStatus> _lastStatus = <int, SessionStatus>{};
+  /// The chat whose status is followed (the selected one) and the last status seen for it, to tell
+  /// a finished turn from a repeated status. Forgotten when the selection moves on, so a turn that
+  /// ended while the chat was not open never reloads when it is opened again.
+  int? _followedSession;
+  SessionStatus? _lastStatus;
 
   /// Stops following the chat.
   void dispose() => _data.chatHandle.removeListener(_onChatHandle);
@@ -126,10 +129,15 @@ class WorkspaceRunLink {
   /// the app runs. A status published again, or a chat that was never busy, reloads nothing.
   void _onChatHandle() {
     final handle = _data.chatHandle.value;
-    if (handle == null) return;
+    if (handle == null) {
+      _followedSession = null;
+      _lastStatus = null;
+      return;
+    }
     final status = handle.view.status;
-    final before = _lastStatus[handle.sessionId];
-    _lastStatus[handle.sessionId] = status;
+    final before = _followedSession == handle.sessionId ? _lastStatus : null;
+    _followedSession = handle.sessionId;
+    _lastStatus = status;
     final turnEnded =
         status == SessionStatus.idle &&
         (before == SessionStatus.running ||

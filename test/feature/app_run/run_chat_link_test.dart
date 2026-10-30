@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
@@ -79,6 +80,7 @@ void main() {
   late _SpyRunRepository spy;
   late int projectId;
   late int sessionId;
+  late int otherSessionId;
 
   setUp(() {
     spy = _SpyRunRepository();
@@ -111,6 +113,15 @@ void main() {
               projectId: projectId,
               agentId: 'claude',
               title: const Value<String>('The chat'),
+            ),
+          );
+      otherSessionId = await database
+          .into(database.sessionsTable)
+          .insert(
+            SessionsTableCompanion.insert(
+              projectId: projectId,
+              agentId: 'claude',
+              title: const Value<String>('Other chat'),
             ),
           );
     });
@@ -160,8 +171,18 @@ void main() {
     insertDraft: (_) {},
   );
 
-  Future<void> publish(WidgetTester tester, SessionStatus status) async {
-    workspaceOf(tester).dataController.publishChatHandle(handleWith(status));
+  Future<void> publish(
+    WidgetTester tester,
+    SessionStatus status, {
+    ValueChanged<String>? insertDraft,
+  }) async {
+    workspaceOf(tester).dataController.publishChatHandle(
+      ChatHandle(
+        sessionId: workspaceOf(tester).dataController.sessionId!,
+        view: handleWith(status).view,
+        insertDraft: insertDraft ?? (_) {},
+      ),
+    );
     await settle(tester);
   }
 
@@ -199,6 +220,27 @@ void main() {
 
       expect(chat.textController.text, contains('Layout overflow'));
       expect(chat.textController.text, contains('booking_card.dart:42'));
+      expect(
+        workspace.runController.state.logs.firstWhere((log) => log.seq == entry.seq).sentToAgent,
+        isTrue,
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('while the chat is running it is still only a draft', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final entry = await reloadUntilError(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      await publish(tester, SessionStatus.running, insertDraft: chat.insertDraft);
+      final workspace = workspaceOf(tester);
+      expect(workspace.dataController.chatHandle.value?.view.status, SessionStatus.running);
+
+      workspace.sendRunErrorToAgent(entry);
+      await settle(tester);
+
+      expect(chat.textController.text, contains('Layout overflow'));
+      expect(chat.promptController.state, isA<PromptSending$InitialState>());
       expect(
         workspace.runController.state.logs.firstWhere((log) => log.seq == entry.seq).sentToAgent,
         isTrue,
@@ -264,6 +306,35 @@ void main() {
       await publish(tester, SessionStatus.running);
       await publish(tester, SessionStatus.idle);
       await until(tester, () => spy.reloads == 2);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('does nothing when the turn ends in an error', (tester) async {
+      await pumpShell(tester, reloadAfterTurn: true);
+      await startRun(tester);
+
+      await publish(tester, SessionStatus.running);
+      await publish(tester, SessionStatus.error);
+      await publish(tester, SessionStatus.idle);
+
+      expect(spy.reloads, 0);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a turn that ended while another chat was open does not reload on return', (
+      tester,
+    ) async {
+      await pumpShell(tester, reloadAfterTurn: true);
+      await startRun(tester);
+      final data = workspaceOf(tester).dataController;
+
+      await publish(tester, SessionStatus.running);
+      data.selectSession(otherSessionId);
+      await settle(tester);
+      data.selectSession(sessionId);
+      await publish(tester, SessionStatus.idle);
+
+      expect(spy.reloads, 0);
       await disposeTestApp(tester, dependencies);
     });
 
