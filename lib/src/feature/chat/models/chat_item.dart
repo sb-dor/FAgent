@@ -236,12 +236,9 @@ final class PermissionItem extends ChatItem {
   PermissionOptionView? get acceptOption =>
       options.where((o) => o.kind == 'allow_once').firstOrNull;
 
-  /// The option Escape picks: the first `reject_once`, else the first one that does not allow.
+  /// The option Escape picks: the first `reject_once`, a "not this time" decline. Escape never
+  /// picks a standing `reject_always`, so without one it does nothing.
   PermissionOptionView? get rejectOption =>
-      rejectOnceOption ?? options.where((o) => !o.allows).firstOrNull;
-
-  /// The first `reject_once`: a "not this time" decline, never a standing one.
-  PermissionOptionView? get rejectOnceOption =>
       options.where((o) => o.kind == 'reject_once').firstOrNull;
 
   /// A copy in [state] (with the picked [optionId]).

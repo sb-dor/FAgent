@@ -125,6 +125,40 @@ void main() {
       expect(accepted, 0);
     });
 
+    testWidgets('Command+Enter, Alt+Enter and Control+Enter do not allow', (tester) async {
+      var accepted = 0;
+      await tester.pumpWidget(
+        composer(canSend: false, canStop: true, onAcceptPending: () => accepted++),
+      );
+      await tester.tap(find.byType(TextField));
+
+      for (final modifier in <LogicalKeyboardKey>[
+        LogicalKeyboardKey.metaLeft,
+        LogicalKeyboardKey.altLeft,
+        LogicalKeyboardKey.controlLeft,
+      ]) {
+        await tester.sendKeyDownEvent(modifier);
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(modifier);
+      }
+
+      expect(accepted, 0);
+    });
+
+    testWidgets('Command+Escape does not reject', (tester) async {
+      var rejected = 0;
+      await tester.pumpWidget(
+        composer(canSend: false, canStop: true, onRejectPending: () => rejected++),
+      );
+      await tester.tap(find.byType(TextField));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+
+      expect(rejected, 0);
+    });
+
     testWidgets('an open suggestion list takes Escape and Enter first', (tester) async {
       var accepted = 0;
       var rejected = 0;
@@ -206,7 +240,7 @@ void main() {
 
   testWidgets('the hint mentions files and commands', (tester) async {
     await tester.pumpWidget(composer(canSend: true, canStop: false));
-    expect(find.text('Ask the agent… @ file · / skill or command'), findsOneWidget);
+    expect(find.text('Ask the agent… @ file · / command'), findsOneWidget);
   });
 
   group('Shift+Tab', () {
@@ -235,9 +269,23 @@ void main() {
       expect(text.text, 'hello');
     });
 
-    testWidgets('does nothing without a mode to cycle', (tester) async {
-      await tester.pumpWidget(composer(canSend: true, canStop: false));
+    testWidgets('without a mode to cycle it is consumed: the focus stays in the field', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          toolbar: <Widget>[TextButton(onPressed: () {}, child: const Text('chip'))],
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
+      expect(focus.hasFocus, isTrue);
+
       await shiftTab(tester);
+
+      expect(focus.hasFocus, isTrue);
       expect(text.text, isEmpty);
     });
 
@@ -250,6 +298,20 @@ void main() {
     });
 
     testWidgets('inside the file list Tab still inserts the file', (tester) async {
+      await tester.pumpWidget(
+        composer(canSend: true, canStop: false, mentionFiles: const <String>['pubspec.yaml']),
+      );
+      await tester.enterText(find.byType(TextField), '@pub');
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+
+      expect(text.text, '@pubspec.yaml ');
+    });
+
+    testWidgets('inside the file list Shift+Tab inserts nothing and cycles nothing', (
+      tester,
+    ) async {
       var cycled = 0;
       await tester.pumpWidget(
         composer(
@@ -265,7 +327,9 @@ void main() {
       await shiftTab(tester);
 
       expect(cycled, 0);
-      expect(text.text, '@pubspec.yaml ');
+      expect(text.text, '@pub');
+      expect(find.text('pubspec.yaml'), findsOneWidget);
+      expect(focus.hasFocus, isTrue);
     });
   });
 

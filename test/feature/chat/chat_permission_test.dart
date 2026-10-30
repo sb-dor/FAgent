@@ -166,12 +166,34 @@ void main() {
       expect(decision(), isNull);
     });
 
-    testWidgets('Escape without reject_once takes the first non-allowing option', (tester) async {
+    testWidgets('Escape without reject_once answers nothing and the card has no Esc hint', (
+      tester,
+    ) async {
       final decision = await pumpRequest(tester, <Map<String, Object?>>[full[0], full[1]]);
 
       await press(tester, LogicalKeyboardKey.escape);
 
-      expect(decision(), isA<PermissionSelected>().having((d) => d.optionId, 'optionId', 'never'));
+      expect(decision(), isNull);
+      expect(find.text('Esc'), findsNothing);
+    });
+
+    testWidgets('Command+Enter in the empty composer does not allow', (tester) async {
+      final decision = await pumpRequest(tester, full);
+      await tester.tap(find.byType(TextField));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+
+      expect(decision(), isNull);
+    });
+
+    testWidgets('the card of the waiting request shows the Enter and Esc hints', (tester) async {
+      await pumpRequest(tester, full);
+
+      expect(find.text('↵'), findsOneWidget);
+      expect(find.text('Esc'), findsOneWidget);
     });
 
     testWidgets('a draft keeps Enter and Escape from answering', (tester) async {

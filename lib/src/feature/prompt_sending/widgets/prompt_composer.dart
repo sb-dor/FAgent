@@ -13,11 +13,12 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_su
 
 /// {@template prompt_composer}
 /// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs
-/// the send button becomes Stop. Shift+Tab calls [onCycleMode]. [toolbar] (the chips) sits under
-/// the field, the send button on its right. Typing `@` suggests project files (arrows
-/// choose, Enter or Tab inserts, Escape closes); a `/` at the start of the text suggests the
-/// app's and the agent's [commands] the same way. While a permission request waits, Enter and
-/// Escape in an empty field call [onAcceptPending] and [onRejectPending].
+/// the send button becomes Stop. Shift+Tab calls [onCycleMode] (it is consumed even without one,
+/// so the focus stays in the field). [toolbar] (the chips) sits under the field, the send button
+/// on its right. Typing `@` suggests project files (arrows choose, Enter or Tab inserts, Escape
+/// closes); a `/` at the start of the text suggests the app's and the agent's [commands] the same
+/// way. While a permission request waits, Enter and Escape (without Shift, Command, Alt or
+/// Control) in an empty field call [onAcceptPending] and [onRejectPending].
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -65,7 +66,7 @@ class PromptComposer extends StatefulWidget {
   /// Widgets under the field, left of the send button.
   final List<Widget> toolbar;
 
-  /// Switches the permission mode (Shift+Tab); `null` leaves Shift+Tab to the focus.
+  /// Switches the permission mode (Shift+Tab); `null` makes Shift+Tab do nothing.
   final VoidCallback? onCycleMode;
 
   /// Commands of the agent for the `/` menu (the app's own are added by the menu).
@@ -230,6 +231,15 @@ class _PromptComposerState extends State<PromptComposer> {
     }
   }
 
+  /// Shift, Command, Alt or Control is held.
+  bool get _hasModifier {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isShiftPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isControlPressed;
+  }
+
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
@@ -239,6 +249,10 @@ class _PromptComposerState extends State<PromptComposer> {
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.tab) {
+        // Shift+Tab is not Tab: it inserts nothing, and the focus stays in the field.
+        if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
+          return KeyEventResult.handled;
+        }
         _pick(_highlighted);
         return KeyEventResult.handled;
       }
@@ -251,17 +265,17 @@ class _PromptComposerState extends State<PromptComposer> {
       }
     }
     if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
-      final cycle = widget.onCycleMode;
-      if (cycle == null) return KeyEventResult.ignored;
-      if (event is KeyDownEvent) cycle();
+      // Always consumed, or the focus would leave the field when there is no mode to cycle.
+      if (event is KeyDownEvent) widget.onCycleMode?.call();
       return KeyEventResult.handled;
     }
     // A waiting permission request is answered from an empty field only (any text, even a
     // space, is a draft the key must not skip over).
-    if (event is KeyDownEvent && widget.controller.text.isEmpty) {
+    // Only the bare key answers: ⌘↵, ⇧↵ and the like are something else.
+    if (event is KeyDownEvent && widget.controller.text.isEmpty && !_hasModifier) {
       final answer = key == LogicalKeyboardKey.escape
           ? widget.onRejectPending
-          : key == LogicalKeyboardKey.enter && !HardwareKeyboard.instance.isShiftPressed
+          : key == LogicalKeyboardKey.enter
           ? widget.onAcceptPending
           : null;
       if (answer != null) {

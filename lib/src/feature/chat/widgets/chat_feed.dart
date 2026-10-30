@@ -16,6 +16,8 @@ class ChatFeed extends StatelessWidget {
     required this.items,
     required this.onAnswerPermission,
     this.onRejectAndSay,
+    this.projectRoot,
+    this.keyboardRequestId,
     super.key,
   });
 
@@ -27,6 +29,13 @@ class ChatFeed extends StatelessWidget {
 
   /// Declines a permission card and lets the user say why; `null` hides the button.
   final void Function(PermissionItem item)? onRejectAndSay;
+
+  /// The chat's project folder; tool paths inside it are shown relative to it.
+  final String? projectRoot;
+
+  /// `requestId` of the permission card that Enter and Esc answer (the latest waiting one); only
+  /// that card shows the key hints.
+  final String? keyboardRequestId;
 
   @override
   Widget build(BuildContext context) {
@@ -43,19 +52,25 @@ class ChatFeed extends StatelessWidget {
       findChildIndexCallback: (key) => key is ValueKey<int> ? indexBySeq[key.value] : null,
       itemBuilder: (context, index) {
         final entry = entries[entries.length - 1 - index];
-        return Center(
+        // The same outer padding as the composer, so both columns line up.
+        return Padding(
           key: ValueKey<int>(entry.seq),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
               child: switch (entry) {
                 SingleEntry(:final item) => ChatItemView(
                   item: item,
                   onAnswerPermission: onAnswerPermission,
                   onRejectAndSay: onRejectAndSay,
+                  projectRoot: projectRoot,
+                  keyboardTarget: item is PermissionItem && item.requestId == keyboardRequestId,
                 ),
-                ReadGroupEntry(:final calls) => ReadGroupRow(calls: calls),
+                ReadGroupEntry(:final calls) => ReadGroupRow(
+                  calls: calls,
+                  projectRoot: projectRoot,
+                ),
               },
             ),
           ),

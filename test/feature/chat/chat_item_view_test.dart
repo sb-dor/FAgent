@@ -1,5 +1,6 @@
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
@@ -7,21 +8,37 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/test_app.dart';
 
-Widget _item(ChatItem item, {Locale locale = const Locale('en'), Dependencies? dependencies}) =>
-    testApp(
-      Align(
-        alignment: Alignment.topCenter,
-        child: SingleChildScrollView(
-          child: ChatItemView(item: item, onAnswerPermission: (_, _) {}),
-        ),
+Widget _item(
+  ChatItem item, {
+  Locale locale = const Locale('en'),
+  Dependencies? dependencies,
+  String? projectRoot,
+  double? width,
+}) => testApp(
+  Align(
+    alignment: Alignment.topCenter,
+    child: SizedBox(
+      width: width,
+      child: SingleChildScrollView(
+        child: ChatItemView(item: item, onAnswerPermission: (_, _) {}, projectRoot: projectRoot),
       ),
-      locale: locale,
-      dependencies: dependencies,
-    );
+    ),
+  ),
+  locale: locale,
+  dependencies: dependencies,
+);
+
+/// Plain text of the rich text whose text contains [part].
+String _richText(WidgetTester tester, String part) => tester
+    .widgetList<RichText>(find.byType(RichText))
+    .map((w) => w.text.toPlainText())
+    .singleWhere((t) => t.contains(part));
 
 void main() {
   // Every test builds its own in-memory database.
@@ -69,7 +86,79 @@ void main() {
     );
 
     expect(find.text('+2 −1'), findsOneWidget);
-    expect(find.text('/p/lib/a.dart'), findsOneWidget);
+  });
+
+  group('tool row path', () {
+    const root = '/private/var/folders/xx/T/flutter_code_agent_project';
+    const deep = '$root/lib/src/feature/booking/widgets/screens/hello.txt';
+
+    ToolCallItem write({String title = 'Write $deep'}) => ToolCallItem(
+      0,
+      toolCallId: 't',
+      title: title,
+      kind: 'edit',
+      status: 'completed',
+      locations: const <String>[deep],
+    );
+
+    testWidgets('shows the file name and the folder relative to the project, once', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(_item(write(), projectRoot: root));
+
+      expect(
+        _richText(tester, 'hello.txt'),
+        'Write hello.txt lib/src/feature/booking/widgets/screens/',
+      );
+      expect(find.textContaining('/private/var', findRichText: true), findsNothing);
+    });
+
+    testWidgets('the file name stays whole when the row is narrow, the folder gives way', (
+      tester,
+    ) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(_item(write(), projectRoot: root, width: 280));
+
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.byWidgetPredicate((w) => w is RichText && w.text.toPlainText().contains('hello.txt')),
+      );
+      expect(paragraph.didExceedMaxLines, isTrue);
+      final text = paragraph.text.toPlainText();
+      final start = text.indexOf('hello.txt');
+      final boxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: start + 'hello.txt'.length),
+      );
+      expect(boxes, isNotEmpty);
+      final nameWidth = boxes.last.right - boxes.first.left;
+      TextStyle? nameStyle;
+      paragraph.text.visitChildren((span) {
+        if (span is TextSpan && span.text == 'hello.txt') nameStyle = span.style;
+        return true;
+      });
+      final probe = TextPainter(
+        text: TextSpan(text: 'hello.txt', style: nameStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      expect(nameWidth, greaterThanOrEqualTo(probe.width));
+    });
+
+    testWidgets('a title without a path keeps its text', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(
+        _item(
+          const ToolCallItem(0, toolCallId: 't', title: 'Run flutter test', kind: 'execute'),
+          projectRoot: root,
+        ),
+      );
+
+      expect(find.text('Run flutter test', findRichText: true), findsOneWidget);
+    });
+
+    testWidgets('a title that is only the path shows just the file', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(_item(write(title: deep), projectRoot: root));
+
+      expect(_richText(tester, 'hello.txt'), 'hello.txt lib/src/feature/booking/widgets/screens/');
+    });
   });
 
   testWidgets('an edit without diffs has no counter', (tester) async {
@@ -110,6 +199,38 @@ void main() {
 
     expect(find.text('/p/lib/f1.dart'), findsOneWidget);
     expect(find.text('/p/lib/f2.dart'), findsOneWidget);
+  });
+
+  testWidgets('a read group shows paths relative to the project', (tester) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      testApp(
+        ChatFeed(
+          items: <ChatItem>[
+            for (var i = 0; i < 3; i++)
+              ToolCallItem(
+                i,
+                toolCallId: 't$i',
+                title: 'Read f$i.dart',
+                kind: 'read',
+                status: 'completed',
+                locations: <String>['/p/lib/f$i.dart'],
+              ),
+          ],
+          onAnswerPermission: (_, _) {},
+          projectRoot: '/p',
+        ),
+      ),
+    );
+
+    expect(_richText(tester, 'f0.dart'), 'f0.dart lib/');
+
+    await tester.tap(find.text('Read 3 files'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('lib/f1.dart'), findsOneWidget);
+    expect(find.text('lib/f2.dart'), findsOneWidget);
+    expect(find.text('/p/lib/f1.dart'), findsNothing);
   });
 
   testWidgets('the read count follows the Russian plural forms', (tester) async {
@@ -182,9 +303,73 @@ void main() {
       ),
     );
 
-    final width = tester.getSize(find.byType(ChatItemView)).width;
-    expect(width, lessThanOrEqualTo(kChatColumnWidth));
-    expect(width, greaterThan(600));
+    expect(tester.getSize(find.byType(ChatItemView)).width, kChatColumnWidth);
+  });
+
+  testWidgets('the feed item lines up with the composer box', (tester) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      testApp(
+        Column(
+          children: <Widget>[
+            Expanded(
+              child: ChatFeed(
+                items: <ChatItem>[AgentMessageItem(0, text: 'word ' * 400)],
+                onAnswerPermission: (_, _) {},
+              ),
+            ),
+            PromptComposer(
+              controller: TextEditingController(),
+              focusNode: FocusNode(),
+              canSend: true,
+              canStop: false,
+              onSend: () {},
+              onStop: () {},
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final item = tester.getRect(find.byType(ChatItemView));
+    final box = tester.getRect(
+      find.ancestor(of: find.byType(TextField), matching: find.byType(DecoratedBox)).last,
+    );
+    expect(item.width, box.width);
+    expect(item.left, box.left);
+  });
+
+  testWidgets('only the latest pending permission card shows the key hints', (tester) async {
+    useDesktopView(tester);
+    PermissionItem request(int seq) => PermissionItem(
+      seq,
+      requestId: 'r$seq',
+      title: 'Run $seq',
+      command: 'ls $seq',
+      options: const <PermissionOptionView>[
+        PermissionOptionView(optionId: 'ok', name: 'Allow', kind: 'allow_once'),
+        PermissionOptionView(optionId: 'no', name: 'Reject', kind: 'reject_once'),
+      ],
+    );
+    await tester.pumpWidget(
+      testApp(
+        ChatFeed(
+          items: <ChatItem>[request(0), request(1)],
+          onAnswerPermission: (_, _) {},
+          keyboardRequestId: 'r1',
+        ),
+      ),
+    );
+
+    expect(find.text('↵'), findsOneWidget);
+    expect(find.text('Esc'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byWidgetPredicate((w) => w is PermissionCard && w.item.requestId == 'r1'),
+        matching: find.text('↵'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an expanded read group stays open when a new item arrives', (tester) async {

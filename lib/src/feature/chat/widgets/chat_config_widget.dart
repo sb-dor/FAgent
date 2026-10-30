@@ -155,11 +155,14 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Declines [item] with its `reject_once` option (never a standing `reject_always`) and moves
   /// the caret to the composer, so the user can tell the agent what to do instead.
   void rejectAndSay(PermissionItem item) {
-    final reject = item.rejectOnceOption;
+    final reject = item.rejectOption;
     if (reject == null) return;
     answerPermission(item.requestId, reject.optionId);
     composerFocus.requestFocus();
   }
+
+  /// Folder of the chat's project.
+  String get projectRoot => widget.project.path;
 
   void retry() => recoveryController.retry(sessionId);
 

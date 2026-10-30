@@ -30,8 +30,8 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   late final _scope = ChatConfigInhWidget.of(context);
 
-  /// Answers the latest waiting request with its Enter (accept) or Esc option; `null` when there
-  /// is nothing to answer.
+  /// Answers the latest waiting request with its Enter (`allow_once`) or Esc (`reject_once`)
+  /// option; `null` when there is nothing to answer.
   VoidCallback? _answerPending(PermissionItem? pending, {required bool accept}) {
     final option = accept ? pending?.acceptOption : pending?.rejectOption;
     return pending == null || option == null
@@ -51,6 +51,8 @@ class _ChatScreenState extends State<ChatScreen> {
               items: view.items,
               onAnswerPermission: _scope.answerPermission,
               onRejectAndSay: _scope.rejectAndSay,
+              projectRoot: _scope.projectRoot,
+              keyboardRequestId: view.pendingPermission?.requestId,
             ),
           ),
           StateConsumer<ChatRecoveryController, ChatRecoveryState>(

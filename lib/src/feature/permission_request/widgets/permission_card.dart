@@ -13,7 +13,8 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 /// card shows the decision.
 ///
 /// Buttons: the primary allow (Enter), "always", the primary reject (Escape), the
-/// other options, and "reject and say…" when [onRejectAndSay] is set.
+/// other options, and "reject and say…" when [onRejectAndSay] is set. The Enter and Esc hints show
+/// on the [keyboardTarget] card only.
 /// {@endtemplate}
 class PermissionCard extends StatelessWidget {
   /// {@macro permission_card}
@@ -21,6 +22,7 @@ class PermissionCard extends StatelessWidget {
     required this.item,
     required this.onAnswer,
     this.onRejectAndSay,
+    this.keyboardTarget = false,
     super.key,
   });
 
@@ -33,6 +35,10 @@ class PermissionCard extends StatelessWidget {
   /// Declines the request and lets the user say what to do instead; `null` hides the button (it
   /// is also hidden when the agent offers no `reject_once` option).
   final VoidCallback? onRejectAndSay;
+
+  /// Enter and Esc answer this card (it is the latest waiting request): only then do the buttons
+  /// show the key hints.
+  final bool keyboardTarget;
 
   String _title(GeneratedLocalization localization) => item.command != null
       ? localization.permissionRunCommand
@@ -55,9 +61,9 @@ class PermissionCard extends StatelessWidget {
   }
 
   Widget _button(PermissionOptionView option) {
-    final label = option == item.acceptOption
+    final label = keyboardTarget && option == item.acceptOption
         ? _WithHint(option.name, '↵', opacity: 0.7)
-        : option == item.rejectOption
+        : keyboardTarget && option == item.rejectOption
         ? _WithHint(option.name, 'Esc', opacity: 0.6)
         : Text(option.name);
     void onPressed() => onAnswer(option.optionId);
@@ -121,7 +127,7 @@ class PermissionCard extends StatelessWidget {
                 runSpacing: 8,
                 children: <Widget>[
                   for (final option in _ordered) _button(option),
-                  if (onRejectAndSay != null && item.rejectOnceOption != null)
+                  if (onRejectAndSay != null && item.rejectOption != null)
                     TextButton(
                       onPressed: onRejectAndSay,
                       style: TextButton.styleFrom(foregroundColor: colors.muted),

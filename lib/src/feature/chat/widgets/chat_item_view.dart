@@ -21,6 +21,8 @@ class ChatItemView extends StatelessWidget {
     required this.item,
     required this.onAnswerPermission,
     this.onRejectAndSay,
+    this.projectRoot,
+    this.keyboardTarget = false,
     super.key,
   });
 
@@ -32,6 +34,12 @@ class ChatItemView extends StatelessWidget {
 
   /// Declines a permission card and lets the user say why; `null` hides the button.
   final void Function(PermissionItem item)? onRejectAndSay;
+
+  /// The chat's project folder; tool paths inside it are shown relative to it.
+  final String? projectRoot;
+
+  /// This permission card is the one Enter and Esc answer (shows the key hints).
+  final bool keyboardTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -85,10 +93,11 @@ class ChatItemView extends StatelessWidget {
         ),
         body: text.isEmpty ? null : SelectableText(text, style: muted),
       ),
-      final ToolCallItem call => ToolCallCard(call: call),
+      final ToolCallItem call => ToolCallCard(call: call, projectRoot: projectRoot),
       PlanItem(:final entries) => PlanCard(entries: entries),
       final PermissionItem permission => PermissionCard(
         item: permission,
+        keyboardTarget: keyboardTarget,
         onAnswer: (optionId) => onAnswerPermission(permission.requestId, optionId),
         onRejectAndSay: onRejectAndSay == null ? null : () => onRejectAndSay!(permission),
       ),

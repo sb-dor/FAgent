@@ -42,7 +42,8 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage3-chat-co
 
 - **AppMenu:** hovered row steals highlight after filtering; empty titled section keeps header; ArrowDown clamp-vs-wrap untested
 - **Defaults:** stale byAcpId entry if a chat goes terminal mid-create; config_option_update during the DB write is overwritten by session/new options; unknown defaultAgentId not validated; const AppSettings constructor doesn't sanitize bypass
-- **Composer toolbar:** disabled chips look enabled; "make default" gives no feedback and can be dropped during a set; ⇧Tab before the agent starts moves focus; two "Agent" chips when the agent has an `agent` option; effort segments shrink below 12 px; `_selectMode` uses context after await without a mounted check; chat_screen imports workspace footer for agentDisplayName
+- **Composer toolbar:** disabled chips look enabled; "make default" gives no feedback and can be dropped during a set; two "Agent" chips when the agent has an `agent` option; effort segments shrink below 12 px; `_selectMode` uses context after await without a mounted check; chat_screen imports workspace footer for agentDisplayName
 - **Slash menu:** dismissed state stores offset only; mid-text insert can leave a double space; app command descriptions chosen by a name switch
 - **Feed:** DiffView still uses Menlo; thought duration may be 0 on replayed history; pills are rectangular; overlapping mention ranges if a path contains " @"
-- **Permission card:** ↵/Esc hints shown on non-latest pending cards; no focus move to the composer when a request arrives; unused `permissionTitle` key; prompt_composer.dart is ~370 lines (split candidate)
+- **Permission card:** ↵/Esc hints shown on non-latest pending cards; no focus move to the composer when a request arrives; prompt_composer.dart is ~370 lines (split candidate)
+- Choosing model/mode before the first message: chips are disabled until the agent session exists — start the session when a chat opens, or queue the choices and apply them like defaults.

@@ -47,6 +47,7 @@ void main() {
         PermissionCard(
           item: _full(command: 'dart run build_runner build'),
           onAnswer: answers.add,
+          keyboardTarget: true,
         ),
       ),
     );
@@ -164,6 +165,22 @@ void main() {
     expect(find.text('Reject and say…'), findsNothing);
   });
 
+  testWidgets('a card that the keys do not answer shows no hints', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        PermissionCard(
+          item: _full(command: 'ls'),
+          onAnswer: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('↵'), findsNothing);
+    expect(find.text('Esc'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Allow'), findsOneWidget);
+  });
+
   testWidgets('without allow_once no button shows the Enter hint', (tester) async {
     await tester.pumpWidget(
       testApp(
@@ -179,6 +196,7 @@ void main() {
             ],
           ),
           onAnswer: (_) {},
+          keyboardTarget: true,
         ),
       ),
     );
@@ -197,6 +215,7 @@ void main() {
         PermissionCard(
           item: _full(command: 'ls'),
           onAnswer: (_) {},
+          keyboardTarget: true,
         ),
       ),
     );
