@@ -49,6 +49,8 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                 key: ValueKey<int>(sessionId),
                 sessionId: sessionId,
                 project: project,
+                onHandle: _scope.dataController.publishChatHandle,
+                onOpenChange: _scope.openChange,
               );
             },
           ),

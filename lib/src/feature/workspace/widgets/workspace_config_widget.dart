@@ -147,6 +147,18 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     ),
   );
 
+  /// Shows the edit of [path]: opens the right pane if it is hidden, switches it to the Changes
+  /// tab and selects the file there.
+  void openChange(String path) {
+    final wide = MediaQuery.sizeOf(context).width >= kWideWindowWidth;
+    if (!(settingsController.settings.rightPaneVisible ?? wide)) {
+      settingsController.update((current) => current.copyWith(rightPaneVisible: true));
+    }
+    dataController
+      ..selectPaneTab(RightPaneTab.changes)
+      ..selectChange(path);
+  }
+
   /// The project a new chat goes to by default: the one of the selected chat, else the selected
   /// project, else the first group of the sidebar, else none.
   int? get newChatProjectId {

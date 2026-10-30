@@ -52,6 +52,7 @@ class _ChatScreenState extends State<ChatScreen> {
               onAnswerPermission: _scope.answerPermission,
               onRejectAndSay: _scope.rejectAndSay,
               projectRoot: _scope.projectRoot,
+              onOpenChange: _scope.onOpenChange,
               keyboardRequestId: view.pendingPermission?.requestId,
             ),
           ),

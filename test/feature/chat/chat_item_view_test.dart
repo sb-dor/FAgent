@@ -20,13 +20,19 @@ Widget _item(
   Dependencies? dependencies,
   String? projectRoot,
   double? width,
+  ValueChanged<String>? onOpenChange,
 }) => testApp(
   Align(
     alignment: Alignment.topCenter,
     child: SizedBox(
       width: width,
       child: SingleChildScrollView(
-        child: ChatItemView(item: item, onAnswerPermission: (_, _) {}, projectRoot: projectRoot),
+        child: ChatItemView(
+          item: item,
+          onAnswerPermission: (_, _) {},
+          projectRoot: projectRoot,
+          onOpenChange: onOpenChange,
+        ),
       ),
     ),
   ),
@@ -65,6 +71,72 @@ void main() {
     expect(children[1].style?.backgroundColor, context.colors.accentSoft);
     // The old `@file` line under the text is gone.
     expect(find.text('@a.dart'), findsNothing);
+  });
+
+  group('clicking an edit row', () {
+    const edit = ToolCallItem(
+      0,
+      toolCallId: 't',
+      title: 'Edit a.dart',
+      kind: 'edit',
+      status: 'completed',
+      content: <ToolContent>[ToolDiffContent(path: '/p/lib/a.dart', oldText: 'a', newText: 'b')],
+    );
+
+    testWidgets('opens the change; the chevron expands the body instead', (tester) async {
+      useDesktopView(tester);
+      final opened = <String>[];
+      await tester.pumpWidget(_item(edit, onOpenChange: opened.add));
+      expect(find.byType(DiffView), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Open in Changes'));
+      await tester.pump();
+      expect(opened, <String>['/p/lib/a.dart']);
+      expect(find.byType(DiffView), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Hide details'));
+      await tester.pump();
+      expect(opened, hasLength(1));
+      expect(find.byType(DiffView), findsNothing);
+      expect(find.byTooltip('Show details'), findsOneWidget);
+    });
+
+    testWidgets('without a listener the header still expands the body', (tester) async {
+      useDesktopView(tester);
+      await tester.pumpWidget(_item(edit));
+      expect(find.byTooltip('Hide details'), findsNothing);
+
+      await tester.tap(find.text('Edit a.dart', findRichText: true));
+      await tester.pump();
+
+      expect(find.byType(DiffView), findsNothing);
+    });
+
+    testWidgets('a call without diffs keeps the header as the expander', (tester) async {
+      useDesktopView(tester);
+      final opened = <String>[];
+      await tester.pumpWidget(
+        _item(
+          const ToolCallItem(
+            0,
+            toolCallId: 't',
+            title: 'Run ls',
+            kind: 'execute',
+            status: 'completed',
+            rawOutput: 'out',
+          ),
+          onOpenChange: opened.add,
+        ),
+      );
+      expect(find.byTooltip('Open in Changes'), findsNothing);
+      expect(find.text('out'), findsNothing);
+
+      await tester.tap(find.text('Run ls', findRichText: true));
+      await tester.pump();
+
+      expect(find.text('out', findRichText: true), findsOneWidget);
+      expect(opened, isEmpty);
+    });
   });
 
   testWidgets('an edit row shows added and removed lines', (tester) async {

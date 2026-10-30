@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_re
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_screen.dart';
@@ -55,6 +56,8 @@ class ChatConfigWidget extends StatefulWidget {
     required this.sessionId,
     required this.project,
     this.pickFile = _pickWithDialog,
+    this.onHandle,
+    this.onOpenChange,
     super.key,
   });
 
@@ -66,6 +69,14 @@ class ChatConfigWidget extends StatefulWidget {
 
   /// Opens the file dialog for the attach button.
   final FilePicker pickFile;
+
+  /// Called with a [ChatHandle] for every new view of the chat, after the frame (never during
+  /// build).
+  final ValueChanged<ChatHandle>? onHandle;
+
+  /// Called with the absolute path of the file when the user clicks an edit row in the feed;
+  /// `null` leaves the row as a plain expander.
+  final ValueChanged<String>? onOpenChange;
 
   @override
   State<ChatConfigWidget> createState() => ChatConfigWidgetState();
@@ -80,6 +91,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final FileMentionController fileMentionController;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
+  ChatView? _publishedView;
+  bool _publishScheduled = false;
 
   int get sessionId => widget.sessionId;
 
@@ -88,7 +101,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.initState();
     final dependencies = Dependencies.of(context);
     final hub = dependencies.agentHub;
-    chatController = ChatController(repository: ChatRepositoryImpl(hub: hub))..open(sessionId);
+    chatController = ChatController(repository: ChatRepositoryImpl(hub: hub))
+      ..addListener(_schedulePublish)
+      ..open(sessionId);
     recoveryController = ChatRecoveryController(repository: ChatRepositoryImpl(hub: hub));
     promptController = PromptSendingController(repository: PromptSendingRepositoryImpl(hub: hub));
     permissionController = PermissionAnswerController(
@@ -107,7 +122,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
 
   @override
   void dispose() {
-    chatController.dispose();
+    chatController
+      ..removeListener(_schedulePublish)
+      ..dispose();
     recoveryController.dispose();
     promptController.dispose();
     permissionController.dispose();
@@ -117,6 +134,36 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     composerFocus.dispose();
     super.dispose();
   }
+
+  /// Hands the latest view to [ChatConfigWidget.onHandle] once the frame is done; several views
+  /// in one frame publish only the last.
+  void _schedulePublish() {
+    if (_publishScheduled || widget.onHandle == null) return;
+    _publishScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _publishScheduled = false;
+      final view = _view;
+      final onHandle = widget.onHandle;
+      if (!mounted || view == null || onHandle == null || identical(view, _publishedView)) return;
+      _publishedView = view;
+      onHandle(ChatHandle(sessionId: sessionId, view: view, insertDraft: insertDraft));
+    });
+  }
+
+  /// Appends [text] to the composer, after a blank line when it already holds something, puts
+  /// the caret at the end and focuses the composer.
+  void insertDraft(String text) {
+    final existing = textController.text;
+    final combined = existing.isEmpty ? text : '$existing\n\n$text';
+    textController.value = TextEditingValue(
+      text: combined,
+      selection: TextSelection.collapsed(offset: combined.length),
+    );
+    composerFocus.requestFocus();
+  }
+
+  /// Tells the owner that the user opened the edit of [path]; `null` when nobody listens.
+  ValueChanged<String>? get onOpenChange => widget.onOpenChange;
 
   /// Refreshes the file list (the agent may have added files).
   void refreshFiles() => fileMentionController.load(widget.project.path);
