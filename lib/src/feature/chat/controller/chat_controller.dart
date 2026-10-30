@@ -44,6 +44,10 @@ final class ChatController extends StateController<ChatState> with SequentialCon
   StreamSubscription<SessionEvent>? _events;
   Timer? _refold;
 
+  // The agent's commands are mapped once per change, not once per refold.
+  List<Map<String, Object?>>? _rawCommands;
+  List<SlashCommand> _commands = const <SlashCommand>[];
+
   void open(int sessionId) => handle(() async {
     _detach();
     setState(const ChatState.inProgress());
@@ -80,10 +84,19 @@ final class ChatController extends StateController<ChatState> with SequentialCon
           configOptions: configOptions,
           bypassBlocked: session.bypassBlocked,
           preparingTurn: session.preparingTurn.value,
-          commands: agentCommands(session.availableCommands.value),
+          commands: _commandsOf(session),
         ),
       ),
     );
+  }
+
+  List<SlashCommand> _commandsOf(LiveSession session) {
+    final raw = session.availableCommands.value;
+    if (!identical(raw, _rawCommands)) {
+      _rawCommands = raw;
+      _commands = agentCommands(raw);
+    }
+    return _commands;
   }
 
   static List<Listenable> _notifiers(LiveSession session) => <Listenable>[
@@ -110,6 +123,8 @@ final class ChatController extends StateController<ChatState> with SequentialCon
       }
     }
     _session = null;
+    _rawCommands = null;
+    _commands = const <SlashCommand>[];
   }
 
   @override

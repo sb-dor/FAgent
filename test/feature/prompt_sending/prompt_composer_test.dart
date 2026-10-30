@@ -248,6 +248,21 @@ void main() {
       expect(focus.hasFocus, isTrue);
     });
 
+    testWidgets('an equal file list from a rebuild keeps the highlighted file', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false, mentionFiles: files));
+      await tester.enterText(find.byType(TextField), '@app');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+
+      await tester.pumpWidget(
+        composer(canSend: true, canStop: false, mentionFiles: <String>[...files]),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+
+      expect(text.text, '@test/app_test.dart ');
+    });
+
     testWidgets('an e-mail address is not a mention', (tester) async {
       await tester.pumpWidget(composer(canSend: true, canStop: false, mentionFiles: files));
       await tester.enterText(find.byType(TextField), 'mail me@app');
@@ -404,6 +419,46 @@ void main() {
 
       await tester.pumpWidget(withCommands());
       expect(find.text('/compact'), findsOneWidget);
+    });
+
+    testWidgets('an equal list from a rebuild keeps the highlighted command', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false, commands: commands));
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+
+      await tester.pumpWidget(
+        composer(canSend: true, canStop: false, commands: <SlashCommand>[...commands]),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+
+      expect(text.text, '/init ');
+    });
+
+    testWidgets('new commands keep the highlight on the command that is still listed', (
+      tester,
+    ) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false, commands: commands));
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.pump();
+
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          commands: <SlashCommand>[
+            const SlashCommand(name: 'aaa', source: SlashSource.agent),
+            ...commands,
+          ],
+        ),
+      );
+      expect(find.text('/aaa'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+
+      expect(text.text, '/init ');
     });
 
     testWidgets('@ mentions still work next to commands', (tester) async {

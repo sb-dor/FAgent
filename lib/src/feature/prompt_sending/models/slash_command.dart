@@ -39,7 +39,21 @@ final class SlashCommand {
 
   /// Why a disabled command cannot be used: the milestone it comes in (`M2`).
   final String? hint;
+
+  @override
+  bool operator ==(Object other) =>
+      other is SlashCommand &&
+      other.name == name &&
+      other.description == description &&
+      other.source == source &&
+      other.enabled == enabled &&
+      other.hint == hint;
+
+  @override
+  int get hashCode => Object.hash(name, description, source, enabled, hint);
 }
+
+final RegExp _whitespace = RegExp(r'\s');
 
 /// Commands of the app. All wait for the run/debug milestone.
 const List<SlashCommand> appCommands = <SlashCommand>[
@@ -57,7 +71,7 @@ List<SlashCommand> agentCommands(List<Map<String, Object?>> raw) {
   final commands = <SlashCommand>[];
   for (final entry in raw) {
     final name = entry['name'];
-    if (name is! String || name.isEmpty || name.contains(RegExp(r'\s')) || !seen.add(name)) {
+    if (name is! String || name.isEmpty || name.contains(_whitespace) || !seen.add(name)) {
       continue;
     }
     final description = entry['description'];

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
@@ -103,7 +104,7 @@ class _PromptComposerState extends State<PromptComposer> {
     // The file and command lists load after the trigger is typed.
     if (_trigger != null &&
         (oldWidget.mentionFiles != widget.mentionFiles || oldWidget.commands != widget.commands)) {
-      _search();
+      _search(refresh: true);
     }
   }
 
@@ -127,16 +128,33 @@ class _PromptComposerState extends State<PromptComposer> {
   };
 
   /// Fills the rows for the current trigger; the first selectable one is highlighted.
-  void _search() {
+  ///
+  /// With [refresh] the lists were reloaded under an open menu: nothing changes when the rows
+  /// are the same, and the highlight stays on its item while that is still listed.
+  void _search({bool refresh = false}) {
+    final highlightedBefore = _highlighted;
+    int keep;
     switch (_trigger) {
       case _Trigger.mention:
-        _files = searchFiles(widget.mentionFiles ?? const <String>[], _query);
+        final found = searchFiles(widget.mentionFiles ?? const <String>[], _query);
+        if (refresh && listEquals(found, _files)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _files.length
+            ? found.indexOf(_files[highlightedBefore])
+            : -1;
+        _files = found;
       case _Trigger.command:
-        _commands = slashSuggestions(appCommands, widget.commands, _query);
+        final found = slashSuggestions(appCommands, widget.commands, _query);
+        if (refresh && listEquals(found, _commands)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _commands.length
+            ? found.indexOf(_commands[highlightedBefore])
+            : -1;
+        _commands = found;
       case null:
-        break;
+        return;
     }
-    _highlighted = List<int>.generate(_count, (i) => i).firstWhere(_selectable, orElse: () => -1);
+    _highlighted = keep >= 0
+        ? keep
+        : List<int>.generate(_count, (i) => i).firstWhere(_selectable, orElse: () => -1);
   }
 
   void _onText() {
