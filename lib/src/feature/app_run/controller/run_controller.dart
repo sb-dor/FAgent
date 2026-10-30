@@ -1,0 +1,115 @@
+import 'dart:async';
+
+import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
+
+part 'run_controller.freezed.dart';
+
+/// How many of the newest log lines [RunController] keeps.
+const int kRunLogLimit = 2000;
+
+/// What the Run tab shows for one project.
+@freezed
+abstract class RunViewState with _$RunViewState {
+  const factory RunViewState({
+    /// The project being followed; `null` before [RunController.watch].
+    int? projectId,
+
+    /// Where the project's run is.
+    @Default(RunIdle()) RunState run,
+
+    /// The newest [kRunLogLimit] lines of output.
+    @Default(<LogEntry>[]) List<LogEntry> logs,
+
+    /// The number of error lines among [logs].
+    @Default(0) int errorCount,
+
+    /// The device picked for the next start; `null` until the user picks one.
+    String? selectedDeviceId,
+
+    /// The build mode for the next start.
+    @Default(BuildMode.debug) BuildMode mode,
+
+    /// The entry point for the next start.
+    @Default('lib/main.dart') String target,
+  }) = _RunViewState;
+}
+
+/// Follows the run and the output of one project at a time (the one open in the window).
+///
+/// The output is kept here, not in the repository: switching projects clears it.
+final class RunController extends StateController<RunViewState> with SequentialControllerHandler {
+  RunController({required this._repository, super.initialState = const RunViewState()});
+
+  final IAppRunRepository _repository;
+  StreamSubscription<RunState>? _runSubscription;
+  StreamSubscription<LogEntry>? _logsSubscription;
+
+  /// Follows [projectId]: drops the previous project's subscriptions, run and output. Calling it
+  /// again for the same project changes nothing.
+  ///
+  /// The device is not chosen for the user: it stays `null` until [choose] sets it, and the
+  /// selection, mode and target survive a change of project.
+  void watch(int projectId) => handle(() async {
+    if (state.projectId == projectId && _runSubscription != null) return;
+    await _cancel();
+    setState(
+      RunViewState(
+        projectId: projectId,
+        selectedDeviceId: state.selectedDeviceId,
+        mode: state.mode,
+        target: state.target,
+      ),
+    );
+    _runSubscription = _repository.watchRun(projectId).listen((run) {
+      if (state.projectId == projectId) setState(state.copyWith(run: run));
+    });
+    _logsSubscription = _repository.logs(projectId).listen((entry) {
+      if (state.projectId != projectId) return;
+      final all = <LogEntry>[...state.logs, entry];
+      final logs = all.length > kRunLogLimit ? all.sublist(all.length - kRunLogLimit) : all;
+      setState(
+        state.copyWith(
+          logs: logs,
+          errorCount: logs.where((log) => log.level == LogLevel.error).length,
+        ),
+      );
+    });
+  });
+
+  /// Chooses what the next start uses; an argument left out keeps its value. (Not called `select`:
+  /// `StateController` already has a method of that name.)
+  void choose({String? deviceId, BuildMode? mode, String? target}) => setState(
+    state.copyWith(
+      selectedDeviceId: deviceId ?? state.selectedDeviceId,
+      mode: mode ?? state.mode,
+      target: target ?? state.target,
+    ),
+  );
+
+  /// Marks the log line [seq] as sent to the agent.
+  void markSent(int seq) => setState(
+    state.copyWith(
+      logs: state.logs
+          .map((log) => log.seq == seq ? log.copyWith(sentToAgent: true) : log)
+          .toList(growable: false),
+    ),
+  );
+
+  Future<void> _cancel() async {
+    await _runSubscription?.cancel();
+    await _logsSubscription?.cancel();
+    _runSubscription = null;
+    _logsSubscription = null;
+  }
+
+  @override
+  void dispose() {
+    _runSubscription?.cancel().ignore();
+    _logsSubscription?.cancel().ignore();
+    super.dispose();
+  }
+}

@@ -2,6 +2,9 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 
 /// {@template dependencies}
@@ -28,6 +31,15 @@ class Dependencies {
 
   /// Agent processes and the runtime state of every chat.
   late final AgentHub agentHub;
+
+  /// The devices the app can run on.
+  late final IDevicesRepository devicesRepository;
+
+  /// Runs of the projects' apps (`flutter run`).
+  late final IAppRunRepository appRunRepository;
+
+  /// Picks a widget in a running app.
+  late final IWidgetPickerRepository widgetPickerRepository;
 
   @override
   String toString() => 'Dependencies{}';

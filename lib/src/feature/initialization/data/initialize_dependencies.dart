@@ -5,6 +5,9 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -42,6 +45,13 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.database = AppDatabase.defaults(name: 'app_database'),
   'Resolve shell environment': (dependencies) async =>
       dependencies.shellEnvironment = await ShellEnvironment.resolve(),
+  // Stand-ins until the Flutter tooling is wired in; the real ones replace these lines.
+  'Create app run repositories': (dependencies) {
+    dependencies
+      ..devicesRepository = FakeDevicesRepositoryImpl()
+      ..appRunRepository = FakeAppRunRepositoryImpl()
+      ..widgetPickerRepository = FakeWidgetPickerRepositoryImpl();
+  },
   'Create agent hub': (dependencies) => dependencies.agentHub = AgentHub(
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
