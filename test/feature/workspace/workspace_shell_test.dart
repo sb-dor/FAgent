@@ -144,7 +144,7 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('the right pane paints surfaceAlt and its placeholder says coming soon', (
+    testWidgets('the right pane paints surfaceAlt; Changes is empty and Run asks for a project', (
       tester,
     ) async {
       useWindow(tester, 1280, 800);
@@ -156,7 +156,10 @@ void main() {
             .first,
       );
       expect((paint.decoration as BoxDecoration).color, AppColors.light.surfaceAlt);
-      expect(find.text('Coming soon'), findsOneWidget);
+      expect(find.text('No changes yet'), findsOneWidget);
+      await tester.tap(find.text('Run'));
+      await tester.pump();
+      expect(find.text('Select a project to run its app'), findsOneWidget);
       expect(find.textContaining('UI stage'), findsNothing);
       await disposeTestApp(tester, dependencies);
     });

@@ -41,6 +41,10 @@ final class ProjectsController extends StateController<ProjectsState>
   /// Shows [path] in Finder. Throws when it cannot.
   Future<void> reveal(String path) => _repository.reveal(path);
 
+  /// Opens the file at [path] in the default text editor. Throws `OpenPathRefusedException` for a
+  /// relative or missing path, and another error when it cannot open it.
+  Future<void> openPath(String path) => _repository.openPath(path);
+
   @override
   void dispose() {
     _subscription?.cancel().ignore();

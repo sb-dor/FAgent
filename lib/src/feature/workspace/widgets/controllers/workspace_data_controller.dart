@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 
 /// What the window shows besides the chat.
 enum WorkspaceView {
@@ -32,6 +33,8 @@ class WorkspaceDataController with ChangeNotifier {
   String? _section;
   RightPaneTab _paneTab = RightPaneTab.changes;
   final Set<int> _collapsedProjects = <int>{};
+  final ValueNotifier<ChatHandle?> _chatHandle = ValueNotifier<ChatHandle?>(null);
+  String? _selectedChangePath;
 
   /// Selected project.
   int? get projectId => _projectId;
@@ -48,9 +51,42 @@ class WorkspaceDataController with ChangeNotifier {
   /// Selected tab of the right pane.
   RightPaneTab get paneTab => _paneTab;
 
+  /// What the selected chat offers the workspace; `null` without a chat or before it has loaded.
+  /// Changes with every new chat view, so it notifies on its own and not through this controller.
+  ValueListenable<ChatHandle?> get chatHandle => _chatHandle;
+
+  /// File (absolute path) shown in the Changes tab; `null` means none is chosen.
+  String? get selectedChangePath => _selectedChangePath;
+
   /// Projects whose chats the sidebar hides. Lives with the window, so hiding the sidebar does
   /// not forget it.
   Set<int> get collapsedProjects => Set<int>.unmodifiable(_collapsedProjects);
+
+  @override
+  void dispose() {
+    _chatHandle.dispose();
+    super.dispose();
+  }
+
+  /// The chat changed: its handle and the file chosen in Changes no longer apply.
+  void _forgetChat() {
+    _selectedChangePath = null;
+    _chatHandle.value = null;
+  }
+
+  /// Stores [handle] of the open chat; a handle of any other chat than the selected one is
+  /// ignored.
+  void publishChatHandle(ChatHandle handle) {
+    if (handle.sessionId != _sessionId) return;
+    _chatHandle.value = handle;
+  }
+
+  /// Chooses the file the Changes tab shows; `null` clears the choice.
+  void selectChange(String? path) {
+    if (_selectedChangePath == path) return;
+    _selectedChangePath = path;
+    notifyListeners();
+  }
 
   /// Collapses project [projectId] in the sidebar, or expands it if it is collapsed.
   void toggleCollapsed(int projectId) {
@@ -63,6 +99,7 @@ class WorkspaceDataController with ChangeNotifier {
     if (_projectId == projectId) return;
     _projectId = projectId;
     _sessionId = null;
+    _forgetChat();
     notifyListeners();
   }
 
@@ -71,6 +108,7 @@ class WorkspaceDataController with ChangeNotifier {
     if (_projectId == null && _sessionId == null) return;
     _projectId = null;
     _sessionId = null;
+    _forgetChat();
     notifyListeners();
   }
 
@@ -78,6 +116,7 @@ class WorkspaceDataController with ChangeNotifier {
   void selectSession(int? sessionId) {
     if (_sessionId == sessionId) return;
     _sessionId = sessionId;
+    _forgetChat();
     notifyListeners();
   }
 

@@ -6,7 +6,8 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 double _luminance(Color c) {
-  double channel(double v) => v <= 0.03928 ? v / 12.92 : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
+  double channel(double v) =>
+      v <= 0.03928 ? v / 12.92 : math.pow((v + 0.055) / 1.055, 2.4).toDouble();
   return 0.2126 * channel(c.r) + 0.7152 * channel(c.g) + 0.0722 * channel(c.b);
 }
 
@@ -27,6 +28,14 @@ void main() {
       expect(contrast(colors.muted, colors.surface), greaterThanOrEqualTo(4.5));
     }
     expect(contrast(Colors.white, AppColors.light.accent), greaterThanOrEqualTo(4.5));
+  });
+
+  test('onAccent is readable on the accent in both themes', () {
+    for (final colors in [AppColors.light, AppColors.dark]) {
+      expect(contrast(colors.onAccent, colors.accent), greaterThanOrEqualTo(4.5));
+    }
+    expect(AppTheme.light().colorScheme.onPrimary, AppColors.light.onAccent);
+    expect(AppTheme.dark().colorScheme.onPrimary, AppColors.dark.onAccent);
   });
 
   test('themes carry the tokens', () {

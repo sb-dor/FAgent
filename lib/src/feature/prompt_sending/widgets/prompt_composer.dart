@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
@@ -36,6 +37,7 @@ class PromptComposer extends StatefulWidget {
     this.commands = const <SlashCommand>[],
     this.onAcceptPending,
     this.onRejectPending,
+    this.runContext,
     super.key,
   });
 
@@ -78,6 +80,9 @@ class PromptComposer extends StatefulWidget {
   /// Escape in an empty field rejects the waiting permission request; `null` when none waits.
   final VoidCallback? onRejectPending;
 
+  /// What the running app offers the `@` menu; `null` offers nothing.
+  final RunMentions? runContext;
+
   @override
   State<PromptComposer> createState() => _PromptComposerState();
 }
@@ -91,7 +96,7 @@ class _PromptComposerState extends State<PromptComposer> {
   /// Where the typed `@…` or `/…` starts.
   int _start = 0;
   String _query = '';
-  List<String> _files = const <String>[];
+  List<MentionRow> _rows = const [];
   List<SlashCommand> _commands = const <SlashCommand>[];
   int _highlighted = 0;
 
@@ -113,7 +118,9 @@ class _PromptComposerState extends State<PromptComposer> {
     }
     // The file and command lists load after the trigger is typed.
     if (_trigger != null &&
-        (oldWidget.mentionFiles != widget.mentionFiles || oldWidget.commands != widget.commands)) {
+        (oldWidget.mentionFiles != widget.mentionFiles ||
+            oldWidget.commands != widget.commands ||
+            oldWidget.runContext != widget.runContext)) {
       _search(refresh: true);
     }
   }
@@ -126,13 +133,13 @@ class _PromptComposerState extends State<PromptComposer> {
 
   /// Number of rows in the open list.
   int get _count => switch (_trigger) {
-    _Trigger.mention => _files.length,
+    _Trigger.mention => _rows.length,
     _Trigger.command => _commands.length,
     null => 0,
   };
 
   bool _selectable(int index) => switch (_trigger) {
-    _Trigger.mention => true,
+    _Trigger.mention => _rows[index].enabled,
     _Trigger.command => _commands[index].enabled,
     null => false,
   };
@@ -146,12 +153,12 @@ class _PromptComposerState extends State<PromptComposer> {
     int keep;
     switch (_trigger) {
       case _Trigger.mention:
-        final found = searchFiles(widget.mentionFiles ?? const <String>[], _query);
-        if (refresh && listEquals(found, _files)) return;
-        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _files.length
-            ? found.indexOf(_files[highlightedBefore])
+        final found = mentionRows(widget.mentionFiles ?? const [], _query, widget.runContext);
+        if (refresh && listEquals(found, _rows)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _rows.length
+            ? found.indexOf(_rows[highlightedBefore])
             : -1;
-        _files = found;
+        _rows = found;
       case _Trigger.command:
         final found = slashSuggestions(appCommands, widget.commands, _query);
         if (refresh && listEquals(found, _commands)) return;
@@ -198,7 +205,7 @@ class _PromptComposerState extends State<PromptComposer> {
 
   void _close() {
     _trigger = null;
-    _files = const <String>[];
+    _rows = const [];
     _commands = const <SlashCommand>[];
     _highlighted = 0;
   }
@@ -217,7 +224,7 @@ class _PromptComposerState extends State<PromptComposer> {
   /// Inserts the row at [index] unless it is disabled; the list stays open then.
   void _pick(int index) {
     if (index < 0 || index >= _count || !_selectable(index)) return;
-    _insert(_trigger == _Trigger.mention ? '@${_files[index]} ' : '/${_commands[index].name} ');
+    _insert(_trigger == _Trigger.mention ? _rows[index].insert : '/${_commands[index].name} ');
   }
 
   /// Moves the highlight [step] rows, skipping the ones that cannot be chosen.
@@ -330,9 +337,10 @@ class _PromptComposerState extends State<PromptComposer> {
                   TextFieldTapRegion(
                     child: switch (_trigger!) {
                       _Trigger.mention => MentionSuggestions(
-                        files: _files,
+                        isPreview: widget.runContext?.isPreview ?? false,
+                        rows: _rows,
                         highlighted: _highlighted,
-                        onSelected: (file) => _pick(_files.indexOf(file)),
+                        onSelected: (row) => _pick(_rows.indexOf(row)),
                       ),
                       _Trigger.command => CommandSuggestions(
                         commands: _commands,

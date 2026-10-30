@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/common/widget/pane_tabs.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_tab.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/changes_pane/controller/changed_files_notifier.dart';
+import 'package:flutter_code_agent/src/feature/changes_pane/models/changed_file.dart';
+import 'package:flutter_code_agent/src/feature/changes_pane/widgets/changes_tab.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/plan_pane/widgets/plan_tab.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 
@@ -33,6 +38,13 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
   double? _dragWidth;
   bool _dragging = false;
 
+  /// The files the open chat changed: one result for the tab and its counter.
+  late final ChangedFilesNotifier _changes = ChangedFilesNotifier(
+    handle: _scope.dataController.chatHandle,
+    projectRoot: () => _scope.selectedProject?.path ?? '',
+    rootChanges: Listenable.merge(<Listenable>[_scope.projectsController, _scope.dataController]),
+  );
+
   double get _storedWidth => _scope.settingsController.settings.rightPaneWidth;
 
   double _width() {
@@ -49,6 +61,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
   @override
   void dispose() {
     _scope.settingsController.removeListener(_onSettingsChanged);
+    _changes.dispose();
     super.dispose();
   }
 
@@ -90,22 +103,53 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: <Widget>[
-                      PaneTabs<RightPaneTab>(
-                        tabs: <PaneTab<RightPaneTab>>[
-                          PaneTab<RightPaneTab>(
-                            id: RightPaneTab.changes,
-                            label: localization.paneChanges,
+                      ListenableBuilder(
+                        listenable: _scope.runController,
+                        builder: (context, _) => ValueListenableBuilder<List<ChangedFile>>(
+                          valueListenable: _changes,
+                          builder: (context, files, _) => PaneTabs<RightPaneTab>(
+                            tabs: <PaneTab<RightPaneTab>>[
+                              PaneTab<RightPaneTab>(
+                                id: RightPaneTab.changes,
+                                label: localization.paneChanges,
+                                count: files.isEmpty ? null : files.length,
+                              ),
+                              PaneTab<RightPaneTab>(
+                                id: RightPaneTab.run,
+                                label: localization.paneRun,
+                                errors: _scope.runController.state.errorCount,
+                              ),
+                              PaneTab<RightPaneTab>(
+                                id: RightPaneTab.plan,
+                                label: localization.panePlan,
+                              ),
+                            ],
+                            selected: tab,
+                            onSelected: _scope.dataController.selectPaneTab,
                           ),
-                          PaneTab<RightPaneTab>(id: RightPaneTab.run, label: localization.paneRun),
-                          PaneTab<RightPaneTab>(
-                            id: RightPaneTab.plan,
-                            label: localization.panePlan,
-                          ),
-                        ],
-                        selected: tab,
-                        onSelected: _scope.dataController.selectPaneTab,
+                        ),
                       ),
-                      Expanded(child: _TabBody(tab: tab)),
+                      Expanded(
+                        child: switch (tab) {
+                          RightPaneTab.changes => ChangesTab(files: _changes),
+                          RightPaneTab.plan => ValueListenableBuilder<ChatHandle?>(
+                            valueListenable: _scope.dataController.chatHandle,
+                            builder: (context, handle, _) =>
+                                PlanTab(items: handle?.view.items ?? const <ChatItem>[]),
+                          ),
+                          RightPaneTab.run => RunTab(
+                            key: ValueKey<int?>(_scope.dataController.projectId),
+                            projectId: _scope.dataController.projectId,
+                            isPreview: _scope.runIsPreview,
+                            devices: _scope.devicesController,
+                            run: _scope.runController,
+                            actions: _scope.runActionsController,
+                            onSendError: _scope.sendRunErrorToAgent,
+                            onAddWidget: _scope.addRunWidgetToMessage,
+                            onOpenFile: (path, line) => _scope.openRunFile(path, line).ignore(),
+                          ),
+                        },
+                      ),
                     ],
                   );
                 },
@@ -131,28 +175,6 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _TabBody extends StatelessWidget {
-  const _TabBody({required this.tab});
-
-  final RightPaneTab tab;
-
-  @override
-  Widget build(BuildContext context) {
-    final localization = Localization.of(context);
-    final (icon, title) = switch (tab) {
-      RightPaneTab.changes => (Icons.difference_outlined, localization.paneChanges),
-      RightPaneTab.run => (Icons.play_circle_outline, localization.paneRun),
-      RightPaneTab.plan => (Icons.checklist, localization.panePlan),
-    };
-    return EmptyState(
-      icon: icon,
-      title: title,
-      message: localization.comingSoon,
-      badge: const PreviewBadge(),
     );
   }
 }

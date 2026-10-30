@@ -39,6 +39,7 @@ Future<Dependencies> $initializeApp({
 /// Disposes the app and releases all resources.
 @visibleForTesting
 Future<void> $disposeApp(Dependencies dependencies) async {
+  await dependencies.appRunRepository.dispose();
   await dependencies.agentHub.dispose();
   await dependencies.database.close();
 }

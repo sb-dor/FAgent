@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/diff_lines_cache.dart
 import 'package:flutter_code_agent/src/feature/chat/models/tool_row_label.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_path_text.dart';
+import 'package:path/path.dart' as p;
 
 /// {@template tool_call_card}
 /// A tool call as one compact row: icon, the agent's wording, the first touched file (name and
@@ -17,13 +18,19 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/tool_path_text.dart'
 /// {@endtemplate}
 class ToolCallCard extends StatefulWidget {
   /// {@macro tool_call_card}
-  const ToolCallCard({required this.call, this.projectRoot, super.key});
+  const ToolCallCard({required this.call, this.projectRoot, this.onOpenChange, super.key});
 
   /// The tool call.
   final ToolCallItem call;
 
   /// The chat's project folder; paths inside it are shown relative to it.
   final String? projectRoot;
+
+  /// Called with the absolute, normalized path of the first diff (a relative one is taken inside
+  /// [projectRoot]) when the user clicks the row of an edit; with it the body
+  /// opens with a separate chevron. `null`, or a call without diffs, keeps the whole header as the
+  /// expander.
+  final ValueChanged<String>? onOpenChange;
 
   /// Icon for an ACP tool [kind].
   static IconData toolIcon(String? kind) => switch (kind) {
@@ -47,6 +54,10 @@ class _ToolCallCardState extends State<ToolCallCard> {
 
   final DiffLinesCache _diffLines = DiffLinesCache();
 
+  /// [path] as the Changes tab knows the file: inside the project folder (the agent may report a
+  /// path relative to it), normalized.
+  String _absolutePath(String path) => p.normalize(p.join(widget.projectRoot ?? '', path));
+
   @override
   Widget build(BuildContext context) {
     final call = widget.call;
@@ -59,8 +70,13 @@ class _ToolCallCardState extends State<ToolCallCard> {
     final hasBody = diffs.isNotEmpty || texts.isNotEmpty || (output != null && output.isNotEmpty);
     final path = call.locations.isEmpty ? null : call.locations.first;
     final label = toolRowLabel(title: call.title, path: path, projectRoot: widget.projectRoot);
+    final onOpenChange = widget.onOpenChange;
     return ExpandableRow(
       initiallyExpanded: diffs.isNotEmpty,
+      onHeaderTap: onOpenChange == null || diffs.isEmpty
+          ? null
+          : () => onOpenChange(_absolutePath(diffs.first.path)),
+      headerTooltip: Localization.of(context).openInChanges,
       header: Row(
         children: <Widget>[
           Icon(ToolCallCard.toolIcon(call.kind), size: 16, color: colors.muted),

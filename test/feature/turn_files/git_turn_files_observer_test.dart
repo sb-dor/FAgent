@@ -1,5 +1,9 @@
 import 'dart:io';
 
+import 'package:drift/native.dart';
+import 'package:flutter_code_agent/src/common/acp/live_session.dart';
+import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
+import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -126,5 +130,25 @@ void main() {
       GitTurnFilesObserver.parseStatus('R  new.txt\u0000old.txt\u0000?? a b.txt\u0000'),
       <String, String>{'new.txt': 'R ', 'a b.txt': '??'},
     );
+  });
+
+  test('turn files carry the git root', () async {
+    final before = (await observer.snapshot(repo.path))!;
+    write('lib/a.dart', 'void main() {}\n');
+    final database = AppDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+    final session = LiveSession(
+      id: 1,
+      agentId: 'claude',
+      cwd: repo.path,
+      store: await SessionEventStore.open(database, 1),
+    );
+
+    final payload = await observer.afterTurn(session, before);
+
+    expect(payload?['root'], before.root);
+    expect(payload?['files'], <Object?>[
+      <String, Object?>{'path': 'lib/a.dart', 'status': '??'},
+    ]);
   });
 }

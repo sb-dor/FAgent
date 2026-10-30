@@ -22,6 +22,7 @@ class ChatItemView extends StatelessWidget {
     required this.onAnswerPermission,
     this.onRejectAndSay,
     this.projectRoot,
+    this.onOpenChange,
     this.keyboardTarget = false,
     super.key,
   });
@@ -37,6 +38,9 @@ class ChatItemView extends StatelessWidget {
 
   /// The chat's project folder; tool paths inside it are shown relative to it.
   final String? projectRoot;
+
+  /// Called with the file's path when the user clicks an edit row; `null` keeps edit rows plain.
+  final ValueChanged<String>? onOpenChange;
 
   /// This permission card is the one Enter and Esc answer (shows the key hints).
   final bool keyboardTarget;
@@ -93,7 +97,11 @@ class ChatItemView extends StatelessWidget {
         ),
         body: text.isEmpty ? null : SelectableText(text, style: muted),
       ),
-      final ToolCallItem call => ToolCallCard(call: call, projectRoot: projectRoot),
+      final ToolCallItem call => ToolCallCard(
+        call: call,
+        projectRoot: projectRoot,
+        onOpenChange: onOpenChange,
+      ),
       PlanItem(:final entries) => PlanCard(entries: entries),
       final PermissionItem permission => PermissionCard(
         item: permission,

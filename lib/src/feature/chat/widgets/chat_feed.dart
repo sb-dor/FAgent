@@ -17,6 +17,7 @@ class ChatFeed extends StatelessWidget {
     required this.onAnswerPermission,
     this.onRejectAndSay,
     this.projectRoot,
+    this.onOpenChange,
     this.keyboardRequestId,
     super.key,
   });
@@ -32,6 +33,9 @@ class ChatFeed extends StatelessWidget {
 
   /// The chat's project folder; tool paths inside it are shown relative to it.
   final String? projectRoot;
+
+  /// Called with the file's path when the user clicks an edit row; `null` keeps edit rows plain.
+  final ValueChanged<String>? onOpenChange;
 
   /// `requestId` of the permission card that Enter and Esc answer (the latest waiting one); only
   /// that card shows the key hints.
@@ -65,6 +69,7 @@ class ChatFeed extends StatelessWidget {
                   onAnswerPermission: onAnswerPermission,
                   onRejectAndSay: onRejectAndSay,
                   projectRoot: projectRoot,
+                  onOpenChange: onOpenChange,
                   keyboardTarget: item is PermissionItem && item.requestId == keyboardRequestId,
                 ),
                 ReadGroupEntry(:final calls) => ReadGroupRow(

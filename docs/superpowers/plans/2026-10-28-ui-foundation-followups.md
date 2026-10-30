@@ -45,5 +45,45 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage3-chat-co
 - **Composer toolbar:** disabled chips look enabled; "make default" gives no feedback and can be dropped during a set; two "Agent" chips when the agent has an `agent` option; effort segments shrink below 12 px; `_selectMode` uses context after await without a mounted check; chat_screen imports workspace footer for agentDisplayName
 - **Slash menu:** dismissed state stores offset only; mid-text insert can leave a double space; app command descriptions chosen by a name switch
 - **Feed:** DiffView still uses Menlo; thought duration may be 0 on replayed history; pills are rectangular; overlapping mention ranges if a path contains " @"
-- **Permission card:** ↵/Esc hints shown on non-latest pending cards; no focus move to the composer when a request arrives; prompt_composer.dart is ~370 lines (split candidate)
+- **Permission card:** no focus move to the composer when a request arrives; prompt_composer.dart is ~370 lines (split candidate)
 - Choosing model/mode before the first message: chips are disabled until the agent session exists — start the session when a chat opens, or queue the choices and apply them like defaults.
+
+## Stage 4 follow-ups
+
+Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage4-right-pane.md. Paths are under `lib/src/feature/`.
+
+- **Bugs and risks:**
+  - Changes: "Open file" is also shown for directory entries (check `FileSystemEntityType.file`); symlink resolution and other FS calls are synchronous on every refold
+  - Changes: file order is lost after each turn (alphabetical within a turn); a rename plus an edit shows two entries; refold and rebuild on every chunk (`ChangedFile` has no equality)
+  - Changes: the diff handle stays stale if a chat leaves Completed; multi-diff edits open `diffs.first`
+  - Run: `choose` can't clear the device; a chosen device leaving the list keeps ▶ enabled with a stale id; `pickWidget` works with nothing running
+  - Run: subscriptions may leak if disposed mid-watch (check `isDisposed` after await); run streams have no `onError`; failed run actions are not surfaced; `RunFailed` is never emitted by the fake
+  - Run: restart doesn't clear the log buffer (`errorCount` accumulates); `clearLogs` assumes increasing `seq` (document it in the interface) and leaves `_atBottom` false while scrolled up
+  - Run: replaying the log is 2000 separate events, O(n²) copies and a `setState` per line (batch it); every log line also costs a full-list copy, filter and badge rebuild; mentions scan the whole log per line
+  - Run: the badge shows a stale project's errors when `projectId` becomes null; brief idle flash on a project switch
+  - Run: `RunTab` is keyed by project, so returning to a project whose pick is still pending loses the "Tap a widget…" hint (the widget still arrives) — revisit with the real inspector (M6)
+  - Title bar: `PreviewBadge` adds ~60 px to the run controls; the chat title shrinks with an ellipsis, but no narrow-window test covers it
+  - Run: one publish per frame could miss a fast running-to-idle change (document it); search skips `error.message`
+  - Run: `RunActionsController` is a single Droppable: Stop pressed within a reload/start is dropped silently, and a pending real pick would block Stop/reload/Start everywhere — split pick into its own controller and never drop stop (matters once the real runner lands, M2) (`app_run/controller/run_actions_controller.dart:25-28`)
+  - Run: `RunTab` re-implements start/stop/reload/restart and active/canStart beside `WorkspaceRunLink` and trusts `widget.projectId` over `run.state.projectId` — pass the runLink callbacks/flags in (`app_run/widgets/run_tab.dart:96-124`, `run_header.dart:79-80`)
+  - Run: removing a project leaves its run running with no way to stop it — stop the run on removal or treat building/running as `ProjectBusyException` (M2) (`workspace/widgets/workspace_config_widget.dart:340-344`)
+  - Changes: `ChangesTab` reads `WorkspaceConfigInhWidget` directly (changes_pane depends on workspace) — pass selectedPath/onSelect/onOpenFile/projectRoot from `WorkspaceRightPane` like `RunTab` (`changes_pane/widgets/changes_tab.dart:19`)
+- **Test gaps:**
+  - Changes: no tests pin post-frame coalescing, `selectedChangePath` reset or the chat-to-chat handle reset; reveal is untested; the '+2' test finds the `DiffView` header, not the list counter; icon-count asserts in the plan tests are weak
+  - Run: no restart-during-build test; two weak tests in the controller; the timer, To-agent filter and pick tests are weak; fixed real-time waits (Changes tests use real 100 ms delays)
+  - Run to chat: the shortcut test doesn't assert composer focus; the disabled ⚡ state is not asserted
+- **Polish:**
+  - Changes header: chevron `IconButton` taller than the header (status icon alignment), `iconSize` 18, default icon color; `Tooltip('')` is possible; `_Entry.shown` doc says "first" but keeps the latest
+  - Plan card: status strings are duplicated with `PlanCard` (add `PlanEntry` getters or an enum); the `in_progress` spinner keeps spinning on a dead session
+  - Run: misplaced doc comment (`markSent`/`setPicked`); screenshot row filters only on the English word; detail 'M2' is overloaded
+  - Off-grid spacing: Changes 10/6 and `labelSmall`, Plan 2/18, Run 10/6/5/3 and a 26 px row, run-to-chat 6/2/10
+  - `prompt_composer.dart` grew from 385 to 392 lines (the "From the run" section lives in a separate file; keep it out of the composer)
+  - Formatting: `app_text`, `app_theme`, `app_menu`, `workspace_page_scaffold` and `app_theme_test` are not dart-formatted on the branch
+- **Rulings recorded during the stage** (revisit if they cost too much):
+  - "Open file" never executes an agent-created file: `openPath` uses `open -t`, refuses relative or missing paths (binary files open in a text editor)
+  - Symlinked roots are compared after `resolveSymbolicLinksSync` so git's resolved root and the agent's paths merge (one extra stat per path per refold)
+  - The run keeps a per-project ring buffer (up to `kRunLogLimit`) and replays it on `logs()` subscribe, including `sentToAgent` flags (up to 2000 lines of memory per project)
+  - On a project switch the selected device stays while the target resets to `lib/main.dart` and the mode to debug; the device default lives in the window (first running device when the project has none)
+  - `RunController.choose({deviceId, mode, target})` instead of `select`; the last picked widget lives in `RunViewState.picked` and is cleared on a project switch
+  - New `onAccent` token in `AppColors` for content on accent fills (light #FFFFFF, dark = dark bg #16181B)
+  - "@ from the run" sits above files in the mention menu (the mockup shows it below); ⚡ in the title bar stays visible but disabled while the app is not running

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
-import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/turn_files/models/file_change_kind.dart';
+import 'package:flutter_code_agent/src/feature/turn_files/widgets/file_change_label.dart';
 
 /// {@template turn_files_card}
 /// Files the turn changed (from `git status` before and after it), collapsed
@@ -45,7 +46,7 @@ class TurnFilesCard extends StatelessWidget {
                     SizedBox(
                       width: 110,
                       child: Text(
-                        _label(localization, file.status),
+                        fileChangeLabel(localization, fileChangeKind(file.status)),
                         style: theme.textTheme.labelSmall,
                       ),
                     ),
@@ -62,13 +63,5 @@ class TurnFilesCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _label(GeneratedLocalization localization, String status) {
-    if (status == 'clean') return localization.fileStatusReverted;
-    if (status == '??' || status.contains('A')) return localization.fileStatusAdded;
-    if (status.contains('D')) return localization.fileStatusDeleted;
-    if (status.contains('R')) return localization.fileStatusRenamed;
-    return localization.fileStatusModified;
   }
 }

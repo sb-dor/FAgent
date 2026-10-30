@@ -14,6 +14,7 @@ final class AppSettings {
     this.rightPaneWidth = defaultRightPaneWidth,
     this.defaultAgentId = 'claude',
     this.sessionDefaults = const <String, Map<String, String>>{},
+    this.reloadAfterTurn = false,
   });
 
   /// Reads settings from stored JSON. Never throws: anything unreadable becomes the default.
@@ -25,6 +26,7 @@ final class AppSettings {
     final agentId = json['defaultAgentId'];
     final sidebarVisible = json['sidebarVisible'];
     final rightPaneVisible = json['rightPaneVisible'];
+    final reloadAfterTurn = json['reloadAfterTurn'];
     return AppSettings(
       themeMode: ThemeMode.values.firstWhere(
         (mode) => mode.name == themeName,
@@ -42,6 +44,7 @@ final class AppSettings {
           : defaultRightPaneWidth,
       defaultAgentId: agentId is String && agentId.isNotEmpty ? agentId : 'claude',
       sessionDefaults: _readSessionDefaults(json['sessionDefaults']),
+      reloadAfterTurn: reloadAfterTurn is bool && reloadAfterTurn,
     );
   }
 
@@ -100,6 +103,9 @@ final class AppSettings {
   /// `mode: bypassPermissions` is never stored; it needs the user's consent in each chat.
   final Map<String, Map<String, String>> sessionDefaults;
 
+  /// Whether the running app is hot-reloaded after the agent finishes a turn.
+  final bool reloadAfterTurn;
+
   /// The JSON stored in `app_settings`.
   Map<String, Object?> toJson() => <String, Object?>{
     'themeMode': themeMode.name,
@@ -109,6 +115,7 @@ final class AppSettings {
     'rightPaneWidth': rightPaneWidth,
     'defaultAgentId': defaultAgentId,
     'sessionDefaults': sessionDefaults,
+    'reloadAfterTurn': reloadAfterTurn,
   };
 
   /// A copy with the given fields replaced.
@@ -124,6 +131,7 @@ final class AppSettings {
     double? rightPaneWidth,
     String? defaultAgentId,
     Map<String, Map<String, String>>? sessionDefaults,
+    bool? reloadAfterTurn,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     locale: resetLocale ? null : locale ?? this.locale,
@@ -136,6 +144,7 @@ final class AppSettings {
         : _sanitize(<String, Map<Object?, Object?>>{
             for (final MapEntry(:key, :value) in sessionDefaults.entries) key: value,
           }),
+    reloadAfterTurn: reloadAfterTurn ?? this.reloadAfterTurn,
   );
 
   @override
@@ -148,6 +157,7 @@ final class AppSettings {
           other.rightPaneVisible == rightPaneVisible &&
           other.rightPaneWidth == rightPaneWidth &&
           other.defaultAgentId == defaultAgentId &&
+          other.reloadAfterTurn == reloadAfterTurn &&
           const DeepCollectionEquality().equals(other.sessionDefaults, sessionDefaults);
 
   @override
@@ -159,6 +169,7 @@ final class AppSettings {
     rightPaneWidth,
     defaultAgentId,
     const DeepCollectionEquality().hash(sessionDefaults),
+    reloadAfterTurn,
   );
 
   @override

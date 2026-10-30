@@ -81,6 +81,7 @@ class TitleBarButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onPressed,
+    this.color,
     super.key,
   });
 
@@ -90,14 +91,23 @@ class TitleBarButton extends StatelessWidget {
   /// Hover hint and accessibility label.
   final String tooltip;
 
-  /// Called on tap.
-  final VoidCallback onPressed;
+  /// Called on tap; `null` disables the button.
+  final VoidCallback? onPressed;
+
+  /// Color of the glyph; the muted one by default. A disabled button is always dimmed.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) => IconButton(
     tooltip: tooltip,
     onPressed: onPressed,
-    icon: Icon(icon, size: 18, color: context.colors.muted),
+    icon: Icon(
+      icon,
+      size: 18,
+      color: onPressed == null
+          ? context.colors.muted.withValues(alpha: 0.4)
+          : color ?? context.colors.muted,
+    ),
     padding: EdgeInsets.zero,
     constraints: const BoxConstraints.tightFor(width: 28, height: 28),
   );

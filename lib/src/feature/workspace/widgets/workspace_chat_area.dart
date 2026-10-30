@@ -45,10 +45,16 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                       : Localization.of(context).chatPlaceholder,
                 );
               }
-              return ChatConfigWidget(
-                key: ValueKey<int>(sessionId),
-                sessionId: sessionId,
-                project: project,
+              return ListenableBuilder(
+                listenable: _scope.runController,
+                builder: (context, _) => ChatConfigWidget(
+                  key: ValueKey<int>(sessionId),
+                  sessionId: sessionId,
+                  project: project,
+                  onHandle: _scope.dataController.publishChatHandle,
+                  onOpenChange: _scope.openChange,
+                  runContext: _scope.runLink.mentions,
+                ),
               );
             },
           ),

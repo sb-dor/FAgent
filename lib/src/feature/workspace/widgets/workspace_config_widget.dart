@@ -4,6 +4,12 @@ import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -21,8 +27,10 @@ import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_cont
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
+import 'package:path/path.dart' as p;
 
 /// Gives the workspace widgets access to [WorkspaceConfigWidgetState].
 class WorkspaceConfigInhWidget extends InheritedWidget {
@@ -60,7 +68,17 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
   late final SessionCreationController sessionCreationController;
+  late final DevicesController devicesController;
+  late final RunController runController;
+  late final RunActionsController runActionsController;
   final WorkspaceDataController dataController = WorkspaceDataController();
+
+  /// The run of the selected project and its ties to the selected chat.
+  late final WorkspaceRunLink runLink;
+
+  /// Whether any of the run data (the run, the devices, the widget picker) is made up. Everything
+  /// that shows it (the Run tab, the title bar, the `@` menu) says so.
+  late final bool runIsPreview;
 
   /// The window-level settings (panels, theme, language).
   late final AppSettingsController settingsController = AppSettingsConfigInhWidget.of(context)
@@ -90,11 +108,42 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
     )..addListener(_onSessionCreated);
     sessionsController.watchAll();
+    runIsPreview =
+        dependencies.appRunRepository.isPreview ||
+        dependencies.devicesRepository.isPreview ||
+        dependencies.widgetPickerRepository.isPreview;
+    devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
+    runController = RunController(repository: dependencies.appRunRepository);
+    runActionsController = RunActionsController(
+      runRepository: dependencies.appRunRepository,
+      pickerRepository: dependencies.widgetPickerRepository,
+    )..addListener(_onRunAction);
+    runLink = WorkspaceRunLink(
+      data: dataController,
+      run: runController,
+      actions: runActionsController,
+      reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
+      isPreview: runIsPreview,
+    );
+    devicesController.addListener(_chooseDefaultDevice);
+    runController.addListener(_chooseDefaultDevice);
+    dataController.addListener(_followSelectedProject);
+    _followSelectedProject();
   }
 
   @override
   void dispose() {
-    dataController.dispose();
+    runLink.dispose();
+    dataController
+      ..removeListener(_followSelectedProject)
+      ..dispose();
+    devicesController.removeListener(_chooseDefaultDevice);
+    runController.removeListener(_chooseDefaultDevice);
+    runActionsController
+      ..removeListener(_onRunAction)
+      ..dispose();
+    runController.dispose();
+    devicesController.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
       ..dispose();
@@ -107,6 +156,34 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     projectsController.dispose();
     sessionsController.dispose();
     super.dispose();
+  }
+
+  /// The run and its logs follow the selected project.
+  void _followSelectedProject() {
+    final id = dataController.projectId;
+    if (id != null) runController.watch(id);
+  }
+
+  /// Picks the first running device for the selected project while none is chosen and the devices
+  /// are known, so every way to start the app (the Run tab, the title bar) sees a device whether or
+  /// not the Run tab was ever opened. A device the user chose is never replaced.
+  void _chooseDefaultDevice() {
+    final run = runController.state;
+    if (run.projectId == null || run.selectedDeviceId != null) return;
+    if (devicesController.state case Devices$CompletedState(:final devices)) {
+      final first = devices.where((device) => device.kind == DeviceKind.running).firstOrNull;
+      if (first != null) runController.choose(deviceId: first.id);
+    }
+  }
+
+  /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.
+  /// The pick may finish after the window moved to another project: the widget belongs to the
+  /// project it was picked in, so it is dropped unless that project is still the followed one.
+  void _onRunAction() {
+    if (runActionsController.state case RunActions$CompletedState(:final picked?, :final projectId)
+        when projectId == runController.state.projectId) {
+      runController.setPicked(picked);
+    }
   }
 
   /// The selected project with its latest data (trust changes, renames).
@@ -146,6 +223,18 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       rightPaneWidth: width.clamp(AppSettings.minRightPaneWidth, AppSettings.maxRightPaneWidth),
     ),
   );
+
+  /// Shows the edit of [path]: opens the right pane if it is hidden, switches it to the Changes
+  /// tab and selects the file there.
+  void openChange(String path) {
+    final wide = MediaQuery.sizeOf(context).width >= kWideWindowWidth;
+    if (!(settingsController.settings.rightPaneVisible ?? wide)) {
+      settingsController.update((current) => current.copyWith(rightPaneVisible: true));
+    }
+    dataController
+      ..selectPaneTab(RightPaneTab.changes)
+      ..selectChange(path);
+  }
 
   /// The project a new chat goes to by default: the one of the selected chat, else the selected
   /// project, else the first group of the sidebar, else none.
@@ -200,6 +289,39 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     } on Object {
       _showError();
     }
+  }
+
+  /// Opens the file at [path] in the default text editor; says so when the file is gone.
+  Future<void> openPath(String path) async {
+    try {
+      await projectsController.openPath(path);
+    } on OpenPathRefusedException {
+      if (mounted) _showMessage(Localization.of(context).fileMissing);
+    } on Object {
+      _showError();
+    }
+  }
+
+  /// Puts the error of the log line [entry] into the open chat's draft (the user sends it), or says
+  /// there is no chat.
+  void sendRunErrorToAgent(LogEntry entry) {
+    if (!runLink.sendError(entry)) _showMessage(Localization.of(context).noChatForError);
+  }
+
+  /// Puts the widget picked in the running app into the open chat's draft, or says there is no
+  /// chat.
+  void addRunWidgetToMessage(PickedWidget picked) {
+    if (!runLink.addWidget(picked)) _showMessage(Localization.of(context).noChatForWidget);
+  }
+
+  /// Opens [file] of the running app in the editor; a relative path is inside the selected project.
+  ///
+  /// [line] is not used yet: the file opens in the default text editor (`open -t`), which cannot
+  /// jump to a line. The parameter stays for a future editor integration.
+  Future<void> openRunFile(String file, int? line) async {
+    final root = selectedProject?.path;
+    if (p.isAbsolute(file)) return openPath(file);
+    if (root != null) return openPath(p.join(root, file));
   }
 
   /// Asks, then forgets [project] with its chats; the folder on disk stays.

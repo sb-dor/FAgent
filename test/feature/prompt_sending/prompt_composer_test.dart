@@ -2,8 +2,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
+import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -35,6 +38,7 @@ void main() {
     List<SlashCommand> commands = const <SlashCommand>[],
     VoidCallback? onAcceptPending,
     VoidCallback? onRejectPending,
+    RunMentions? runContext,
   }) => testApp(
     PromptComposer(
       controller: text,
@@ -50,6 +54,7 @@ void main() {
       commands: commands,
       onAcceptPending: onAcceptPending,
       onRejectPending: onRejectPending,
+      runContext: runContext,
     ),
   );
 
@@ -430,6 +435,121 @@ void main() {
       await tester.enterText(find.byType(TextField), 'mail me@app');
       await tester.pump();
       expect(find.text('app.dart'), findsNothing);
+    });
+  });
+
+  group('@ from the run', () {
+    const files = <String>['lib/main.dart', 'lib/src/error_view.dart'];
+    const run = RunMentions(
+      widget: RunMention(
+        detail: 'BookingCard · booking_card.dart:42',
+        text: '@widget BookingCard (lib/booking_card.dart:42)',
+      ),
+      error: RunMention(
+        detail: 'Layout overflow',
+        text: '@error Layout overflow (booking_card.dart:42:12)',
+      ),
+    );
+
+    Widget withRun({RunMentions? context = run}) =>
+        composer(canSend: true, canStop: false, mentionFiles: files, runContext: context);
+
+    testWidgets('the menu offers the picked widget, the last error and the screenshot', (
+      tester,
+    ) async {
+      await tester.pumpWidget(withRun());
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+
+      expect(find.text('From the run'), findsOneWidget);
+      expect(find.text('Selected widget'), findsOneWidget);
+      expect(find.text('BookingCard · booking_card.dart:42'), findsOneWidget);
+      expect(find.text('Last error'), findsOneWidget);
+      expect(find.text('Layout overflow'), findsOneWidget);
+      expect(find.text('Screenshot'), findsOneWidget);
+      // The run rows sit above the files.
+      expect(
+        tester.getTopLeft(find.text('Selected widget')).dy,
+        lessThan(tester.getTopLeft(find.text('main.dart')).dy),
+      );
+    });
+
+    testWidgets('Enter inserts the widget, a click inserts the error', (tester) async {
+      await tester.pumpWidget(withRun());
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(text.text, '@widget BookingCard (lib/booking_card.dart:42) ');
+
+      text.clear();
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+      await tester.tap(find.text('Last error'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(text.text, '@error Layout overflow (booking_card.dart:42:12) ');
+    });
+
+    testWidgets('the screenshot says M2, cannot be chosen and arrows skip it', (tester) async {
+      await tester.pumpWidget(withRun());
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+      expect(find.text('Coming in M2'), findsOneWidget);
+
+      await tester.tap(find.text('Screenshot'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(text.text, '@');
+      expect(find.text('Screenshot'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect(text.text, '@lib/main.dart ');
+    });
+
+    testWidgets('typing narrows the run rows like the files', (tester) async {
+      await tester.pumpWidget(withRun());
+      await tester.enterText(find.byType(TextField), '@err');
+      await tester.pump();
+
+      expect(find.text('Last error'), findsOneWidget);
+      expect(find.text('Selected widget'), findsNothing);
+      expect(find.text('Screenshot'), findsNothing);
+    });
+
+    testWidgets('a made-up offer is marked Preview in the section title', (tester) async {
+      const preview = RunMentions(
+        isPreview: true,
+        widget: RunMention(
+          detail: 'BookingCard · booking_card.dart:42',
+          text: '@widget BookingCard',
+        ),
+      );
+      await tester.pumpWidget(withRun(context: preview));
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+
+      expect(find.text('From the run'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(MentionSuggestions), matching: find.byType(PreviewBadge)),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(withRun());
+      await tester.pump();
+      expect(find.text('From the run'), findsOneWidget);
+      expect(find.byType(PreviewBadge), findsNothing, reason: 'a real offer has no badge');
+    });
+
+    testWidgets('without anything from the run there is no section', (tester) async {
+      await tester.pumpWidget(withRun(context: const RunMentions()));
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+      expect(find.text('From the run'), findsNothing);
+      expect(find.text('main.dart'), findsOneWidget);
+
+      await tester.pumpWidget(withRun(context: null));
+      expect(find.text('From the run'), findsNothing);
     });
   });
 

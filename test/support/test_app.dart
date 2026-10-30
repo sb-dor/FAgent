@@ -5,19 +5,34 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Dependencies backed by an in-memory database; no agent is ever started.
-Dependencies testDependencies() {
+/// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
+/// [appRunRepository], [devicesRepository] or [widgetPickerRepository].
+Dependencies testDependencies({
+  Duration step = const Duration(milliseconds: 1),
+  IAppRunRepository? appRunRepository,
+  IDevicesRepository? devicesRepository,
+  IWidgetPickerRepository? widgetPickerRepository,
+}) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment
-    ..agentHub = AgentHub(database: database, environment: environment);
+    ..agentHub = AgentHub(database: database, environment: environment)
+    ..devicesRepository = devicesRepository ?? FakeDevicesRepositoryImpl(step: step)
+    ..appRunRepository = appRunRepository ?? FakeAppRunRepositoryImpl(step: step)
+    ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step);
 }
 
 /// Wraps [child] in the app's localizations, [theme] (light by default) and [dependencies].

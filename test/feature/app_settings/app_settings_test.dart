@@ -35,6 +35,20 @@ void main() {
     expect(AppSettings.fromJson(const <String, Object?>{'locale': 'xx'}).locale, isNull);
   });
 
+  test('reloadAfterTurn round-trips and defaults to false', () {
+    expect(const AppSettings().reloadAfterTurn, isFalse);
+    expect(AppSettings.fromJson(null).reloadAfterTurn, isFalse);
+    expect(
+      AppSettings.fromJson(const <String, Object?>{'reloadAfterTurn': 'yes'}).reloadAfterTurn,
+      isFalse,
+    );
+    final enabled = const AppSettings().copyWith(reloadAfterTurn: true);
+    expect(enabled.toJson()['reloadAfterTurn'], isTrue);
+    expect(AppSettings.fromJson(enabled.toJson()), enabled);
+    expect(enabled, isNot(const AppSettings()));
+    expect(enabled.hashCode, isNot(const AppSettings().hashCode));
+  });
+
   test('session defaults round-trip and never keep bypass', () {
     final settings = AppSettings.fromJson(const <String, Object?>{
       'sessionDefaults': <String, Object?>{

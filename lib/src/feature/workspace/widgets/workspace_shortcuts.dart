@@ -5,7 +5,8 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 
 /// {@template workspace_shortcuts}
 /// Window shortcuts: ⌘N starts a chat, ⌘K searches the chats, ⌘\ toggles the sidebar, ⌘J the right pane, ⌘, opens
-/// Settings, and Esc leaves Skills or Settings for the chat.
+/// Settings, ⌘R hot reloads and ⇧⌘R hot restarts the running app (they do nothing while it is not
+/// running), and Esc leaves Skills or Settings for the chat.
 ///
 /// They are bound above the whole window, so they work while a text field has focus. Esc is bound
 /// only on those screens, so the chat keeps it. A menu or dialog handles Esc before it gets here.
@@ -29,6 +30,9 @@ class WorkspaceShortcuts extends StatelessWidget {
           const SingleActivator(LogicalKeyboardKey.backslash, meta: true): scope.toggleSidebar,
           const SingleActivator(LogicalKeyboardKey.keyJ, meta: true): () =>
               scope.toggleRightPane(windowWidth: MediaQuery.sizeOf(context).width),
+          const SingleActivator(LogicalKeyboardKey.keyR, meta: true): scope.runLink.reload,
+          const SingleActivator(LogicalKeyboardKey.keyR, meta: true, shift: true):
+              scope.runLink.restart,
           const SingleActivator(LogicalKeyboardKey.comma, meta: true): () =>
               scope.dataController.openView(WorkspaceView.settings),
           if (scope.dataController.view != WorkspaceView.chat)
