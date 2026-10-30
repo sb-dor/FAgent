@@ -50,17 +50,28 @@ class _SkillNameDialogState extends State<SkillNameDialog> {
     super.dispose();
   }
 
+  /// Closes this dialog, whatever route is on top of it.
+  void _close() {
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isActive) return;
+    if (route.isCurrent) {
+      Navigator.of(context).pop();
+    } else {
+      route.navigator?.removeRoute(route);
+    }
+  }
+
   void _onAction() {
     switch (_scope.actions.state) {
       case SkillActions$CompletedState():
-        Navigator.of(context).pop();
+        _close();
       case SkillActions$FailedState(:final error):
         if (error is InvalidKnowledgeNameException) {
           setState(() => _error = Localization.of(context).skillNameInvalid);
         } else if (error is KnowledgeExistsException) {
           setState(() => _error = Localization.of(context).skillNameTaken);
         } else {
-          Navigator.of(context).pop();
+          _close();
         }
       case SkillActions$ProcessingState():
         setState(() {});

@@ -154,6 +154,17 @@ class WorkspaceDataController with ChangeNotifier {
   /// Returns from Skills or Settings to the same chat.
   void backToChat() => openView(WorkspaceView.chat);
 
+  /// Asked before the user leaves a screen with "← Back to chat" or Esc; the screen may set it to
+  /// ask about unsaved work. `false` keeps the screen open.
+  Future<bool> Function()? leaveGuard;
+
+  /// The user wants to leave the open screen for the chat: does so unless [leaveGuard] says no.
+  Future<void> leaveToChat() async {
+    final guard = leaveGuard;
+    if (guard != null && !await guard()) return;
+    backToChat();
+  }
+
   /// Selects a tab of the right pane.
   void selectPaneTab(RightPaneTab tab) {
     if (_paneTab == tab) return;

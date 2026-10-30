@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
@@ -607,6 +608,158 @@ void main() {
       expect(_data(tester).sessionId, isNull);
       // The menu stays open: the row is disabled.
       expect(find.text('Create'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('Unsaved edits', () {
+    Future<void> editMine(WidgetTester tester) async {
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'edited');
+      await tester.pump();
+    }
+
+    testWidgets('create asks about the edits before the name dialog', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await chooseAdd(tester, 'Create');
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(find.text('Name'), findsNothing);
+
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Name'), findsOneWidget);
+      await submitName(tester, 'ok-name');
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      // No dialog is left behind and the new item is open, without a second question.
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, 'skill:user:ok-name');
+      expect(_editorText(tester), contains('# ok-name'));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('staying at the question creates nothing and keeps the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await chooseAdd(tester, 'Create');
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, _mine);
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('cancelling the name dialog after discarding still protects the edit', (
+      tester,
+    ) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await chooseAdd(tester, 'Create');
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(_editorText(tester), 'edited');
+      await tester.tap(_row('other-skill'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('importing a folder asks first, then opens the skill', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      var picked = 0;
+      _skills(tester).pickFolder = (_) async {
+        picked++;
+        return '/imports/pretty';
+      };
+      await editMine(tester);
+
+      await chooseAdd(tester, 'From folder…');
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(picked, 0);
+
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+
+      expect(picked, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, 'skill:user:pretty');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the back button asks; Stay keeps the screen and the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await tester.tap(find.text('Back to chat'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_editorText(tester), 'edited');
+
+      await tester.tap(find.text('Back to chat'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.chat);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Esc asks too', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+      await tester.tap(_editor());
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(_data(tester).view, WorkspaceView.skills);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_editorText(tester), 'edited');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.chat);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('leaving without edits does not ask', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      await tester.tap(find.text('Back to chat'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_data(tester).view, WorkspaceView.chat);
       await disposeTestApp(tester, dependencies);
     });
   });

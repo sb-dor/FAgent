@@ -71,7 +71,7 @@ class WorkspacePageScaffold extends StatelessWidget {
         AppTitleBar(
           leading: <Widget>[
             TextButton.icon(
-              onPressed: scope.dataController.backToChat,
+              onPressed: scope.dataController.leaveToChat,
               icon: const Icon(Icons.arrow_back, size: 16),
               label: Text(Localization.of(context).backToChat),
               style: TextButton.styleFrom(

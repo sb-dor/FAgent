@@ -74,6 +74,10 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   /// Whether the name dialog is open: it explains the name errors itself.
   bool _naming = false;
 
+  /// Whether the user already agreed to lose the unsaved edits for an action that ends by opening
+  /// a new item (create, import, duplicate), so the item opens without asking again.
+  bool _discardAgreed = false;
+
   /// The project of the screen with its latest data; `null` when the screen has none.
   Project? get project => _projectById(view.projectId);
 
@@ -106,7 +110,9 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
       kind: data.section == 'rules' ? KnowledgeKind.rule : KnowledgeKind.skill,
       projectId: data.projectId,
     );
-    data.addListener(_takeTarget);
+    data
+      ..addListener(_takeTarget)
+      ..leaveGuard = confirmDiscard;
     actions.addListener(_onAction);
     _workspace.projectsController.addListener(_syncLibrary);
     view.addListener(_syncLibrary);
@@ -117,6 +123,9 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   @override
   void dispose() {
     _workspace.dataController.removeListener(_takeTarget);
+    if (_workspace.dataController.leaveGuard == confirmDiscard) {
+      _workspace.dataController.leaveGuard = null;
+    }
     actions.removeListener(_onAction);
     _workspace.projectsController.removeListener(_syncLibrary);
     view
@@ -162,10 +171,13 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
         // The name dialog explains these two under its field.
         final nameError =
             error is InvalidKnowledgeNameException || error is KnowledgeExistsException;
-        if (!(_naming && nameError))
+        if (!(_naming && nameError)) {
+          _discardAgreed = false;
           showMessage(skillErrorMessage(Localization.of(context), error));
+        }
       case SkillActions$CompletedState(:final id?):
         open(id);
+        _discardAgreed = false;
       case SkillActions$IdleState() ||
           SkillActions$ProcessingState() ||
           SkillActions$CompletedState():
@@ -183,7 +195,7 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   void showComingSoon() => showMessage(Localization.of(context).comingInMilestone('M3'));
 
   /// Whether the open item may be dropped: yes when nothing is unsaved, else after the user agrees
-  /// to lose the edits. Agreeing clears [hasUnsavedEdits].
+  /// to lose the edits. The edits stay (and so does [hasUnsavedEdits]) until the item is dropped.
   Future<bool> confirmDiscard() async {
     if (!hasUnsavedEdits) return true;
     final localization = Localization.of(context);
@@ -205,14 +217,12 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
         ],
       ),
     );
-    if (discard != true || !mounted) return false;
-    hasUnsavedEdits = false;
-    return true;
+    return discard == true && mounted;
   }
 
   /// Runs [change], which drops the open item, once the user agrees to lose unsaved edits.
   Future<void> guard(VoidCallback change) async {
-    if (!hasUnsavedEdits) return change();
+    if (!hasUnsavedEdits || _discardAgreed) return change();
     if (await confirmDiscard()) change();
   }
 
@@ -237,8 +247,19 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
     view.setProject(projectId);
   }
 
+  /// Asks about the unsaved edits before an action that ends by opening a new item. After a yes
+  /// the item opens without another question, until the action is over ([_discardAgreed]).
+  Future<bool> _agreeToLeave() async {
+    if (!await confirmDiscard()) return false;
+    _discardAgreed = hasUnsavedEdits;
+    return true;
+  }
+
   /// Asks for a name and creates a skill or rule in the open section.
+  ///
+  /// Unsaved edits are settled before the dialog opens, so no other dialog can appear on top of it.
   Future<void> createItem() async {
+    if (!await _agreeToLeave() || !mounted) return;
     _naming = true;
     try {
       await showDialog<void>(
@@ -247,13 +268,19 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
       );
     } finally {
       _naming = false;
+      _discardAgreed = false;
     }
   }
 
   /// Asks for a folder and copies it among the user's skills.
   Future<void> importFromFolder() async {
+    if (!await _agreeToLeave() || !mounted) return;
     final path = await pickFolder(Localization.of(context).skillsPickFolder);
-    if (path != null && mounted) actions.importFolder(path);
+    if (path != null && mounted) {
+      actions.importFolder(path);
+    } else {
+      _discardAgreed = false;
+    }
   }
 
   /// Starts a chat in the screen's project with the request to write a skill. Does nothing
@@ -266,7 +293,10 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
   }
 
   /// Copies the read-only [item] among the user's items; the copy opens when it is ready.
-  void duplicate(KnowledgeItem item) => actions.duplicate(item.id, projectRoot: project?.path);
+  Future<void> duplicate(KnowledgeItem item) async {
+    if (!await _agreeToLeave()) return;
+    actions.duplicate(item.id, projectRoot: project?.path);
+  }
 
   /// Goes back to the chat and starts the composer with `/<name> `; says so when there is no chat.
   Future<void> tryInChat(KnowledgeItem item) async {
