@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_com
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/bypass_gate_banner.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/composer_toolbar.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_footer.dart';
 
 /// {@template chat_screen}
@@ -48,13 +49,18 @@ class _ChatScreenState extends State<ChatScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Expanded(
-            child: ChatFeed(
-              items: view.items,
-              onAnswerPermission: _scope.answerPermission,
-              onRejectAndSay: _scope.rejectAndSay,
-              projectRoot: _scope.projectRoot,
-              onOpenChange: _scope.onOpenChange,
-              keyboardRequestId: view.pendingPermission?.requestId,
+            child: ValueListenableBuilder<ChatSkills>(
+              valueListenable: _scope.chatSkills,
+              builder: (context, chatSkills, _) => ChatFeed(
+                items: view.items,
+                onAnswerPermission: _scope.answerPermission,
+                onRejectAndSay: _scope.rejectAndSay,
+                projectRoot: _scope.projectRoot,
+                onOpenChange: _scope.onOpenChange,
+                skills: chatSkills,
+                onOpenSkill: _scope.canOpenSkills ? (id) => _scope.openSkills(itemId: id) : null,
+                keyboardRequestId: view.pendingPermission?.requestId,
+              ),
             ),
           ),
           StateConsumer<ChatRecoveryController, ChatRecoveryState>(
@@ -82,40 +88,46 @@ class _ChatScreenState extends State<ChatScreen> {
             controller: _scope.fileMentionController,
             builder: (context, _, _) => ValueListenableBuilder<RunMentions?>(
               valueListenable: _scope.runContext,
-              builder: (context, runContext, _) => PromptComposer(
-                runContext: runContext,
-                controller: _scope.textController,
-                focusNode: _scope.composerFocus,
-                canSend:
-                    !view.bypassBlocked &&
-                    switch (view.status) {
-                      SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
-                      _ => false,
-                    },
-                canStop:
-                    view.status == SessionStatus.running ||
-                    view.status == SessionStatus.awaitingPermission,
-                onSend: _scope.send,
-                onStop: _scope.stop,
-                mentionFiles: _scope.fileMentionController.files,
-                onMentionStart: _scope.refreshFiles,
-                commands: view.commands,
-                onAcceptPending: _answerPending(view.pendingPermission, accept: true),
-                onRejectPending: _answerPending(view.pendingPermission, accept: false),
-                onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
-                    ? _scope.cycleMode
-                    : null,
-                toolbar: <Widget>[
-                  ComposerToolbar(
-                    agentName: agentDisplayName(view.agentId),
-                    agentLocked: view.agentLocked,
-                    options: view.configOptions,
-                    enabled: view.canChangeConfig,
-                    onChanged: _scope.setConfig,
-                    onAttach: _scope.attachFile,
-                    onMakeDefault: _scope.makeDefault,
-                  ),
-                ],
+              builder: (context, runContext, _) => ValueListenableBuilder<ChatSkills>(
+                valueListenable: _scope.chatSkills,
+                builder: (context, chatSkills, _) => PromptComposer(
+                  runContext: runContext,
+                  chatSkills: chatSkills,
+                  controller: _scope.textController,
+                  focusNode: _scope.composerFocus,
+                  canSend:
+                      !view.bypassBlocked &&
+                      switch (view.status) {
+                        SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
+                        _ => false,
+                      },
+                  canStop:
+                      view.status == SessionStatus.running ||
+                      view.status == SessionStatus.awaitingPermission,
+                  onSend: _scope.send,
+                  onStop: _scope.stop,
+                  mentionFiles: _scope.fileMentionController.files,
+                  onMentionStart: _scope.refreshFiles,
+                  commands: view.commands,
+                  onAcceptPending: _answerPending(view.pendingPermission, accept: true),
+                  onRejectPending: _answerPending(view.pendingPermission, accept: false),
+                  onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
+                      ? _scope.cycleMode
+                      : null,
+                  toolbar: <Widget>[
+                    ComposerToolbar(
+                      agentName: agentDisplayName(view.agentId),
+                      agentLocked: view.agentLocked,
+                      options: view.configOptions,
+                      enabled: view.canChangeConfig,
+                      onChanged: _scope.setConfig,
+                      onAttach: _scope.attachFile,
+                      onMakeDefault: _scope.makeDefault,
+                      chatSkills: chatSkills,
+                      onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

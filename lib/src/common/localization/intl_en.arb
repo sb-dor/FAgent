@@ -266,5 +266,14 @@
   "noChatForError": "Open a chat to send the error to the agent",
   "noChatForWidget": "Open a chat to add the widget to the message",
   "logsNewLines": "{count, plural, =1{1 new line ↓} other{{count} new lines ↓}}",
-  "@logsNewLines": {"placeholders": {"count": {"type": "int"}}}
+  "@logsNewLines": {"placeholders": {"count": {"type": "int"}}},
+  "chatSkillsTooltip": "Skills enabled for this project",
+  "chatSkillsEnabledFor": "Enabled for {project}",
+  "@chatSkillsEnabledFor": {"placeholders": {"project": {"type": "String"}}},
+  "chatSkillsOpenLibrary": "Open the skill library →",
+  "chatSkillsNone": "No skills for this project",
+  "chatSkillsNote": "The agent loads the enabled skills when a task fits. Choosing skills for a single chat and handing them to the agent come in M3.",
+  "slashSectionSkills": "Project skills",
+  "skillUsed": "Skill",
+  "skillUsedTooltip": "Open in the skill library"
 }

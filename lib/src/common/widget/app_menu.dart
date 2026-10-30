@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
@@ -21,6 +22,7 @@ final class AppMenuItem<T> {
     this.shortcut,
     this.badge,
     this.tone = AppTone.neutral,
+    this.mono = false,
   });
 
   /// Result of the menu when this row is picked.
@@ -49,6 +51,9 @@ final class AppMenuItem<T> {
 
   /// [AppTone.warn] / [AppTone.danger] mark rows that need caution.
   final AppTone tone;
+
+  /// Sets [title] in the monospace font: a command or a name.
+  final bool mono;
 }
 
 /// A titled group of [AppMenuItem]s.
@@ -487,9 +492,12 @@ class _MenuRow<T> extends StatelessWidget {
     final subtitle = item.subtitle;
     final shortcut = item.shortcut;
     final badge = item.badge;
+    final titleColor = toneColor ?? colors.text;
     final title = Text(
       item.title,
-      style: theme.bodyMedium!.copyWith(color: toneColor ?? colors.text),
+      style: item.mono
+          ? AppText.mono(context, size: 13).copyWith(color: titleColor)
+          : theme.bodyMedium!.copyWith(color: titleColor),
     );
     return Semantics(
       button: true,

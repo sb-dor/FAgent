@@ -24,6 +24,7 @@ import 'package:flutter_code_agent/src/feature/session_config/controller/session
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:path/path.dart' as p;
 
 /// Gives the chat widgets access to [ChatConfigWidgetState].
@@ -60,6 +61,8 @@ class ChatConfigWidget extends StatefulWidget {
     this.onHandle,
     this.onOpenChange,
     this.runContext,
+    this.chatSkills = ChatSkills.empty,
+    this.onOpenSkills,
     super.key,
   });
 
@@ -84,6 +87,14 @@ class ChatConfigWidget extends StatefulWidget {
   /// while the chat is open.
   final RunMentions? runContext;
 
+  /// The skills of the chat's project for the 🧩 chip, the `/` menu and the skill lines of the
+  /// feed. May change while the chat is open.
+  final ChatSkills chatSkills;
+
+  /// Shows the skill library: on the skill [itemId] when given, for the chat's project. `null`
+  /// hides the 🧩 chip and leaves the skill lines of the feed plain.
+  final void Function({String? itemId, int? projectId})? onOpenSkills;
+
   @override
   State<ChatConfigWidget> createState() => ChatConfigWidgetState();
 }
@@ -102,6 +113,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final ValueNotifier<RunMentions?> runContext = ValueNotifier<RunMentions?>(
     widget.runContext,
   );
+
+  /// [ChatConfigWidget.chatSkills], as something the composer can listen to. Equal skills do not
+  /// notify, so a library that emits the same content again rebuilds nothing.
+  late final ValueNotifier<ChatSkills> chatSkills = ValueNotifier<ChatSkills>(widget.chatSkills);
   ChatView? _publishedView;
   bool _publishScheduled = false;
 
@@ -144,6 +159,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     textController.dispose();
     composerFocus.dispose();
     runContext.dispose();
+    chatSkills.dispose();
     super.dispose();
   }
 
@@ -151,7 +167,15 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   void didUpdateWidget(ChatConfigWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     runContext.value = widget.runContext;
+    chatSkills.value = widget.chatSkills;
   }
+
+  /// Whether the skill library can be shown from the chat.
+  bool get canOpenSkills => widget.onOpenSkills != null;
+
+  /// Shows the skill library for the chat's project, on the skill [itemId] when given.
+  void openSkills({String? itemId}) =>
+      widget.onOpenSkills?.call(itemId: itemId, projectId: widget.project.id);
 
   /// Hands the latest view to [ChatConfigWidget.onHandle] once the frame is done; several views
   /// in one frame publish only the last.

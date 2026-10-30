@@ -26,6 +26,7 @@ import 'package:flutter_code_agent/src/feature/session_creation/data/session_cre
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/pending_chat_draft.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
@@ -72,6 +73,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final DevicesController devicesController;
   late final RunController runController;
   late final RunActionsController runActionsController;
+
+  /// The skills of the selected project, for the chats (the 🧩 chip, the `/` menu, the skill lines).
+  /// The Skills screen has a library of its own.
+  late final SkillLibraryController skillLibraryController;
   final WorkspaceDataController dataController = WorkspaceDataController();
 
   /// The run of the selected project and its ties to the selected chat.
@@ -129,20 +134,26 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
       isPreview: runIsPreview,
     );
+    skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
+    projectsController.addListener(_followSkills);
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
     dataController
       ..addListener(_followSelectedProject)
+      ..addListener(_followSkills)
       ..addListener(_draft.onSelectionChanged)
       ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
+    _followSkills();
   }
 
   @override
   void dispose() {
     runLink.dispose();
+    projectsController.removeListener(_followSkills);
     dataController
       ..removeListener(_followSelectedProject)
+      ..removeListener(_followSkills)
       ..removeListener(_draft.onSelectionChanged)
       ..chatHandle.removeListener(_draft.onHandleChanged)
       ..dispose();
@@ -152,6 +163,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..removeListener(_onRunAction)
       ..dispose();
     runController.dispose();
+    skillLibraryController.dispose();
     devicesController.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
@@ -171,6 +183,16 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _followSelectedProject() {
     final id = dataController.projectId;
     if (id != null) runController.watch(id);
+  }
+
+  /// The skills follow the selected project. They wait for the project list, since the folder of
+  /// the project belongs to its skills; without a project (or with one that is gone) nothing new
+  /// is followed.
+  void _followSkills() {
+    final project = selectedProject;
+    if (project != null) {
+      skillLibraryController.watch(projectId: project.id, projectRoot: project.path);
+    }
   }
 
   /// Picks the first running device for the selected project while none is chosen and the devices

@@ -9,17 +9,20 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_commands.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 
 /// {@template prompt_composer}
 /// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs
 /// the send button becomes Stop. Shift+Tab calls [onCycleMode] (it is consumed even without one,
 /// so the focus stays in the field). [toolbar] (the chips) sits under the field, the send button
 /// on its right. Typing `@` suggests project files (arrows choose, Enter or Tab inserts, Escape
-/// closes); a `/` at the start of the text suggests the app's and the agent's [commands] the same
-/// way. While a permission request waits, Enter and Escape (without Shift, Command, Alt or
-/// Control) in an empty field call [onAcceptPending] and [onRejectPending].
+/// closes); a `/` at the start of the text suggests the project's [chatSkills], the app's commands
+/// and the agent's [commands] the same way. While a permission request waits, Enter and Escape
+/// (without Shift, Command, Alt or Control) in an empty field call [onAcceptPending] and
+/// [onRejectPending].
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -38,6 +41,7 @@ class PromptComposer extends StatefulWidget {
     this.onAcceptPending,
     this.onRejectPending,
     this.runContext,
+    this.chatSkills = ChatSkills.empty,
     super.key,
   });
 
@@ -83,6 +87,9 @@ class PromptComposer extends StatefulWidget {
   /// What the running app offers the `@` menu; `null` offers nothing.
   final RunMentions? runContext;
 
+  /// The skills of the chat's project for the `/` menu (shown before the app's commands).
+  final ChatSkills chatSkills;
+
   @override
   State<PromptComposer> createState() => _PromptComposerState();
 }
@@ -120,7 +127,8 @@ class _PromptComposerState extends State<PromptComposer> {
     if (_trigger != null &&
         (oldWidget.mentionFiles != widget.mentionFiles ||
             oldWidget.commands != widget.commands ||
-            oldWidget.runContext != widget.runContext)) {
+            oldWidget.runContext != widget.runContext ||
+            oldWidget.chatSkills != widget.chatSkills)) {
       _search(refresh: true);
     }
   }
@@ -160,7 +168,11 @@ class _PromptComposerState extends State<PromptComposer> {
             : -1;
         _rows = found;
       case _Trigger.command:
-        final found = slashSuggestions(appCommands, widget.commands, _query);
+        final found = slashMenuRows(
+          skills: widget.chatSkills,
+          agent: widget.commands,
+          query: _query,
+        );
         if (refresh && listEquals(found, _commands)) return;
         keep = refresh && highlightedBefore >= 0 && highlightedBefore < _commands.length
             ? found.indexOf(_commands[highlightedBefore])

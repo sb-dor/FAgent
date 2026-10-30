@@ -4,6 +4,9 @@ import 'package:meta/meta.dart';
 
 /// Who runs a [SlashCommand].
 enum SlashSource {
+  /// The skills of the chat's project.
+  skill,
+
   /// The app itself (run, reload, …).
   app,
 
@@ -111,16 +114,22 @@ List<SlashCommand> searchCommands(List<SlashCommand> all, String query, {int lim
   return <SlashCommand>[for (final (_, _, command) in ranked.take(limit)) command];
 }
 
-/// What the `/` menu shows for [query]: matching [app] commands, then matching
-/// [agent] commands, [limit] rows in all.
+/// What the `/` menu shows for [query]: matching [skills] first, then matching [app] commands, then
+/// matching [agent] commands, [limit] rows in all.
 List<SlashCommand> slashSuggestions(
   List<SlashCommand> app,
   List<SlashCommand> agent,
   String query, {
+  List<SlashCommand> skills = const <SlashCommand>[],
   int limit = 12,
 }) {
-  final apps = searchCommands(app, query, limit: limit);
-  return <SlashCommand>[...apps, ...searchCommands(agent, query, limit: limit - apps.length)];
+  final found = searchCommands(skills, query, limit: limit);
+  final apps = searchCommands(app, query, limit: limit - found.length);
+  return <SlashCommand>[
+    ...found,
+    ...apps,
+    ...searchCommands(agent, query, limit: limit - found.length - apps.length),
+  ];
 }
 
 final RegExp _slash = RegExp(r'^/(\S*)$');

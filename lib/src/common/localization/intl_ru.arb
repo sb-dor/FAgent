@@ -230,5 +230,14 @@
   "noChatForError": "Откройте чат, чтобы отправить ошибку агенту",
   "noChatForWidget": "Откройте чат, чтобы добавить виджет в сообщение",
   "logsNewLines": "{count, plural, one{{count} новая строка ↓} few{{count} новые строки ↓} many{{count} новых строк ↓} other{{count} новой строки ↓}}",
-  "@logsNewLines": {"placeholders": {"count": {"type": "int"}}}
+  "@logsNewLines": {"placeholders": {"count": {"type": "int"}}},
+  "chatSkillsTooltip": "Скиллы, включённые для проекта",
+  "chatSkillsEnabledFor": "Включены для {project}",
+  "@chatSkillsEnabledFor": {"placeholders": {"project": {"type": "String"}}},
+  "chatSkillsOpenLibrary": "Открыть библиотеку скиллов →",
+  "chatSkillsNone": "В проекте нет скиллов",
+  "chatSkillsNote": "Агент подгружает включённые скиллы, когда задача подходит. Выбор скиллов для одного чата и доставка их агенту — в M3.",
+  "slashSectionSkills": "Скиллы проекта",
+  "skillUsed": "Скилл",
+  "skillUsedTooltip": "Открыть в библиотеке скиллов"
 }
