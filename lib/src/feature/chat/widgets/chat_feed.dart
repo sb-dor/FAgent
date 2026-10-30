@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/feed_grouping.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/read_group_row.dart';
 
 /// {@template chat_feed}
 /// The feed, newest at the bottom; it sticks to the bottom while new items
-/// arrive (reversed list), and stays put when the user scrolled up.
+/// arrive (reversed list), and stays put when the user scrolled up. Runs of
+/// file reads fold into one row.
 /// {@endtemplate}
 class ChatFeed extends StatelessWidget {
   /// {@macro chat_feed}
@@ -17,22 +21,31 @@ class ChatFeed extends StatelessWidget {
   final void Function(String requestId, String optionId) onAnswerPermission;
 
   @override
-  Widget build(BuildContext context) => ListView.builder(
-    reverse: true,
-    padding: const EdgeInsets.symmetric(vertical: 16),
-    itemCount: items.length,
-    itemBuilder: (context, index) {
-      final item = items[items.length - 1 - index];
-      return Center(
-        key: ValueKey<int>(item.seq),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
-            child: ChatItemView(item: item, onAnswerPermission: onAnswerPermission),
+  Widget build(BuildContext context) {
+    final entries = groupFeed(items);
+    return ListView.builder(
+      reverse: true,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      itemCount: entries.length,
+      itemBuilder: (context, index) {
+        final entry = entries[entries.length - 1 - index];
+        return Center(
+          key: ValueKey<int>(entry.seq),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+              child: switch (entry) {
+                SingleEntry(:final item) => ChatItemView(
+                  item: item,
+                  onAnswerPermission: onAnswerPermission,
+                ),
+                ReadGroupEntry(:final calls) => ReadGroupRow(calls: calls),
+              },
+            ),
           ),
-        ),
-      );
-    },
-  );
+        );
+      },
+    );
+  }
 }

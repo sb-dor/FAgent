@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/mention_spans.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/plan_card.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_call_card.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
@@ -32,36 +35,47 @@ class ChatItemView extends StatelessWidget {
       UserMessageItem(:final text, :final resources) => Align(
         alignment: Alignment.centerRight,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 640),
+          constraints: const BoxConstraints(maxWidth: 560),
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: colors.accentSoft,
+              color: colors.surface,
+              border: Border.all(color: colors.border),
               borderRadius: BorderRadius.circular(AppRadius.large),
             ),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  SelectableText(text),
-                  for (final resource in resources)
-                    Text('@${Uri.parse(resource).pathSegments.last}', style: muted),
-                ],
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: SelectableText.rich(
+                TextSpan(
+                  children: mentionSpans(
+                    text,
+                    resources,
+                    pill: AppText.mono(
+                      context,
+                      size: 13,
+                    ).copyWith(color: colors.accent, backgroundColor: colors.accentSoft),
+                  ),
+                ),
               ),
             ),
           ),
         ),
       ),
       AgentMessageItem(:final text) => MarkdownBody(data: text, selectable: true),
-      AgentThoughtItem(:final text) => Theme(
-        data: theme.copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          dense: true,
-          tilePadding: EdgeInsets.zero,
-          leading: const Icon(Icons.psychology_outlined, size: 18),
-          title: Text(localization.thinking, style: muted),
-          children: <Widget>[SelectableText(text, style: muted)],
+      AgentThoughtItem(:final text, :final duration) => ExpandableRow(
+        bordered: false,
+        header: Row(
+          children: <Widget>[
+            Icon(Icons.psychology_outlined, size: 16, color: colors.muted),
+            const SizedBox(width: 8),
+            Text(
+              duration != null && duration.inSeconds >= 1
+                  ? localization.thinkingFor(duration.inSeconds)
+                  : localization.thinking,
+              style: muted,
+            ),
+          ],
         ),
+        body: text.isEmpty ? null : SelectableText(text, style: muted),
       ),
       final ToolCallItem call => ToolCallCard(call: call),
       PlanItem(:final entries) => PlanCard(entries: entries),

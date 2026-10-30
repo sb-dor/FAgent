@@ -36,13 +36,16 @@ final class AgentMessageItem extends ChatItem {
 /// Agent reasoning (shown collapsed).
 final class AgentThoughtItem extends ChatItem {
   /// Creates a thought.
-  const AgentThoughtItem(super.seq, {required this.text, this.messageId});
+  const AgentThoughtItem(super.seq, {required this.text, this.messageId, this.duration});
 
   /// Thought text so far.
   final String text;
 
   /// ACP `messageId`, when the agent sends one.
   final String? messageId;
+
+  /// Time between the first and the last chunk; `null` for a single chunk.
+  final Duration? duration;
 }
 
 /// Content of a tool call.
