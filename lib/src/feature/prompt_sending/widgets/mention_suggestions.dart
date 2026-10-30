@@ -6,7 +6,8 @@ import 'package:path/path.dart' as p;
 /// The list of project files under a typed `@`; [highlighted] is the row Enter would insert.
 class MentionSuggestions extends StatelessWidget {
   /// Creates the list.
-  const MentionSuggestions({super.key, 
+  const MentionSuggestions({
+    super.key,
     required this.files,
     required this.highlighted,
     required this.onSelected,

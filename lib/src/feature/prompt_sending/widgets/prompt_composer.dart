@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
@@ -193,7 +194,7 @@ class _PromptComposerState extends State<PromptComposer> {
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
+          constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: colors.surface,

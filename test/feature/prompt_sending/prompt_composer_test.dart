@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -88,6 +89,17 @@ void main() {
     expect(chips.top, greaterThanOrEqualTo(field.bottom));
     expect(chips.left, lessThan(send.left));
     expect(send.top, greaterThanOrEqualTo(field.bottom));
+  });
+
+  testWidgets('the composer is the chat column: 720 px wide and centred', (tester) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(composer(canSend: true, canStop: false));
+
+    final box = tester.getRect(
+      find.ancestor(of: find.byType(TextField), matching: find.byType(DecoratedBox)).last,
+    );
+    expect(box.width, kChatColumnWidth);
+    expect(box.center.dx, 640);
   });
 
   testWidgets('the hint mentions files and commands', (tester) async {
