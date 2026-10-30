@@ -19,6 +19,7 @@ import 'package:flutter_code_agent/src/feature/project_trust/widgets/project_tru
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/session_config/controller/session_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
@@ -58,6 +59,7 @@ class ChatConfigWidget extends StatefulWidget {
     this.pickFile = _pickWithDialog,
     this.onHandle,
     this.onOpenChange,
+    this.runContext,
     super.key,
   });
 
@@ -78,6 +80,10 @@ class ChatConfigWidget extends StatefulWidget {
   /// `null` leaves the row as a plain expander.
   final ValueChanged<String>? onOpenChange;
 
+  /// What the running app offers the `@` menu of the composer; `null` offers nothing. May change
+  /// while the chat is open.
+  final RunMentions? runContext;
+
   @override
   State<ChatConfigWidget> createState() => ChatConfigWidgetState();
 }
@@ -91,6 +97,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final FileMentionController fileMentionController;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
+
+  /// [ChatConfigWidget.runContext], as something the composer can listen to.
+  late final ValueNotifier<RunMentions?> runContext = ValueNotifier<RunMentions?>(
+    widget.runContext,
+  );
   ChatView? _publishedView;
   bool _publishScheduled = false;
 
@@ -132,7 +143,14 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     fileMentionController.dispose();
     textController.dispose();
     composerFocus.dispose();
+    runContext.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(ChatConfigWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    runContext.value = widget.runContext;
   }
 
   /// Hands the latest view to [ChatConfigWidget.onHandle] once the frame is done; several views
@@ -153,6 +171,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Appends [text] to the composer, after a blank line when it already holds something, puts
   /// the caret at the end and focuses the composer.
   void insertDraft(String text) {
+    if (!mounted) return;
     final existing = textController.text;
     final combined = existing.isEmpty ? text : '$existing\n\n$text';
     textController.value = TextEditingValue(

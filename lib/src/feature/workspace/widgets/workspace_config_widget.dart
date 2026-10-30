@@ -8,8 +8,8 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/devices_contro
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -27,6 +27,7 @@ import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_cont
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:path/path.dart' as p;
@@ -72,6 +73,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final RunActionsController runActionsController;
   final WorkspaceDataController dataController = WorkspaceDataController();
 
+  /// The run of the selected project and its ties to the selected chat.
+  late final WorkspaceRunLink runLink;
+
   /// Whether the run data is made up (the Run tab says so).
   late final bool runIsPreview;
 
@@ -110,6 +114,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       runRepository: dependencies.appRunRepository,
       pickerRepository: dependencies.widgetPickerRepository,
     )..addListener(_onRunAction);
+    runLink = WorkspaceRunLink(
+      data: dataController,
+      run: runController,
+      actions: runActionsController,
+      reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
+    );
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
     dataController.addListener(_followSelectedProject);
@@ -118,6 +128,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
 
   @override
   void dispose() {
+    runLink.dispose();
     dataController
       ..removeListener(_followSelectedProject)
       ..dispose();
@@ -283,14 +294,17 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     }
   }
 
-  /// Sends an error of the running app to the open chat. Filled in with the chat integration; for
-  /// now it only says so.
-  void sendRunErrorToAgent(RunError error) => _showMessage(Localization.of(context).comingSoon);
+  /// Puts the error of the log line [entry] into the open chat's draft (the user sends it), or says
+  /// there is no chat.
+  void sendRunErrorToAgent(LogEntry entry) {
+    if (!runLink.sendError(entry)) _showMessage(Localization.of(context).noChatForError);
+  }
 
-  /// Adds the widget picked in the running app to the message being written. Filled in with the
-  /// chat integration; for now it only says so.
-  void addRunWidgetToMessage(PickedWidget picked) =>
-      _showMessage(Localization.of(context).comingSoon);
+  /// Puts the widget picked in the running app into the open chat's draft, or says there is no
+  /// chat.
+  void addRunWidgetToMessage(PickedWidget picked) {
+    if (!runLink.addWidget(picked)) _showMessage(Localization.of(context).noChatForWidget);
+  }
 
   /// Opens [file] of the running app in the editor; a relative path is inside the selected project.
   Future<void> openRunFile(String file, int? line) async {

@@ -5,8 +5,8 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/devices_contro
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_card.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_logs.dart';
@@ -48,8 +48,8 @@ class RunTab extends StatefulWidget {
   /// The actions (start, stop, reload, pick a widget).
   final RunActionsController actions;
 
-  /// Called when the user sends an error of the run to the agent.
-  final ValueChanged<RunError> onSendError;
+  /// Called with the log line when the user sends its error to the agent.
+  final ValueChanged<LogEntry> onSendError;
 
   /// Called when the user adds the picked widget to the message.
   final ValueChanged<PickedWidget> onAddWidget;
@@ -163,7 +163,7 @@ class _RunTabState extends State<RunTab> {
                 logs: state.logs,
                 errorCount: state.errorCount,
                 onClear: widget.run.clearLogs,
-                onSend: (entry) => widget.onSendError(entry.error!),
+                onSend: widget.onSendError,
                 onOpenFile: widget.onOpenFile,
               ),
             ),

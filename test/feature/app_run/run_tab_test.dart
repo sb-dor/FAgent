@@ -10,12 +10,12 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_tab.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_right_pane.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -88,7 +88,7 @@ void main() {
     late DevicesController devices;
     late RunController run;
     late RunActionsController actions;
-    late List<RunError> sentErrors;
+    late List<LogEntry> sentErrors;
     late List<(String, int?)> openedFiles;
 
     setUp(() {
@@ -99,7 +99,7 @@ void main() {
         runRepository: dependencies.appRunRepository,
         pickerRepository: dependencies.widgetPickerRepository,
       );
-      sentErrors = <RunError>[];
+      sentErrors = <LogEntry>[];
       openedFiles = <(String, int?)>[];
     });
 
@@ -208,7 +208,7 @@ void main() {
       expect(find.text('Errors 1'), findsOneWidget);
 
       await tester.tap(find.text('Send to the agent'));
-      expect(sentErrors.single.title, 'Layout overflow');
+      expect(sentErrors.single.error!.title, 'Layout overflow');
 
       await tester.tap(find.text('Open file'));
       expect(openedFiles.single, ('lib/src/feature/booking/widgets/booking_card.dart', 42));
@@ -492,6 +492,10 @@ void main() {
 
     setUp(() => dependencies = testDependencies());
 
+    /// The button of the right pane (the title bar has buttons with the same tooltips).
+    Finder inPane(String tooltip) =>
+        find.descendant(of: find.byType(WorkspaceRightPane), matching: find.byTooltip(tooltip));
+
     Future<void> settle(WidgetTester tester) async {
       await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
       await tester.pump(const Duration(milliseconds: 100));
@@ -569,9 +573,9 @@ void main() {
       await pump(tester);
       expect(find.text('Not running'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Run'));
+      await tester.tap(inPane('Run'));
       await tester.pump(const Duration(milliseconds: 20));
-      await tester.tap(find.byTooltip('Hot reload'));
+      await tester.tap(inPane('Hot reload'));
       await tester.pump(const Duration(milliseconds: 20));
 
       expect(find.text('Layout overflow'), findsOneWidget);
@@ -581,7 +585,7 @@ void main() {
 
     testWidgets('picking a widget shows its card', (tester) async {
       await pump(tester);
-      await tester.tap(find.byTooltip('Run'));
+      await tester.tap(inPane('Run'));
       await tester.pump(const Duration(milliseconds: 20));
 
       await tester.tap(find.byTooltip('Pick a widget in the app'));
@@ -599,12 +603,12 @@ void main() {
 
     testWidgets('the picked widget survives a later action', (tester) async {
       final state = await pump(tester);
-      await tester.tap(find.byTooltip('Run'));
+      await tester.tap(inPane('Run'));
       await tester.pump(const Duration(milliseconds: 20));
       await tester.tap(find.byTooltip('Pick a widget in the app'));
       await tester.pump(const Duration(milliseconds: 20));
 
-      await tester.tap(find.byTooltip('Hot reload'));
+      await tester.tap(inPane('Hot reload'));
       await tester.pump(const Duration(milliseconds: 20));
 
       expect(state.runController.state.picked, isA<PickedWidget>());
@@ -618,9 +622,9 @@ void main() {
       await settle(tester);
       await tester.pump();
       await tester.pump();
-      await tester.tap(find.byTooltip('Run'));
+      await tester.tap(inPane('Run'));
       await tester.pump(const Duration(milliseconds: 20));
-      await tester.tap(find.byTooltip('Hot reload'));
+      await tester.tap(inPane('Hot reload'));
       await tester.pump(const Duration(milliseconds: 20));
       await tester.tap(find.byTooltip('Pick a widget in the app'));
       await tester.pump(const Duration(milliseconds: 20));

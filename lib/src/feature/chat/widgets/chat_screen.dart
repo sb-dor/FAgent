@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/bypass_gate_banner.dart';
@@ -79,39 +80,43 @@ class _ChatScreenState extends State<ChatScreen> {
           if (view.bypassBlocked) BypassGateBanner(onAllow: _scope.allowBypass),
           StateConsumer<FileMentionController, FileMentionState>(
             controller: _scope.fileMentionController,
-            builder: (context, _, _) => PromptComposer(
-              controller: _scope.textController,
-              focusNode: _scope.composerFocus,
-              canSend:
-                  !view.bypassBlocked &&
-                  switch (view.status) {
-                    SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
-                    _ => false,
-                  },
-              canStop:
-                  view.status == SessionStatus.running ||
-                  view.status == SessionStatus.awaitingPermission,
-              onSend: _scope.send,
-              onStop: _scope.stop,
-              mentionFiles: _scope.fileMentionController.files,
-              onMentionStart: _scope.refreshFiles,
-              commands: view.commands,
-              onAcceptPending: _answerPending(view.pendingPermission, accept: true),
-              onRejectPending: _answerPending(view.pendingPermission, accept: false),
-              onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
-                  ? _scope.cycleMode
-                  : null,
-              toolbar: <Widget>[
-                ComposerToolbar(
-                  agentName: agentDisplayName(view.agentId),
-                  agentLocked: view.agentLocked,
-                  options: view.configOptions,
-                  enabled: view.canChangeConfig,
-                  onChanged: _scope.setConfig,
-                  onAttach: _scope.attachFile,
-                  onMakeDefault: _scope.makeDefault,
-                ),
-              ],
+            builder: (context, _, _) => ValueListenableBuilder<RunMentions?>(
+              valueListenable: _scope.runContext,
+              builder: (context, runContext, _) => PromptComposer(
+                runContext: runContext,
+                controller: _scope.textController,
+                focusNode: _scope.composerFocus,
+                canSend:
+                    !view.bypassBlocked &&
+                    switch (view.status) {
+                      SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
+                      _ => false,
+                    },
+                canStop:
+                    view.status == SessionStatus.running ||
+                    view.status == SessionStatus.awaitingPermission,
+                onSend: _scope.send,
+                onStop: _scope.stop,
+                mentionFiles: _scope.fileMentionController.files,
+                onMentionStart: _scope.refreshFiles,
+                commands: view.commands,
+                onAcceptPending: _answerPending(view.pendingPermission, accept: true),
+                onRejectPending: _answerPending(view.pendingPermission, accept: false),
+                onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
+                    ? _scope.cycleMode
+                    : null,
+                toolbar: <Widget>[
+                  ComposerToolbar(
+                    agentName: agentDisplayName(view.agentId),
+                    agentLocked: view.agentLocked,
+                    options: view.configOptions,
+                    enabled: view.canChangeConfig,
+                    onChanged: _scope.setConfig,
+                    onAttach: _scope.attachFile,
+                    onMakeDefault: _scope.makeDefault,
+                  ),
+                ],
+              ),
             ),
           ),
         ],

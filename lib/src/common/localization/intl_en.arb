@@ -213,6 +213,12 @@
   "runChooseDeviceFirst": "Choose a device to run on",
   "runNoProject": "Select a project to run its app",
   "runNoProjectHint": "The app runs per project, not per chat.",
+  "fromRun": "From the run",
+  "mentionFiles": "Files",
+  "selectedWidget": "Selected widget",
+  "lastError": "Last error",
+  "noChatForError": "Open a chat to send the error to the agent",
+  "noChatForWidget": "Open a chat to add the widget to the message",
   "logsNewLines": "{count, plural, =1{1 new line ↓} other{{count} new lines ↓}}",
   "@logsNewLines": {"placeholders": {"count": {"type": "int"}}}
 }

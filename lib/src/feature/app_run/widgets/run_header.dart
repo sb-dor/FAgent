@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_reload_switch.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_status.dart';
 import 'package:path/path.dart' as p;
@@ -72,32 +73,11 @@ class RunHeader extends StatelessWidget {
   /// Called when the user presses one of the buttons.
   final ValueChanged<RunAction> onAction;
 
-  static const String _argumentsValue = '';
-
-  static IconData _platformIcon(DevicePlatform platform) => switch (platform) {
-    DevicePlatform.ios => Icons.phone_iphone,
-    DevicePlatform.android => Icons.phone_android,
-    DevicePlatform.macos => Icons.desktop_mac_outlined,
-    DevicePlatform.web => Icons.public,
-    DevicePlatform.windows || DevicePlatform.linux => Icons.desktop_windows_outlined,
-  };
-
-  AppMenuItem<String> _item(Device device) => AppMenuItem<String>(
-    value: device.id,
-    title: device.name,
-    subtitle: device.detail,
-    icon: _platformIcon(device.platform),
-    selected: device.id == state.selectedDeviceId,
-  );
-
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final localization = Localization.of(context);
     final run = state.run;
-    final selected = devices.where((device) => device.id == state.selectedDeviceId).firstOrNull;
-    final running = devices.where((device) => device.kind == DeviceKind.running);
-    final available = devices.where((device) => device.kind == DeviceKind.available);
     final active = run is RunBuilding || run is RunRunning;
     final canStart = state.selectedDeviceId != null;
 
@@ -144,34 +124,9 @@ class RunHeader extends StatelessWidget {
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
-                SelectorChip<String>(
-                  label: selected?.name ?? localization.chooseDevice,
-                  icon: selected == null ? Icons.devices : _platformIcon(selected.platform),
-                  menuWidth: 300,
-                  sections: <AppMenuSection<String>>[
-                    if (running.isNotEmpty)
-                      AppMenuSection<String>(
-                        title: localization.devicesRunning,
-                        items: running.map(_item).toList(growable: false),
-                      ),
-                    if (available.isNotEmpty)
-                      AppMenuSection<String>(
-                        title: localization.devicesAvailable,
-                        items: available.map(_item).toList(growable: false),
-                      ),
-                    if (devices.isNotEmpty)
-                      AppMenuSection<String>(
-                        items: <AppMenuItem<String>>[
-                          AppMenuItem<String>(
-                            value: _argumentsValue,
-                            title: localization.runArguments,
-                            subtitle: localization.comingInMilestone('M2'),
-                            icon: Icons.tune,
-                            enabled: false,
-                          ),
-                        ],
-                      ),
-                  ],
+                RunDeviceChip(
+                  devices: devices,
+                  selectedDeviceId: state.selectedDeviceId,
                   onSelected: onDevice,
                 ),
                 SelectorChip<BuildMode>(

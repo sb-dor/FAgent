@@ -3,9 +3,11 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/app_title_bar.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_controls.dart';
 
 /// {@template workspace_title_bar}
-/// Title bar of the chat screen: the sidebar toggle, "chat · project" and the right pane toggle.
+/// Title bar of the chat screen: the sidebar toggle, "chat · project", the run controls and the
+/// right pane toggle.
 /// {@endtemplate}
 class WorkspaceTitleBar extends StatelessWidget {
   /// {@macro workspace_title_bar}
@@ -32,6 +34,8 @@ class WorkspaceTitleBar extends StatelessWidget {
         builder: (context, _) => Text(_title(context, scope)),
       ),
       trailing: <Widget>[
+        const WorkspaceRunControls(),
+        const SizedBox(width: 4),
         TitleBarButton(
           icon: Icons.vertical_split_outlined,
           tooltip: localization.toggleRightPane,
