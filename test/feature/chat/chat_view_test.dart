@@ -80,10 +80,15 @@ void main() {
       expect(item.rejectOption?.optionId, '3');
     });
 
-    test('without allow_once the first allowing option is taken', () {
+    test('Enter never takes a standing permission: without allow_once it has no option', () {
       final item = withKinds(<String>['reject_always', 'allow_always']);
-      expect(item.acceptOption?.optionId, '1');
+      expect(item.acceptOption, isNull);
       expect(item.rejectOption?.optionId, '0');
+    });
+
+    test('reject and say takes only reject_once', () {
+      expect(withKinds(<String>['allow_once', 'reject_always']).rejectOnceOption, isNull);
+      expect(withKinds(<String>['reject_always', 'reject_once']).rejectOnceOption?.optionId, '1');
     });
 
     test('without a rejecting option Esc has nothing to take', () {

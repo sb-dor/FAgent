@@ -231,15 +231,18 @@ final class PermissionItem extends ChatItem {
   /// The option the user chose.
   final String? selectedOptionId;
 
-  /// The option Enter picks: the first `allow_once`, else the first one that allows.
+  /// The option Enter picks: the first `allow_once`. Enter never grants a standing permission, so
+  /// without one it does nothing.
   PermissionOptionView? get acceptOption =>
-      options.where((o) => o.kind == 'allow_once').firstOrNull ??
-      options.where((o) => o.allows).firstOrNull;
+      options.where((o) => o.kind == 'allow_once').firstOrNull;
 
-  /// The option Esc picks: the first `reject_once`, else the first one that does not allow.
+  /// The option Escape picks: the first `reject_once`, else the first one that does not allow.
   PermissionOptionView? get rejectOption =>
-      options.where((o) => o.kind == 'reject_once').firstOrNull ??
-      options.where((o) => !o.allows).firstOrNull;
+      rejectOnceOption ?? options.where((o) => !o.allows).firstOrNull;
+
+  /// The first `reject_once`: a "not this time" decline, never a standing one.
+  PermissionOptionView? get rejectOnceOption =>
+      options.where((o) => o.kind == 'reject_once').firstOrNull;
 
   /// A copy in [state] (with the picked [optionId]).
   PermissionItem resolve(PermissionState state, {String? optionId}) => PermissionItem(

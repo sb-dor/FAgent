@@ -140,6 +140,82 @@ void main() {
     expect(answers, isEmpty);
   });
 
+  testWidgets('without reject_once there is no reject and say', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        PermissionCard(
+          item: const PermissionItem(
+            0,
+            requestId: 'r',
+            title: 't',
+            command: 'ls',
+            options: <PermissionOptionView>[
+              PermissionOptionView(optionId: 'a', name: 'Allow', kind: 'allow_once'),
+              PermissionOptionView(optionId: 'n', name: 'Never', kind: 'reject_always'),
+            ],
+          ),
+          onAnswer: (_) {},
+          onRejectAndSay: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reject and say…'), findsNothing);
+  });
+
+  testWidgets('without allow_once no button shows the Enter hint', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        PermissionCard(
+          item: const PermissionItem(
+            0,
+            requestId: 'r',
+            title: 't',
+            command: 'ls',
+            options: <PermissionOptionView>[
+              PermissionOptionView(optionId: 'a', name: 'Always', kind: 'allow_always'),
+              PermissionOptionView(optionId: 'n', name: 'No', kind: 'reject_once'),
+            ],
+          ),
+          onAnswer: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('↵'), findsNothing);
+    expect(find.byType(FilledButton), findsNothing);
+    expect(find.text('Esc'), findsOneWidget);
+  });
+
+  testWidgets('with allow_once and allow_always only allow_once has the Enter hint', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        PermissionCard(
+          item: _full(command: 'ls'),
+          onAnswer: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('↵'), findsOneWidget);
+    expect(
+      find.descendant(of: find.widgetWithText(FilledButton, 'Allow'), matching: find.text('↵')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(OutlinedButton, 'Always in this project'),
+        matching: find.text('↵'),
+      ),
+      findsNothing,
+    );
+  });
+
   testWidgets('without the callback there is no reject and say', (tester) async {
     await tester.pumpWidget(
       testApp(

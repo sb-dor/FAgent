@@ -30,7 +30,8 @@ class PermissionCard extends StatelessWidget {
   /// Called with the chosen `optionId`.
   final ValueChanged<String> onAnswer;
 
-  /// Declines the request and lets the user say what to do instead; `null` hides the button.
+  /// Declines the request and lets the user say what to do instead; `null` hides the button (it
+  /// is also hidden when the agent offers no `reject_once` option).
   final VoidCallback? onRejectAndSay;
 
   String _title(GeneratedLocalization localization) => item.command != null
@@ -120,7 +121,7 @@ class PermissionCard extends StatelessWidget {
                 runSpacing: 8,
                 children: <Widget>[
                   for (final option in _ordered) _button(option),
-                  if (onRejectAndSay != null)
+                  if (onRejectAndSay != null && item.rejectOnceOption != null)
                     TextButton(
                       onPressed: onRejectAndSay,
                       style: TextButton.styleFrom(foregroundColor: colors.muted),

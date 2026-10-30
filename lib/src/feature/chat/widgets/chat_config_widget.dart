@@ -152,10 +152,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   void answerPermission(String requestId, String optionId) =>
       permissionController.answer(sessionId: sessionId, requestId: requestId, optionId: optionId);
 
-  /// Declines [item] with its `reject_once` option and moves the caret to the composer, so the
-  /// user can tell the agent what to do instead.
+  /// Declines [item] with its `reject_once` option (never a standing `reject_always`) and moves
+  /// the caret to the composer, so the user can tell the agent what to do instead.
   void rejectAndSay(PermissionItem item) {
-    final reject = item.rejectOption;
+    final reject = item.rejectOnceOption;
     if (reject == null) return;
     answerPermission(item.requestId, reject.optionId);
     composerFocus.requestFocus();
