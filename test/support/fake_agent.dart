@@ -16,8 +16,11 @@
 // session/load replays one user and one agent message for the loaded session;
 // loading the id `missing` fails with -32002 like the real adapter.
 // Sessions have a `mode` select option (default, acceptEdits, bypassPermissions)
-// that session/set_config_option changes; a loaded session whose id starts
-// with `bypass` is in bypassPermissions mode (as a session saved in it).
+// that session/set_config_option changes, plus a `model` select (m1, m2, bad, slow,
+// cmd) and an `effort` select (low, high). Setting model `bad` fails with an error,
+// `slow` is never answered, `cmd` first sends an available_commands_update.
+// A loaded session whose id starts with `bypass` is in bypassPermissions mode
+// (as a session saved in it).
 
 import 'dart:async';
 import 'dart:io';
@@ -33,6 +36,18 @@ Future<void> main(List<String> arguments) async {
   var nextSession = 0;
   final cancels = <String, Completer<void>>{};
   final modes = <String, String>{};
+  final models = <String, String>{};
+  final efforts = <String, String>{};
+
+  Map<String, Object?> select(String id, String current, List<String> values) => <String, Object?>{
+    'id': id,
+    'name': id,
+    'type': 'select',
+    'currentValue': current,
+    'options': <Map<String, Object?>>[
+      for (final value in values) <String, Object?>{'value': value, 'name': value},
+    ],
+  };
 
   List<Map<String, Object?>> configOptions(String session) => <Map<String, Object?>>[
     <String, Object?>{
@@ -47,6 +62,8 @@ Future<void> main(List<String> arguments) async {
         <String, Object?>{'value': 'bypassPermissions', 'name': 'Bypass permissions'},
       ],
     },
+    select('model', models[session] ?? 'm1', <String>['m1', 'm2', 'bad', 'slow', 'cmd']),
+    select('effort', efforts[session] ?? 'low', <String>['low', 'high']),
   ];
 
   Future<void> say(AcpAgentContext client, SessionId session, String text, {String? id}) =>
@@ -84,10 +101,35 @@ Future<void> main(List<String> arguments) async {
               'configOptions': configOptions(session),
             });
           })
-          .onSetSessionConfigOption((context) {
+          .onSetSessionConfigOption((context) async {
             final session = context.params.sessionId.value;
             final request = context.params.toJson();
-            if (request['configId'] == 'mode') modes[session] = '${request['value']}';
+            final value = '${request['value']}';
+            if (request['configId'] == 'mode') modes[session] = value;
+            if (request['configId'] == 'effort') efforts[session] = value;
+            if (request['configId'] == 'model') {
+              if (value == 'bad') {
+                throw JsonRpcRequestException(
+                  JsonRpcErrorObject(code: -32602, message: 'Unsupported model'),
+                );
+              }
+              if (value == 'slow') await Completer<void>().future;
+              if (value == 'cmd') {
+                await context.client.updateSession(
+                  SessionNotification(
+                    sessionId: context.params.sessionId,
+                    update: SessionUpdateAvailableCommandsUpdate(
+                      AvailableCommandsUpdate(
+                        availableCommands: <AvailableCommand>[
+                          AvailableCommand(name: 'late', description: 'sent while setting up'),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }
+              models[session] = value;
+            }
             return SetSessionConfigOptionResponse.fromJson(<String, Object?>{
               'configOptions': configOptions(session),
             });

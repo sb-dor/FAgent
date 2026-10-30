@@ -124,6 +124,30 @@ void main() {
     expect((items[2] as AgentMessageItem).text, 'Second part');
   });
 
+  test('thought duration comes from the chunk times', () {
+    final start = DateTime(2026);
+    SessionEvent at(int seq, int seconds, Map<String, Object?> update) => SessionEvent(
+      seq: seq,
+      origin: SessionEventOrigin.agent,
+      kind: '${update['sessionUpdate']}',
+      payload: <String, Object?>{
+        'method': 'session/update',
+        'params': <String, Object?>{'sessionId': 's', 'update': update},
+      },
+      createdAt: start.add(Duration(seconds: seconds)),
+    );
+
+    final items = ChatTranscript.fold(<SessionEvent>[
+      at(0, 0, _chunk('a', id: 't1', thought: true)),
+      at(1, 5, _chunk('b', id: 't1', thought: true)),
+      at(2, 12, _chunk('c', id: 't1', thought: true)),
+      at(3, 13, _chunk('single', id: 't2', thought: true)),
+    ]);
+
+    expect((items[0] as AgentThoughtItem).duration, const Duration(seconds: 12));
+    expect((items[1] as AgentThoughtItem).duration, isNull);
+  });
+
   test('a plan is updated in place within a turn', () {
     Map<String, Object?> plan(String status) => <String, Object?>{
       'sessionUpdate': 'plan',

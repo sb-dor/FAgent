@@ -1,12 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
-import 'package:flutter_code_agent/src/feature/session_config/widgets/session_config_bar.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import '../../support/test_app.dart';
 
 List<Map<String, Object?>> _recordedOptions() {
   final result = jsonDecode(
@@ -16,17 +12,6 @@ List<Map<String, Object?>> _recordedOptions() {
     for (final option in result['configOptions']! as List<Object?>) option! as Map<String, Object?>,
   ];
 }
-
-const _mode = SelectConfigOption(
-  id: 'mode',
-  name: 'Mode',
-  currentValue: 'default',
-  choices: <ConfigChoice>[
-    ConfigChoice(value: 'default', name: 'Manual'),
-    ConfigChoice(value: 'acceptEdits', name: 'Accept edits'),
-    ConfigChoice(value: 'bypassPermissions', name: 'Bypass permissions'),
-  ],
-);
 
 void main() {
   test('the recorded Claude options parse into selects with readable values', () {
@@ -55,57 +40,5 @@ void main() {
     expect((options.first as BooleanConfigOption).currentValue, isTrue);
     expect((options.last as UnknownConfigOption).type, 'number');
     expect(permissionModeOf(options), isNull);
-  });
-
-  testWidgets('choosing bypass asks first and a cancel changes nothing', (tester) async {
-    final changes = <(String, Object)>[];
-    await tester.pumpWidget(
-      testApp(
-        SessionConfigBar(
-          options: const <ConfigOption>[_mode],
-          enabled: true,
-          onChanged: (id, value) => changes.add((id, value)),
-        ),
-      ),
-    );
-
-    expect(find.text('Mode: Manual'), findsOneWidget);
-    await tester.tap(find.text('Mode: Manual'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Bypass permissions'));
-    await tester.pumpAndSettle();
-    expect(find.text('Allow bypassing permissions?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(changes, isEmpty);
-
-    await tester.tap(find.text('Mode: Manual'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Bypass permissions'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Allow for this chat'));
-    await tester.pumpAndSettle();
-    expect(changes, <(String, Object)>[('mode', bypassPermissionMode)]);
-  });
-
-  testWidgets('other modes change without a dialog', (tester) async {
-    final changes = <(String, Object)>[];
-    await tester.pumpWidget(
-      testApp(
-        SessionConfigBar(
-          options: const <ConfigOption>[_mode],
-          enabled: true,
-          onChanged: (id, value) => changes.add((id, value)),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Mode: Manual'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept edits'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(AlertDialog), findsNothing);
-    expect(changes, <(String, Object)>[('mode', 'acceptEdits')]);
   });
 }

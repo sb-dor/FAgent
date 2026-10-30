@@ -1,15 +1,24 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
-import 'package:path/path.dart' as p;
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 
 /// {@template prompt_composer}
 /// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs
-/// the send button becomes Stop. Typing `@` suggests project files (arrows
-/// choose, Enter or Tab inserts, Escape closes).
+/// the send button becomes Stop. Shift+Tab calls [onCycleMode] (it is consumed even without one,
+/// so the focus stays in the field). [toolbar] (the chips) sits under the field, the send button
+/// on its right. Typing `@` suggests project files (arrows choose, Enter or Tab inserts, Escape
+/// closes); a `/` at the start of the text suggests the app's and the agent's [commands] the same
+/// way. While a permission request waits, Enter and Escape (without Shift, Command, Alt or
+/// Control) in an empty field call [onAcceptPending] and [onRejectPending].
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -22,6 +31,11 @@ class PromptComposer extends StatefulWidget {
     required this.onStop,
     this.mentionFiles,
     this.onMentionStart,
+    this.toolbar = const <Widget>[],
+    this.onCycleMode,
+    this.commands = const <SlashCommand>[],
+    this.onAcceptPending,
+    this.onRejectPending,
     super.key,
   });
 
@@ -49,16 +63,39 @@ class PromptComposer extends StatefulWidget {
   /// A new `@` mention started (time to refresh the file list).
   final VoidCallback? onMentionStart;
 
+  /// Widgets under the field, left of the send button.
+  final List<Widget> toolbar;
+
+  /// Switches the permission mode (Shift+Tab); `null` makes Shift+Tab do nothing.
+  final VoidCallback? onCycleMode;
+
+  /// Commands of the agent for the `/` menu (the app's own are added by the menu).
+  final List<SlashCommand> commands;
+
+  /// Enter in an empty field allows the waiting permission request; `null` when none waits.
+  final VoidCallback? onAcceptPending;
+
+  /// Escape in an empty field rejects the waiting permission request; `null` when none waits.
+  final VoidCallback? onRejectPending;
+
   @override
   State<PromptComposer> createState() => _PromptComposerState();
 }
 
+/// What the open suggestion list completes.
+enum _Trigger { mention, command }
+
 class _PromptComposerState extends State<PromptComposer> {
-  ({int start, String query})? _mention;
-  List<String> _suggestions = const <String>[];
+  _Trigger? _trigger;
+
+  /// Where the typed `@…` or `/…` starts.
+  int _start = 0;
+  String _query = '';
+  List<String> _files = const <String>[];
+  List<SlashCommand> _commands = const <SlashCommand>[];
   int _highlighted = 0;
 
-  /// Start of a mention closed with Escape: it stays closed while typed on.
+  /// Start of a list closed with Escape: it stays closed while typed on.
   int? _dismissedAt;
 
   @override
@@ -74,10 +111,10 @@ class _PromptComposerState extends State<PromptComposer> {
       oldWidget.controller.removeListener(_onText);
       widget.controller.addListener(_onText);
     }
-    // The file list loads after the mention starts.
-    if (oldWidget.mentionFiles != widget.mentionFiles && _mention != null) {
-      _suggestions = searchFiles(widget.mentionFiles ?? const <String>[], _mention!.query);
-      _highlighted = 0;
+    // The file and command lists load after the trigger is typed.
+    if (_trigger != null &&
+        (oldWidget.mentionFiles != widget.mentionFiles || oldWidget.commands != widget.commands)) {
+      _search(refresh: true);
     }
   }
 
@@ -87,62 +124,162 @@ class _PromptComposerState extends State<PromptComposer> {
     super.dispose();
   }
 
+  /// Number of rows in the open list.
+  int get _count => switch (_trigger) {
+    _Trigger.mention => _files.length,
+    _Trigger.command => _commands.length,
+    null => 0,
+  };
+
+  bool _selectable(int index) => switch (_trigger) {
+    _Trigger.mention => true,
+    _Trigger.command => _commands[index].enabled,
+    null => false,
+  };
+
+  /// Fills the rows for the current trigger; the first selectable one is highlighted.
+  ///
+  /// With [refresh] the lists were reloaded under an open menu: nothing changes when the rows
+  /// are the same, and the highlight stays on its item while that is still listed.
+  void _search({bool refresh = false}) {
+    final highlightedBefore = _highlighted;
+    int keep;
+    switch (_trigger) {
+      case _Trigger.mention:
+        final found = searchFiles(widget.mentionFiles ?? const <String>[], _query);
+        if (refresh && listEquals(found, _files)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _files.length
+            ? found.indexOf(_files[highlightedBefore])
+            : -1;
+        _files = found;
+      case _Trigger.command:
+        final found = slashSuggestions(appCommands, widget.commands, _query);
+        if (refresh && listEquals(found, _commands)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _commands.length
+            ? found.indexOf(_commands[highlightedBefore])
+            : -1;
+        _commands = found;
+      case null:
+        return;
+    }
+    _highlighted = keep >= 0
+        ? keep
+        : List<int>.generate(_count, (i) => i).firstWhere(_selectable, orElse: () => -1);
+  }
+
   void _onText() {
-    final files = widget.mentionFiles;
     final value = widget.controller.value;
-    final mention = files == null || !value.selection.isCollapsed
-        ? null
-        : mentionQueryAt(value.text, value.selection.baseOffset);
-    if (mention == null || mention.start == _dismissedAt) {
-      if (mention == null) _dismissedAt = null;
-      if (_mention != null) setState(_close);
+    final caret = value.selection.baseOffset;
+    final collapsed = value.selection.isCollapsed;
+    final command = collapsed ? slashQueryAt(value.text, caret) : null;
+    final mention = collapsed && widget.mentionFiles != null
+        ? mentionQueryAt(value.text, caret)
+        : null;
+    final trigger = command != null
+        ? (_Trigger.command, 0, command)
+        : mention != null
+        ? (_Trigger.mention, mention.start, mention.query)
+        : null;
+    if (trigger == null || trigger.$2 == _dismissedAt) {
+      if (trigger == null) _dismissedAt = null;
+      if (_trigger != null) setState(_close);
       return;
     }
-    if (_mention?.start != mention.start) widget.onMentionStart?.call();
+    if (trigger.$1 == _Trigger.mention && (_trigger != _Trigger.mention || _start != trigger.$2)) {
+      widget.onMentionStart?.call();
+    }
     setState(() {
-      _mention = mention;
-      _suggestions = searchFiles(files!, mention.query);
-      _highlighted = 0;
+      _trigger = trigger.$1;
+      _start = trigger.$2;
+      _query = trigger.$3;
+      _search();
     });
   }
 
   void _close() {
-    _mention = null;
-    _suggestions = const <String>[];
+    _trigger = null;
+    _files = const <String>[];
+    _commands = const <SlashCommand>[];
+    _highlighted = 0;
   }
 
-  /// Replaces the typed mention with `@path `.
-  void _insert(String path) {
-    final mention = _mention;
-    if (mention == null) return;
+  /// Replaces the typed `@…` or `/…` with [inserted].
+  void _insert(String inserted) {
+    if (_trigger == null) return;
     final value = widget.controller.value;
-    final end = value.selection.baseOffset;
-    final inserted = '@$path ';
     widget.controller.value = TextEditingValue(
-      text: value.text.replaceRange(mention.start, end, inserted),
-      selection: TextSelection.collapsed(offset: mention.start + inserted.length),
+      text: value.text.replaceRange(_start, value.selection.baseOffset, inserted),
+      selection: TextSelection.collapsed(offset: _start + inserted.length),
     );
     setState(_close);
+  }
+
+  /// Inserts the row at [index] unless it is disabled; the list stays open then.
+  void _pick(int index) {
+    if (index < 0 || index >= _count || !_selectable(index)) return;
+    _insert(_trigger == _Trigger.mention ? '@${_files[index]} ' : '/${_commands[index].name} ');
+  }
+
+  /// Moves the highlight [step] rows, skipping the ones that cannot be chosen.
+  void _move(int step) {
+    for (var i = 1; i <= _count; i++) {
+      final index = (_highlighted + step * i) % _count;
+      if (_selectable(index)) {
+        setState(() => _highlighted = index);
+        return;
+      }
+    }
+  }
+
+  /// Shift, Command, Alt or Control is held.
+  bool get _hasModifier {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isShiftPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isControlPressed;
   }
 
   KeyEventResult _onKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
     final key = event.logicalKey;
-    if (_suggestions.isNotEmpty) {
+    if (_count > 0) {
       if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.arrowUp) {
-        final step = key == LogicalKeyboardKey.arrowDown ? 1 : -1;
-        setState(() => _highlighted = (_highlighted + step) % _suggestions.length);
+        _move(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.tab) {
-        _insert(_suggestions[_highlighted]);
+        // Shift+Tab is not Tab: it inserts nothing, and the focus stays in the field.
+        if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
+          return KeyEventResult.handled;
+        }
+        _pick(_highlighted);
         return KeyEventResult.handled;
       }
       if (key == LogicalKeyboardKey.escape) {
         setState(() {
-          _dismissedAt = _mention?.start;
+          _dismissedAt = _start;
           _close();
         });
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
+      // Always consumed, or the focus would leave the field when there is no mode to cycle.
+      if (event is KeyDownEvent) widget.onCycleMode?.call();
+      return KeyEventResult.handled;
+    }
+    // A waiting permission request is answered from an empty field only (any text, even a
+    // space, is a draft the key must not skip over).
+    // Only the bare key answers: ⌘↵, ⇧↵ and the like are something else.
+    if (event is KeyDownEvent && widget.controller.text.isEmpty && !_hasModifier) {
+      final answer = key == LogicalKeyboardKey.escape
+          ? widget.onRejectPending
+          : key == LogicalKeyboardKey.enter
+          ? widget.onAcceptPending
+          : null;
+      if (answer != null) {
+        answer();
         return KeyEventResult.handled;
       }
     }
@@ -152,6 +289,23 @@ class _PromptComposerState extends State<PromptComposer> {
     return KeyEventResult.handled;
   }
 
+  Widget _sendButton(GeneratedLocalization localization) => widget.canStop
+      ? IconButton.filledTonal(
+          tooltip: localization.stop,
+          onPressed: widget.onStop,
+          icon: const Icon(Icons.stop_rounded),
+        )
+      : ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) => IconButton.filled(
+            tooltip: localization.send,
+            onPressed: widget.canSend && widget.controller.text.trim().isNotEmpty
+                ? widget.onSend
+                : null,
+            icon: const Icon(Icons.arrow_upward_rounded),
+          ),
+        );
+
   @override
   Widget build(BuildContext context) {
     final localization = Localization.of(context);
@@ -160,7 +314,7 @@ class _PromptComposerState extends State<PromptComposer> {
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
+          constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: colors.surface,
@@ -172,105 +326,59 @@ class _PromptComposerState extends State<PromptComposer> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
                 // Part of the field's tap region: a click keeps the caret.
-                if (_suggestions.isNotEmpty)
+                if (_count > 0)
                   TextFieldTapRegion(
-                    child: _MentionSuggestions(
-                      files: _suggestions,
-                      highlighted: _highlighted,
-                      onSelected: _insert,
+                    child: switch (_trigger!) {
+                      _Trigger.mention => MentionSuggestions(
+                        files: _files,
+                        highlighted: _highlighted,
+                        onSelected: (file) => _pick(_files.indexOf(file)),
+                      ),
+                      _Trigger.command => CommandSuggestions(
+                        commands: _commands,
+                        highlighted: _highlighted,
+                        onSelected: (command) => _pick(_commands.indexOf(command)),
+                      ),
+                    },
+                  ),
+                Focus(
+                  onKeyEvent: _onKey,
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    autofocus: true,
+                    minLines: 1,
+                    maxLines: 10,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      hintText: localization.promptHint,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     ),
                   ),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: <Widget>[
-                    Expanded(
-                      child: Focus(
-                        onKeyEvent: _onKey,
-                        child: TextField(
-                          controller: widget.controller,
-                          focusNode: widget.focusNode,
-                          autofocus: true,
-                          minLines: 1,
-                          maxLines: 10,
-                          keyboardType: TextInputType.multiline,
-                          decoration: InputDecoration(
-                            hintText: localization.promptHint,
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
-                          ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: widget.toolbar,
                         ),
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: widget.canStop
-                          ? IconButton.filledTonal(
-                              tooltip: localization.stop,
-                              onPressed: widget.onStop,
-                              icon: const Icon(Icons.stop_rounded),
-                            )
-                          : ListenableBuilder(
-                              listenable: widget.controller,
-                              builder: (context, _) => IconButton.filled(
-                                tooltip: localization.send,
-                                onPressed:
-                                    widget.canSend && widget.controller.text.trim().isNotEmpty
-                                    ? widget.onSend
-                                    : null,
-                                icon: const Icon(Icons.arrow_upward_rounded),
-                              ),
-                            ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      _sendButton(localization),
+                    ],
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _MentionSuggestions extends StatelessWidget {
-  const _MentionSuggestions({
-    required this.files,
-    required this.highlighted,
-    required this.onSelected,
-  });
-
-  final List<String> files;
-  final int highlighted;
-  final ValueChanged<String> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (final (index, file) in files.indexed)
-            Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-                dense: true,
-                visualDensity: VisualDensity.compact,
-                selected: index == highlighted,
-                selectedTileColor: context.colors.accentSoft,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.small)),
-                leading: const Icon(Icons.description_outlined, size: 18),
-                title: Text(p.basename(file)),
-                subtitle: Text(
-                  p.dirname(file) == '.' ? '' : p.dirname(file),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onTap: () => onSelected(file),
-              ),
-            ),
-        ],
       ),
     );
   }

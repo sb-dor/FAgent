@@ -83,6 +83,7 @@ final class AgentHub {
     Map<String, AgentDefinition>? agents,
     AgentConnector? connector,
     AgentAuth? auth,
+    this._sessionDefaults,
     this._observers = const <TurnObserver>[],
     this.setupTimeout = const Duration(seconds: 60),
     this.cancelTimeout = const Duration(seconds: 15),
@@ -106,6 +107,7 @@ final class AgentHub {
 
   final AppDatabase _database;
   final List<TurnObserver> _observers;
+  final Future<Map<String, String>> Function(String agentId)? _sessionDefaults;
   final Map<String, _AgentSlot> _slots;
   late final AgentConnector _connector;
 
@@ -382,7 +384,8 @@ final class AgentHub {
   }
 
   /// Destructive: forgets the agent session and creates a new one (the agent
-  /// loses the chat's context; the journal stays).
+  /// loses the chat's context; the journal stays). The user's session defaults
+  /// apply to the new agent session like to any new chat.
   Future<void> startNewAgentSession(int sessionId) async {
     final live = await session(sessionId);
     if (live.status.value != SessionStatus.setupFailed) {
@@ -565,11 +568,17 @@ final class AgentHub {
     String? contextLostFrom,
   }) async {
     _move(live, SessionStatus.creating);
+    _AgentSlot? registered;
+    String? registeredId;
     try {
       final response = await connection.agent
           .createSession(NewSessionRequest(cwd: live.cwd, mcpServers: const <McpServer>[]))
           .timeout(setupTimeout);
       final acpId = response.sessionId.value;
+      // Registered at once: the agent may notify (commands, config) while the
+      // defaults are applied, and `_route` drops what it cannot place.
+      registered = _slots[live.agentId]!..byAcpId[acpId] = live;
+      registeredId = acpId;
       await _database.transaction(() async {
         await (_database.update(_database.sessionsTable)..where((s) => s.id.equals(live.id))).write(
           SessionsTableCompanion(
@@ -589,13 +598,76 @@ final class AgentHub {
       live
         ..acpSessionId = acpId
         ..configOptions.value = _objects(_plain(response.toJson())['configOptions']);
+      // Still `creating`: the first prompt only runs once the defaults are in.
+      await _applySessionDefaults(live, connection, acpId);
       // The agent may have stopped meanwhile; the id is kept for the next load.
       if (live.status.value != SessionStatus.creating) return;
-      _slots[live.agentId]!.byAcpId[acpId] = live;
       _move(live, SessionStatus.idle);
     } on Object catch (error, stackTrace) {
+      if (registeredId != null) registered?.byAcpId.remove(registeredId);
       await _setupError(live, SessionOperation.create, error, stackTrace);
     }
+  }
+
+  /// Applies the user's default model, mode, … to a freshly created session,
+  /// in the order of the defaults map; each response replaces the options.
+  /// Never throws: a default that cannot be read or set is logged and skipped,
+  /// and a default that times out also skips the remaining ones.
+  Future<void> _applySessionDefaults(
+    LiveSession live,
+    AgentConnection connection,
+    String acpId,
+  ) async {
+    final source = _sessionDefaults;
+    if (source == null) return;
+    final Map<String, String> defaults;
+    try {
+      defaults = await source(live.agentId);
+    } on Object catch (error) {
+      l.w('AgentHub | session ${live.id}: could not read the defaults: $error');
+      return;
+    }
+    for (final MapEntry(key: configId, value: value) in defaults.entries) {
+      if (live.status.value != SessionStatus.creating) return;
+      final option = live.configOptions.value.where((o) => o['id'] == configId).firstOrNull;
+      if (option == null ||
+          option['currentValue'] == value ||
+          (LiveSession.isModeOption(option) && value == LiveSession.bypassMode) ||
+          !_offers(option, value)) {
+        continue;
+      }
+      try {
+        final response = await connection.agent
+            .setSessionConfigOption(
+              SetSessionConfigOptionRequest.fromJson(<String, Object?>{
+                'sessionId': acpId,
+                'configId': configId,
+                'value': value,
+              }),
+            )
+            .timeout(setupTimeout);
+        live.configOptions.value = _objects(_plain(response.toJson())['configOptions']);
+      } on TimeoutException {
+        // A silent agent would cost another timeout per default: give up.
+        l.w('AgentHub | session ${live.id}: the default $configId timed out, skipping the rest');
+        return;
+      } on Object catch (error) {
+        l.w('AgentHub | session ${live.id}: could not set the default $configId: $error');
+      }
+    }
+  }
+
+  /// Whether a `select` option lists [value] among its choices (flat or grouped).
+  static bool _offers(Map<String, Object?> option, String value) {
+    bool contains(Object? choices) => switch (choices) {
+      final List<Object?> list => list.any(
+        (choice) =>
+            choice is Map<Object?, Object?> &&
+            (choice['value'] == value || contains(choice['options'])),
+      ),
+      _ => false,
+    };
+    return contains(option['options']);
   }
 
   Future<void> _load(LiveSession live, AgentConnection connection) async {

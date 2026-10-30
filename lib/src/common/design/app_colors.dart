@@ -23,6 +23,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     required this.warnSoft,
     required this.danger,
     required this.dangerSoft,
+    required this.shadow,
   });
 
   /// Light palette.
@@ -41,6 +42,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     warnSoft: Color(0xFFFFF4E0),
     danger: Color(0xFFD93025),
     dangerSoft: Color(0xFFFCE8E6),
+    shadow: Color(0x1F000000),
   );
 
   /// Dark palette.
@@ -59,6 +61,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     warnSoft: Color(0xFF3A2C12),
     danger: Color(0xFFF06A5F),
     dangerSoft: Color(0xFF3D1D1B),
+    shadow: Color(0x66000000),
   );
 
   /// Feed and page background.
@@ -103,6 +106,9 @@ final class AppColors extends ThemeExtension<AppColors> {
   /// Background for [danger].
   final Color dangerSoft;
 
+  /// Drop shadow of popovers: black in both themes, stronger in dark.
+  final Color shadow;
+
   @override
   AppColors copyWith({
     Color? bg,
@@ -119,6 +125,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     Color? warnSoft,
     Color? danger,
     Color? dangerSoft,
+    Color? shadow,
   }) => AppColors(
     bg: bg ?? this.bg,
     surface: surface ?? this.surface,
@@ -134,6 +141,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     warnSoft: warnSoft ?? this.warnSoft,
     danger: danger ?? this.danger,
     dangerSoft: dangerSoft ?? this.dangerSoft,
+    shadow: shadow ?? this.shadow,
   );
 
   @override
@@ -154,6 +162,7 @@ final class AppColors extends ThemeExtension<AppColors> {
       warnSoft: Color.lerp(warnSoft, other.warnSoft, t)!,
       danger: Color.lerp(danger, other.danger, t)!,
       dangerSoft: Color.lerp(dangerSoft, other.dangerSoft, t)!,
+      shadow: Color.lerp(shadow, other.shadow, t)!,
     );
   }
 
@@ -174,7 +183,8 @@ final class AppColors extends ThemeExtension<AppColors> {
           warn == other.warn &&
           warnSoft == other.warnSoft &&
           danger == other.danger &&
-          dangerSoft == other.dangerSoft;
+          dangerSoft == other.dangerSoft &&
+          shadow == other.shadow;
 
   @override
   int get hashCode => Object.hash(
@@ -192,6 +202,7 @@ final class AppColors extends ThemeExtension<AppColors> {
     warnSoft,
     danger,
     dangerSoft,
+    shadow,
   );
 }
 

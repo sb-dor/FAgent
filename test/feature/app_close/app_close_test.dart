@@ -40,7 +40,11 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
 void main() {
   late Dependencies dependencies;
 
-  Future<_FakeAppCloseRepository> pumpGuard(WidgetTester tester, {int busy = 0}) async {
+  Future<_FakeAppCloseRepository> pumpGuard(
+    WidgetTester tester, {
+    int busy = 0,
+    Locale locale = const Locale('en'),
+  }) async {
     useDesktopView(tester);
     final repository = _FakeAppCloseRepository(busy: busy);
     dependencies = testDependencies();
@@ -48,6 +52,7 @@ void main() {
       testApp(
         AppCloseGuard(repository: repository, child: const Text('workspace')),
         dependencies: dependencies,
+        locale: locale,
       ),
     );
     await tester.pump();
@@ -109,5 +114,32 @@ void main() {
     await tester.pump();
     expect(repository.calls, <String>['shutdown', 'quit']);
     await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('the Russian text for 21 chats is neutral: no "an agent works in one chat"', (
+    tester,
+  ) async {
+    final repository = await pumpGuard(tester, busy: 21, locale: const Locale('ru'));
+
+    repository.close();
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('Ещё идёт работа в 21 чате.'), findsOneWidget);
+    expect(find.textContaining('Агент'), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('the Russian text for 2 and 5 chats uses the plural', (tester) async {
+    for (final (count, text) in <(int, String)>[
+      (2, 'Ещё идёт работа в 2 чатах.'),
+      (5, 'Ещё идёт работа в 5 чатах.'),
+    ]) {
+      final repository = await pumpGuard(tester, busy: count, locale: const Locale('ru'));
+      repository.close();
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining(text), findsOneWidget, reason: '$count');
+      await disposeTestApp(tester, dependencies);
+    }
   });
 }

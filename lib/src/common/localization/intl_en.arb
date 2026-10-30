@@ -18,7 +18,7 @@
   "chatPlaceholder": "Open a project and start a chat with an agent",
   "selectChat": "Pick a chat or start a new one",
   "somethingWentWrong": "Something went wrong",
-  "promptHint": "Ask the agent… (Enter to send, Shift+Enter for a new line)",
+  "promptHint": "Ask the agent… @ file · / command",
   "send": "Send",
   "stop": "Stop",
   "forceStop": "Force stop",
@@ -29,6 +29,10 @@
   "cancel": "Cancel",
   "continueAction": "Continue",
   "thinking": "Thinking",
+  "thinkingFor": "Thinking · {seconds} s",
+  "@thinkingFor": {"placeholders": {"seconds": {"type": "int"}}},
+  "readFiles": "{count, plural, one{Read {count} file} other{Read {count} files}}",
+  "@readFiles": {"placeholders": {"count": {"type": "int"}}},
   "statusStarting": "Starting the agent…",
   "statusLoading": "Restoring the agent's context…",
   "statusCreating": "Creating the agent session…",
@@ -50,7 +54,9 @@
   "trustFiles": "Found in the folder:",
   "trustNoFiles": "No Claude settings or hooks found in the folder.",
   "trustAllow": "Trust and continue",
-  "permissionTitle": "The agent asks for permission",
+  "permissionRunCommand": "Run this command?",
+  "permissionApplyEdits": "Apply these edits?",
+  "permissionRejectAndSay": "Reject and say…",
   "permissionAllowed": "Allowed",
   "permissionRejected": "Rejected",
   "permissionCancelled": "Cancelled",
@@ -151,5 +157,19 @@
         "type": "String"
       }
     }
-  }
+  },
+  "attach": "Attach a file",
+  "agentLabel": "Agent",
+  "modelLabel": "Model",
+  "effortLabel": "Effort",
+  "modeLabel": "Mode",
+  "makeDefaultForNewChats": "Make default for new chats",
+  "availableAfterStart": "Available after the agent starts",
+  "attachOutsideProject": "Only files inside the project can be attached",
+  "slashSectionApp": "App",
+  "slashSectionAgent": "Agent",
+  "commandRun": "Run the app",
+  "commandReload": "Hot reload",
+  "commandRestart": "Hot restart",
+  "commandScreenshot": "Screenshot of the device"
 }

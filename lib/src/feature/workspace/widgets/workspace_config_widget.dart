@@ -176,7 +176,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     if (project == null) return;
     dataController.selectProject(project);
     if (dataController.view != WorkspaceView.chat) dataController.backToChat();
-    sessionCreationController.create(projectId: project, agentId: 'claude');
+    sessionCreationController.create(
+      projectId: project,
+      agentId: settingsController.settings.defaultAgentId,
+    );
   }
 
   /// Asks which chat to open, then opens it: its project and the chat become selected and the

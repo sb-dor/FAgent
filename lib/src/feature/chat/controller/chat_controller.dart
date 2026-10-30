@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_transcript.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -42,6 +43,10 @@ final class ChatController extends StateController<ChatState> with SequentialCon
   LiveSession? _session;
   StreamSubscription<SessionEvent>? _events;
   Timer? _refold;
+
+  // The agent's commands are mapped once per change, not once per refold.
+  List<Map<String, Object?>>? _rawCommands;
+  List<SlashCommand> _commands = const <SlashCommand>[];
 
   void open(int sessionId) => handle(() async {
     _detach();
@@ -79,9 +84,19 @@ final class ChatController extends StateController<ChatState> with SequentialCon
           configOptions: configOptions,
           bypassBlocked: session.bypassBlocked,
           preparingTurn: session.preparingTurn.value,
+          commands: _commandsOf(session),
         ),
       ),
     );
+  }
+
+  List<SlashCommand> _commandsOf(LiveSession session) {
+    final raw = session.availableCommands.value;
+    if (!identical(raw, _rawCommands)) {
+      _rawCommands = raw;
+      _commands = agentCommands(raw);
+    }
+    return _commands;
   }
 
   static List<Listenable> _notifiers(LiveSession session) => <Listenable>[
@@ -92,6 +107,7 @@ final class ChatController extends StateController<ChatState> with SequentialCon
     session.configOptions,
     session.bypassAcknowledged,
     session.preparingTurn,
+    session.availableCommands,
   ];
 
   void _detach() {
@@ -107,6 +123,8 @@ final class ChatController extends StateController<ChatState> with SequentialCon
       }
     }
     _session = null;
+    _rawCommands = null;
+    _commands = const <SlashCommand>[];
   }
 
   @override

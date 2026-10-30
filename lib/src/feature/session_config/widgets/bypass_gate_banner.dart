@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 
@@ -20,7 +21,7 @@ class BypassGateBanner extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
+          constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
           child: Card(
             margin: EdgeInsets.zero,
             elevation: 0,

@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
@@ -45,5 +46,10 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
     observers: <TurnObserver>[GitTurnFilesObserver(environment: dependencies.shellEnvironment)],
+    sessionDefaults: (agentId) async =>
+        (await AppSettingsRepositoryImpl(
+          database: dependencies.database,
+        ).watch().first).sessionDefaults[agentId] ??
+        const <String, String>{},
   ),
 };

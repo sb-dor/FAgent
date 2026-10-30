@@ -39,6 +39,7 @@ abstract final class ChatTranscript {
     final items = <ChatItem>[];
     final toolCalls = <String, int>{};
     final permissions = <String, int>{};
+    final thoughtStarts = <int, DateTime>{};
     int? planIndex;
 
     for (final event in events.toList()..sort((a, b) => a.seq.compareTo(b.seq))) {
@@ -87,7 +88,14 @@ abstract final class ChatTranscript {
             case 'agent_message_chunk':
               _appendText(items, event.seq, update, thought: false);
             case 'agent_thought_chunk':
-              _appendText(items, event.seq, update, thought: true);
+              _appendText(
+                items,
+                event.seq,
+                update,
+                thought: true,
+                createdAt: event.createdAt,
+                thoughtStarts: thoughtStarts,
+              );
             case 'tool_call':
               final id = _string(update['toolCallId']);
               if (id == null) continue;
@@ -169,6 +177,8 @@ abstract final class ChatTranscript {
     int seq,
     Map<String, Object?> update, {
     required bool thought,
+    DateTime? createdAt,
+    Map<int, DateTime>? thoughtStarts,
   }) {
     final content = _map(update['content']);
     final text = content?['type'] == 'text' ? _string(content?['text']) ?? '' : '';
@@ -177,13 +187,18 @@ abstract final class ChatTranscript {
     // Consecutive chunks of one message merge; a new messageId starts a new item.
     if (thought) {
       if (last is AgentThoughtItem && last.messageId == messageId) {
+        final start = thoughtStarts?[items.length - 1];
         items[items.length - 1] = AgentThoughtItem(
           last.seq,
           text: last.text + text,
           messageId: messageId,
+          duration: start == null || createdAt == null
+              ? last.duration
+              : createdAt.difference(start),
         );
         return;
       }
+      if (createdAt != null) thoughtStarts?[items.length] = createdAt;
       items.add(AgentThoughtItem(seq, text: text, messageId: messageId));
     } else {
       if (last is AgentMessageItem && last.messageId == messageId) {

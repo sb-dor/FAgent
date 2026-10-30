@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 
 /// One selectable row of an [AppMenuSection].
@@ -59,19 +60,37 @@ final class AppMenuSection<T> {
   final List<AppMenuItem<T>> items;
 }
 
+/// Builds the area under the rows of a menu. Calling `close(value)` closes the
+/// menu and makes [showAppMenu] return `value`.
+typedef AppMenuFooterBuilder<T> = Widget Function(
+  BuildContext context,
+  void Function(T? value) close,
+);
+
 /// Shows a popover menu next to [anchor] (a rect in global coordinates) and
 /// returns the picked value, or `null` when it is dismissed.
 ///
 /// The menu opens below [anchor], or above it when it does not fit. Arrow keys
 /// move the highlight over enabled rows, Enter picks, Escape and a click
 /// outside close it. Escape is consumed by the menu and does not reach
-/// shortcuts of the page below.
+/// shortcuts of the page below. The row of the selected item is scrolled into
+/// view when the menu opens.
+///
+/// With [searchable] a focused search field is shown above the rows; it filters
+/// rows by title and subtitle, ignoring case, and hides sections left without
+/// rows. The arrows and Enter keep working from the field. [searchHint] is the
+/// placeholder of the field ("Search" when `null`).
+///
+/// [footerBuilder] adds interactive content under the rows, e.g. an option
+/// toggle; it can close the menu with a value through its `close` callback.
 Future<T?> showAppMenu<T>({
   required BuildContext context,
   required Rect anchor,
   required List<AppMenuSection<T>> sections,
   double width = 320,
-  Widget? footer,
+  bool searchable = false,
+  String? searchHint,
+  AppMenuFooterBuilder<T>? footerBuilder,
 }) {
   final navigator = Navigator.of(context);
   final navigatorBox = navigator.context.findRenderObject()! as RenderBox;
@@ -80,7 +99,14 @@ Future<T?> showAppMenu<T>({
     navigatorBox.globalToLocal(anchor.bottomRight),
   );
   return navigator.push<T>(
-    _AppMenuRoute<T>(anchor: localAnchor, sections: sections, width: width, footer: footer),
+    _AppMenuRoute<T>(
+      anchor: localAnchor,
+      sections: sections,
+      width: width,
+      searchable: searchable,
+      searchHint: searchHint,
+      footerBuilder: footerBuilder,
+    ),
   );
 }
 
@@ -89,13 +115,17 @@ class _AppMenuRoute<T> extends PopupRoute<T> {
     required this.anchor,
     required this.sections,
     required this.width,
-    required this.footer,
+    required this.searchable,
+    required this.searchHint,
+    required this.footerBuilder,
   });
 
   final Rect anchor;
   final List<AppMenuSection<T>> sections;
   final double width;
-  final Widget? footer;
+  final bool searchable;
+  final String? searchHint;
+  final AppMenuFooterBuilder<T>? footerBuilder;
 
   @override
   Duration get transitionDuration => const Duration(milliseconds: 100);
@@ -118,7 +148,12 @@ class _AppMenuRoute<T> extends PopupRoute<T> {
     delegate: _MenuLayout(anchor: anchor, width: width),
     child: FadeTransition(
       opacity: animation,
-      child: _AppMenu<T>(sections: sections, footer: footer),
+      child: _AppMenu<T>(
+        sections: sections,
+        searchable: searchable,
+        searchHint: searchHint,
+        footerBuilder: footerBuilder,
+      ),
     ),
   );
 }
@@ -165,10 +200,17 @@ class _MenuLayout extends SingleChildLayoutDelegate {
 }
 
 class _AppMenu<T> extends StatefulWidget {
-  const _AppMenu({required this.sections, required this.footer});
+  const _AppMenu({
+    required this.sections,
+    required this.searchable,
+    required this.searchHint,
+    required this.footerBuilder,
+  });
 
   final List<AppMenuSection<T>> sections;
-  final Widget? footer;
+  final bool searchable;
+  final String? searchHint;
+  final AppMenuFooterBuilder<T>? footerBuilder;
 
   @override
   State<_AppMenu<T>> createState() => _AppMenuState<T>();
@@ -179,6 +221,15 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
     for (final section in widget.sections) ...section.items,
   ];
   late final List<GlobalKey> _keys = List<GlobalKey>.generate(_items.length, (_) => GlobalKey());
+  late final TextEditingController _query = TextEditingController();
+  late final FocusNode _searchFocus = FocusNode(onKeyEvent: _onKey);
+
+  /// Indices into [_items] of the rows that match the query, in order.
+  late List<int> _visible = List<int>.generate(_items.length, (i) => i);
+
+  String _appliedQuery = '';
+
+  /// Index into [_items] of the highlighted row.
   int? _highlighted;
 
   @override
@@ -186,28 +237,63 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
     super.initState();
     final selected = _items.indexWhere((item) => item.selected && item.enabled);
     _highlighted = selected >= 0 ? selected : _step(-1, 1);
+    _query.addListener(_onQueryChanged);
+    _scrollToHighlighted(const Duration(milliseconds: 1));
   }
 
-  /// Index of the next enabled row from [from] in [direction], or `null`.
+  @override
+  void dispose() {
+    _query.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  bool _matches(AppMenuItem<T> item, String query) =>
+      item.title.toLowerCase().contains(query) ||
+      (item.subtitle?.toLowerCase().contains(query) ?? false);
+
+  void _onQueryChanged() {
+    final query = _query.text.trim().toLowerCase();
+    // The controller also notifies about caret moves; those keep the highlight.
+    if (query == _appliedQuery) return;
+    _appliedQuery = query;
+    setState(() {
+      _visible = <int>[
+        for (var i = 0; i < _items.length; i++)
+          if (query.isEmpty || _matches(_items[i], query)) i,
+      ];
+      _highlighted = _step(-1, 1);
+    });
+    _scrollToHighlighted(const Duration(milliseconds: 1));
+  }
+
+  /// Index into [_items] of the next enabled visible row after [from] (an index
+  /// into [_items], or `-1` / `_items.length` for the ends) in [direction].
   int? _step(int from, int direction) {
-    var index = from + direction;
-    while (index >= 0 && index < _items.length) {
-      if (_items[index].enabled) return index;
-      index += direction;
+    for (final index in direction > 0 ? _visible : _visible.reversed) {
+      if (direction > 0 ? index > from : index < from) {
+        if (_items[index].enabled) return index;
+      }
     }
     return null;
+  }
+
+  void _scrollToHighlighted(Duration duration) {
+    final target = _highlighted;
+    if (target == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final itemContext = _keys[target].currentContext;
+      if (itemContext != null && itemContext.mounted) {
+        Scrollable.ensureVisible(itemContext, duration: duration);
+      }
+    });
   }
 
   void _move(int direction) {
     final next = _step(_highlighted ?? (direction > 0 ? -1 : _items.length), direction);
     if (next == null) return;
     setState(() => _highlighted = next);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final itemContext = _keys[next].currentContext;
-      if (itemContext != null && itemContext.mounted) {
-        Scrollable.ensureVisible(itemContext, duration: const Duration(milliseconds: 80));
-      }
-    });
+    _scrollToHighlighted(const Duration(milliseconds: 80));
   }
 
   void _pick(int index) {
@@ -241,13 +327,17 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final filtering = _visible.length != _items.length;
+    final visible = _visible.toSet();
     var index = 0;
     final rows = <Widget>[];
     for (final section in widget.sections) {
-      if (section.title != null) rows.add(_SectionHeader(title: section.title!));
+      final first = index;
+      final sectionRows = <Widget>[];
       for (final item in section.items) {
         final i = index++;
-        rows.add(
+        if (!visible.contains(i)) continue;
+        sectionRows.add(
           _MenuRow<T>(
             key: _keys[i],
             item: item,
@@ -259,17 +349,25 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
           ),
         );
       }
+      if (filtering && sectionRows.isEmpty && index > first) continue;
+      if (section.title != null) rows.add(_SectionHeader(title: section.title!));
+      rows.addAll(sectionRows);
     }
+    final footerBuilder = widget.footerBuilder;
     return Focus(
-      autofocus: true,
+      autofocus: !widget.searchable,
       onKeyEvent: _onKey,
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: colors.bg,
           borderRadius: BorderRadius.circular(AppRadius.large),
           border: Border.all(color: colors.border),
-          boxShadow: const <BoxShadow>[
-            BoxShadow(color: Color(0x1F000000), blurRadius: 32, offset: Offset(0, 12)),
+          boxShadow: <BoxShadow>[
+            BoxShadow(
+              color: colors.shadow,
+              blurRadius: 32,
+              offset: const Offset(0, 12),
+            ),
           ],
         ),
         child: Material(
@@ -280,20 +378,64 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                if (widget.searchable) ...<Widget>[
+                  _SearchField(
+                    controller: _query,
+                    focusNode: _searchFocus,
+                    hint: widget.searchHint ?? Localization.of(context).search,
+                  ),
+                  Divider(color: colors.border),
+                ],
                 Flexible(
                   child: SingleChildScrollView(
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: rows),
                   ),
                 ),
-                if (widget.footer != null) ...<Widget>[
+                if (footerBuilder != null) ...<Widget>[
                   const SizedBox(height: 4),
                   Divider(color: colors.border),
-                  widget.footer!,
+                  footerBuilder(context, (value) => Navigator.of(context).pop(value)),
                 ],
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _SearchField extends StatelessWidget {
+  const _SearchField({required this.controller, required this.focusNode, required this.hint});
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final String hint;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final style = Theme.of(context).textTheme.bodyMedium!.copyWith(color: colors.text);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.search, size: 16, color: colors.muted),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              autofocus: true,
+              style: style,
+              cursorColor: colors.accent,
+              decoration: InputDecoration.collapsed(
+                hintText: hint,
+                hintStyle: style.copyWith(color: colors.muted),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

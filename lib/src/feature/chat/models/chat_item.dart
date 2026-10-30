@@ -36,13 +36,16 @@ final class AgentMessageItem extends ChatItem {
 /// Agent reasoning (shown collapsed).
 final class AgentThoughtItem extends ChatItem {
   /// Creates a thought.
-  const AgentThoughtItem(super.seq, {required this.text, this.messageId});
+  const AgentThoughtItem(super.seq, {required this.text, this.messageId, this.duration});
 
   /// Thought text so far.
   final String text;
 
   /// ACP `messageId`, when the agent sends one.
   final String? messageId;
+
+  /// Time between the first and the last chunk; `null` for a single chunk.
+  final Duration? duration;
 }
 
 /// Content of a tool call.
@@ -228,7 +231,17 @@ final class PermissionItem extends ChatItem {
   /// The option the user chose.
   final String? selectedOptionId;
 
-  /// Copy with a new [state].
+  /// The option Enter picks: the first `allow_once`. Enter never grants a standing permission, so
+  /// without one it does nothing.
+  PermissionOptionView? get acceptOption =>
+      options.where((o) => o.kind == 'allow_once').firstOrNull;
+
+  /// The option Escape picks: the first `reject_once`, a "not this time" decline. Escape never
+  /// picks a standing `reject_always`, so without one it does nothing.
+  PermissionOptionView? get rejectOption =>
+      options.where((o) => o.kind == 'reject_once').firstOrNull;
+
+  /// A copy in [state] (with the picked [optionId]).
   PermissionItem resolve(PermissionState state, {String? optionId}) => PermissionItem(
     seq,
     requestId: requestId,

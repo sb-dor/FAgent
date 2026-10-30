@@ -35,6 +35,33 @@ void main() {
     expect(AppSettings.fromJson(const <String, Object?>{'locale': 'xx'}).locale, isNull);
   });
 
+  test('session defaults round-trip and never keep bypass', () {
+    final settings = AppSettings.fromJson(const <String, Object?>{
+      'sessionDefaults': <String, Object?>{
+        'claude': <String, Object?>{'model': 'sonnet', 'mode': 'bypassPermissions', 'n': 3},
+        'x': 5,
+      },
+    });
+    expect(settings.sessionDefaults, <String, Map<String, String>>{
+      'claude': <String, String>{'model': 'sonnet'},
+    });
+    expect(AppSettings.fromJson(settings.toJson()), settings);
+    expect(
+      settings
+          .copyWith(
+            sessionDefaults: const <String, Map<String, String>>{
+              'claude': <String, String>{'mode': 'bypassPermissions', 'model': 'opus'},
+            },
+          )
+          .sessionDefaults,
+      <String, Map<String, String>>{
+        'claude': <String, String>{'model': 'opus'},
+      },
+    );
+    expect(const AppSettings().sessionDefaults, isEmpty);
+    expect(settings == const AppSettings(), isFalse);
+  });
+
   test('wrong-typed fields fall back to their defaults', () {
     final settings = AppSettings.fromJson(const <String, Object?>{
       'themeMode': 3,

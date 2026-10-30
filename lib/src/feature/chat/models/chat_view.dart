@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:meta/meta.dart';
 
@@ -21,6 +22,7 @@ class ChatView {
     this.configOptions = const <ConfigOption>[],
     this.bypassBlocked = false,
     this.preparingTurn = false,
+    this.commands = const <SlashCommand>[],
   });
 
   /// `sessions.id`.
@@ -53,4 +55,22 @@ class ChatView {
 
   /// The turn's prompt is not sent yet.
   final bool preparingTurn;
+
+  /// Slash commands of the agent (the app's own are not included).
+  final List<SlashCommand> commands;
+
+  /// The latest permission request that still waits for an answer (the one the keyboard answers).
+  PermissionItem? get pendingPermission => items
+      .whereType<PermissionItem>()
+      .where((item) => item.state == PermissionState.pending)
+      .lastOrNull;
+
+  /// Agent settings can be changed in this status.
+  bool get canChangeConfig => switch (status) {
+    SessionStatus.idle || SessionStatus.running || SessionStatus.awaitingPermission => true,
+    _ => false,
+  };
+
+  /// The chat already has a message of the user, so its agent can no longer be changed.
+  bool get agentLocked => items.any((item) => item is UserMessageItem);
 }
