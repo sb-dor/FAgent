@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_reposit
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,8 +35,20 @@ final class _ScriptedRunRepository implements IAppRunRepository {
 
   void emitState(int project, RunState state) => _statesOf(project).add(state);
 
+  /// Lines replayed to a new `logs` listener, per project.
+  final Map<int, List<LogEntry>> replay = <int, List<LogEntry>>{};
+
   @override
-  Stream<LogEntry> logs(int projectId) => _logsOf(projectId).stream;
+  Stream<LogEntry> logs(int projectId) {
+    final live = _logsOf(projectId).stream;
+    final buffered = replay[projectId] ?? const <LogEntry>[];
+    return (() async* {
+      for (final entry in buffered) {
+        yield entry;
+      }
+      yield* live;
+    })();
+  }
 
   @override
   Stream<RunState> watchRun(int projectId) => _statesOf(projectId).stream;
@@ -221,6 +234,55 @@ void main() {
       expect(controller.state.logs.map((log) => log.sentToAgent), <bool>[false, true]);
       expect(scripted.marked, <(int, int)>[(1, 1)]);
     });
+
+    test('setPicked keeps the picked widget until the project changes', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      const picked = PickedWidget(
+        name: 'Card',
+        file: 'lib/card.dart',
+        line: 7,
+        ancestors: <String>[],
+      );
+
+      controller.setPicked(picked);
+      expect(controller.state.picked, picked);
+      controller.watch(1);
+      await pumpEventQueue();
+      expect(controller.state.picked, picked);
+
+      controller.watch(2);
+      await pumpEventQueue();
+      expect(controller.state.picked, isNull);
+    });
+
+    test(
+      'clearLogs empties the logs and the error count, and the cleared lines stay away',
+      () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        scripted
+          ..emit(1, _entry(0, level: LogLevel.error))
+          ..emit(1, _entry(1));
+        await pumpEventQueue();
+
+        controller.clearLogs();
+        expect(controller.state.logs, isEmpty);
+        expect(controller.state.errorCount, 0);
+
+        scripted.emit(1, _entry(2));
+        await pumpEventQueue();
+        expect(controller.state.logs.map((log) => log.seq), <int>[2]);
+
+        // A replay after a project switch does not bring the cleared lines back.
+        controller.watch(2);
+        await pumpEventQueue();
+        scripted.replay[1] = <LogEntry>[_entry(0, level: LogLevel.error), _entry(1), _entry(2)];
+        controller.watch(1);
+        await pumpEventQueue();
+        expect(controller.state.logs.map((log) => log.seq), <int>[2]);
+      },
+    );
 
     test('coming back to a running project restores its logs, error and sent flags', () async {
       final fake = FakeAppRunRepositoryImpl(step: _step);

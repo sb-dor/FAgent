@@ -4,6 +4,11 @@ import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -23,6 +28,7 @@ import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
+import 'package:path/path.dart' as p;
 
 /// Gives the workspace widgets access to [WorkspaceConfigWidgetState].
 class WorkspaceConfigInhWidget extends InheritedWidget {
@@ -60,7 +66,13 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
   late final SessionCreationController sessionCreationController;
+  late final DevicesController devicesController;
+  late final RunController runController;
+  late final RunActionsController runActionsController;
   final WorkspaceDataController dataController = WorkspaceDataController();
+
+  /// Whether the run data is made up (the Run tab says so).
+  late final bool runIsPreview;
 
   /// The window-level settings (panels, theme, language).
   late final AppSettingsController settingsController = AppSettingsConfigInhWidget.of(context)
@@ -90,11 +102,27 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
     )..addListener(_onSessionCreated);
     sessionsController.watchAll();
+    runIsPreview = dependencies.appRunRepository.isPreview;
+    devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
+    runController = RunController(repository: dependencies.appRunRepository);
+    runActionsController = RunActionsController(
+      runRepository: dependencies.appRunRepository,
+      pickerRepository: dependencies.widgetPickerRepository,
+    )..addListener(_onRunAction);
+    dataController.addListener(_followSelectedProject);
+    _followSelectedProject();
   }
 
   @override
   void dispose() {
-    dataController.dispose();
+    dataController
+      ..removeListener(_followSelectedProject)
+      ..dispose();
+    runActionsController
+      ..removeListener(_onRunAction)
+      ..dispose();
+    runController.dispose();
+    devicesController.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
       ..dispose();
@@ -107,6 +135,19 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     projectsController.dispose();
     sessionsController.dispose();
     super.dispose();
+  }
+
+  /// The run and its logs follow the selected project.
+  void _followSelectedProject() {
+    final id = dataController.projectId;
+    if (id != null) runController.watch(id);
+  }
+
+  /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.
+  void _onRunAction() {
+    if (runActionsController.state case RunActions$CompletedState(:final picked?)) {
+      runController.setPicked(picked);
+    }
   }
 
   /// The selected project with its latest data (trust changes, renames).
@@ -223,6 +264,22 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     } on Object {
       _showError();
     }
+  }
+
+  /// Sends an error of the running app to the open chat. Filled in with the chat integration; for
+  /// now it only says so.
+  void sendRunErrorToAgent(RunError error) => _showMessage(Localization.of(context).comingSoon);
+
+  /// Adds the widget picked in the running app to the message being written. Filled in with the
+  /// chat integration; for now it only says so.
+  void addRunWidgetToMessage(PickedWidget picked) =>
+      _showMessage(Localization.of(context).comingSoon);
+
+  /// Opens [file] of the running app in the editor; a relative path is inside the selected project.
+  Future<void> openRunFile(String file, int? line) async {
+    final root = selectedProject?.path;
+    if (p.isAbsolute(file)) return openPath(file);
+    if (root != null) return openPath(p.join(root, file));
   }
 
   /// Asks, then forgets [project] with its chats; the folder on disk stays.

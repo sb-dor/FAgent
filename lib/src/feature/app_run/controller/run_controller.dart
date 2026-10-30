@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -32,6 +33,9 @@ abstract class RunViewState with _$RunViewState {
 
     /// The entry point for the next start.
     @Default('lib/main.dart') String target,
+
+    /// The widget the user last picked in the running app; cleared when the project changes.
+    PickedWidget? picked,
   }) = _RunViewState;
 }
 
@@ -45,6 +49,9 @@ final class RunController extends StateController<RunViewState> with SequentialC
   final IAppRunRepository _repository;
   StreamSubscription<RunState>? _runSubscription;
   StreamSubscription<LogEntry>? _logsSubscription;
+
+  /// Per project: the newest line the user cleared; a replay never brings those back.
+  final Map<int, int> _clearedThrough = <int, int>{};
 
   /// Follows [projectId]: drops the previous project's subscriptions, run and output. Calling it
   /// again for the same project changes nothing.
@@ -60,7 +67,7 @@ final class RunController extends StateController<RunViewState> with SequentialC
       if (state.projectId == projectId) setState(state.copyWith(run: run));
     });
     _logsSubscription = _repository.logs(projectId).listen((entry) {
-      if (state.projectId != projectId) return;
+      if (state.projectId != projectId || entry.seq <= (_clearedThrough[projectId] ?? -1)) return;
       final all = <LogEntry>[...state.logs, entry];
       final logs = all.length > kRunLogLimit ? all.sublist(all.length - kRunLogLimit) : all;
       setState(
@@ -83,6 +90,18 @@ final class RunController extends StateController<RunViewState> with SequentialC
   );
 
   /// Marks the log line [seq] as sent to the agent, here and in the repository's buffer.
+  /// Remembers the widget picked in the app, so later actions do not lose it; `null` forgets it.
+  void setPicked(PickedWidget? picked) => setState(state.copyWith(picked: picked));
+
+  /// Empties the project's logs; lines that were already printed do not come back.
+  void clearLogs() {
+    final projectId = state.projectId;
+    if (projectId != null && state.logs.isNotEmpty) {
+      _clearedThrough[projectId] = state.logs.last.seq;
+    }
+    setState(state.copyWith(logs: const <LogEntry>[], errorCount: 0));
+  }
+
   void markSent(int seq) {
     setState(
       state.copyWith(
