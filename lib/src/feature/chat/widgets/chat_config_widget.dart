@@ -76,7 +76,7 @@ class ChatConfigWidget extends StatefulWidget {
   /// build).
   final ValueChanged<ChatHandle>? onHandle;
 
-  /// Called with the absolute path of the file when the user clicks an edit row in the feed;
+  /// Called with the absolute, normalized path of the file when the user clicks an edit row in the feed;
   /// `null` leaves the row as a plain expander.
   final ValueChanged<String>? onOpenChange;
 

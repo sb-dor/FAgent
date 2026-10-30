@@ -34,10 +34,14 @@ final class RunError {
   /// The stack trace, one frame per line.
   final String? stack;
 
+  /// Where to look, as one short text: the [location] the app printed, else `file:line`, else the
+  /// [file] alone; `null` when the error names no place.
+  String? get place => location ?? (file == null ? null : (line == null ? file : '$file:$line'));
+
   /// The error as text for the agent: the title, the message, the place and the first
   /// [agentStackLines] lines of the stack in a code block.
   String forAgent() {
-    final place = location ?? (file == null ? null : (line == null ? file : '$file:$line'));
+    final place = this.place;
     final stackLines = (stack ?? '').split('\n').where((line) => line.trim().isNotEmpty);
     final excerpt = stackLines.take(agentStackLines).join('\n');
     return <String>[

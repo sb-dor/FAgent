@@ -24,6 +24,7 @@ class WorkspaceRunLink {
     required this._run,
     required this._actions,
     required this._reloadAfterTurn,
+    this.isPreview = false,
   }) {
     _data.chatHandle.addListener(_onChatHandle);
   }
@@ -32,6 +33,9 @@ class WorkspaceRunLink {
   final RunController _run;
   final RunActionsController _actions;
   final bool Function() _reloadAfterTurn;
+
+  /// Whether the run data is made up; the `@` menu says so.
+  final bool isPreview;
 
   /// The chat whose status is followed (the selected one) and the last status seen for it, to tell
   /// a finished turn from a repeated status. Forgotten when the selection moves on, so a turn that
@@ -107,6 +111,7 @@ class WorkspaceRunLink {
     final error = state.logs.reversed.where((log) => log.error != null).firstOrNull?.error;
     if (picked == null && error == null) return null;
     return RunMentions(
+      isPreview: isPreview,
       widget: picked == null
           ? null
           : RunMention(
@@ -121,7 +126,7 @@ class WorkspaceRunLink {
       '@widget ${picked.name} (${picked.file}:${picked.line})';
 
   static String _errorText(RunError error) {
-    final place = error.location ?? (error.file == null ? null : '${error.file}:${error.line}');
+    final place = error.place;
     return '@error ${error.title}${place == null ? '' : ' ($place)'}';
   }
 

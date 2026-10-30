@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:path/path.dart' as p;
@@ -98,7 +99,11 @@ class MentionSuggestions extends StatelessWidget {
     required this.rows,
     required this.highlighted,
     required this.onSelected,
+    this.isPreview = false,
   });
+
+  /// Whether the rows from the run are made up (the section title says so).
+  final bool isPreview;
 
   final List<MentionRow> rows;
   final int highlighted;
@@ -109,12 +114,17 @@ class MentionSuggestions extends StatelessWidget {
     final localization = Localization.of(context);
     final colors = context.colors;
     final hasRun = rows.any((row) => row.fromRun);
-    Widget title(String text) => Padding(
+    Widget title(String text, {bool badge = false}) => Padding(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.labelSmall
-            ?.copyWith(color: colors.muted, fontWeight: FontWeight.w600),
+      child: Row(
+        children: <Widget>[
+          Text(
+            text,
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: colors.muted, fontWeight: FontWeight.w600),
+          ),
+          if (badge) ...<Widget>[const SizedBox(width: 6), const PreviewBadge()],
+        ],
       ),
     );
     return Padding(
@@ -124,7 +134,7 @@ class MentionSuggestions extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           for (final (index, row) in rows.indexed) ...<Widget>[
-            if (hasRun && index == 0) title(localization.fromRun),
+            if (hasRun && index == 0) title(localization.fromRun, badge: isPreview),
             if (hasRun && !row.fromRun && (index == 0 || rows[index - 1].fromRun))
               title(localization.mentionFiles),
             Opacity(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
+import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
@@ -10,7 +11,8 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 
 /// {@template workspace_run_controls}
 /// The run controls of the title bar: the device chip, Run (Stop while the app builds or runs) and
-/// hot reload. Nothing is shown without a selected project.
+/// hot reload, and the Preview badge while the run is made up. Nothing is shown without a selected
+/// project.
 /// {@endtemplate}
 class WorkspaceRunControls extends StatelessWidget {
   /// {@macro workspace_run_controls}
@@ -68,6 +70,7 @@ class WorkspaceRunControls extends StatelessWidget {
               tooltip: localization.hotReload,
               onPressed: link.isRunning ? link.reload : null,
             ),
+            if (scope.runIsPreview) ...<Widget>[const SizedBox(width: 6), const PreviewBadge()],
           ],
         );
       },

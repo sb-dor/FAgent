@@ -2,9 +2,11 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
+import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -513,6 +515,30 @@ void main() {
       expect(find.text('Last error'), findsOneWidget);
       expect(find.text('Selected widget'), findsNothing);
       expect(find.text('Screenshot'), findsNothing);
+    });
+
+    testWidgets('a made-up offer is marked Preview in the section title', (tester) async {
+      const preview = RunMentions(
+        isPreview: true,
+        widget: RunMention(
+          detail: 'BookingCard · booking_card.dart:42',
+          text: '@widget BookingCard',
+        ),
+      );
+      await tester.pumpWidget(withRun(context: preview));
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+
+      expect(find.text('From the run'), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(MentionSuggestions), matching: find.byType(PreviewBadge)),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(withRun());
+      await tester.pump();
+      expect(find.text('From the run'), findsOneWidget);
+      expect(find.byType(PreviewBadge), findsNothing, reason: 'a real offer has no badge');
     });
 
     testWidgets('without anything from the run there is no section', (tester) async {

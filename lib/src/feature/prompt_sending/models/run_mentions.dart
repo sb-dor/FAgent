@@ -21,11 +21,12 @@ final class RunMention {
 }
 
 /// What the running app offers the `@` menu: the picked widget and the last error. Plain data, so
-/// the chat does not depend on the run.
+/// the chat does not depend on the run. Equal offers are equal, so a log line that changes neither
+/// part does not rebuild the composer.
 @immutable
 final class RunMentions {
   /// Creates the offer; an absent part is not shown.
-  const RunMentions({this.widget, this.error});
+  const RunMentions({this.widget, this.error, this.isPreview = false});
 
   /// The widget picked in the app.
   final RunMention? widget;
@@ -33,14 +34,20 @@ final class RunMentions {
   /// The last error of the app.
   final RunMention? error;
 
+  /// Whether the run is made up (the menu says so next to the offer).
+  final bool isPreview;
+
   /// Nothing to offer.
   bool get isEmpty => widget == null && error == null;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is RunMentions && other.widget == widget && other.error == error;
+      other is RunMentions &&
+          other.widget == widget &&
+          other.error == error &&
+          other.isPreview == isPreview;
 
   @override
-  int get hashCode => Object.hash(widget, error);
+  int get hashCode => Object.hash(widget, error, isPreview);
 }

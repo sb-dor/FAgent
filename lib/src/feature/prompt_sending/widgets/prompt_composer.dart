@@ -337,6 +337,7 @@ class _PromptComposerState extends State<PromptComposer> {
                   TextFieldTapRegion(
                     child: switch (_trigger!) {
                       _Trigger.mention => MentionSuggestions(
+                        isPreview: widget.runContext?.isPreview ?? false,
                         rows: _rows,
                         highlighted: _highlighted,
                         onSelected: (row) => _pick(_rows.indexOf(row)),

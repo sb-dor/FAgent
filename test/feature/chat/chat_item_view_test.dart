@@ -101,6 +101,34 @@ void main() {
       expect(find.byTooltip('Show details'), findsOneWidget);
     });
 
+    testWidgets('an agent path relative to the project opens the absolute, normalized one', (
+      tester,
+    ) async {
+      useDesktopView(tester);
+      final opened = <String>[];
+      await tester.pumpWidget(
+        _item(
+          const ToolCallItem(
+            0,
+            toolCallId: 't',
+            title: 'Edit a.dart',
+            kind: 'edit',
+            status: 'completed',
+            content: <ToolContent>[
+              ToolDiffContent(path: 'lib/./sub/../a.dart', oldText: 'a', newText: 'b'),
+            ],
+          ),
+          projectRoot: '/p',
+          onOpenChange: opened.add,
+        ),
+      );
+
+      await tester.tap(find.byTooltip('Open in Changes'));
+      await tester.pump();
+
+      expect(opened, <String>['/p/lib/a.dart']);
+    });
+
     testWidgets('without a listener the header still expands the body', (tester) async {
       useDesktopView(tester);
       await tester.pumpWidget(_item(edit));

@@ -76,7 +76,8 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// The run of the selected project and its ties to the selected chat.
   late final WorkspaceRunLink runLink;
 
-  /// Whether the run data is made up (the Run tab says so).
+  /// Whether any of the run data (the run, the devices, the widget picker) is made up. Everything
+  /// that shows it (the Run tab, the title bar, the `@` menu) says so.
   late final bool runIsPreview;
 
   /// The window-level settings (panels, theme, language).
@@ -107,7 +108,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
     )..addListener(_onSessionCreated);
     sessionsController.watchAll();
-    runIsPreview = dependencies.appRunRepository.isPreview;
+    runIsPreview =
+        dependencies.appRunRepository.isPreview ||
+        dependencies.devicesRepository.isPreview ||
+        dependencies.widgetPickerRepository.isPreview;
     devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
     runController = RunController(repository: dependencies.appRunRepository);
     runActionsController = RunActionsController(
@@ -119,6 +123,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       run: runController,
       actions: runActionsController,
       reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
+      isPreview: runIsPreview,
     );
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
@@ -172,8 +177,11 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   }
 
   /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.
+  /// The pick may finish after the window moved to another project: the widget belongs to the
+  /// project it was picked in, so it is dropped unless that project is still the followed one.
   void _onRunAction() {
-    if (runActionsController.state case RunActions$CompletedState(:final picked?)) {
+    if (runActionsController.state case RunActions$CompletedState(:final picked?, :final projectId)
+        when projectId == runController.state.projectId) {
       runController.setPicked(picked);
     }
   }
@@ -307,6 +315,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   }
 
   /// Opens [file] of the running app in the editor; a relative path is inside the selected project.
+  ///
+  /// [line] is not used yet: the file opens in the default text editor (`open -t`), which cannot
+  /// jump to a line. The parameter stays for a future editor integration.
   Future<void> openRunFile(String file, int? line) async {
     final root = selectedProject?.path;
     if (p.isAbsolute(file)) return openPath(file);

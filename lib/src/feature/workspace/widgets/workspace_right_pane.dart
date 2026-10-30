@@ -138,6 +138,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                                 PlanTab(items: handle?.view.items ?? const <ChatItem>[]),
                           ),
                           RightPaneTab.run => RunTab(
+                            key: ValueKey<int?>(_scope.dataController.projectId),
                             projectId: _scope.dataController.projectId,
                             isPreview: _scope.runIsPreview,
                             devices: _scope.devicesController,
