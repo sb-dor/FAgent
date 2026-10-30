@@ -104,7 +104,10 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage5-skills.
   - Screen: "Try in chat" sends `/name` to a chat of another project (`skills/widgets/skills_config_widget.dart`)
   - Chat: skills can fill the / menu's 12 rows before app commands (cap the section); `ChatSkills.of` is recomputed on every run notification; menu F footer link is not keyboard-reachable (`prompt_sending/models/slash_commands.dart`, `skills/widgets/chat_skills_chip.dart`)
   - Scanner: it follows symlinks and walks hidden folders before filtering them out; walk by hand (skip hidden directories, do not follow links, cap the number of entries) (`skills/data/knowledge_scanner.dart`: `snapshotRoot`, `_listInto`)
-  - Duplicate: a skill whose `SKILL.md` is a symlink loses the file, because `copyDirectory` skips links; copy the resolved targets (`skills/data/knowledge_copy.dart`)
+  - Duplicate: a skill whose `SKILL.md` is a symlink cannot be duplicated (`copyDirectory` skips links, the copy fails with a generic error and is removed); copy the resolved targets (`skills/data/knowledge_copy.dart`)
+  - Editor: saving writes a temp file and renames it, which resets the file's mode and extended attributes and needs a writable folder (`skills/data/skills_repository.dart` `write`)
+  - Editor: an outside deletion of the open item still drops its unsaved edits
+  - Frontmatter: keys are stringified with `'${entry.key}'`, so a YAML complex key (`? *alias`) can still expand — accept only `String` keys (`skills/data/frontmatter.dart`)
   - Enablement: `skill_states` rows outlive the deleted item, so a skill re-created under the same name starts with the old state (`skills/data/skill_states.dart`)
 - **Test gaps:**
   - Builtin: the failed-load-not-cached branch of `AssetBuiltinKnowledge` is untested; the builtin test hard-codes counts and won't catch a skill folder missing from the pubspec assets (compare with the directory listing)
