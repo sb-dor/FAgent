@@ -364,7 +364,7 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
           border: Border.all(color: colors.border),
           boxShadow: <BoxShadow>[
             BoxShadow(
-              color: colors.text.withValues(alpha: 0.12),
+              color: colors.shadow,
               blurRadius: 32,
               offset: const Offset(0, 12),
             ),

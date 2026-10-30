@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -156,6 +157,7 @@ void main() {
       Widget Function(BuildContext, void Function(String?))? footerBuilder,
       bool searchable = true,
       ValueChanged<String?>? onResult,
+      ThemeData? theme,
     }) async {
       final buttonKey = GlobalKey();
       await tester.pumpWidget(
@@ -180,6 +182,7 @@ void main() {
               ),
             ),
           ),
+          theme: theme,
         ),
       );
       await tester.tap(find.text('Open'));
@@ -211,19 +214,114 @@ void main() {
       expect(picked, 'sonnet');
     });
 
-    testWidgets('the search field has focus and arrows move over the filtered list', (
+    const mixed = <AppMenuSection<String>>[
+      AppMenuSection<String>(
+        items: <AppMenuItem<String>>[
+          AppMenuItem<String>(value: 'opus', title: 'Opus 5.5'),
+          AppMenuItem<String>(value: 'old', title: 'Sonnet Old', enabled: false),
+          AppMenuItem<String>(value: 'son1', title: 'Sonnet 5.5'),
+          AppMenuItem<String>(value: 'son2', title: 'Sonnet 5.6'),
+          AppMenuItem<String>(value: 'haiku', title: 'Haiku 5.5'),
+        ],
+      ),
+    ];
+
+    int highlightedRows(WidgetTester tester) => tester
+        .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+        .where((box) => (box.decoration as BoxDecoration).color == AppColors.light.surface)
+        .length;
+
+    testWidgets('the search field has focus right after opening', (tester) async {
+      await openMenu(tester, sections: models);
+      final field = tester.widget<TextField>(find.byType(TextField));
+      expect(field.focusNode!.hasFocus, isTrue);
+    });
+
+    testWidgets('arrows and Enter act on the filtered list and skip disabled matches', (
       tester,
     ) async {
       String? picked;
-      await openMenu(tester, sections: models, onResult: (value) => picked = value);
+      await openMenu(tester, sections: mixed, onResult: (value) => picked = value);
 
-      await tester.enterText(find.byType(TextField), '5.5');
+      await tester.enterText(find.byType(TextField), 'son');
       await tester.pumpAndSettle();
+      expect(find.text('Opus 5.5'), findsNothing);
+      expect(find.text('Haiku 5.5'), findsNothing);
+      expect(find.text('Sonnet Old'), findsOneWidget);
+      expect(highlightedRows(tester), 1);
+
+      // The first enabled match (not the disabled one above it) is highlighted.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(picked, 'son1');
+    });
+
+    testWidgets('ArrowDown moves to the next match and stops at the last one', (tester) async {
+      String? picked;
+      await openMenu(tester, sections: mixed, onResult: (value) => picked = value);
+
+      await tester.enterText(find.byType(TextField), 'son');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pumpAndSettle();
-      expect(picked, 'haiku');
+      expect(picked, 'son2');
+    });
+
+    testWidgets('typing again resets the highlight to the first enabled match', (tester) async {
+      String? picked;
+      await openMenu(tester, sections: mixed, onResult: (value) => picked = value);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.enterText(find.byType(TextField), '5.5');
+      await tester.pumpAndSettle();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(picked, 'opus');
+    });
+
+    testWidgets('Enter with no matches does nothing and the menu stays open', (tester) async {
+      var results = 0;
+      await openMenu(tester, sections: mixed, onResult: (_) => results++);
+
+      await tester.enterText(find.byType(TextField), 'zzz');
+      await tester.pumpAndSettle();
+      expect(find.text('Sonnet 5.5'), findsNothing);
+      expect(highlightedRows(tester), 0);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(results, 0);
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('disabled-only matches leave nothing highlighted', (tester) async {
+      var results = 0;
+      await openMenu(tester, sections: mixed, onResult: (_) => results++);
+
+      await tester.enterText(find.byType(TextField), 'old');
+      await tester.pumpAndSettle();
+      expect(find.text('Sonnet Old'), findsOneWidget);
+      expect(highlightedRows(tester), 0);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pumpAndSettle();
+      expect(results, 0);
+      expect(find.text('Sonnet Old'), findsOneWidget);
+    });
+
+    testWidgets('the menu shadow is dark in the dark theme', (tester) async {
+      await openMenu(tester, sections: models, theme: AppTheme.dark());
+      final card = tester.widget<DecoratedBox>(
+        find.ancestor(of: find.byType(TextField), matching: find.byType(DecoratedBox)).last,
+      );
+      final shadow = (card.decoration as BoxDecoration).boxShadow!.single.color;
+      expect(shadow.computeLuminance(), lessThan(0.1));
+      expect(shadow, AppColors.dark.shadow);
     });
 
     testWidgets('Escape closes a searchable menu without a value', (tester) async {
