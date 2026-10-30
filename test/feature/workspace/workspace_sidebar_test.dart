@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/widget/status.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chat_tile.dart';
@@ -445,6 +446,25 @@ void main() {
       expect(rows.where((r) => r.projectId == avera), hasLength(1));
       final created = rows.firstWhere((r) => r.projectId == shop && r.id != chat);
       expect(scopeOf(tester).dataController.sessionId, created.id);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('⌘N uses the default agent', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int avera;
+      await tester.runAsync(() async {
+        avera = await addProject('avera-hotel');
+      });
+      await pumpSidebar(tester);
+      AppSettingsConfigInhWidget.of(tester.element(find.byType(WorkspaceConfigWidget))).controller
+          .update((current) => current.copyWith(defaultAgentId: 'codex'));
+      await tester.pump();
+      scopeOf(tester).dataController.selectProject(avera);
+      await tester.pump();
+
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+
+      expect((await sessions(tester)).single.agentId, 'codex');
       await disposeTestApp(tester, dependencies);
     });
 

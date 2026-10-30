@@ -81,9 +81,13 @@ void main() {
     await database.close();
   });
 
-  AgentHub newHub({List<TurnObserver> observers = const <TurnObserver>[]}) {
+  AgentHub newHub({
+    List<TurnObserver> observers = const <TurnObserver>[],
+    Future<Map<String, String>> Function(String agentId)? sessionDefaults,
+  }) {
     final hub = AgentHub(
       observers: observers,
+      sessionDefaults: sessionDefaults,
       database: database,
       environment: environment,
       agents: <String, AgentDefinition>{'fake': fakeAgent},
@@ -135,6 +139,49 @@ void main() {
     expect(live.store.events.first.kind, SessionEventKind.prompt);
     expect(_agentText(live).join(), 'hello world');
     expect(live.store.events.last.payload, containsPair('stopReason', 'end_turn'));
+  });
+
+  String? modeOf(LiveSession live) => [
+    for (final o in live.configOptions.value)
+      if (o['id'] == 'mode') o['currentValue'] as String?,
+  ].firstOrNull;
+
+  test('a new chat starts in the default mode', () async {
+    final hub = newHub(sessionDefaults: (_) async => <String, String>{'mode': 'acceptEdits'});
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(modeOf(live), 'acceptEdits');
+    expect(_agentText(live).join(), 'hi');
+  });
+
+  test('a bypass or unknown default is ignored', () async {
+    for (final defaults in <Map<String, String>>[
+      <String, String>{'mode': 'bypassPermissions'},
+      <String, String>{'mode': 'nope', 'model': 'x'},
+    ]) {
+      final hub = newHub(sessionDefaults: (_) async => defaults);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      await hub.prompt(chat, 'echo hi');
+
+      expect(modeOf(live), 'default');
+      expect(_agentText(live).join(), 'hi');
+    }
+  });
+
+  test('a failing defaults source does not block the chat', () async {
+    final hub = newHub(sessionDefaults: (_) async => throw StateError('no settings'));
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(modeOf(live), 'default');
+    expect(_agentText(live).join(), 'hi');
   });
 
   test('a config option change returns the agent\'s new options', () async {

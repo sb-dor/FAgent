@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 
@@ -12,6 +13,7 @@ final class AppSettings {
     this.rightPaneVisible,
     this.rightPaneWidth = defaultRightPaneWidth,
     this.defaultAgentId = 'claude',
+    this.sessionDefaults = const <String, Map<String, String>>{},
   });
 
   /// Reads settings from stored JSON. Never throws: anything unreadable becomes the default.
@@ -39,8 +41,32 @@ final class AppSettings {
           ? width.toDouble().clamp(minRightPaneWidth, maxRightPaneWidth)
           : defaultRightPaneWidth,
       defaultAgentId: agentId is String && agentId.isNotEmpty ? agentId : 'claude',
+      sessionDefaults: _readSessionDefaults(json['sessionDefaults']),
     );
   }
+
+  /// Keeps string-to-string entries only and drops `mode: bypassPermissions`.
+  static Map<String, Map<String, String>> _readSessionDefaults(Object? json) {
+    if (json is! Map<Object?, Object?>) return const <String, Map<String, String>>{};
+    return _sanitize(<String, Map<Object?, Object?>>{
+      for (final MapEntry(:key, :value) in json.entries)
+        if (key is String && value is Map<Object?, Object?>) key: value,
+    });
+  }
+
+  static Map<String, Map<String, String>> _sanitize(Map<String, Map<Object?, Object?>> raw) =>
+      <String, Map<String, String>>{
+        for (final MapEntry(:key, :value) in raw.entries)
+          key: <String, String>{
+            for (final MapEntry(key: configId, value: choice) in value.entries)
+              if (configId is String &&
+                  choice is String &&
+                  !(configId == 'mode' && choice == _bypassMode))
+                configId: choice,
+          },
+      };
+
+  static const String _bypassMode = 'bypassPermissions';
 
   /// Narrowest right pane.
   static const double minRightPaneWidth = 340;
@@ -69,6 +95,11 @@ final class AppSettings {
   /// The agent a new chat starts with.
   final String defaultAgentId;
 
+  /// Config option values a new chat starts with: agent id → config id → value (model, mode, …).
+  ///
+  /// `mode: bypassPermissions` is never stored; it needs the user's consent in each chat.
+  final Map<String, Map<String, String>> sessionDefaults;
+
   /// The JSON stored in `app_settings`.
   Map<String, Object?> toJson() => <String, Object?>{
     'themeMode': themeMode.name,
@@ -77,6 +108,7 @@ final class AppSettings {
     'rightPaneVisible': rightPaneVisible,
     'rightPaneWidth': rightPaneWidth,
     'defaultAgentId': defaultAgentId,
+    'sessionDefaults': sessionDefaults,
   };
 
   /// A copy with the given fields replaced.
@@ -91,6 +123,7 @@ final class AppSettings {
     bool resetRightPaneVisible = false,
     double? rightPaneWidth,
     String? defaultAgentId,
+    Map<String, Map<String, String>>? sessionDefaults,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     locale: resetLocale ? null : locale ?? this.locale,
@@ -98,6 +131,11 @@ final class AppSettings {
     rightPaneVisible: resetRightPaneVisible ? null : rightPaneVisible ?? this.rightPaneVisible,
     rightPaneWidth: rightPaneWidth ?? this.rightPaneWidth,
     defaultAgentId: defaultAgentId ?? this.defaultAgentId,
+    sessionDefaults: sessionDefaults == null
+        ? this.sessionDefaults
+        : _sanitize(<String, Map<Object?, Object?>>{
+            for (final MapEntry(:key, :value) in sessionDefaults.entries) key: value,
+          }),
   );
 
   @override
@@ -109,7 +147,8 @@ final class AppSettings {
           other.sidebarVisible == sidebarVisible &&
           other.rightPaneVisible == rightPaneVisible &&
           other.rightPaneWidth == rightPaneWidth &&
-          other.defaultAgentId == defaultAgentId;
+          other.defaultAgentId == defaultAgentId &&
+          const DeepCollectionEquality().equals(other.sessionDefaults, sessionDefaults);
 
   @override
   int get hashCode => Object.hash(
@@ -119,6 +158,7 @@ final class AppSettings {
     rightPaneVisible,
     rightPaneWidth,
     defaultAgentId,
+    const DeepCollectionEquality().hash(sessionDefaults),
   );
 
   @override
