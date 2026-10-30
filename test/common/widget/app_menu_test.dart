@@ -44,6 +44,36 @@ void main() {
     expect(find.text('Sonnet'), findsNothing);
   });
 
+  testWidgets('a row can carry a badge after its title', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        const Center(
+          child: SelectorChip<String>(
+            label: 'Pick',
+            sections: <AppMenuSection<String>>[
+              AppMenuSection<String>(
+                items: <AppMenuItem<String>>[
+                  AppMenuItem<String>(value: 'a', title: 'With badge', badge: Text('NEW')),
+                  AppMenuItem<String>(value: 'b', title: 'Plain'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Pick'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NEW'), findsOneWidget);
+    expect(find.text('With badge'), findsOneWidget);
+    expect(find.text('Plain'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('NEW')).dx,
+      greaterThan(tester.getTopRight(find.text('With badge')).dx - 1),
+    );
+  });
+
   testWidgets('arrows and Enter pick, disabled items are skipped', (tester) async {
     String? picked;
     await tester.pumpWidget(

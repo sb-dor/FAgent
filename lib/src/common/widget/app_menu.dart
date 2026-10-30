@@ -19,6 +19,7 @@ final class AppMenuItem<T> {
     this.selected = false,
     this.enabled = true,
     this.shortcut,
+    this.badge,
     this.tone = AppTone.neutral,
   });
 
@@ -42,6 +43,9 @@ final class AppMenuItem<T> {
 
   /// Hint shown at the trailing edge, e.g. `⌘K`.
   final String? shortcut;
+
+  /// Small widget after the title, e.g. a `PreviewBadge`.
+  final Widget? badge;
 
   /// [AppTone.warn] / [AppTone.danger] mark rows that need caution.
   final AppTone tone;
@@ -482,6 +486,11 @@ class _MenuRow<T> extends StatelessWidget {
     };
     final subtitle = item.subtitle;
     final shortcut = item.shortcut;
+    final badge = item.badge;
+    final title = Text(
+      item.title,
+      style: theme.bodyMedium!.copyWith(color: toneColor ?? colors.text),
+    );
     return Semantics(
       button: true,
       enabled: item.enabled,
@@ -512,10 +521,14 @@ class _MenuRow<T> extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
-                          Text(
-                            item.title,
-                            style: theme.bodyMedium!.copyWith(color: toneColor ?? colors.text),
-                          ),
+                          if (badge == null)
+                            title
+                          else
+                            Wrap(
+                              spacing: 8,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: <Widget>[title, badge],
+                            ),
                           if (subtitle != null)
                             Text(subtitle, style: theme.bodySmall!.copyWith(color: colors.muted)),
                         ],

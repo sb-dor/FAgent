@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skill_list_tile.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/skills_add_menu.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widget.dart';
 
 /// {@template skills_list}
@@ -79,6 +80,8 @@ class _SkillsListState extends State<SkillsList> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                const SkillsAddMenu(),
               ],
             ),
           ),
@@ -123,7 +126,7 @@ class _SkillsListState extends State<SkillsList> {
         return SkillListTile(
           item: item,
           selected: item.id == view.selectedId,
-          onTap: () => view.select(item.id),
+          onTap: () => _scope.select(item.id),
           onToggle: (enabled) =>
               _scope.actions.setEnabled(item.id, enabled: enabled, projectId: view.projectId),
         );

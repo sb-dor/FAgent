@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/skill_card.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_list.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_navigation.dart';
@@ -45,7 +45,7 @@ class _SkillsScreen extends StatelessWidget {
           sections: sections,
           // A source filter replaces the section as the highlighted item of the navigation.
           selected: view.source == null ? view.kind.name : '',
-          onSelect: (id) => view.setKind(KnowledgeKind.values.byName(id)),
+          onSelect: (id) => scope.chooseKind(KnowledgeKind.values.byName(id)),
           sectionBadges: <String, String>{
             KnowledgeKind.skill.name: '${library.skills.length}',
             KnowledgeKind.rule.name: '${library.rules.length}',
@@ -58,13 +58,7 @@ class _SkillsScreen extends StatelessWidget {
             children: <Widget>[
               const SizedBox(width: _kListWidth, child: SkillsList()),
               VerticalDivider(width: 1, color: context.colors.border),
-              Expanded(
-                // The card of the open item arrives in a later task.
-                child: EmptyState(
-                  icon: Icons.auto_awesome_outlined,
-                  title: localization.skillsPickOne,
-                ),
-              ),
+              const Expanded(child: SkillCard()),
             ],
           ),
         );

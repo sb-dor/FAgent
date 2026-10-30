@@ -46,7 +46,7 @@ class SkillsProjectSelector extends StatelessWidget {
                 ],
               ),
             ],
-            onSelected: scope.view.setProject,
+            onSelected: scope.chooseProject,
           ),
         );
       },

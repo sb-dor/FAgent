@@ -70,6 +70,9 @@ final class MemorySkillsRepository implements ISkillsRepository {
   final Map<String, Map<int, bool>> _perProject = {};
   final Set<_Watcher> _watchers = {};
 
+  /// The stored text of [id] (what a read returns); `null` when there is none.
+  String? textOf(String id) => _texts[id];
+
   /// The calls made so far, for example `setEnabled skill:builtin:a false project=1`.
   final List<String> calls = [];
 

@@ -134,6 +134,11 @@ void main() {
       projectItems: {
         _averaRoot: [memorySkill('release-checklist', source: SkillSource.project)],
       },
+      texts: const {
+        'skill:builtin:a-skill-with-a-really-long-name-that-goes-on-and-on-and-on': '# long\n',
+        'skill:user:short': '# short\n',
+        'skill:project:release-checklist': '# release\n',
+      },
     );
     await pumpScreen(tester, locale: locale, theme: dark ? AppTheme.dark() : AppTheme.light());
 
@@ -142,6 +147,18 @@ void main() {
     await tester.tap(find.byType(TextField));
     await tester.pump();
     expect(tester.takeException(), isNull);
+    // The card of the open item, for each source.
+    for (final name in const [
+      'a-skill-with-a-really-long-name-that-goes-on-and-on-and-on',
+      'short',
+      'release-checklist',
+    ]) {
+      await tester.tap(find.widgetWithText(SkillListTile, name));
+      await tester.pump();
+      await _settle(tester);
+      expect(find.text(name), findsWidgets, reason: name);
+      expect(tester.takeException(), isNull, reason: name);
+    }
     await disposeTestApp(tester, dependencies);
   }
 

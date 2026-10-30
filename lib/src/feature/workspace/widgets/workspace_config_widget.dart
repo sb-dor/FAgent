@@ -26,6 +26,7 @@ import 'package:flutter_code_agent/src/feature/session_creation/data/session_cre
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/pending_chat_draft.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
@@ -75,6 +76,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
 
   /// The run of the selected project and its ties to the selected chat.
   late final WorkspaceRunLink runLink;
+
+  /// The text for the chat that is being created (see [createChat]).
+  late final PendingChatDraft _draft = PendingChatDraft(data: dataController);
 
   /// Whether any of the run data (the run, the devices, the widget picker) is made up. Everything
   /// that shows it (the Run tab, the title bar, the `@` menu) says so.
@@ -127,7 +131,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     );
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
-    dataController.addListener(_followSelectedProject);
+    dataController
+      ..addListener(_followSelectedProject)
+      ..addListener(_draft.onSelectionChanged)
+      ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
   }
 
@@ -136,6 +143,8 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     runLink.dispose();
     dataController
       ..removeListener(_followSelectedProject)
+      ..removeListener(_draft.onSelectionChanged)
+      ..chatHandle.removeListener(_draft.onHandleChanged)
       ..dispose();
     devicesController.removeListener(_chooseDefaultDevice);
     runController.removeListener(_chooseDefaultDevice);
@@ -260,11 +269,16 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// Starts a new chat in [projectId], by default in [newChatProjectId]; does nothing without a
   /// project. The project becomes selected and the window leaves Skills or Settings for the chat;
   /// the new chat is selected when it is created.
-  void createChat({int? projectId}) {
+  ///
+  /// A [draft] is put into the composer of the new chat once it has opened. It is dropped when the
+  /// user opens another chat first, or when the chat cannot be created.
+  void createChat({int? projectId, String? draft}) {
     final project = projectId ?? newChatProjectId;
     if (project == null) return;
     dataController.selectProject(project);
     if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    // A creation that is already running ignores this one, so it keeps the draft it was given.
+    if (sessionCreationController.state is! SessionCreation$InProgressState) _draft.expect(draft);
     sessionCreationController.create(
       projectId: project,
       agentId: settingsController.settings.defaultAgentId,
@@ -382,8 +396,14 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   }
 
   void _onSessionCreated() {
-    if (sessionCreationController.state case SessionCreation$CompletedState(:final sessionId)) {
-      dataController.selectSession(sessionId);
+    switch (sessionCreationController.state) {
+      case SessionCreation$CompletedState(:final sessionId):
+        _draft.created(sessionId);
+        dataController.selectSession(sessionId);
+      case SessionCreation$ErrorState():
+        _draft.forget();
+      default:
+        break;
     }
   }
 
