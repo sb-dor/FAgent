@@ -40,6 +40,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
   late final ChangedFilesNotifier _changes = ChangedFilesNotifier(
     handle: _scope.dataController.chatHandle,
     projectRoot: () => _scope.selectedProject?.path ?? '',
+    rootChanges: Listenable.merge(<Listenable>[_scope.projectsController, _scope.dataController]),
   );
 
   double get _storedWidth => _scope.settingsController.settings.rightPaneWidth;

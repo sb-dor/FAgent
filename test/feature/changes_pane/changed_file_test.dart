@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter_code_agent/src/feature/changes_pane/models/changed_file.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/models/file_change_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 void main() {
   TurnFilesItem turn(int seq, Map<String, String> files, {String? root}) => TurnFilesItem(
@@ -115,6 +118,37 @@ void main() {
       ], projectRoot: '/p'),
       isEmpty,
     );
+  });
+
+  test('turn files of an old journal are skipped while the project root is unknown', () {
+    final files = collectChanges(<ChatItem>[
+      turn(1, <String, String>{'lib/a.dart': ' M'}),
+      turn(2, <String, String>{'lib/b.dart': ' M'}, root: '/p'),
+    ], projectRoot: '');
+
+    expect(paths(files), <String>['/p/lib/b.dart']);
+  });
+
+  test('a symlinked project folder and its resolved git root are one file', () {
+    final real = Directory.systemTemp.createTempSync('changes_real');
+    addTearDown(() => real.deleteSync(recursive: true));
+    final link = p.join(Directory.systemTemp.createTempSync('changes_link').path, 'project');
+    addTearDown(() => Directory(p.dirname(link)).deleteSync(recursive: true));
+    Link(link).createSync(real.path);
+    final resolved = real.resolveSymbolicLinksSync();
+    File(p.join(real.path, 'lib/a.dart')).createSync(recursive: true);
+
+    final files = collectChanges(<ChatItem>[
+      edit(1, p.join(link, 'lib/a.dart'), before: 'a\n'),
+      turn(2, <String, String>{'lib/a.dart': ' M', 'lib/gone.dart': ' D'}, root: resolved),
+    ], projectRoot: link);
+
+    expect(files, hasLength(2));
+    final a = files.singleWhere((f) => f.path.endsWith('a.dart'));
+    expect(a.path, p.join(link, 'lib/a.dart'), reason: 'shown in the form the user opened');
+    expect(a.status, 'modified');
+    expect(a.diffs, hasLength(1));
+    expect(files.map((f) => f.path), contains(p.join(link, 'lib/gone.dart')));
   });
 
   group('fileChangeKind', () {

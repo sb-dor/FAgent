@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/feature/changes_pane/models/changed_file.
 import 'package:flutter_code_agent/src/feature/changes_pane/widgets/changes_file_list.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/diff_lines_cache.dart';
+import 'package:flutter_code_agent/src/feature/turn_files/models/file_change_kind.dart';
 import 'package:path/path.dart' as p;
 
 /// {@template changes_view}
@@ -92,7 +93,11 @@ class _ChangesViewState extends State<ChangesView> {
           Divider(height: 1, color: context.colors.border),
           Expanded(
             child: selected.diffs.isEmpty
-                ? _NoDiff(path: selected.path, onOpenFile: widget.onOpenFile)
+                ? _NoDiff(
+                    path: selected.path,
+                    canOpen: selected.status != FileChangeKind.deleted.name,
+                    onOpenFile: widget.onOpenFile,
+                  )
                 : ListView(
                     padding: const EdgeInsets.all(12),
                     children: <Widget>[
@@ -130,9 +135,12 @@ class _ChangesViewState extends State<ChangesView> {
 
 /// A file a command changed: there is no diff, only the file itself to open.
 class _NoDiff extends StatelessWidget {
-  const _NoDiff({required this.path, required this.onOpenFile});
+  const _NoDiff({required this.path, required this.canOpen, required this.onOpenFile});
 
   final String path;
+
+  /// A deleted file is not there to open.
+  final bool canOpen;
   final ValueChanged<String> onOpenFile;
 
   @override
@@ -141,8 +149,8 @@ class _NoDiff extends StatelessWidget {
     return EmptyState(
       icon: Icons.terminal,
       title: localization.changedByCommand,
-      actionLabel: localization.openFile,
-      onAction: () => onOpenFile(path),
+      actionLabel: canOpen ? localization.openFile : null,
+      onAction: canOpen ? () => onOpenFile(path) : null,
     );
   }
 }

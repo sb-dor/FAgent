@@ -214,10 +214,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     }
   }
 
-  /// Opens the file at [path] with the system's application for it.
+  /// Opens the file at [path] in the default text editor; says so when the file is gone.
   Future<void> openPath(String path) async {
     try {
       await projectsController.openPath(path);
+    } on OpenPathRefusedException {
+      if (mounted) _showMessage(Localization.of(context).fileMissing);
     } on Object {
       _showError();
     }

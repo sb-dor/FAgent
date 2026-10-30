@@ -90,6 +90,20 @@ void main() {
     expect(opened, '/p/pubspec.lock');
   });
 
+  testWidgets('a deleted file has no Open file button', (tester) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      view(
+        changes: const <ChangedFile>[
+          ChangedFile(path: '/p/gone.dart', status: 'deleted', diffs: <ToolDiffContent>[]),
+        ],
+      ),
+    );
+
+    expect(find.text('Open file'), findsNothing);
+    expect(find.text('Changed by a command, there is no diff to show.'), findsOneWidget);
+  });
+
   testWidgets('no changes shows the empty state', (tester) async {
     useDesktopView(tester);
     await tester.pumpWidget(view(changes: const <ChangedFile>[]));

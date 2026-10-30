@@ -63,6 +63,7 @@
   "changesEmptyHint": "Здесь появятся файлы, которые агент изменит в этом чате.",
   "changedByCommand": "Изменён командой, показать diff нельзя.",
   "openFile": "Открыть файл",
+  "fileMissing": "Файла больше нет.",
   "showDetails": "Показать подробности",
   "hideDetails": "Скрыть подробности",
   "filesChanged": "{count, plural, =1{Изменён 1 файл} few{Изменено {count} файла} other{Изменено {count} файлов}}",

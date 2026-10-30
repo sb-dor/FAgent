@@ -84,6 +84,7 @@
   "changesEmptyHint": "Files the agent changes in this chat appear here.",
   "changedByCommand": "Changed by a command, there is no diff to show.",
   "openFile": "Open file",
+  "fileMissing": "The file no longer exists.",
   "showDetails": "Show details",
   "hideDetails": "Hide details",
   "filesChanged": "{count, plural, =1{1 file changed} other{{count} files changed}}",
