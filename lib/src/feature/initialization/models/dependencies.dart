@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
 /// {@template dependencies}
 /// Application dependencies.
@@ -40,6 +41,9 @@ class Dependencies {
 
   /// Picks a widget in a running app.
   late final IWidgetPickerRepository widgetPickerRepository;
+
+  /// Skills and rules: the built-in ones, the user's and the projects', and where they are on.
+  late final ISkillsRepository skillsRepository;
 
   @override
   String toString() => 'Dependencies{}';
