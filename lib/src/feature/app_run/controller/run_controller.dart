@@ -8,9 +8,6 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'run_controller.freezed.dart';
 
-/// How many of the newest log lines [RunController] keeps.
-const int kRunLogLimit = 2000;
-
 /// What the Run tab shows for one project.
 @freezed
 abstract class RunViewState with _$RunViewState {
@@ -40,7 +37,8 @@ abstract class RunViewState with _$RunViewState {
 
 /// Follows the run and the output of one project at a time (the one open in the window).
 ///
-/// The output is kept here, not in the repository: switching projects clears it.
+/// The buffer here is cleared on a project switch; the repository keeps the project's history and
+/// replays it when the project is watched again.
 final class RunController extends StateController<RunViewState> with SequentialControllerHandler {
   RunController({required this._repository, super.initialState = const RunViewState()});
 
@@ -51,19 +49,13 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// Follows [projectId]: drops the previous project's subscriptions, run and output. Calling it
   /// again for the same project changes nothing.
   ///
-  /// The device is not chosen for the user: it stays `null` until [choose] sets it, and the
-  /// selection, mode and target survive a change of project.
+  /// The device is not chosen for the user: it stays `null` until [choose] sets it, and the chosen
+  /// device survives a change of project. The mode and the target (a per-project path) go back to
+  /// `debug` and `lib/main.dart`.
   void watch(int projectId) => handle(() async {
     if (state.projectId == projectId && _runSubscription != null) return;
     await _cancel();
-    setState(
-      RunViewState(
-        projectId: projectId,
-        selectedDeviceId: state.selectedDeviceId,
-        mode: state.mode,
-        target: state.target,
-      ),
-    );
+    setState(RunViewState(projectId: projectId, selectedDeviceId: state.selectedDeviceId));
     _runSubscription = _repository.watchRun(projectId).listen((run) {
       if (state.projectId == projectId) setState(state.copyWith(run: run));
     });
@@ -90,14 +82,18 @@ final class RunController extends StateController<RunViewState> with SequentialC
     ),
   );
 
-  /// Marks the log line [seq] as sent to the agent.
-  void markSent(int seq) => setState(
-    state.copyWith(
-      logs: state.logs
-          .map((log) => log.seq == seq ? log.copyWith(sentToAgent: true) : log)
-          .toList(growable: false),
-    ),
-  );
+  /// Marks the log line [seq] as sent to the agent, here and in the repository's buffer.
+  void markSent(int seq) {
+    setState(
+      state.copyWith(
+        logs: state.logs
+            .map((log) => log.seq == seq ? log.copyWith(sentToAgent: true) : log)
+            .toList(growable: false),
+      ),
+    );
+    final projectId = state.projectId;
+    if (projectId != null) _repository.markSent(projectId, seq).ignore();
+  }
 
   Future<void> _cancel() async {
     await _runSubscription?.cancel();

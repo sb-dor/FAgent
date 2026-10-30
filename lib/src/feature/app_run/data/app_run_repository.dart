@@ -1,6 +1,9 @@
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 
+/// How many of the newest log lines a project keeps (and replays to a new `logs` listener).
+const int kRunLogLimit = 2000;
+
 /// The Flutter build mode of a run.
 enum BuildMode { debug, profile, release }
 
@@ -13,9 +16,14 @@ abstract interface class IAppRunRepository {
   /// cancelled or the repository is disposed.
   Stream<RunState> watchRun(int projectId);
 
-  /// The app's output from now on (nothing is replayed). Ends when the subscription is cancelled or
-  /// the repository is disposed.
+  /// The project's buffered output (at most [kRunLogLimit] newest lines, with their `sentToAgent`
+  /// flags), then every new line, the same way [watchRun] replays the state. Ends when the
+  /// subscription is cancelled or the repository is disposed.
   Stream<LogEntry> logs(int projectId);
+
+  /// Flags the buffered line [seq] of the project as sent to the agent, so the flag survives a
+  /// listener that leaves and comes back. Does nothing when the line is no longer buffered.
+  Future<void> markSent(int projectId, int seq);
 
   /// Starts the app on [deviceId] and returns once the build began; follow it through [watchRun].
   /// A running app is stopped and started again.

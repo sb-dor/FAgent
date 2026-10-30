@@ -13,6 +13,9 @@ final class _FakeRun {
   final StreamController<LogEntry> logs = StreamController<LogEntry>.broadcast();
   final Map<Timer, Completer<bool>> _waits = <Timer, Completer<bool>>{};
 
+  /// The newest [kRunLogLimit] lines, replayed to a new `logs` listener.
+  final List<LogEntry> buffer = <LogEntry>[];
+
   RunState state = const RunIdle();
   int nextSeq = 0;
   int reloads = 0;
@@ -33,6 +36,8 @@ final class _FakeRun {
       text: text,
       error: error,
     );
+    buffer.add(entry);
+    if (buffer.length > kRunLogLimit) buffer.removeRange(0, buffer.length - kRunLogLimit);
     if (!logs.isClosed) logs.add(entry);
   }
 
@@ -94,8 +99,15 @@ final class FakeAppRunRepositoryImpl implements IAppRunRepository {
   Stream<LogEntry> logs(int projectId) => _stream<LogEntry>(
     projectId,
     source: (run) => run.logs.stream,
-    initial: (run) => const <LogEntry>[],
+    initial: (run) => List<LogEntry>.of(run.buffer),
   );
+
+  @override
+  Future<void> markSent(int projectId, int seq) async {
+    final buffer = _runs[projectId]?.buffer;
+    final index = buffer?.indexWhere((log) => log.seq == seq) ?? -1;
+    if (index >= 0) buffer![index] = buffer[index].copyWith(sentToAgent: true);
+  }
 
   /// A stream that first replays [initial] and then forwards [source]; it closes on cancel.
   Stream<T> _stream<T>(

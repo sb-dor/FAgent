@@ -18,6 +18,9 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   final Map<int, StreamController<LogEntry>> _logs = <int, StreamController<LogEntry>>{};
   final Map<int, StreamController<RunState>> _states = <int, StreamController<RunState>>{};
 
+  /// The `(project, seq)` pairs `markSent` was called with.
+  final List<(int, int)> marked = <(int, int)>[];
+
   @override
   bool get isPreview => true;
 
@@ -44,6 +47,9 @@ final class _ScriptedRunRepository implements IAppRunRepository {
     required BuildMode mode,
     required String target,
   }) async {}
+
+  @override
+  Future<void> markSent(int projectId, int seq) async => marked.add((projectId, seq));
 
   @override
   Future<void> stop(int projectId) async {}
@@ -170,7 +176,7 @@ void main() {
     });
 
     test(
-      'choose changes the device, the mode and the target, and keeps them across projects',
+      'choose changes the device, the mode and the target; a project switch keeps only the device',
       () async {
         controller.watch(1);
         await pumpEventQueue();
@@ -185,10 +191,22 @@ void main() {
         await pumpEventQueue();
 
         expect(controller.state.selectedDeviceId, 'macos');
-        expect(controller.state.mode, BuildMode.release);
-        expect(controller.state.target, 'lib/main_dev.dart');
+        expect(controller.state.mode, BuildMode.debug);
+        expect(controller.state.target, 'lib/main.dart');
       },
     );
+
+    test('choose sets the mode and the target of the current project', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+
+      controller
+        ..choose(mode: BuildMode.release)
+        ..choose(target: 'lib/main_dev.dart');
+
+      expect(controller.state.mode, BuildMode.release);
+      expect(controller.state.target, 'lib/main_dev.dart');
+    });
 
     test('markSent flags one log entry as sent to the agent', () async {
       controller.watch(1);
@@ -201,6 +219,38 @@ void main() {
       controller.markSent(1);
 
       expect(controller.state.logs.map((log) => log.sentToAgent), <bool>[false, true]);
+      expect(scripted.marked, <(int, int)>[(1, 1)]);
+    });
+
+    test('coming back to a running project restores its logs, error and sent flags', () async {
+      final fake = FakeAppRunRepositoryImpl(step: _step);
+      addTearDown(fake.dispose);
+      final fakeController = RunController(repository: fake)..watch(1);
+      addTearDown(fakeController.dispose);
+      await pumpEventQueue();
+      await fake.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await Future<void>.delayed(_step * 50);
+      await fake.hotReload(1);
+      await Future<void>.delayed(_step * 50);
+      expect(fakeController.state.errorCount, 1);
+      final before = fakeController.state.logs;
+      fakeController.markSent(before.first.seq);
+      await pumpEventQueue();
+
+      fakeController.watch(2);
+      await pumpEventQueue();
+      expect(fakeController.state.logs, isEmpty);
+      expect(fakeController.state.errorCount, 0);
+      fakeController.watch(1);
+      await pumpEventQueue();
+
+      final after = fakeController.state;
+      expect(after.projectId, 1);
+      expect(after.run, isA<RunRunning>());
+      expect(after.logs.map((log) => log.seq), before.map((log) => log.seq));
+      expect(after.errorCount, 1);
+      expect(after.logs.first.sentToAgent, isTrue);
+      expect(after.logs.skip(1).any((log) => log.sentToAgent), isFalse);
     });
   });
 

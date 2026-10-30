@@ -112,6 +112,40 @@ void main() {
       expect(states.whereType<RunRunning>(), isEmpty);
     });
 
+    test('a new logs listener gets the buffered lines first, with their sent flags', () async {
+      final states = collect(repository.watchRun(1));
+      await start();
+      await until(() => states.last is RunRunning);
+      await repository.markSent(1, 0);
+
+      final replayed = await repository.logs(1).take(2).toList();
+
+      expect(replayed.map((log) => log.seq), <int>[0, 1]);
+      expect(replayed.map((log) => log.sentToAgent), <bool>[true, false]);
+      expect(await repository.logs(2).take(0).toList(), isEmpty);
+    });
+
+    test('the log buffer never holds more than $kRunLogLimit lines', () async {
+      final quick = FakeAppRunRepositoryImpl(step: Duration.zero);
+      addTearDown(quick.dispose);
+      final states = collect(quick.watchRun(1));
+      await quick.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await until(() => states.last is RunRunning);
+      for (var i = 0; i < kRunLogLimit + 100; i++) {
+        await quick.hotReload(1);
+      }
+      await pumpEventQueue();
+
+      final replayed = <LogEntry>[];
+      final subscription = quick.logs(1).listen(replayed.add);
+      addTearDown(subscription.cancel);
+      await pumpEventQueue();
+
+      expect(replayed, hasLength(kRunLogLimit));
+      expect(replayed.first.seq, greaterThan(0));
+      expect(replayed.last.seq, replayed.first.seq + kRunLogLimit - 1);
+    });
+
     test('reload, restart and stop without a run do nothing', () async {
       final states = collect(repository.watchRun(1));
       final logs = collect(repository.logs(1));
