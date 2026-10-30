@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_code_agent/src/feature/skills/data/frontmatter.dart';
@@ -15,7 +16,7 @@ typedef Snapshot = Map<String, String>;
 /// A missing folder is empty, so the next call finds it once it appears.
 Future<Snapshot> snapshotRoot(String root) async {
   final snapshot = <String, String>{};
-  Future<void> add(FileSystemEntity entity, String base) async {
+  void add(FileSystemEntity entity, String base) {
     if (entity is! File || p.split(p.relative(entity.path, from: base)).any(_isHidden)) return;
     try {
       final stat = entity.statSync();
@@ -28,16 +29,28 @@ Future<Snapshot> snapshotRoot(String root) async {
   final skills = p.join(root, 'skills');
   final rules = p.join(root, 'rules');
   for (final (directory, recursive) in [(skills, true), (rules, false)]) {
-    try {
-      await for (final entity in Directory(directory).list(recursive: recursive)) {
-        if (directory == rules && p.extension(entity.path) != '.md') continue;
-        await add(entity, directory);
-      }
-    } on FileSystemException {
-      // The folder does not exist (yet) or went away.
-    }
+    await _listInto(Directory(directory), recursive: recursive, (entity) {
+      if (directory == rules && p.extension(entity.path) != '.md') return;
+      add(entity, directory);
+    });
   }
   return snapshot;
+}
+
+/// Passes every entry of [directory] to [onEntity], skipping the ones that cannot be listed.
+///
+/// An unreadable subfolder or a missing [directory] ends only its own part of the listing: the
+/// stream goes on with the other entries.
+Future<void> _listInto(
+  Directory directory,
+  void Function(FileSystemEntity entity) onEntity, {
+  required bool recursive,
+}) {
+  final done = Completer<void>();
+  directory
+      .list(recursive: recursive)
+      .listen(onEntity, onError: (Object _) {}, onDone: done.complete);
+  return done.future;
 }
 
 /// Reads the skills and rules of the folder [root] that [snapshot] (of [snapshotRoot]) lists.

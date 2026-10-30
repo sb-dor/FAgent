@@ -24,10 +24,14 @@ abstract interface class ISkillsRepository {
   Stream<SkillLibrary> watch({int? projectId, String? projectRoot});
 
   /// The text of the `SKILL.md` or rule file of [id].
-  Future<String> read(String id);
+  ///
+  /// A `*:project:*` id needs the [projectRoot] of its project and throws
+  /// [KnowledgeNotFoundException] without it; other ids ignore it. The same goes for [write] and
+  /// [duplicate].
+  Future<String> read(String id, {String? projectRoot});
 
   /// Replaces the text of [id]; throws [ReadOnlyKnowledgeException] for a built-in item.
-  Future<void> write(String id, String text);
+  Future<void> write(String id, String text, {String? projectRoot});
 
   /// Turns [id] on or off for everything (`projectId == null`) or as an exception for one project.
   Future<void> setEnabled(String id, {required bool enabled, int? projectId});
@@ -39,7 +43,7 @@ abstract interface class ISkillsRepository {
   Future<String> create(KnowledgeKind kind, String name);
 
   /// Copies [id] to the user's items under a free name and returns the new id.
-  Future<String> duplicate(String id);
+  Future<String> duplicate(String id, {String? projectRoot});
 
   /// Copies the skill folder at [path] to the user's items and returns the new id.
   Future<String> importFolder(String path);
@@ -62,9 +66,6 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
   final String _userRoot;
   final Duration _pollInterval;
 
-  /// The project folder of the latest [watch]: project ids are resolved against it.
-  String? _projectRoot;
-
   final Set<Future<void> Function({bool force})> _watchers = {};
 
   /// How many [watch] streams are listened to.
@@ -73,7 +74,6 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
 
   @override
   Stream<SkillLibrary> watch({int? projectId, String? projectRoot}) {
-    _projectRoot = projectRoot;
     final root = projectRoot == null ? null : p.join(projectRoot, '.claude');
     final controller = StreamController<SkillLibrary>();
     StreamSubscription<List<SkillStateRow>>? statesSubscription;
@@ -188,16 +188,17 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
     return (kind: kind, source: source, name: name);
   }
 
-  String _rootOf(SkillSource source, String id) => switch (source) {
+  String _rootOf(SkillSource source, String id, String? projectRoot) => switch (source) {
     SkillSource.user => _userRoot,
-    SkillSource.project when _projectRoot != null => p.join(_projectRoot!, '.claude'),
+    SkillSource.project when projectRoot != null => p.join(projectRoot, '.claude'),
     _ => throw KnowledgeNotFoundException(id),
   };
 
-  /// The skill folder or the rule file of an item that lives on disk.
-  String _pathOf(String id) {
+  /// The skill folder or the rule file of an item that lives on disk; a project item needs the
+  /// [projectRoot] of its project.
+  String _pathOf(String id, {String? projectRoot}) {
     final (:kind, :source, :name) = _parse(id);
-    final root = _rootOf(source, id);
+    final root = _rootOf(source, id, projectRoot);
     return kind == KnowledgeKind.skill
         ? p.join(root, 'skills', name)
         : p.join(root, 'rules', '$name.md');
@@ -207,24 +208,24 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
       kind == KnowledgeKind.skill ? p.join(path, skillFileName) : path;
 
   @override
-  Future<String> read(String id) async {
+  Future<String> read(String id, {String? projectRoot}) async {
     final (:kind, :source, :name) = _parse(id);
     if (source == SkillSource.builtin) {
       final key = kind == KnowledgeKind.skill ? 'skills/$name/$skillFileName' : 'rules/$name.md';
       return (await _builtin.load())[key] ?? (throw KnowledgeNotFoundException(id));
     }
     try {
-      return await File(_mainFile(kind, _pathOf(id))).readAsString();
+      return await File(_mainFile(kind, _pathOf(id, projectRoot: projectRoot))).readAsString();
     } on PathNotFoundException {
       throw KnowledgeNotFoundException(id);
     }
   }
 
   @override
-  Future<void> write(String id, String text) async {
+  Future<void> write(String id, String text, {String? projectRoot}) async {
     final (:kind, :source, name: _) = _parse(id);
     if (source == SkillSource.builtin) throw ReadOnlyKnowledgeException(id);
-    final file = File(_mainFile(kind, _pathOf(id)));
+    final file = File(_mainFile(kind, _pathOf(id, projectRoot: projectRoot)));
     if (!file.existsSync()) throw KnowledgeNotFoundException(id);
     await file.writeAsString(text);
     _filesChanged();
@@ -233,8 +234,17 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
   // --- Enablement ---
 
   @override
-  Future<void> setEnabled(String id, {required bool enabled, int? projectId}) =>
-      setSkillEnabled(_database, id, enabled: enabled, projectId: projectId);
+  Future<void> setEnabled(String id, {required bool enabled, int? projectId}) {
+    // Ids carry no project, so a global row would apply to every project that has the same name.
+    if (projectId == null && _parse(id).source == SkillSource.project) {
+      throw ArgumentError.value(
+        id,
+        'id',
+        'A project item can only be turned on or off per project',
+      );
+    }
+    return setSkillEnabled(_database, id, enabled: enabled, projectId: projectId);
+  }
 
   @override
   Future<void> clearException(String id, int projectId) =>
@@ -262,7 +272,7 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
   }
 
   @override
-  Future<String> duplicate(String id) async {
+  Future<String> duplicate(String id, {String? projectRoot}) async {
     final (:kind, :source, :name) = _parse(id);
     final copyName = await freeName(name, (candidate) => _taken(kind, candidate));
     final copyId = '${kind.name}:${SkillSource.user.name}:$copyName';
@@ -282,7 +292,7 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
         await file.writeAsString(value);
       }
     } else {
-      final from = _pathOf(id);
+      final from = _pathOf(id, projectRoot: projectRoot);
       if (kind == KnowledgeKind.skill) {
         if (!Directory(from).existsSync()) throw KnowledgeNotFoundException(id);
         await copyDirectory(Directory(from), Directory(target));

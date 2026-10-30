@@ -351,4 +351,88 @@ void main() {
 
     expect(repository.activeWatchers, 0);
   });
+
+  group('project items', () {
+    late Directory other;
+
+    setUp(() {
+      other = Directory('${temp.path}/other')..createSync();
+    });
+
+    File skillIn(Directory root) => File('${root.path}/.claude/skills/foo/SKILL.md');
+
+    test('read, write and duplicate work with the given project root', () async {
+      await put(skillIn(project), _doc('foo'));
+      await put(File('${project.path}/.claude/skills/foo/extra.md'), 'extra');
+
+      await repository.write('skill:project:foo', 'edited', projectRoot: project.path);
+      expect(await repository.read('skill:project:foo', projectRoot: project.path), 'edited');
+      expect(await skillIn(project).readAsString(), 'edited');
+
+      final id = await repository.duplicate('skill:project:foo', projectRoot: project.path);
+      expect(id, 'skill:user:foo');
+      expect(await userFile('skills/foo/extra.md').readAsString(), 'extra');
+    });
+
+    test('a project id without a project root is not found', () async {
+      await put(skillIn(project), _doc('foo'));
+
+      await expectLater(
+        repository.read('skill:project:foo'),
+        throwsA(isA<KnowledgeNotFoundException>()),
+      );
+      await expectLater(
+        repository.write('skill:project:foo', 'x'),
+        throwsA(isA<KnowledgeNotFoundException>()),
+      );
+      await expectLater(
+        repository.duplicate('skill:project:foo'),
+        throwsA(isA<KnowledgeNotFoundException>()),
+      );
+      expect(await skillIn(project).readAsString(), _doc('foo'));
+    });
+
+    test('with two watches open, a write goes only to the project it names', () async {
+      await put(skillIn(project), _doc('foo'));
+      await put(skillIn(other), _doc('foo', description: 'other'));
+      final first = _Listener(repository.watch(projectRoot: project.path));
+      final second = _Listener(repository.watch(projectRoot: other.path));
+      addTearDown(first.cancel);
+      addTearDown(second.cancel);
+      await first.until((_) => true);
+      await second.until((_) => true);
+
+      await repository.write('skill:project:foo', 'x', projectRoot: project.path);
+
+      expect(await skillIn(project).readAsString(), 'x');
+      expect(await skillIn(other).readAsString(), _doc('foo', description: 'other'));
+      expect(await repository.read('skill:project:foo', projectRoot: other.path), isNot('x'));
+    });
+
+    test('a global switch of a project item is refused', () async {
+      expect(() => repository.setEnabled('skill:project:foo', enabled: false), throwsArgumentError);
+      await repository.setEnabled('skill:project:foo', enabled: false, projectId: 1);
+      expect(await database.select(database.skillStatesTable).get(), hasLength(1));
+    });
+  });
+
+  test('an unreadable subfolder does not hide the other skills', () async {
+    await put(userFile('skills/a1/SKILL.md'), _doc('a1'));
+    await put(userFile('skills/b2/SKILL.md'), _doc('b2'));
+    await put(userFile('skills/b2/locked/file.txt'), 'x');
+    await put(userFile('skills/c3/SKILL.md'), _doc('c3'));
+    await put(userFile('skills/z9/SKILL.md'), _doc('z9'));
+    final locked = Directory('${user.path}/skills/b2/locked');
+    await Process.run('chmod', ['000', locked.path]);
+    addTearDown(() => Process.run('chmod', ['755', locked.path]));
+
+    final library = await first();
+
+    expect(library.skills.where((s) => s.source == SkillSource.user).map((s) => s.name), [
+      'a1',
+      'b2',
+      'c3',
+      'z9',
+    ]);
+  });
 }
