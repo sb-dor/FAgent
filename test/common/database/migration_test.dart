@@ -7,6 +7,7 @@ import '../../generated_migrations/schema.dart';
 import '../../generated_migrations/schema_v1.dart' as v1;
 import '../../generated_migrations/schema_v2.dart' as v2;
 import '../../generated_migrations/schema_v3.dart' as v3;
+import '../../generated_migrations/schema_v4.dart' as v4;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -70,5 +71,20 @@ void main() {
     final chat = await database.select(database.sessionsTable).getSingle();
     expect(chat.title, 'chat');
     expect(await database.select(database.appSettingsTable).get(), isEmpty);
+  });
+
+  test('v4 → v5 adds skill_states and keeps settings', () async {
+    final schema = await verifier.schemaAt(4);
+    final old = v4.DatabaseAtV4(schema.newConnection());
+    await old.customStatement("INSERT INTO app_settings (key, value) VALUES ('app', '{}')");
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 5);
+
+    final setting = await database.select(database.appSettingsTable).getSingle();
+    expect(setting.key, 'app');
+    expect(await database.select(database.skillStatesTable).get(), isEmpty);
   });
 }
