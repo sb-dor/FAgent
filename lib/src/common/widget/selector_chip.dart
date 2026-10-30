@@ -48,13 +48,14 @@ class SelectorChip<T> extends StatelessWidget {
   /// Hover hint.
   final String? tooltip;
 
-  /// Menu sections. When `null` the chip does not open a menu.
+  /// Menu sections. When `null`, empty or without any item the chip does not
+  /// open a menu.
   final List<AppMenuSection<T>>? sections;
 
   /// Called with the value the user picked from the menu.
   final ValueChanged<T>? onSelected;
 
-  /// Called on tap when there is no menu ([sections] is `null`).
+  /// Called on tap when there is no menu ([sections] is `null` or has no items).
   final VoidCallback? onPressed;
 
   Future<void> _open(BuildContext context, List<AppMenuSection<T>> sections) async {
@@ -72,7 +73,9 @@ class SelectorChip<T> extends StatelessWidget {
       AppTone.warn => (colors.warnSoft, colors.warn),
       AppTone.danger => (colors.dangerSoft, colors.danger),
     };
-    final menu = sections;
+    final menu = sections != null && sections!.any((section) => section.items.isNotEmpty)
+        ? sections
+        : null;
     final radius = BorderRadius.circular(AppRadius.medium);
     final textStyle = Theme.of(context).textTheme.bodyMedium!
         .copyWith(color: foreground, fontSize: 12, height: 16 / 12, fontWeight: FontWeight.w500);
