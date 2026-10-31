@@ -28,6 +28,7 @@ class WorkspacePageScaffold extends StatelessWidget {
     this.navigationFooter,
     this.sectionBadges = const <String, String>{},
     this.fill = false,
+    this.subtitle,
     super.key,
   });
 
@@ -60,10 +61,14 @@ class WorkspacePageScaffold extends StatelessWidget {
   /// column and the scroll.
   final bool fill;
 
+  /// A muted line under the heading of the open section; shown only without [fill].
+  final String? subtitle;
+
   @override
   Widget build(BuildContext context) {
     final scope = WorkspaceConfigInhWidget.of(context);
     final rail = MediaQuery.sizeOf(context).width < kWideWindowWidth;
+    final subtitle = this.subtitle;
     final label = sections.where((section) => section.$1 == selected).firstOrNull?.$3 ?? title;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -115,6 +120,15 @@ class WorkspacePageScaffold extends StatelessWidget {
                                   style: Theme.of(context).textTheme.titleLarge!
                                       .copyWith(color: context.colors.text),
                                 ),
+                                if (subtitle != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      subtitle,
+                                      style: Theme.of(context).textTheme.bodySmall!
+                                          .copyWith(color: context.colors.muted),
+                                    ),
+                                  ),
                                 const SizedBox(height: 16),
                                 child,
                               ],

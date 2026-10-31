@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/appearance_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/general_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/shortcuts_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_page_scaffold.dart';
 
 /// {@template workspace_settings_page}
-/// The Settings screen. Sections are placeholders until the milestones that deliver them.
+/// The Settings screen. Sections that are not built yet are placeholders until the milestones that
+/// deliver them.
 /// {@endtemplate}
 class WorkspaceSettingsPage extends StatelessWidget {
   /// {@macro workspace_settings_page}
@@ -43,11 +47,21 @@ class WorkspaceSettingsPage extends StatelessWidget {
           sections: sections,
           selected: selected.$1,
           onSelect: (id) => data.openView(WorkspaceView.settings, section: id),
-          child: SectionPlaceholder(
-            icon: selected.$2,
-            title: selected.$3,
-            milestone: _milestones[selected.$1],
-          ),
+          subtitle: switch (selected.$1) {
+            'agents' => localization.settingsAgentsSubtitle,
+            'mcp' => localization.settingsMcpSubtitle,
+            _ => null,
+          },
+          child: switch (selected.$1) {
+            'general' => const GeneralSettingsSection(),
+            'appearance' => const AppearanceSettingsSection(),
+            'shortcuts' => const ShortcutsSettingsSection(),
+            _ => SectionPlaceholder(
+              icon: selected.$2,
+              title: selected.$3,
+              milestone: _milestones[selected.$1],
+            ),
+          },
         );
       },
     );
