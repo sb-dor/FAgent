@@ -17,6 +17,12 @@ class AppSettingsConfigInhWidget extends InheritedWidget {
     return (widget! as AppSettingsConfigInhWidget).state;
   }
 
+  /// Like [of], or `null` when there is no [AppSettingsConfigWidget] above [context].
+  static AppSettingsConfigWidgetState? maybeOf(BuildContext context) =>
+      (context.getElementForInheritedWidgetOfExactType<AppSettingsConfigInhWidget>()?.widget
+              as AppSettingsConfigInhWidget?)
+          ?.state;
+
   @override
   bool updateShouldNotify(AppSettingsConfigInhWidget oldWidget) => false;
 }

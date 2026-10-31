@@ -46,7 +46,7 @@ final class AppCloseController extends StateController<AppCloseState>
   void requestClose() => handle(() async {
     if (state is! AppClose$InitialState) return;
     final busyChats = await _repository.busyChats();
-    if (busyChats > 0) {
+    if (busyChats > 0 && await _repository.askBeforeQuit()) {
       setState(AppCloseState.confirming(busyChats: busyChats));
     } else {
       await _quit();

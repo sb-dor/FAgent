@@ -372,11 +372,7 @@ class _AppMenuState<T> extends State<_AppMenu<T>> {
           borderRadius: BorderRadius.circular(AppRadius.large),
           border: Border.all(color: colors.border),
           boxShadow: <BoxShadow>[
-            BoxShadow(
-              color: colors.shadow,
-              blurRadius: 32,
-              offset: const Offset(0, 12),
-            ),
+            BoxShadow(color: colors.shadow, blurRadius: 32, offset: const Offset(0, 12)),
           ],
         ),
         child: Material(

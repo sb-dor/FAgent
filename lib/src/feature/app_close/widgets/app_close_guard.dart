@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_close/controller/app_close_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 
 /// {@template app_close_guard}
@@ -34,7 +35,11 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
     _controller = AppCloseController(
       repository:
           widget.repository ??
-          AppCloseRepositoryImpl(hub: dependencies.agentHub, database: dependencies.database),
+          AppCloseRepositoryImpl(
+            hub: dependencies.agentHub,
+            database: dependencies.database,
+            settings: AppSettingsRepositoryImpl(database: dependencies.database),
+          ),
     )..watch();
   }
 

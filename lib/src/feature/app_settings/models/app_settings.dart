@@ -2,6 +2,36 @@ import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 
+/// How tightly the chat feed packs its rows.
+enum FeedDensity {
+  /// The default spacing.
+  comfortable,
+
+  /// Rows closer together.
+  compact,
+}
+
+/// What a new project starts from.
+enum NewProjectTemplate {
+  /// The architecture skeleton of the project instructions.
+  architecture,
+
+  /// A plain `flutter create` project.
+  plain,
+
+  /// A plain project with a git repository.
+  git,
+}
+
+/// Where Flutter DevTools opens.
+enum DevToolsTarget {
+  /// The system browser.
+  browser,
+
+  /// A window of the app.
+  app,
+}
+
 /// Window-level settings: theme, language, panels and the default agent.
 @immutable
 final class AppSettings {
@@ -15,6 +45,11 @@ final class AppSettings {
     this.defaultAgentId = 'claude',
     this.sessionDefaults = const <String, Map<String, String>>{},
     this.reloadAfterTurn = false,
+    this.askBeforeQuit = true,
+    this.feedDensity = FeedDensity.comfortable,
+    this.projectOrg = defaultProjectOrg,
+    this.projectTemplate = NewProjectTemplate.architecture,
+    this.devToolsTarget = DevToolsTarget.browser,
   });
 
   /// Reads settings from stored JSON. Never throws: anything unreadable becomes the default.
@@ -27,6 +62,8 @@ final class AppSettings {
     final sidebarVisible = json['sidebarVisible'];
     final rightPaneVisible = json['rightPaneVisible'];
     final reloadAfterTurn = json['reloadAfterTurn'];
+    final askBeforeQuit = json['askBeforeQuit'];
+    final projectOrg = json['projectOrg'];
     return AppSettings(
       themeMode: ThemeMode.values.firstWhere(
         (mode) => mode.name == themeName,
@@ -45,6 +82,22 @@ final class AppSettings {
       defaultAgentId: agentId is String && agentId.isNotEmpty ? agentId : 'claude',
       sessionDefaults: _readSessionDefaults(json['sessionDefaults']),
       reloadAfterTurn: reloadAfterTurn is bool && reloadAfterTurn,
+      askBeforeQuit: askBeforeQuit is! bool || askBeforeQuit,
+      feedDensity: FeedDensity.values.firstWhere(
+        (density) => density.name == json['feedDensity'],
+        orElse: () => FeedDensity.comfortable,
+      ),
+      projectOrg: projectOrg is String && orgPattern.hasMatch(projectOrg)
+          ? projectOrg
+          : defaultProjectOrg,
+      projectTemplate: NewProjectTemplate.values.firstWhere(
+        (template) => template.name == json['projectTemplate'],
+        orElse: () => NewProjectTemplate.architecture,
+      ),
+      devToolsTarget: DevToolsTarget.values.firstWhere(
+        (target) => target.name == json['devToolsTarget'],
+        orElse: () => DevToolsTarget.browser,
+      ),
     );
   }
 
@@ -70,6 +123,12 @@ final class AppSettings {
       };
 
   static const String _bypassMode = 'bypassPermissions';
+
+  /// A reverse-domain organization, as `flutter create --org` takes it.
+  static final RegExp orgPattern = RegExp(r'^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$');
+
+  /// The organization of a new project until the user changes it.
+  static const String defaultProjectOrg = 'com.example';
 
   /// Narrowest right pane.
   static const double minRightPaneWidth = 340;
@@ -106,6 +165,21 @@ final class AppSettings {
   /// Whether the running app is hot-reloaded after the agent finishes a turn.
   final bool reloadAfterTurn;
 
+  /// Whether quitting while agents work asks first.
+  final bool askBeforeQuit;
+
+  /// How tightly the chat feed packs its rows.
+  final FeedDensity feedDensity;
+
+  /// The organization (`--org`) of a new project.
+  final String projectOrg;
+
+  /// What a new project starts from.
+  final NewProjectTemplate projectTemplate;
+
+  /// Where Flutter DevTools opens.
+  final DevToolsTarget devToolsTarget;
+
   /// The JSON stored in `app_settings`.
   Map<String, Object?> toJson() => <String, Object?>{
     'themeMode': themeMode.name,
@@ -116,6 +190,11 @@ final class AppSettings {
     'defaultAgentId': defaultAgentId,
     'sessionDefaults': sessionDefaults,
     'reloadAfterTurn': reloadAfterTurn,
+    'askBeforeQuit': askBeforeQuit,
+    'feedDensity': feedDensity.name,
+    'projectOrg': projectOrg,
+    'projectTemplate': projectTemplate.name,
+    'devToolsTarget': devToolsTarget.name,
   };
 
   /// A copy with the given fields replaced.
@@ -132,6 +211,11 @@ final class AppSettings {
     String? defaultAgentId,
     Map<String, Map<String, String>>? sessionDefaults,
     bool? reloadAfterTurn,
+    bool? askBeforeQuit,
+    FeedDensity? feedDensity,
+    String? projectOrg,
+    NewProjectTemplate? projectTemplate,
+    DevToolsTarget? devToolsTarget,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     locale: resetLocale ? null : locale ?? this.locale,
@@ -145,6 +229,11 @@ final class AppSettings {
             for (final MapEntry(:key, :value) in sessionDefaults.entries) key: value,
           }),
     reloadAfterTurn: reloadAfterTurn ?? this.reloadAfterTurn,
+    askBeforeQuit: askBeforeQuit ?? this.askBeforeQuit,
+    feedDensity: feedDensity ?? this.feedDensity,
+    projectOrg: projectOrg ?? this.projectOrg,
+    projectTemplate: projectTemplate ?? this.projectTemplate,
+    devToolsTarget: devToolsTarget ?? this.devToolsTarget,
   );
 
   @override
@@ -158,6 +247,11 @@ final class AppSettings {
           other.rightPaneWidth == rightPaneWidth &&
           other.defaultAgentId == defaultAgentId &&
           other.reloadAfterTurn == reloadAfterTurn &&
+          other.askBeforeQuit == askBeforeQuit &&
+          other.feedDensity == feedDensity &&
+          other.projectOrg == projectOrg &&
+          other.projectTemplate == projectTemplate &&
+          other.devToolsTarget == devToolsTarget &&
           const DeepCollectionEquality().equals(other.sessionDefaults, sessionDefaults);
 
   @override
@@ -170,6 +264,11 @@ final class AppSettings {
     defaultAgentId,
     const DeepCollectionEquality().hash(sessionDefaults),
     reloadAfterTurn,
+    askBeforeQuit,
+    feedDensity,
+    projectOrg,
+    projectTemplate,
+    devToolsTarget,
   );
 
   @override
