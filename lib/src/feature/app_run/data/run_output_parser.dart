@@ -37,8 +37,10 @@ final class RunOutputParser {
   static final RegExp _unhandled = RegExp(r'^\[ERROR:[^\]]*\]\s*Unhandled Exception: (.*)$');
   static final RegExp _compileError = RegExp(r'^(\S.*?\.dart):(\d+):(\d+): Error: (.*)$');
   static final RegExp _place = RegExp(
-    r'(file:///\S+?\.dart|package:\S+?\.dart|/\S+?\.dart|[\w./-]+?\.dart):(\d+):(\d+)',
+    r'(file:///\S+?\.dart|package:\S+?\.dart|(?<![\w.:/-])(?:/\S+?|[\w./-]+?)\.dart):(\d+):(\d+)',
   );
+  // `dart:async/x.dart`, `org-dartlang-sdk:///…`: not a file of the project.
+  static final RegExp _scheme = RegExp(r'^[a-zA-Z][\w+.-]*:');
   static final RegExp _warning = RegExp('^[Ww]arning:');
 
   RunError? _firstBuildError;
@@ -164,7 +166,8 @@ final class RunOutputParser {
     final thrown = lines.indexWhere(_thrown.hasMatch);
     final message = <String>[];
     if (thrown != -1) {
-      for (var i = thrown + 1; i < lines.length && lines[i].trim().isNotEmpty; i++) {
+      for (var i = thrown + 1; i < lines.length; i++) {
+        if (lines[i].trim().isEmpty || _blockEnd.hasMatch(lines[i])) break;
         message.add(lines[i]);
       }
     }
@@ -260,6 +263,7 @@ final class RunOutputParser {
       final prefix = 'package:$packageName/';
       return path.startsWith(prefix) ? 'lib/${path.substring(prefix.length)}' : null;
     }
+    if (!path.startsWith('file://') && _scheme.hasMatch(path)) return null;
     var absolute = path;
     if (absolute.startsWith('file://')) {
       absolute = absolute.substring(7);

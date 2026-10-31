@@ -152,6 +152,49 @@ The relevant error-causing widget was:
       expect(emittedAt, 400);
     });
 
+    test('a new header while a block is open gives out the unfinished one', () {
+      final parser = _parser()
+        ..add('══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY ╞═══')
+        ..add('The following assertion was thrown during layout:')
+        ..add('First.');
+
+      final out = parser.add('══╡ EXCEPTION CAUGHT BY WIDGETS LIBRARY ╞═══');
+
+      expect(out, hasLength(1));
+      expect(out.single.error!.message, 'First.');
+      parser
+        ..add('The following assertion was thrown:')
+        ..add('Second.');
+      final rest = parser.add('═══════════');
+      expect(rest.single.error!.message, 'Second.');
+      expect(rest.single.error!.title, 'Widgets library error');
+    });
+
+    test('without a `The following` line takes the first text line as the message', () {
+      final lines = _feed(_parser(), '''
+══╡ EXCEPTION CAUGHT BY GESTURE ╞═══
+Something odd happened.
+More detail.
+═══════════''');
+
+      expect(lines.single.text, 'Something odd happened.');
+      expect(lines.single.error!.title, 'Gesture error');
+      expect(lines.single.error!.message, 'Something odd happened.');
+    });
+
+    test('with nothing inside falls back to the library title', () {
+      final lines = _feed(_parser(), '══╡ EXCEPTION CAUGHT BY GESTURE ╞═══\n═══════════');
+
+      expect(lines.single.text, 'Gesture error');
+      expect(lines.single.error!.message, 'Gesture error');
+    });
+
+    test('a compile error in the SDK has no file', () {
+      final lines = _parser().add('dart:core/list.dart:5:6: Error: Nope.');
+
+      expect(lines.single.error!.file, isNull);
+    });
+
     test('flush gives out an unfinished block', () {
       final parser = _parser();
       final lines = _feed(parser, _overflowBlock.split('\n').take(6).join('\n'));
@@ -224,6 +267,34 @@ The relevant error-causing widget was:
       expect(flushed, hasLength(1));
       expect(flushed.single.error!.file, 'lib/main.dart');
       expect(flushed.single.error!.line, 4);
+    });
+
+    test('with only framework and SDK frames has no file', () {
+      final parser = _parser()
+        ..add('${head}oops')
+        ..add('#0      Foo.bar (package:flutter/src/foo.dart:1:2)')
+        ..add('#1      _runMain (dart:ui/hooks.dart:300:23)')
+        ..add('#2      _Future.then (dart:async/future_impl.dart:20:5)')
+        ..add('#3      sdk (org-dartlang-sdk:///sdk/lib/async/zone.dart:9:9)');
+
+      final error = parser.flush().single.error!;
+
+      expect(error.file, isNull);
+      expect(error.line, isNull);
+      expect(error.location, isNull);
+    });
+
+    test('skips an SDK frame before the project frame', () {
+      final parser = _parser()
+        ..add('${head}oops')
+        ..add('#0      _Future.then (dart:async/future_impl.dart:20:5)')
+        ..add('#1      main (package:app/main.dart:10:3)');
+
+      final error = parser.flush().single.error!;
+
+      expect(error.file, 'lib/main.dart');
+      expect(error.line, 10);
+      expect(error.location, 'main.dart:10:3');
     });
 
     test('without a stack is still reported', () {
