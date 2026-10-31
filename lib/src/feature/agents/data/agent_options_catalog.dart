@@ -9,8 +9,9 @@ abstract interface class IAgentOptionsCatalog {
   /// Agent id → raw `configOptions`: the stored value, then every change. Closes when cancelled.
   Stream<Map<String, List<Map<String, Object?>>>> watch();
 
-  /// Remembers [options] of [agentId]. Writes only when they differ from the stored ones; an empty
-  /// list is ignored.
+  /// Remembers [options] of [agentId] without their `currentValue`, which is the state of one chat
+  /// and not of the agent (Settings offers the choices, not the value a chat happens to hold).
+  /// Writes only when they differ from the stored ones; an empty list is ignored.
   Future<void> save(String agentId, List<Map<String, Object?>> options);
 }
 
@@ -45,9 +46,12 @@ final class AgentOptionsCatalogImpl implements IAgentOptionsCatalog {
       _database.appSettingsTable,
     )..where((r) => r.key.equals(_key))).getSingleOrNull();
     final stored = row == null ? <String, List<Map<String, Object?>>>{} : _decode(row.value);
-    // Round trip through JSON so the comparison sees what would be stored.
+    // Round trip through JSON so the comparison sees what would be stored. The value of the chat is
+    // dropped: changing the model or mode in any chat would otherwise rewrite the settings row and
+    // wake everything that listens to it.
     final value = (jsonDecode(jsonEncode(options)) as List<Object?>)
         .whereType<Map<String, Object?>>()
+        .map((option) => <String, Object?>{...option}..remove('currentValue'))
         .toList();
     if (value.isEmpty || _deepEquals(stored[agentId], value)) return;
     await _database

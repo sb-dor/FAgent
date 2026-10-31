@@ -103,14 +103,19 @@ class McpServersConfigWidgetState extends State<McpServersConfigWidget> {
               : localization.mcpImportAddedSkipped(
                   imported.added.length,
                   skipped.length,
-                  skipped.map((entry) => entry.$1).join(', '),
+                  skipped
+                      .map(
+                        (entry) =>
+                            localization.mcpImportSkippedEntry(entry.$1, _skipReason(entry.$2)),
+                      )
+                      .join('; '),
                 ),
         );
       // The add dialog explains what is wrong with the server itself.
       case McpServerActions$FailedState(error: InvalidMcpServerException()):
         break;
-      case McpServerActions$FailedState(error: McpJsonException(:final message)):
-        showMessage(localization.mcpImportFailed(message));
+      case McpServerActions$FailedState(error: McpJsonException()):
+        showMessage(localization.mcpImportFailed);
       case McpServerActions$FailedState(:final error):
         showMessage(localization.mcpActionFailed('$error'));
       case McpServerActions$IdleState() ||
@@ -118,6 +123,20 @@ class McpServersConfigWidgetState extends State<McpServersConfigWidget> {
           McpServerActions$CompletedState():
         break;
     }
+  }
+
+  /// Says in words why the import left an entry out; [reason] is the code of the repository.
+  String _skipReason(String reason) {
+    final localization = Localization.of(context);
+    return switch (reason) {
+      'name is taken' || 'duplicateName' => localization.mcpImportReasonTaken,
+      'sse is not supported' => localization.mcpImportReasonSse,
+      'no command or url' => localization.mcpImportReasonNoCommandOrUrl,
+      'invalidName' => localization.mcpImportReasonInvalidName,
+      'missingCommand' => localization.mcpImportReasonNoCommand,
+      'invalidUrl' => localization.mcpImportReasonInvalidUrl,
+      _ => localization.mcpImportReasonInvalidEntry,
+    };
   }
 
   /// Shows [message] in a snack bar.

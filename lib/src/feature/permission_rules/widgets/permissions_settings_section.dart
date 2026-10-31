@@ -119,7 +119,7 @@ class _ProjectCard extends StatelessWidget {
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 4),
               Text(
                 project.path,
                 style: AppText.mono(context, size: 12).copyWith(color: colors.muted),

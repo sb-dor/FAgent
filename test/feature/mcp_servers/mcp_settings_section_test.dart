@@ -417,7 +417,12 @@ void main() {
           real,
           imported: (
             added: <String>['a', 'b'],
-            skipped: <(String, String)>[('c', 'name is taken'), ('d', 'sse is not supported')],
+            skipped: <(String, String)>[
+              ('c', 'name is taken'),
+              ('d', 'sse is not supported'),
+              ('e', 'invalidUrl'),
+              ('f', 'something new'),
+            ],
           ),
         ),
       );
@@ -428,7 +433,13 @@ void main() {
       await tester.pump();
 
       expect(stub.importedPaths, <String>['/work/.mcp.json']);
-      expect(find.text('Added: 2. Skipped: 2 (c, d).'), findsOneWidget);
+      expect(
+        find.text(
+          'Added: 2. Skipped: 4 (c: name is taken; d: SSE is not supported; e: invalid URL; '
+          'f: invalid entry).',
+        ),
+        findsOneWidget,
+      );
       await _expireSnackBar(tester);
       await disposeTestApp(tester, dependencies);
     });
@@ -459,7 +470,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Could not read that file: no mcpServers object'), findsOneWidget);
+      expect(find.text('The file is not a valid .mcp.json'), findsOneWidget);
+      expect(find.textContaining('no mcpServers object'), findsNothing);
       await _expireSnackBar(tester);
       await disposeTestApp(tester, dependencies);
     });

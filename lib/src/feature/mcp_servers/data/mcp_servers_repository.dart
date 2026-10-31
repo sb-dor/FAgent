@@ -289,7 +289,15 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
   Future<({List<String> added, List<(String name, String reason)> skipped})> importMcpJson(
     String path,
   ) async {
-    final parsed = parseMcpJson(await File(path).readAsString());
+    final String text;
+    try {
+      text = await File(path).readAsString();
+    } on FileSystemException catch (error) {
+      throw McpJsonException('cannot read the file: ${error.message}');
+    } on FormatException catch (error) {
+      throw McpJsonException('not UTF-8 text: ${error.message}');
+    }
+    final parsed = parseMcpJson(text);
     final added = <String>[];
     final skipped = [...parsed.skipped];
     for (final draft in parsed.servers) {

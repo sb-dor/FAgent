@@ -100,11 +100,16 @@ final class PermissionRulesRepositoryImpl implements IPermissionRulesRepository 
   }
 
   /// Writes [text] to a hidden temporary file next to [path] and renames it over [path].
+  ///
+  /// The temporary file starts as a copy of [path], so the file keeps its permissions (another tool
+  /// owns it, and it may hold secrets under `env`).
   Future<void> _replaceFile(String path, String text) async {
     final temporary = File(
       p.join(p.dirname(path), '.${p.basename(path)}.${DateTime.now().microsecondsSinceEpoch}.tmp'),
     );
     try {
+      final original = File(path);
+      if (original.existsSync()) await original.copy(temporary.path);
       await temporary.writeAsString(text, flush: true);
       await temporary.rename(path);
     } on Object {

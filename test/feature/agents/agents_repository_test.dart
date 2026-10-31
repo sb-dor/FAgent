@@ -47,6 +47,28 @@ final class _MemoryCatalog implements IAgentOptionsCatalog {
 
 typedef _Call = ({String executable, List<String> arguments, Duration? timeout});
 
+/// Waits for [file] to hold a process id, written by a script before it goes on.
+Future<int> _readPid(File file) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (DateTime.now().isBefore(deadline)) {
+    final pid = file.existsSync() ? int.tryParse(file.readAsStringSync().trim()) : null;
+    if (pid != null) return pid;
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+  }
+  fail('${file.path} did not get a process id within 10 seconds');
+}
+
+/// Whether process [pid] is gone, polled until it is or ten seconds pass.
+Future<bool> _isGone(int pid) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 10));
+  while (DateTime.now().isBefore(deadline)) {
+    // SIGCONT is harmless to a running process; false means there is no such process.
+    if (!Process.killPid(pid, ProcessSignal.sigcont)) return true;
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+  }
+  return false;
+}
+
 void main() {
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
   late AppDatabase database;
@@ -310,35 +332,37 @@ void main() {
     test('kills the whole group of a process that outlives the timeout', () async {
       final dir = Directory.systemTemp.createTempSync('runner_test');
       addTearDown(() => dir.deleteSync(recursive: true));
-      final marker = File('${dir.path}/alive');
-      // A child and a grandchild, like `npx` and `node`; each would write the marker after a second.
-      final script = '(sleep 1; echo x > "${marker.path}") & sleep 1; echo y > "${marker.path}"';
+      final pidFile = File('${dir.path}/pid');
+      // A child and a grandchild, like `npx` and `node`; both outlive the timeout.
+      final script = 'sleep 30 & echo \$! > "${pidFile.path}"; sleep 30';
 
-      await expectLater(
-        runProcessKillingOnTimeout('/bin/sh', [
-          '-c',
-          script,
-        ], timeout: const Duration(milliseconds: 200)),
-        throwsA(isA<TimeoutException>()),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      final run = runProcessKillingOnTimeout('/bin/sh', [
+        '-c',
+        script,
+      ], timeout: const Duration(seconds: 2));
+      final expectation = expectLater(run, throwsA(isA<TimeoutException>()));
+      final pid = await _readPid(pidFile);
+      addTearDown(() => Process.killPid(pid, ProcessSignal.sigkill));
 
-      expect(marker.existsSync(), isFalse);
+      await expectation;
+
+      expect(await _isGone(pid), isTrue);
     });
 
     test('kills what a finished process left running', () async {
       final dir = Directory.systemTemp.createTempSync('runner_test');
       addTearDown(() => dir.deleteSync(recursive: true));
-      final marker = File('${dir.path}/alive');
+      final pidFile = File('${dir.path}/pid');
 
       final result = await runProcessKillingOnTimeout('/bin/sh', [
         '-c',
-        '(sleep 1; echo x > "${marker.path}") >/dev/null 2>&1 &',
+        'sleep 30 >/dev/null 2>&1 & echo \$! > "${pidFile.path}"',
       ], timeout: const Duration(seconds: 5));
-      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      final pid = await _readPid(pidFile);
+      addTearDown(() => Process.killPid(pid, ProcessSignal.sigkill));
 
       expect(result.exitCode, 0);
-      expect(marker.existsSync(), isFalse);
+      expect(await _isGone(pid), isTrue);
     });
   });
 }

@@ -123,6 +123,18 @@ void main() {
     expect(list.firstWhere((s) => s.name == 'linear').transport, McpTransport.http);
   });
 
+  test('import reports a file it cannot read as a McpJsonException', () async {
+    final dir = Directory.systemTemp.createTempSync('mcp_import');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final binary = File('${dir.path}/binary.json')..writeAsBytesSync([0xff, 0xfe, 0xfd]);
+
+    await expectLater(
+      repository.importMcpJson('${dir.path}/missing.json'),
+      throwsA(isA<McpJsonException>()),
+    );
+    await expectLater(repository.importMcpJson(binary.path), throwsA(isA<McpJsonException>()));
+  });
+
   test('deleting a project drops its states', () async {
     final project = await insertProject();
     await repository.setEnabled('builtin:app', enabled: false, projectId: project);

@@ -14,13 +14,25 @@ void main() {
 
   tearDown(() => database.close());
 
-  List<Map<String, Object?>> model(String value) => [
+  /// What a chat reports: the choices of the agent and the value that chat holds.
+  List<Map<String, Object?>> model(String value, {String name = 'Opus'}) => [
     {
       'id': 'model',
       'type': 'select',
       'currentValue': value,
       'options': [
-        {'value': 'opus', 'name': 'Opus'},
+        {'value': 'opus', 'name': name},
+      ],
+    },
+  ];
+
+  /// What the catalog keeps of [model]: the same without the value of the chat.
+  List<Map<String, Object?>> kept(String name) => [
+    {
+      'id': 'model',
+      'type': 'select',
+      'options': [
+        {'value': 'opus', 'name': name},
       ],
     },
   ];
@@ -37,7 +49,7 @@ void main() {
     await catalog.save('claude', model('opus'));
     await catalog.save('codex', model('gpt'));
 
-    expect(await catalog.watch().first, {'claude': model('opus'), 'codex': model('gpt')});
+    expect(await catalog.watch().first, {'claude': kept('Opus'), 'codex': kept('Opus')});
   });
 
   test('an empty list is not saved', () async {
@@ -55,9 +67,20 @@ void main() {
     await catalog.save('claude', model('opus'));
     expect(await updatedAt(), first);
 
-    await catalog.save('claude', model('sonnet'));
-    expect((await catalog.watch().first)['claude'], model('sonnet'));
+    await catalog.save('claude', model('opus', name: 'Opus 5'));
+    expect((await catalog.watch().first)['claude'], kept('Opus 5'));
     expect((await updatedAt())!.isAfter(first!), isTrue);
+  });
+
+  test('options that differ only in the value of the chat are written once', () async {
+    await catalog.save('claude', model('opus'));
+    final first = await updatedAt();
+    await Future<void>.delayed(const Duration(seconds: 1, milliseconds: 100));
+
+    await catalog.save('claude', model('sonnet'));
+
+    expect(await updatedAt(), first);
+    expect((await catalog.watch().first)['claude'], kept('Opus'));
   });
 
   test('saves made at once keep every agent', () async {

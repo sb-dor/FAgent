@@ -24,6 +24,7 @@ class ShortcutsSettingsSection extends StatelessWidget {
       (localization.shortcutHotReload, '⌘R'),
       (localization.shortcutHotRestart, '⇧⌘R'),
       (localization.shortcutPermissionMode, '⇧Tab'),
+      (localization.shortcutPermissionCard, '↵ / Esc'),
       (localization.shortcutClose, 'Esc'),
     ];
     return SettingsCard(

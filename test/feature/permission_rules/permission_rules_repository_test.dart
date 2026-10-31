@@ -88,6 +88,16 @@ void main() {
       ]);
     });
 
+    test('the file keeps its permissions', () async {
+      writeSettings(original);
+      Process.runSync('chmod', ['600', settings().path]);
+
+      await repository.remove(root.path, 'Bash(npm test:*)');
+
+      expect(settings().statSync().mode & 0x1FF, 0x180);
+      expect(await repository.rules(root.path), <String>['WebFetch(domain:pub.dev)']);
+    });
+
     test('removes every copy of the rule', () async {
       writeSettings('{"permissions":{"allow":["a","b","a"]}}');
       await repository.remove(root.path, 'a');

@@ -274,7 +274,7 @@ class _Defaults extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
                 Text(
-                  '${localization.agentClaudeSettingsNote} — ',
+                  localization.agentClaudeSettingsNote,
                   style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
                 ),
                 InkWell(

@@ -126,9 +126,21 @@ void main() {
 
   testWidgets('shortcuts lists every binding', (tester) async {
     await openSettings(tester, 'shortcuts');
-    for (final keys in <String>['⌘N', '⌘K', r'⌘\', '⌘J', '⌘,', '⌘R', '⇧⌘R', '⇧Tab', 'Esc']) {
+    for (final keys in <String>[
+      '⌘N',
+      '⌘K',
+      r'⌘\',
+      '⌘J',
+      '⌘,',
+      '⌘R',
+      '⇧⌘R',
+      '⇧Tab',
+      '↵ / Esc',
+      'Esc',
+    ]) {
       expect(find.text(keys), findsOneWidget, reason: keys);
     }
+    expect(find.text('Answer the permission card'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 
