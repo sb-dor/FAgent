@@ -385,5 +385,16 @@
   "mcpErrorMissingCommand": "Enter the command to run.",
   "mcpErrorInvalidUrl": "Enter a full http:// or https:// address.",
   "mcpErrorEnvLine": "Each line must look like KEY=VALUE.",
-  "mcpErrorHeaderLine": "Each line must look like Name: value."
+  "mcpErrorHeaderLine": "Each line must look like Name: value.",
+  "settingsPermissionsSubtitle": "Rules saved with \"Always allow in this project\". They are read from .claude/settings.local.json in each project; the shared .claude/settings.json is not shown.",
+  "permissionsLoading": "Loading the rules…",
+  "permissionsRefresh": "Refresh",
+  "permissionsRemoveRule": "Remove the rule",
+  "permissionsRemoveFailed": "Could not remove the rule: {error}",
+  "@permissionsRemoveFailed": {"placeholders": {"error": {"type": "String"}}},
+  "permissionsUnreadable": "Could not read .claude/settings.local.json",
+  "permissionsNoRules": "No saved rules: {count, plural, one{{count} project} other{{count} projects}}",
+  "@permissionsNoRules": {"placeholders": {"count": {"type": "int"}}},
+  "permissionsNoProjects": "No projects yet",
+  "permissionsNoProjectsHint": "Open a project to see the permissions saved for it."
 }

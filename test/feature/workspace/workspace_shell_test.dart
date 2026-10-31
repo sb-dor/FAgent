@@ -403,7 +403,8 @@ void main() {
       expect(find.text('Coming soon'), findsNothing);
       await tester.tap(find.text('Permissions'));
       await tester.pump();
-      expect(find.text('Coming soon'), findsOneWidget);
+      expect(dataOf(tester).section, 'permissions');
+      expect(find.text('Coming soon'), findsNothing);
       expect(find.textContaining('UI stage'), findsNothing);
       await tester.tap(find.text('Agents'));
       await tester.pump();

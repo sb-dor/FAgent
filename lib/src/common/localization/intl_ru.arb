@@ -349,5 +349,14 @@
   "mcpErrorMissingCommand": "Укажите команду для запуска.",
   "mcpErrorInvalidUrl": "Укажите полный адрес с http:// или https://.",
   "mcpErrorEnvLine": "Каждая строка должна иметь вид КЛЮЧ=ЗНАЧЕНИЕ.",
-  "mcpErrorHeaderLine": "Каждая строка должна иметь вид Имя: значение."
+  "mcpErrorHeaderLine": "Каждая строка должна иметь вид Имя: значение.",
+  "settingsPermissionsSubtitle": "Правила, сохранённые кнопкой «Всегда в этом проекте». Они читаются из .claude/settings.local.json каждого проекта; общий .claude/settings.json здесь не показывается.",
+  "permissionsLoading": "Загружаем правила…",
+  "permissionsRefresh": "Обновить",
+  "permissionsRemoveRule": "Удалить правило",
+  "permissionsRemoveFailed": "Не удалось удалить правило: {error}",
+  "permissionsUnreadable": "Не удалось прочитать .claude/settings.local.json",
+  "permissionsNoRules": "Без сохранённых правил: {count, plural, one{{count} проект} few{{count} проекта} many{{count} проектов} other{{count} проекта}}",
+  "permissionsNoProjects": "Проектов пока нет",
+  "permissionsNoProjectsHint": "Откройте проект, чтобы увидеть сохранённые для него разрешения."
 }

@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
 /// {@template dependencies}
@@ -56,6 +57,9 @@ class Dependencies {
 
   /// The MCP servers handed to agents: the built-in ones and the user's own.
   late final IMcpServersRepository mcpServersRepository;
+
+  /// The permission rules saved in each project's `.claude/settings.local.json`.
+  late final IPermissionRulesRepository permissionRulesRepository;
 
   @override
   String toString() => 'Dependencies{}';

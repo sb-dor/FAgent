@@ -6,6 +6,8 @@ import 'package:flutter_code_agent/src/feature/app_settings/widgets/appearance_s
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/general_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_servers_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/widgets/permission_rules_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/widgets/permissions_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/shortcuts_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
@@ -50,12 +52,14 @@ class WorkspaceSettingsPage extends StatelessWidget {
           subtitle: switch (selected.$1) {
             'agents' => localization.settingsAgentsSubtitle,
             'mcp' => localization.settingsMcpSubtitle,
+            'permissions' => localization.settingsPermissionsSubtitle,
             _ => null,
           },
           child: switch (selected.$1) {
             'general' => const AgentsConfigWidget(child: GeneralSettingsSection()),
             'agents' => const AgentsConfigWidget(child: AgentsSettingsSection()),
             'mcp' => const McpServersConfigWidget(child: McpSettingsSection()),
+            'permissions' => const PermissionRulesConfigWidget(child: PermissionsSettingsSection()),
             'appearance' => const AppearanceSettingsSection(),
             'shortcuts' => const ShortcutsSettingsSection(),
             _ => SectionPlaceholder(
