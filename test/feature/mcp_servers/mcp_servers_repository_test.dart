@@ -77,7 +77,16 @@ void main() {
 
   test('names are checked', () async {
     await repository.add(stdio('figma'));
-    expect(() => repository.add(stdio('Figma')), throwsA(problem(McpServerProblem.duplicateName)));
+    // A refusal is a failed Future, not a synchronous throw.
+    await expectLater(
+      repository.add(stdio('Figma')),
+      throwsA(problem(McpServerProblem.duplicateName)),
+    );
+    await expectLater(
+      repository.setEnabled('builtin:dart', enabled: false),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(repository.remove('builtin:app'), throwsA(isA<ArgumentError>()));
     expect(() => repository.add(stdio('dart')), throwsA(problem(McpServerProblem.invalidName)));
     expect(
       () => repository.add(stdio('flutter_code_agent')),
@@ -122,7 +131,7 @@ void main() {
     expect((await servers()).first.disabledIn, isEmpty);
   });
 
-  test('the stream follows changes and a cancelled listener leaves nothing behind', () async {
+  test('the stream follows changes and stops after cancel', () async {
     final stream = repository.watchServers();
     final seen = <int>[];
     final subscription = stream.listen((list) => seen.add(list.length));
@@ -131,5 +140,9 @@ void main() {
     await pumpEventQueue();
     expect(seen.last, 3);
     await subscription.cancel();
+    final count = seen.length;
+    await repository.add(stdio('b'));
+    await pumpEventQueue();
+    expect(seen.length, count);
   });
 }

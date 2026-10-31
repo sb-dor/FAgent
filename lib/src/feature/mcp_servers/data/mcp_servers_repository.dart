@@ -48,8 +48,9 @@ const String _dartKey = 'builtin:dart';
 
 final RegExp _validName = RegExp(r'^[A-Za-z0-9_.-]{1,64}$');
 
-/// Names the built-in servers go by, so a user's server must not use them.
-const Set<String> _reservedNames = {'flutter_code_agent', 'dart mcp', 'dart'};
+/// Names the built-in servers go by, so a user's server must not use them. The display name
+/// `Dart MCP` needs no entry: its space already fails [_validName].
+const Set<String> _reservedNames = {'flutter_code_agent', 'dart'};
 
 McpServer _builtinApp(Set<int> disabledIn) => McpServer(
   id: _appKey,
@@ -182,7 +183,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
   // --- Adding and removing ---
 
   @override
-  Future<McpServer> add(McpServerDraft draft) {
+  Future<McpServer> add(McpServerDraft draft) async {
     final name = draft.name;
     if (!_validName.hasMatch(name) || _reservedNames.contains(name.toLowerCase())) {
       throw const InvalidMcpServerException(McpServerProblem.invalidName);
