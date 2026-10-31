@@ -154,8 +154,10 @@ class _RunTabState extends State<RunTab> {
         }
         setState(() => _picking = true);
         widget.actions.pickWidget(projectId);
-      case RunAction.screenshot || RunAction.devTools:
-        _comingIn('M2');
+      case RunAction.screenshot:
+        widget.actions.screenshot(projectId);
+      case RunAction.devTools:
+        widget.actions.openDevTools(projectId);
     }
   }
 

@@ -19,7 +19,7 @@ enum MentionKind {
   /// The last error of the running app.
   error,
 
-  /// A screenshot of the device (not available yet).
+  /// The last screenshot of the running app (disabled until one is taken).
   screenshot,
 }
 
@@ -81,7 +81,14 @@ List<MentionRow> mentionRows(List<String> files, String query, RunMentions? run)
       if (run.error case final error? when matches(error.text))
         MentionRow.run(MentionKind.error, detail: error.detail, insert: '${error.text} '),
       if (matches('screenshot'))
-        const MentionRow.run(MentionKind.screenshot, detail: 'M2', insert: '', enabled: false),
+        if (run.screenshot case final screenshot?)
+          MentionRow.run(
+            MentionKind.screenshot,
+            detail: screenshot.detail,
+            insert: '${screenshot.text} ',
+          )
+        else
+          const MentionRow.run(MentionKind.screenshot, detail: '', insert: '', enabled: false),
     ],
   ];
   return <MentionRow>[
@@ -179,7 +186,7 @@ class MentionSuggestions extends StatelessWidget {
   static Widget? _subtitle(GeneratedLocalization localization, MentionRow row) {
     final text = switch (row.kind) {
       MentionKind.file => p.dirname(row.detail) == '.' ? '' : p.dirname(row.detail),
-      MentionKind.screenshot => localization.comingInMilestone(row.detail),
+      MentionKind.screenshot => row.enabled ? row.detail : localization.mentionScreenshotNone,
       _ => row.detail,
     };
     return Text(text, maxLines: 1, overflow: TextOverflow.ellipsis);

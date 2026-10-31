@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
@@ -80,6 +81,8 @@ void main() {
     late List<ScriptedDaemonProcess> started;
     late void Function(ScriptedDaemonProcess process, Map<String, Object?> request) onRequest;
     late AppRunRepositoryImpl repository;
+    late List<Uri> opened;
+    late DateTime clock;
     final subscriptions = <StreamSubscription<Object?>>[];
 
     ScriptedDaemonProcess create() {
@@ -158,12 +161,16 @@ void main() {
             ..exit(0);
         }
       };
+      opened = <Uri>[];
+      clock = DateTime(2026, 10, 31, 9, 5, 7);
       repository = AppRunRepositoryImpl(
         projectPath: (id) async => paths[id],
         flutter: (_) => flutterPath,
         environment: const <String, String>{'PATH': '/usr/bin'},
         start: scriptedStarter(create, started: started),
         stopTimeout: const Duration(milliseconds: 50),
+        openUrl: (url) async => opened.add(url),
+        now: () => clock,
       );
     });
 
@@ -765,5 +772,284 @@ void main() {
       expect(started.single.stopped, isTrue);
       expect(repository.watchRun(1), emitsDone);
     });
+
+    group('DevTools', () {
+      /// Brings the run up with [devTools] as the `app.devTools` address (none when `null`).
+      Future<ScriptedDaemonProcess> runWithDevTools(String? devTools) async {
+        await startRun(1);
+        final process = started.single;
+        await emit(process, 'app.start', <String, Object?>{'appId': 'app-1'});
+        await emit(process, 'app.debugPort', <String, Object?>{
+          'appId': 'app-1',
+          'wsUri': 'ws://127.0.0.1:5000/abc=/ws',
+        });
+        if (devTools != null) {
+          await emit(process, 'app.devTools', <String, Object?>{'appId': 'app-1', 'uri': devTools});
+        }
+        await emit(process, 'app.started', <String, Object?>{'appId': 'app-1'});
+        return process;
+      }
+
+      test('adds the VM service when the address from flutter run has none', () async {
+        await runWithDevTools('http://127.0.0.1:9100');
+
+        await repository.openDevTools(1);
+
+        expect(opened, <Uri>[Uri.parse('http://127.0.0.1:9100/?uri=ws://127.0.0.1:5000/abc=/ws')]);
+        expect(opened.single.toString(), 'http://127.0.0.1:9100/?uri=ws://127.0.0.1:5000/abc=/ws');
+      });
+
+      test('keeps other query parameters when it adds the VM service', () async {
+        await runWithDevTools('http://127.0.0.1:9100/?theme=dark');
+
+        await repository.openDevTools(1);
+
+        expect(
+          opened.single.toString(),
+          'http://127.0.0.1:9100/?theme=dark&uri=ws://127.0.0.1:5000/abc=/ws',
+        );
+      });
+
+      test('opens the address as it is when it already names the VM service', () async {
+        const address = 'http://127.0.0.1:9100/?uri=ws://127.0.0.1:1234/other=/ws';
+        await runWithDevTools(address);
+
+        await repository.openDevTools(1);
+
+        expect(opened, <Uri>[Uri.parse(address)]);
+      });
+
+      test('does nothing while flutter run has not reported DevTools', () async {
+        await runWithDevTools(null);
+
+        await repository.openDevTools(1);
+
+        expect(opened, isEmpty);
+      });
+
+      test('does nothing when the app is not running', () async {
+        await repository.openDevTools(1);
+        await startRun(1);
+        await repository.openDevTools(1);
+
+        expect(opened, isEmpty);
+      });
+
+      test('a browser that cannot be opened is logged, not thrown', () async {
+        repository = AppRunRepositoryImpl(
+          projectPath: (id) async => paths[id],
+          flutter: (_) => flutterPath,
+          environment: const <String, String>{'PATH': '/usr/bin'},
+          start: scriptedStarter(create, started: started),
+          stopTimeout: const Duration(milliseconds: 50),
+          openUrl: (url) async => throw const io.ProcessException('open', <String>[], 'no', 1),
+        );
+        final seen = logs(1);
+        await runWithDevTools('http://127.0.0.1:9100');
+
+        await repository.openDevTools(1);
+        await pumpEventQueue();
+
+        final failure = seen.lastWhere((log) => log.level == LogLevel.error);
+        expect(failure.error?.title, 'Opening DevTools failed');
+      });
+    });
+
+    group('screenshot', () {
+      const pngBytes = <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
+      final png = base64Encode(pngBytes);
+      const shots = '.dart_tool/flutter_code_agent/screenshots';
+
+      /// The `app.callServiceExtension` requests the code under test sent.
+      List<Map<String, Object?>> extensionCalls(ScriptedDaemonProcess process) =>
+          <Map<String, Object?>>[
+            for (final request in process.sent)
+              if (request['method'] == 'app.callServiceExtension')
+                request['params']! as Map<String, Object?>,
+          ];
+
+      /// Answers the extension calls like a debug app does; [answer] overrides one extension.
+      void answerExtensions({Object? Function(String method)? answer}) {
+        onRequest = (process, request) {
+          final id = request['id']! as int;
+          switch (request['method']) {
+            case 'app.stop':
+              process
+                ..respond(id, result: true)
+                ..exit(0);
+            case 'app.callServiceExtension':
+              final method = (request['params']! as Map<String, Object?>)['methodName']! as String;
+              final custom = answer?.call(method);
+              if (custom is DaemonError) {
+                process.respond(id, error: custom.message);
+              } else if (custom != null) {
+                process.respond(id, result: custom);
+              } else {
+                process.respond(
+                  id,
+                  result: switch (method) {
+                    'ext.flutter.inspector.getRootWidget' => <String, Object?>{
+                      'result': <String, Object?>{'valueId': 'inspector-7'},
+                    },
+                    'ext.flutter.inspector.screenshot' => <String, Object?>{'result': png},
+                    _ => <String, Object?>{'result': true},
+                  },
+                );
+              }
+          }
+        };
+      }
+
+      Future<ScriptedDaemonProcess> runApp({BuildMode mode = BuildMode.debug}) async {
+        await startRun(1, mode: mode);
+        final process = started.single;
+        await launch(process);
+        return process;
+      }
+
+      test('asks the inspector for a PNG, saves it in the project and returns its path', () async {
+        answerExtensions();
+        final process = await runApp();
+
+        final path = await repository.screenshot(1);
+
+        expect(path, '$shots/screenshot-20261031-090507.png');
+        expect(io.File(p.join(paths[1]!, path)).readAsBytesSync(), pngBytes);
+        expect(extensionCalls(process), <Map<String, Object?>>[
+          <String, Object?>{
+            'appId': 'app-1',
+            'methodName': 'ext.flutter.inspector.getRootWidget',
+            'params': <String, Object?>{'objectGroup': 'flutter_code_agent'},
+          },
+          <String, Object?>{
+            'appId': 'app-1',
+            'methodName': 'ext.flutter.inspector.screenshot',
+            'params': <String, Object?>{
+              'id': 'inspector-7',
+              'width': '1600',
+              'height': '1600',
+              'maxPixelRatio': '2',
+            },
+          },
+          <String, Object?>{
+            'appId': 'app-1',
+            'methodName': 'ext.flutter.inspector.disposeGroup',
+            'params': <String, Object?>{'objectGroup': 'flutter_code_agent'},
+          },
+        ]);
+      });
+
+      test('two shots in the same second do not overwrite each other', () async {
+        answerExtensions();
+        await runApp();
+
+        final first = await repository.screenshot(1);
+        final second = await repository.screenshot(1);
+
+        expect(second, isNot(first));
+        expect(io.Directory(p.join(paths[1]!, shots)).listSync(), hasLength(2));
+      });
+
+      test('keeps the 20 newest shots', () async {
+        answerExtensions();
+        await runApp();
+        final taken = <String>[];
+
+        for (var i = 0; i < 21; i++) {
+          clock = DateTime(2026, 10, 31, 9, 5, i);
+          taken.add((await repository.screenshot(1))!);
+        }
+
+        final files = io.Directory(p.join(paths[1]!, shots))
+            .listSync()
+            .map((e) => p.basename(e.path));
+        expect(files, hasLength(20));
+        expect(files, isNot(contains(p.basename(taken.first))));
+        expect(files, contains(p.basename(taken.last)));
+      });
+
+      test('other files in the folder are left alone', () async {
+        answerExtensions();
+        await runApp();
+        final folder = io.Directory(p.join(paths[1]!, shots))..createSync(recursive: true);
+        io.File(p.join(folder.path, 'notes.txt')).writeAsStringSync('mine');
+        for (var i = 0; i < 21; i++) {
+          clock = DateTime(2026, 10, 31, 9, 5, i);
+          await repository.screenshot(1);
+        }
+
+        expect(io.File(p.join(folder.path, 'notes.txt')).existsSync(), isTrue);
+      });
+
+      test('profile has no inspector: null, and nothing is asked', () async {
+        answerExtensions();
+        final process = await runApp(mode: BuildMode.profile);
+
+        expect(await repository.screenshot(1), isNull);
+        expect(extensionCalls(process), isEmpty);
+      });
+
+      test('null when the app is not running', () async {
+        expect(await repository.screenshot(1), isNull);
+        await startRun(1);
+        expect(await repository.screenshot(1), isNull);
+      });
+
+      test('an error response logs "Screenshot failed" and returns null', () async {
+        answerExtensions(
+          answer: (method) =>
+              method == 'ext.flutter.inspector.screenshot' ? const DaemonError('no render') : null,
+        );
+        final seen = logs(1);
+        final process = await runApp();
+
+        expect(await repository.screenshot(1), isNull);
+        await pumpEventQueue();
+
+        final failure = seen.lastWhere((log) => log.level == LogLevel.error);
+        expect(failure.error?.title, 'Screenshot failed');
+        expect(failure.text, startsWith('Screenshot failed'));
+        expect(io.Directory(p.join(paths[1]!, shots)).existsSync(), isFalse);
+        // The object group is released all the same.
+        expect(extensionCalls(process).last['methodName'], 'ext.flutter.inspector.disposeGroup');
+      });
+
+      test('a null result (nothing to render) logs "Screenshot failed"', () async {
+        answerExtensions(
+          answer: (method) => method == 'ext.flutter.inspector.screenshot'
+              ? <String, Object?>{'result': null}
+              : null,
+        );
+        final seen = logs(1);
+        await runApp();
+
+        expect(await repository.screenshot(1), isNull);
+        await pumpEventQueue();
+
+        expect(seen.last.error?.title, 'Screenshot failed');
+      });
+
+      test('a root widget without an id logs "Screenshot failed"', () async {
+        answerExtensions(
+          answer: (method) => method == 'ext.flutter.inspector.getRootWidget'
+              ? <String, Object?>{'result': null}
+              : null,
+        );
+        final seen = logs(1);
+        await runApp();
+
+        expect(await repository.screenshot(1), isNull);
+        await pumpEventQueue();
+
+        expect(seen.last.error?.title, 'Screenshot failed');
+      });
+    });
   });
+}
+
+/// An error answer for a scripted extension call.
+final class DaemonError {
+  const DaemonError(this.message);
+
+  final String message;
 }

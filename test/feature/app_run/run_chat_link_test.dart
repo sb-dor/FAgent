@@ -40,6 +40,9 @@ final class _SpyRunRepository implements IAppRunRepository {
   int reloads = 0;
   int restarts = 0;
 
+  /// The fake run behind the spy, for what a test sets up on it.
+  ScriptedAppRunRepository get scripted => _inner;
+
   @override
   bool get isPreview => true;
 
@@ -84,6 +87,12 @@ final class _SpyRunRepository implements IAppRunRepository {
     restarts++;
     return _inner.hotRestart(projectId);
   }
+
+  @override
+  Future<void> openDevTools(int projectId) => _inner.openDevTools(projectId);
+
+  @override
+  Future<String?> screenshot(int projectId) => _inner.screenshot(projectId);
 
   @override
   Future<void> dispose() => _inner.dispose();
@@ -298,6 +307,99 @@ void main() {
         chat.textController.text,
         '@widget BookingCard (lib/src/feature/booking/widgets/booking_card.dart:42)',
       );
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('screenshot', () {
+    const path = ScriptedAppRunRepository.defaultScreenshotPath;
+
+    testWidgets('puts @path into the draft and offers it to the @ menu and to the send', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      final workspace = workspaceOf(tester);
+      expect(workspace.runLink.mentions?.screenshot, isNull);
+
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => chat.textController.text.isNotEmpty);
+
+      expect(chat.textController.text, '@$path');
+      final mentions = workspace.runLink.mentions!;
+      expect(mentions.screenshot!.text, '@$path');
+      expect(mentions.screenshot!.detail, matches(RegExp(r'^\d\d:\d\d:\d\d$')));
+      expect(mentions.attachable, <String>{path});
+      expect(find.byType(SnackBar), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('without a chat the path is remembered and the user is told to open one', (
+      tester,
+    ) async {
+      await pumpShell(tester, openChat: false);
+      workspaceOf(tester).dataController.selectProject(projectId);
+      await settle(tester);
+      expect(workspaceOf(tester).dataController.chatHandle.value, isNull);
+      await startRun(tester);
+
+      workspaceOf(tester).runActionsController.screenshot(projectId);
+      await until(tester, () => workspaceOf(tester).runLink.mentions != null);
+      await tester.pump();
+
+      expect(find.text('Open a chat to add the screenshot to the message'), findsOneWidget);
+      expect(workspaceOf(tester).runLink.mentions!.screenshot!.text, '@$path');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the @ menu keeps every shot of the session, the last one is the offer', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      final workspace = workspaceOf(tester);
+
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => chat.textController.text.isNotEmpty);
+      spy.scripted.screenshotPath = '.dart_tool/flutter_code_agent/screenshots/second.png';
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => workspace.runLink.mentions!.attachable.length == 2);
+
+      final mentions = workspace.runLink.mentions!;
+      expect(mentions.screenshot!.text, '@.dart_tool/flutter_code_agent/screenshots/second.png');
+      expect(mentions.attachable, <String>{
+        path,
+        '.dart_tool/flutter_code_agent/screenshots/second.png',
+      });
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a shot that failed puts nothing into the draft', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      spy.scripted.screenshotPath = null;
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      workspaceOf(tester).runActionsController.screenshot(projectId);
+      await until(tester, () => spy.scripted.screenshotCalls.isNotEmpty);
+      await settle(tester);
+
+      expect(chat.textController.text, isEmpty);
+      expect(workspaceOf(tester).runLink.mentions, isNull);
+      expect(find.byType(SnackBar), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('DevTools opens through the repository', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+
+      workspaceOf(tester).runActionsController.openDevTools(projectId);
+      await until(tester, () => spy.scripted.devToolsOpened.isNotEmpty);
+
+      expect(spy.scripted.devToolsOpened, <int>[projectId]);
       await disposeTestApp(tester, dependencies);
     });
   });

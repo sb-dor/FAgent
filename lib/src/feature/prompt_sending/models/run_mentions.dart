@@ -20,13 +20,19 @@ final class RunMention {
   int get hashCode => Object.hash(detail, text);
 }
 
-/// What the running app offers the `@` menu: the picked widget and the last error. Plain data, so
-/// the chat does not depend on the run. Equal offers are equal, so a log line that changes neither
-/// part does not rebuild the composer.
+/// What the running app offers the `@` menu: the picked widget, the last error and the last
+/// screenshot. Plain data, so the chat does not depend on the run. Equal offers are equal, so a
+/// log line that changes no part does not rebuild the composer.
 @immutable
 final class RunMentions {
   /// Creates the offer; an absent part is not shown.
-  const RunMentions({this.widget, this.error, this.isPreview = false});
+  const RunMentions({
+    this.widget,
+    this.error,
+    this.screenshot,
+    this.attachable = const <String>{},
+    this.isPreview = false,
+  });
 
   /// The widget picked in the app.
   final RunMention? widget;
@@ -34,11 +40,20 @@ final class RunMentions {
   /// The last error of the app.
   final RunMention? error;
 
+  /// The last screenshot of the app: [RunMention.detail] is its time, [RunMention.text] the
+  /// `@path` that mentions it.
+  final RunMention? screenshot;
+
+  /// The paths (relative to the project) of every screenshot of the project taken in this
+  /// session. They are not in the project's file list, so sending a message that mentions one
+  /// takes them from here and attaches the file.
+  final Set<String> attachable;
+
   /// Whether the run is made up (the menu says so next to the offer).
   final bool isPreview;
 
   /// Nothing to offer.
-  bool get isEmpty => widget == null && error == null;
+  bool get isEmpty => widget == null && error == null && screenshot == null;
 
   @override
   bool operator ==(Object other) =>
@@ -46,8 +61,11 @@ final class RunMentions {
       other is RunMentions &&
           other.widget == widget &&
           other.error == error &&
+          other.screenshot == screenshot &&
+          setEquals(other.attachable, attachable) &&
           other.isPreview == isPreview;
 
   @override
-  int get hashCode => Object.hash(widget, error, isPreview);
+  int get hashCode =>
+      Object.hash(widget, error, screenshot, Object.hashAllUnordered(attachable), isPreview);
 }

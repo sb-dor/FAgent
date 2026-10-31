@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:io' as io;
+import 'dart:math' as math;
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
+import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
@@ -60,9 +62,25 @@ abstract interface class IAppRunRepository {
   /// Hot-restarts the app. Does nothing when it is not running; a failure is logged.
   Future<void> hotRestart(int projectId);
 
+  /// Opens DevTools of the running app in the browser. Does nothing until `flutter run` has
+  /// reported the DevTools address (see [RunRunning.devToolsUri]); a failure is logged.
+  Future<void> openDevTools(int projectId);
+
+  /// Takes a screenshot of the running app through the widget inspector, saves it as a PNG in the
+  /// project and returns its path relative to the project folder. `null` when the app is not
+  /// running or was not started in debug mode (the inspector exists only there), and when the shot
+  /// failed (the log says why).
+  Future<String?> screenshot(int projectId);
+
   /// Stops every run and closes every stream.
   Future<void> dispose();
 }
+
+/// Where the screenshots of a project go, relative to the project folder.
+const String kScreenshotsFolder = '.dart_tool/flutter_code_agent/screenshots';
+
+/// How many of the newest screenshots a project keeps.
+const int kScreenshotLimit = 20;
 
 /// {@template app_run_repository_impl}
 /// Runs `flutter run --machine` per project and follows it over the daemon protocol: the events
@@ -76,13 +94,16 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   ///
   /// [projectPath] gives the folder of a project (`null` when it is unknown), [flutter] the
   /// `flutter` executable for a project folder (`null` when there is no SDK). [stopTimeout] is how
-  /// long a stopped app may take to exit before its process group is killed.
+  /// long a stopped app may take to exit before its process group is killed. [openUrl] opens
+  /// DevTools in the browser, [now] names the screenshots.
   AppRunRepositoryImpl({
     required this._projectPath,
     required this._flutter,
     required this._environment,
     this._start = startGroupedDaemonProcess,
     this._stopTimeout = const Duration(seconds: 5),
+    this._openUrl = openUrl,
+    this._now = DateTime.now,
   });
 
   final Future<String?> Function(int projectId) _projectPath;
@@ -90,6 +111,8 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   final Map<String, String> _environment;
   final DaemonProcessStarter _start;
   final Duration _stopTimeout;
+  final UrlOpener _openUrl;
+  final DateTime Function() _now;
 
   final Map<int, _ProjectRun> _runs = <int, _ProjectRun>{};
   bool _disposed = false;
@@ -257,14 +280,102 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       l.w('AppRunRepository | ${full ? 'hot restart' : 'hot reload'} of $projectId failed: $error');
       message = '$error';
     }
-    if (run.launch == launch) {
-      run.log(
-        LogLevel.error,
-        message.isEmpty ? title : '$title: $message',
-        error: RunError(title: title, message: message),
-      );
-    }
+    _logFailure(run, launch, title, message);
     return Duration.zero;
+  }
+
+  @override
+  Future<void> openDevTools(int projectId) async {
+    final run = _runs[projectId];
+    final launch = run?.launch;
+    if (run == null || launch == null) return;
+    if (run.state case RunRunning(:final devToolsUri?, :final vmServiceUri)) {
+      try {
+        await _openUrl(_devToolsUrl(devToolsUri, vmServiceUri));
+      } on Object catch (error, stackTrace) {
+        l.w('AppRunRepository | cannot open DevTools of $projectId: $error', stackTrace);
+        _logFailure(run, launch, 'Opening DevTools failed', '$error');
+      }
+    }
+  }
+
+  /// The address of DevTools for the app: [devTools] as `flutter run` reported it, with the VM
+  /// service of the app added when the address does not name one.
+  static Uri _devToolsUrl(Uri devTools, Uri? vmService) {
+    if (vmService == null || devTools.queryParameters.containsKey('uri')) return devTools;
+    return devTools.replace(
+      path: devTools.path.isEmpty ? '/' : devTools.path,
+      query: '${devTools.hasQuery ? '${devTools.query}&' : ''}uri=$vmService',
+    );
+  }
+
+  @override
+  Future<String?> screenshot(int projectId) async {
+    final run = _runs[projectId];
+    final launch = run?.launch;
+    final state = run?.state;
+    if (run == null || launch == null || state is! RunRunning || state.mode != BuildMode.debug) {
+      return null;
+    }
+    const title = 'Screenshot failed';
+    try {
+      final root = await _projectPath(projectId);
+      if (root == null) throw StateError('The project folder is unknown.');
+      final bytes = await launch.screenshot();
+      return await _saveScreenshot(root, bytes);
+    } on DaemonRequestException catch (error) {
+      _logFailure(run, launch, title, '${error.error}');
+    } on Object catch (error, stackTrace) {
+      l.w('AppRunRepository | screenshot of $projectId failed: $error', stackTrace);
+      _logFailure(run, launch, title, '$error');
+    }
+    return null;
+  }
+
+  /// Writes [bytes] to a new file in the screenshot folder of [root], drops all but the newest
+  /// [kScreenshotLimit] and returns the path of the new one relative to [root].
+  Future<String> _saveScreenshot(String root, List<int> bytes) async {
+    final folder = io.Directory(p.join(root, kScreenshotsFolder));
+    await folder.create(recursive: true);
+    final stamp = _stamp(_now());
+    var name = 'screenshot-$stamp';
+    for (var n = 2; io.File(p.join(folder.path, '$name.png')).existsSync(); n++) {
+      name = 'screenshot-$stamp-$n';
+    }
+    final file = io.File(p.join(folder.path, '$name.png'));
+    await file.writeAsBytes(bytes, flush: true);
+    try {
+      final names = <String>[
+        await for (final entity in folder.list())
+          if (entity is io.File && _screenshotName.hasMatch(p.basename(entity.path)))
+            p.basenameWithoutExtension(entity.path),
+      ]..sort();
+      for (final old in names.take(math.max(0, names.length - kScreenshotLimit))) {
+        await io.File(p.join(folder.path, '$old.png')).delete();
+      }
+    } on io.FileSystemException catch (error) {
+      l.w('AppRunRepository | cannot prune the screenshots in ${folder.path}: $error');
+    }
+    return p.posix.join(kScreenshotsFolder, '$name.png');
+  }
+
+  static final RegExp _screenshotName = RegExp(r'^screenshot-.+\.png$');
+
+  /// `yyyyMMdd-HHmmss`.
+  static String _stamp(DateTime time) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${time.year.toString().padLeft(4, '0')}${two(time.month)}${two(time.day)}'
+        '-${two(time.hour)}${two(time.minute)}${two(time.second)}';
+  }
+
+  /// Logs an error line with a [RunError] of [title], unless [launch] is no longer the run's.
+  void _logFailure(_ProjectRun run, _Launch launch, String title, String message) {
+    if (run.launch != launch) return;
+    run.log(
+      LogLevel.error,
+      message.isEmpty ? title : '$title: $message',
+      error: RunError(title: title, message: message),
+    );
   }
 
   @override
@@ -436,6 +547,63 @@ final class _Launch {
       'fullRestart': full,
       'reason': 'manual',
     });
+  }
+
+  /// Calls the service extension [method] of the app with [params] and returns the answer (the
+  /// extension's JSON map). Throws when the daemon cannot answer.
+  Future<Map<String, Object?>> _extension(String method, Map<String, String> params) async {
+    final connection = _connection;
+    final appId = _appId;
+    if (connection == null || appId == null) {
+      throw const DaemonClosedException(method: 'app.callServiceExtension');
+    }
+    final answer = await connection
+        .request('app.callServiceExtension', <String, Object?>{
+          'appId': appId,
+          'methodName': method,
+          'params': params,
+        })
+        .timeout(_extensionTimeout);
+    return answer is Map ? Map<String, Object?>.from(answer) : const <String, Object?>{};
+  }
+
+  /// How long the app may take to answer a service extension.
+  static const Duration _extensionTimeout = Duration(seconds: 30);
+
+  /// The inspector's object group of this app's screenshots.
+  static const String _inspectorGroup = 'flutter_code_agent';
+
+  /// A PNG of the running app, rendered by the widget inspector. Throws when the app cannot.
+  Future<List<int>> screenshot() async {
+    try {
+      final root = await _extension('ext.flutter.inspector.getRootWidget', <String, String>{
+        'objectGroup': _inspectorGroup,
+      });
+      final id = switch (root['result']) {
+        {'valueId': final String valueId} => valueId,
+        _ => null,
+      };
+      if (id == null) throw StateError('The app returned no root widget.');
+      final shot = await _extension('ext.flutter.inspector.screenshot', <String, String>{
+        'id': id,
+        'width': '1600',
+        'height': '1600',
+        'maxPixelRatio': '2',
+      });
+      final data = shot['result'];
+      if (data is! String || data.isEmpty) {
+        throw StateError('The app could not render a screenshot.');
+      }
+      return base64Decode(data);
+    } finally {
+      try {
+        await _extension('ext.flutter.inspector.disposeGroup', <String, String>{
+          'objectGroup': _inspectorGroup,
+        });
+      } on Object catch (error) {
+        l.v('AppRunRepository | cannot dispose the inspector group: $error');
+      }
+    }
   }
 
   /// A hot reload or restart that took [took] has finished.

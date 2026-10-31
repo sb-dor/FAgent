@@ -451,6 +451,21 @@ void main() {
       ),
     );
 
+    const withShot = RunMentions(
+      widget: RunMention(
+        detail: 'BookingCard · booking_card.dart:42',
+        text: '@widget BookingCard (lib/booking_card.dart:42)',
+      ),
+      error: RunMention(
+        detail: 'Layout overflow',
+        text: '@error Layout overflow (booking_card.dart:42:12)',
+      ),
+      screenshot: RunMention(
+        detail: '09:05:07',
+        text: '@.dart_tool/flutter_code_agent/screenshots/screenshot-1.png',
+      ),
+    );
+
     Widget withRun({RunMentions? context = run}) =>
         composer(canSend: true, canStop: false, mentionFiles: files, runContext: context);
 
@@ -490,11 +505,13 @@ void main() {
       expect(text.text, '@error Layout overflow (booking_card.dart:42:12) ');
     });
 
-    testWidgets('the screenshot says M2, cannot be chosen and arrows skip it', (tester) async {
+    testWidgets('without a shot the Screenshot row says how to take one and cannot be chosen', (
+      tester,
+    ) async {
       await tester.pumpWidget(withRun());
       await tester.enterText(find.byType(TextField), '@');
       await tester.pump();
-      expect(find.text('Coming in M2'), findsOneWidget);
+      expect(find.text('Take one in the Run tab'), findsOneWidget);
 
       await tester.tap(find.text('Screenshot'), kind: PointerDeviceKind.mouse);
       await tester.pump();
@@ -505,6 +522,40 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       expect(text.text, '@lib/main.dart ');
+    });
+
+    testWidgets('with a shot the Screenshot row shows its time and inserts the path', (
+      tester,
+    ) async {
+      await tester.pumpWidget(withRun(context: withShot));
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+
+      expect(find.text('09:05:07'), findsOneWidget);
+      expect(find.text('Take one in the Run tab'), findsNothing);
+
+      await tester.tap(find.text('Screenshot'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(text.text, '@.dart_tool/flutter_code_agent/screenshots/screenshot-1.png ');
+    });
+
+    testWidgets('a shot alone is enough to open the run section', (tester) async {
+      await tester.pumpWidget(
+        withRun(
+          context: const RunMentions(
+            screenshot: RunMention(
+              detail: '09:05:07',
+              text: '@.dart_tool/flutter_code_agent/screenshots/screenshot-1.png',
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '@shot');
+      await tester.pump();
+
+      expect(find.text('From the run'), findsOneWidget);
+      expect(find.text('Screenshot'), findsOneWidget);
+      expect(find.text('Selected widget'), findsNothing);
     });
 
     testWidgets('typing narrows the run rows like the files', (tester) async {

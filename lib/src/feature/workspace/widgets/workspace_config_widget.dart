@@ -310,11 +310,21 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// The pick may finish after the window moved to another project: the widget belongs to the
   /// project it was picked in, so it is dropped unless that project is still the followed one.
   void _onRunAction() {
-    if (runActionsController.state case RunActions$CompletedState(:final picked?, :final projectId)
-        when projectId == runController.state.projectId) {
+    final state = runActionsController.state;
+    if (state is! RunActions$CompletedState || identical(state, _handledAction)) return;
+    _handledAction = state;
+    if (state.picked case final picked? when state.projectId == runController.state.projectId) {
       runController.setPicked(picked);
     }
+    if (state case RunActions$CompletedState(:final screenshot?, :final projectId?)) {
+      if (!runLink.addScreenshot(projectId, screenshot) && mounted) {
+        _showMessage(Localization.of(context).noChatForScreenshot);
+      }
+    }
   }
+
+  /// The last finished action that was dealt with, so one result is not taken twice.
+  RunActions$CompletedState? _handledAction;
 
   /// The selected project with its latest data (trust changes, renames).
   Project? get selectedProject {

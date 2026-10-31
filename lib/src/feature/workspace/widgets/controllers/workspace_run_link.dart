@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
@@ -12,13 +13,14 @@ import 'package:path/path.dart' as p;
 
 /// {@template workspace_run_link}
 /// Ties the run of the selected project to the selected chat, and gives the window's run controls
-/// (title bar, shortcuts) one place to act: start and stop, hot reload and restart, an error or
-/// the picked widget into the composer, the offer for the `@` menu, and the hot reload after an
-/// agent turn.
+/// (title bar, shortcuts) one place to act: start and stop, hot reload and restart, an error, the
+/// picked widget or a screenshot into the composer, the offer for the `@` menu, and the hot reload
+/// after an agent turn.
 ///
-/// It never sends a message: everything it puts into the chat is a draft the user sends.
+/// It never sends a message: everything it puts into the chat is a draft the user sends. It
+/// notifies when the offer for the `@` menu changes without the run changing (a new screenshot).
 /// {@endtemplate}
-class WorkspaceRunLink {
+class WorkspaceRunLink extends ChangeNotifier {
   /// {@macro workspace_run_link}
   WorkspaceRunLink({
     required this._data,
@@ -27,6 +29,7 @@ class WorkspaceRunLink {
     required this._reloadAfterTurn,
     this._selectedDevice = _noDevice,
     this.isPreview = false,
+    this._now = DateTime.now,
   }) {
     _data.chatHandle.addListener(_onChatHandle);
   }
@@ -41,6 +44,13 @@ class WorkspaceRunLink {
 
   static Device? _noDevice() => null;
 
+  /// Gives the time a screenshot is taken at.
+  final DateTime Function() _now;
+
+  /// Every screenshot taken in this session, per project, oldest first.
+  final Map<int, List<({String path, DateTime time})>> _screenshots =
+      <int, List<({String path, DateTime time})>>{};
+
   /// Whether the run data is made up; the `@` menu says so.
   final bool isPreview;
 
@@ -51,7 +61,11 @@ class WorkspaceRunLink {
   SessionStatus? _lastStatus;
 
   /// Stops following the chat.
-  void dispose() => _data.chatHandle.removeListener(_onChatHandle);
+  @override
+  void dispose() {
+    _data.chatHandle.removeListener(_onChatHandle);
+    super.dispose();
+  }
 
   /// The selected project when the run state is about it.
   int? get _projectId => _run.state.projectId == _data.projectId ? _data.projectId : null;
@@ -118,16 +132,37 @@ class WorkspaceRunLink {
     return true;
   }
 
-  /// What the app offers the `@` menu of the selected project's chats: the picked widget and the
-  /// last error; `null` when it has neither.
+  /// Remembers the screenshot [path] (relative to the project) that was taken for [projectId] and
+  /// puts `@path` into the draft of the selected chat. `false` when the screenshot is for the
+  /// selected project and no chat is selected (the path is remembered all the same, so the `@`
+  /// menu offers it).
+  bool addScreenshot(int projectId, String path) {
+    _screenshots.putIfAbsent(projectId, () => <({String path, DateTime time})>[])
+      ..removeWhere((shot) => shot.path == path)
+      ..add((path: path, time: _now()));
+    notifyListeners();
+    if (projectId != _data.projectId) return true;
+    final handle = _data.chatHandle.value;
+    if (handle == null) return false;
+    handle.insertDraft(_screenshotText(path));
+    return true;
+  }
+
+  /// What the app offers the `@` menu of the selected project's chats: the picked widget, the last
+  /// error and the last screenshot; `null` when it has none of them.
   RunMentions? get mentions {
     final state = _run.state;
     if (state.projectId == null || state.projectId != _data.projectId) return null;
     final picked = state.picked;
     final error = state.logs.reversed.where((log) => log.error != null).firstOrNull?.error;
-    if (picked == null && error == null) return null;
+    final shots = _screenshots[state.projectId] ?? const <({String path, DateTime time})>[];
+    if (picked == null && error == null && shots.isEmpty) return null;
     return RunMentions(
       isPreview: isPreview,
+      screenshot: shots.isEmpty
+          ? null
+          : RunMention(detail: _clock(shots.last.time), text: _screenshotText(shots.last.path)),
+      attachable: <String>{for (final shot in shots) shot.path},
       widget: picked == null
           ? null
           : RunMention(
@@ -136,6 +171,14 @@ class WorkspaceRunLink {
             ),
       error: error == null ? null : RunMention(detail: error.title, text: _errorText(error)),
     );
+  }
+
+  static String _screenshotText(String path) => '@$path';
+
+  /// `HH:mm:ss`.
+  static String _clock(DateTime time) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
   }
 
   static String _widgetText(PickedWidget picked) =>

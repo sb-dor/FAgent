@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart' show ProjectsTableCompanion;
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/widget/segmented_control.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
@@ -200,7 +201,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('git template and in-app DevTools are previews', (tester) async {
+  testWidgets('the git template is a preview', (tester) async {
     await openSettings(tester);
 
     await tester.tap(find.text('From git'));
@@ -208,14 +209,43 @@ void main() {
     await _settle(tester);
     expect(find.text('Coming in M4'), findsOneWidget);
     expect(_settings(tester).projectTemplate, NewProjectTemplate.architecture);
+    await disposeTestApp(tester, dependencies);
+  });
 
-    ScaffoldMessenger.of(tester.element(find.text('DevTools'))).clearSnackBars();
-    await tester.pumpAndSettle();
+  testWidgets('DevTools in the app is not available yet and cannot be chosen', (tester) async {
+    await openSettings(tester);
+
+    expect(find.text('In the app — Not available yet'), findsOneWidget);
     await tester.tap(find.text('In the app'));
     await tester.pump();
     await _settle(tester);
-    expect(find.text('Coming in M2'), findsOneWidget);
+
     expect(_settings(tester).devToolsTarget, DevToolsTarget.browser);
+    expect(find.textContaining('Coming in M2'), findsNothing);
+    expect(
+      tester
+          .widget<SegmentedControl<DevToolsTarget>>(find.byType(SegmentedControl<DevToolsTarget>))
+          .selected,
+      DevToolsTarget.browser,
+    );
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a saved in-app target opens the browser, and the browser shows as chosen', (
+    tester,
+  ) async {
+    await openSettings(tester);
+    AppSettingsConfigInhWidget.of(tester.element(find.byType(WorkspaceWidget))).controller
+        .update((s) => s.copyWith(devToolsTarget: DevToolsTarget.app));
+    await _settle(tester);
+
+    expect(_settings(tester).devToolsTarget, DevToolsTarget.app);
+    expect(
+      tester
+          .widget<SegmentedControl<DevToolsTarget>>(find.byType(SegmentedControl<DevToolsTarget>))
+          .selected,
+      DevToolsTarget.browser,
+    );
     await disposeTestApp(tester, dependencies);
   });
 

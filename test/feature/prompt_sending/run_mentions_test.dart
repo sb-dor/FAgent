@@ -26,6 +26,30 @@ void main() {
       );
     });
 
+    test('the screenshot and the attachable paths are part of the equality', () {
+      const shot = RunMention(detail: '09:05:07', text: '@shots/a.png');
+      const offer = RunMentions(screenshot: shot, attachable: <String>{'shots/a.png'});
+      expect(offer, const RunMentions(screenshot: shot, attachable: <String>{'shots/a.png'}));
+      expect(
+        offer.hashCode,
+        const RunMentions(screenshot: shot, attachable: <String>{'shots/a.png'}).hashCode,
+      );
+      expect(offer, isNot(const RunMentions(screenshot: shot)));
+      expect(
+        offer,
+        isNot(const RunMentions(screenshot: shot, attachable: <String>{'shots/b.png'})),
+      );
+    });
+
+    test('a screenshot alone is an offer', () {
+      expect(
+        const RunMentions(
+          screenshot: RunMention(detail: '09:05:07', text: '@a.png'),
+        ).isEmpty,
+        isFalse,
+      );
+    });
+
     test('the flag alone does not make an offer', () {
       expect(const RunMentions(isPreview: true).isEmpty, isTrue);
       expect(const RunMentions(widget: widget).isEmpty, isFalse);

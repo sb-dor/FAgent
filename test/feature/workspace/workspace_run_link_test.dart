@@ -53,6 +53,12 @@ final class _ScriptedRun implements IAppRunRepository {
   Future<void> hotRestart(int projectId) async {}
 
   @override
+  Future<void> openDevTools(int projectId) async {}
+
+  @override
+  Future<String?> screenshot(int projectId) async => null;
+
+  @override
   Future<void> dispose() async {}
 }
 

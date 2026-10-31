@@ -87,6 +87,12 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   Future<void> hotRestart(int projectId) async {}
 
   @override
+  Future<void> openDevTools(int projectId) async {}
+
+  @override
+  Future<String?> screenshot(int projectId) async => null;
+
+  @override
   Future<void> dispose() async {
     for (final controller in <StreamController<Object?>>[..._logs.values, ..._states.values]) {
       await controller.close();

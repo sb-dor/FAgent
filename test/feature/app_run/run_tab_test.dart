@@ -74,6 +74,12 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   Future<void> hotRestart(int projectId) async {}
 
   @override
+  Future<void> openDevTools(int projectId) async {}
+
+  @override
+  Future<String?> screenshot(int projectId) async => null;
+
+  @override
   Future<void> dispose() => _live.close();
 }
 
@@ -402,19 +408,56 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('screenshot and DevTools say they come in M2', (tester) async {
-      await pumpTab(tester);
+    group('screenshot and DevTools', () {
+      ScriptedAppRunRepository scripted() =>
+          dependencies.appRunRepository as ScriptedAppRunRepository;
 
-      await tester.tap(find.byTooltip('Screenshot'));
-      await tester.pump();
-      expect(find.text('Coming in M2'), findsOneWidget);
+      bool enabled(WidgetTester tester, IconData icon) =>
+          tester.widget<IconButton>(find.widgetWithIcon(IconButton, icon)).onPressed != null;
 
-      ScaffoldMessenger.of(tester.element(find.byType(RunTab))).clearSnackBars();
-      await tester.pump();
-      await tester.tap(find.byTooltip('Open DevTools'));
-      await tester.pump();
-      expect(find.text('Coming in M2'), findsOneWidget);
-      await disposeTestApp(tester, dependencies);
+      testWidgets('are off until the app runs, and the tooltips say what to wait for', (
+        tester,
+      ) async {
+        await pumpTab(tester);
+
+        expect(enabled(tester, Icons.photo_camera_outlined), isFalse);
+        expect(enabled(tester, Icons.open_in_new), isFalse);
+        expect(find.byTooltip('Screenshots are available in a debug run'), findsOneWidget);
+        expect(find.byTooltip('Open DevTools'), findsOneWidget);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('a debug run turns both on; they act on the project', (tester) async {
+        await pumpTab(tester);
+        await tester.tap(find.byTooltip('Run'));
+        await elapse(tester);
+
+        expect(enabled(tester, Icons.photo_camera_outlined), isTrue);
+        expect(enabled(tester, Icons.open_in_new), isTrue);
+        expect(find.byTooltip('Screenshot'), findsOneWidget);
+
+        await tester.tap(find.byTooltip('Screenshot'));
+        await elapse(tester);
+        await tester.tap(find.byTooltip('Open DevTools'));
+        await elapse(tester);
+
+        expect(scripted().screenshotCalls, <int>[1]);
+        expect(scripted().devToolsOpened, <int>[1]);
+        expect(find.textContaining('Coming in'), findsNothing);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('a profile run has DevTools but no screenshot', (tester) async {
+        await pumpTab(tester);
+        run.choose(mode: BuildMode.profile);
+        await tester.tap(find.byTooltip('Run'));
+        await elapse(tester);
+
+        expect(enabled(tester, Icons.photo_camera_outlined), isFalse);
+        expect(find.byTooltip('Screenshots are available in a debug run'), findsOneWidget);
+        expect(enabled(tester, Icons.open_in_new), isTrue);
+        await disposeTestApp(tester, dependencies);
+      });
     });
 
     testWidgets('Run is disabled until a device is chosen', (tester) async {
@@ -503,6 +546,18 @@ void main() {
         expect(find.textContaining('reload 180 ms'), findsOneWidget);
         await tester.pump(const Duration(seconds: 2));
         expect(find.textContaining('Running 4:'), findsOneWidget);
+        await disposeTestApp(tester, dependencies);
+        await scripted.dispose();
+      });
+
+      testWidgets('DevTools waits for its address and says so', (tester) async {
+        await pumpScripted(tester, lines: 1);
+
+        expect(find.byTooltip('DevTools is starting…'), findsOneWidget);
+        expect(
+          tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.open_in_new)).onPressed,
+          isNull,
+        );
         await disposeTestApp(tester, dependencies);
         await scripted.dispose();
       });

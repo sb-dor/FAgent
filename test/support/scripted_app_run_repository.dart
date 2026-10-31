@@ -93,6 +93,25 @@ class ScriptedAppRunRepository implements IAppRunRepository {
   /// The calls of [start], in order.
   final List<RunStart> starts = <RunStart>[];
 
+  /// The projects [openDevTools] was called for, in order.
+  final List<int> devToolsOpened = <int>[];
+
+  /// The projects [screenshot] was called for, in order (including those that gave nothing).
+  final List<int> screenshotCalls = <int>[];
+
+  /// What [screenshot] returns for a debug app that is running: the path of the PNG, relative to
+  /// the project. `null` makes the shot fail.
+  String? screenshotPath = defaultScreenshotPath;
+
+  /// The path a shot has unless a test sets [screenshotPath].
+  static const String defaultScreenshotPath =
+      '.dart_tool/flutter_code_agent/screenshots/screenshot-20261031-090507.png';
+
+  /// The DevTools address the fake app reports.
+  static final Uri devToolsUri = Uri.parse(
+    'http://127.0.0.1:9100/?uri=ws://127.0.0.1:1234/abc=/ws',
+  );
+
   final Map<int, _FakeRun> _runs = <int, _FakeRun>{};
   bool _disposed = false;
 
@@ -182,7 +201,14 @@ class ScriptedAppRunRepository implements IAppRunRepository {
     run.setState(const RunBuilding(progress: 1, label: 'Starting the app'));
     if (!await run.wait(step) || run.generation != generation) return;
     run
-      ..setState(RunRunning(device: device, startedAt: DateTime.now(), mode: mode))
+      ..setState(
+        RunRunning(
+          device: device,
+          startedAt: DateTime.now(),
+          mode: mode,
+          devToolsUri: ScriptedAppRunRepository.devToolsUri,
+        ),
+      )
       ..log(LogLevel.info, 'flutter: Booking loaded 12 rooms');
   }
 
@@ -243,6 +269,20 @@ class ScriptedAppRunRepository implements IAppRunRepository {
     const took = Duration(milliseconds: 640);
     run.log(LogLevel.info, 'Restarted application in 640ms.');
     if (run.state case final RunRunning running) run.setState(running.withReload(took));
+  }
+
+  @override
+  Future<void> openDevTools(int projectId) async {
+    final state = _runs[projectId]?.state;
+    if (state is RunRunning && state.devToolsUri != null) devToolsOpened.add(projectId);
+  }
+
+  @override
+  Future<String?> screenshot(int projectId) async {
+    screenshotCalls.add(projectId);
+    final state = _runs[projectId]?.state;
+    if (state is! RunRunning || state.mode != BuildMode.debug) return null;
+    return screenshotPath;
   }
 
   @override

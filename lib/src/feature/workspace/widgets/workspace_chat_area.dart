@@ -65,6 +65,7 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
               return ListenableBuilder(
                 listenable: Listenable.merge(<Listenable>[
                   _scope.runController,
+                  _scope.runLink,
                   _scope.skillLibraryController,
                 ]),
                 builder: (context, _) => ChatConfigWidget(

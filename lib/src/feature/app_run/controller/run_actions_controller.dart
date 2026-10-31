@@ -16,14 +16,20 @@ sealed class RunActionsState with _$RunActionsState {
 
   const factory RunActionsState.error({Object? error}) = RunActions$ErrorState;
 
-  /// The last action finished for [projectId]; [picked] is the widget `pickWidget` returned, `null`
-  /// for the others or when nothing was picked. The window may have moved on to another project
-  /// by then, so a [picked] widget belongs to [projectId] and nowhere else.
-  const factory RunActionsState.completed({int? projectId, PickedWidget? picked}) =
-      RunActions$CompletedState;
+  /// The last action finished for [projectId]; [picked] is the widget `pickWidget` returned and
+  /// [screenshot] the path (relative to the project) of the shot `screenshot` took, `null` for
+  /// the others or when nothing was picked or the shot failed. The window may have moved on to
+  /// another project by then, so a [picked] widget or a [screenshot] belongs to [projectId] and
+  /// nowhere else.
+  const factory RunActionsState.completed({
+    int? projectId,
+    PickedWidget? picked,
+    String? screenshot,
+  }) = RunActions$CompletedState;
 }
 
-/// The buttons of the Run tab: start, stop, hot reload, hot restart and the widget picker.
+/// The buttons of the Run tab: start, stop, hot reload, hot restart, the widget picker, DevTools
+/// and the screenshot.
 ///
 /// One action at a time: a tap during another one is dropped. The run itself is observed through
 /// `RunController`.
@@ -64,6 +70,17 @@ final class RunActionsController extends StateController<RunActionsState>
 
   /// Hot-restarts the app.
   void hotRestart(int projectId) => _run(projectId, () => _runRepository.hotRestart(projectId));
+
+  /// Opens DevTools of the running app in the browser.
+  void openDevTools(int projectId) => _run(projectId, () => _runRepository.openDevTools(projectId));
+
+  /// Takes a screenshot of the running app; completes with the path of the PNG (relative to the
+  /// project), or with `null` if the shot failed (the run's log says why).
+  void screenshot(int projectId) => handle(() async {
+    setState(const RunActionsState.inProgress());
+    final path = await _runRepository.screenshot(projectId);
+    setState(RunActionsState.completed(projectId: projectId, screenshot: path));
+  }, error: (error, stackTrace) async => setState(RunActionsState.error(error: error)));
 
   /// Lets the user pick a widget in the app; completes with it, or with `null` if none was picked.
   void pickWidget(int projectId) => handle(() async {

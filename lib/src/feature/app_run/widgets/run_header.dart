@@ -109,6 +109,10 @@ class RunHeader extends StatelessWidget {
     final selected = deviceList.where((device) => device.id == state.selectedDeviceId).firstOrNull;
     final launching = selected?.kind == DeviceKind.available;
     final canStart = selected?.kind == DeviceKind.running;
+    // The inspector (screenshots) exists in debug only; DevTools needs the address `flutter run`
+    // reports a moment after the app is up.
+    final canScreenshot = run is RunRunning && run.mode == BuildMode.debug;
+    final canDevTools = run is RunRunning && run.devToolsUri != null;
 
     Widget button(
       RunAction action,
@@ -253,8 +257,20 @@ class RunHeader extends StatelessWidget {
                   localization.pickWidget,
                   enabled: run is RunRunning,
                 ),
-                button(RunAction.screenshot, Icons.photo_camera_outlined, localization.screenshot),
-                button(RunAction.devTools, Icons.open_in_new, localization.devTools),
+                button(
+                  RunAction.screenshot,
+                  Icons.photo_camera_outlined,
+                  canScreenshot ? localization.screenshot : localization.screenshotDebugOnly,
+                  enabled: canScreenshot,
+                ),
+                button(
+                  RunAction.devTools,
+                  Icons.open_in_new,
+                  run is RunRunning && !canDevTools
+                      ? localization.devToolsStarting
+                      : localization.devTools,
+                  enabled: canDevTools,
+                ),
               ],
             ),
             const SizedBox(height: 8),
