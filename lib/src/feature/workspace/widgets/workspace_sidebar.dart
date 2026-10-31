@@ -252,7 +252,9 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
     switch (action) {
       case _AddProjectAction.openFolder:
         _scope.pickAndOpenProject().ignore();
-      case _AddProjectAction.newFlutter || _AddProjectAction.clone:
+      case _AddProjectAction.newFlutter:
+        _scope.openNewProject().ignore();
+      case _AddProjectAction.clone:
         ScaffoldMessenger.maybeOf(context)
             ?.showSnackBar(SnackBar(content: Text(localization.comingInMilestone('M4'))));
       case null:

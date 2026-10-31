@@ -15,6 +15,8 @@ import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat_search/widgets/chat_search_dialog.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/project_removal_controller.dart';
@@ -67,6 +69,10 @@ class WorkspaceConfigWidget extends StatefulWidget {
 class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectsController projectsController;
   late final ProjectOpeningController projectOpeningController;
+
+  /// The creation of a new project. It lives as long as the window, so closing the dialog does not
+  /// stop a creation.
+  late final ProjectCreationController projectCreation;
   late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
   late final SessionCreationController sessionCreationController;
@@ -89,6 +95,19 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// that shows it (the Run tab, the title bar, the `@` menu) says so.
   late final bool runIsPreview;
 
+  /// Asks the user for a folder; the argument is the text of the confirm button. Tests replace it,
+  /// because the native picker cannot be driven from a widget test.
+  @visibleForTesting
+  Future<String?> Function(String confirmButtonText) pickFolder = (confirmButtonText) =>
+      getDirectoryPath(confirmButtonText: confirmButtonText);
+
+  /// Asks for the folder a new project goes into; `null` when the user cancels.
+  Future<String?> pickNewProjectParent() =>
+      pickFolder(Localization.of(context).newProjectPickFolder);
+
+  /// Whether the New project dialog is open.
+  bool _newProjectOpen = false;
+
   /// The window-level settings (panels, theme, language).
   late final AppSettingsController settingsController = AppSettingsConfigInhWidget.of(context)
       .controller;
@@ -107,6 +126,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     projectOpeningController = ProjectOpeningController(
       repository: ProjectOpeningRepositoryImpl(database: dependencies.database),
     )..addListener(_onProjectOpened);
+    projectCreation = ProjectCreationController(repository: dependencies.projectCreationRepository);
     sessionsController = SessionsController(
       repository: SessionsRepositoryImpl(
         database: dependencies.database,
@@ -165,6 +185,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     runController.dispose();
     skillLibraryController.dispose();
     devicesController.dispose();
+    projectCreation.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
       ..dispose();
@@ -231,6 +252,22 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   Future<void> pickAndOpenProject() async {
     final path = await getDirectoryPath(confirmButtonText: Localization.of(context).openProject);
     if (path != null) projectOpeningController.open(path);
+  }
+
+  /// Shows the New project dialog; does nothing while it is already open.
+  Future<void> openNewProject() async {
+    if (_newProjectOpen) return;
+    _newProjectOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        // The dialog's route is not below this widget, so it gets the scope handed over.
+        builder: (_) => WorkspaceConfigInhWidget(state: this, child: const NewProjectDialog()),
+      );
+    } finally {
+      _newProjectOpen = false;
+    }
   }
 
   /// Shows or hides the sidebar and remembers the choice.

@@ -378,7 +378,7 @@ void main() {
   });
 
   group('top and bottom', () {
-    testWidgets('the Project menu offers the folder picker and two coming soon items', (
+    testWidgets('the Project menu offers the folder picker, the wizard and a coming soon clone', (
       tester,
     ) async {
       useWindow(tester, 1280, 800);
@@ -388,7 +388,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Open folder…'), findsOneWidget);
 
-      await tester.tap(find.text('New Flutter project…'));
+      await tester.tap(find.text('Clone from git…'));
       await tester.pumpAndSettle();
       expect(find.text('Coming in M4'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
