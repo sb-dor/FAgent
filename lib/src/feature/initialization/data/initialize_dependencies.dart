@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_reposit
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
@@ -95,4 +96,7 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
   'Create permission rules repository': (dependencies) =>
       dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
+  // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
+  'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
+      FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
 };

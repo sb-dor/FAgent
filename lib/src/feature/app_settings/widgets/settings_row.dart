@@ -41,11 +41,18 @@ class SettingsCard extends StatelessWidget {
 
 /// {@template settings_row}
 /// A row of a settings section: the [label] (and a muted [hint] under it) on the left, the
-/// [control] on the right. In a row narrower than [wrapWidth] the control moves under the label.
+/// [control] on the right. In a row narrower than [wrapWidth], or with [stacked], the control moves
+/// under the label.
 /// {@endtemplate}
 class SettingsRow extends StatelessWidget {
   /// {@macro settings_row}
-  const SettingsRow({required this.label, required this.control, this.hint, super.key});
+  const SettingsRow({
+    required this.label,
+    required this.control,
+    this.hint,
+    this.stacked = false,
+    super.key,
+  });
 
   /// What the row sets.
   final String label;
@@ -55,6 +62,9 @@ class SettingsRow extends StatelessWidget {
 
   /// The widget that changes the setting.
   final Widget control;
+
+  /// Whether the [control] always goes under the [label]; for a control too wide to share the row.
+  final bool stacked;
 
   /// Rows narrower than this put the [control] under the [label].
   static const double wrapWidth = 480;
@@ -79,7 +89,7 @@ class SettingsRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: LayoutBuilder(
-        builder: (context, constraints) => constraints.maxWidth < wrapWidth
+        builder: (context, constraints) => stacked || constraints.maxWidth < wrapWidth
             ? Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,

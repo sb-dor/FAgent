@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dar
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
@@ -60,6 +61,9 @@ class Dependencies {
 
   /// The permission rules saved in each project's `.claude/settings.local.json`.
   late final IPermissionRulesRepository permissionRulesRepository;
+
+  /// The Flutter SDK, its version and `flutter doctor`.
+  late final IFlutterSdkRepository flutterSdkRepository;
 
   @override
   String toString() => 'Dependencies{}';
