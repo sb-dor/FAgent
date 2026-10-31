@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 
@@ -139,38 +139,30 @@ final class FakeAppRunRepositoryImpl implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) async {
     if (_disposed) return;
     final run = _run(projectId);
     if (run.state is RunBuilding || run.state is RunRunning) await stop(projectId);
     run.reloads = 0;
     final generation = ++run.generation;
-    final device = kFakeDevices.firstWhere(
-      (device) => device.id == deviceId,
-      orElse: () => Device(
-        id: deviceId,
-        name: deviceId,
-        platform: DevicePlatform.macos,
-        kind: DeviceKind.running,
-      ),
-    );
     run
       ..setState(const RunBuilding(progress: 0.2, label: 'Resolving dependencies'))
       ..log(LogLevel.info, 'Launching $target on ${device.name} in ${mode.name} mode...');
-    unawaited(_build(run, generation, device));
+    unawaited(_build(run, generation, device, mode));
   }
 
-  Future<void> _build(_FakeRun run, int generation, Device device) async {
+  Future<void> _build(_FakeRun run, int generation, Device device, BuildMode mode) async {
     if (!await run.wait(step) || run.generation != generation) return;
     run.setState(const RunBuilding(progress: 0.6, label: 'Xcode build'));
     if (!await run.wait(step) || run.generation != generation) return;
     run.setState(const RunBuilding(progress: 1, label: 'Starting the app'));
     if (!await run.wait(step) || run.generation != generation) return;
     run
-      ..setState(RunRunning(device: device, startedAt: DateTime.now()))
+      ..setState(RunRunning(device: device, startedAt: DateTime.now(), mode: mode))
       ..log(LogLevel.info, 'flutter: Booking loaded 12 rooms');
   }
 

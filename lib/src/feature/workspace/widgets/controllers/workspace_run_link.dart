@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
@@ -24,7 +25,7 @@ class WorkspaceRunLink {
     required this._run,
     required this._actions,
     required this._reloadAfterTurn,
-    this._isLaunching = _never,
+    this._selectedDevice = _noDevice,
     this.isPreview = false,
   }) {
     _data.chatHandle.addListener(_onChatHandle);
@@ -35,10 +36,10 @@ class WorkspaceRunLink {
   final RunActionsController _actions;
   final bool Function() _reloadAfterTurn;
 
-  /// Whether the chosen device is an emulator that is still booting.
-  final bool Function() _isLaunching;
+  /// The chosen device as the device list has it; `null` when none is chosen or it is not listed.
+  final Device? Function() _selectedDevice;
 
-  static bool _never() => false;
+  static Device? _noDevice() => null;
 
   /// Whether the run data is made up; the `@` menu says so.
   final bool isPreview;
@@ -62,19 +63,18 @@ class WorkspaceRunLink {
   bool get isActive => _projectId != null && (isRunning || _run.state.run is RunBuilding);
 
   /// Whether the chosen device is an emulator that is still booting; the app cannot start on it yet.
-  bool get isLaunching =>
-      _projectId != null && _run.state.selectedDeviceId != null && _isLaunching();
+  bool get isLaunching => _projectId != null && _selectedDevice()?.kind == DeviceKind.available;
 
-  /// Whether there is a device to start the app on.
-  bool get canStart => _projectId != null && _run.state.selectedDeviceId != null && !_isLaunching();
+  /// Whether there is a device to start the app on: one is chosen, listed and running.
+  bool get canStart => _projectId != null && _selectedDevice()?.kind == DeviceKind.running;
 
   /// Starts the app of the selected project on the chosen device.
   void start() {
     final projectId = _projectId;
     final state = _run.state;
-    final deviceId = state.selectedDeviceId;
-    if (projectId == null || deviceId == null) return;
-    _actions.start(projectId, deviceId: deviceId, mode: state.mode, target: state.target);
+    final device = _selectedDevice();
+    if (projectId == null || device == null || device.kind != DeviceKind.running) return;
+    _actions.start(projectId, device: device, mode: state.mode, target: state.target);
   }
 
   /// Stops the app of the selected project.

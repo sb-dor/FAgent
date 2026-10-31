@@ -1,0 +1,758 @@
+import 'dart:async';
+import 'dart:io' as io;
+
+import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+
+import '../../support/scripted_daemon_process.dart';
+
+const Device _macos = Device(
+  id: 'macos',
+  name: 'macOS',
+  platform: DevicePlatform.macos,
+  kind: DeviceKind.running,
+);
+
+Map<String, Object?> _event(
+  String name, [
+  Map<String, Object?> params = const <String, Object?>{},
+]) => <String, Object?>{'event': name, 'params': params};
+
+void main() {
+  group('splitArgs', () {
+    test('splits on spaces, groups quotes and honours backslashes', () {
+      expect(splitArgs('--a "b c" \'d\' e\\ f'), <String>['--a', 'b c', 'd', 'e f']);
+    });
+
+    test('an unclosed quote is null', () {
+      expect(splitArgs('"x'), isNull);
+      expect(splitArgs("--a 'b"), isNull);
+    });
+
+    test('an empty text is no arguments', () {
+      expect(splitArgs(''), isEmpty);
+      expect(splitArgs('   '), isEmpty);
+    });
+
+    test('a backslash escapes a quote inside double quotes', () {
+      expect(splitArgs(r'"a \"b\" c"'), <String>['a "b" c']);
+    });
+  });
+
+  group('RunArguments.toFlutterArgs', () {
+    test('flavor, every define, then the extra arguments', () {
+      expect(
+        const RunArguments(
+          flavor: 'dev',
+          dartDefines: <String>['A=1', 'B=two words'],
+          extraArgs: '--verbose --route "/a b"',
+        ).toFlutterArgs(),
+        <String>[
+          '--flavor',
+          'dev',
+          '--dart-define',
+          'A=1',
+          '--dart-define',
+          'B=two words',
+          '--verbose',
+          '--route',
+          '/a b',
+        ],
+      );
+    });
+
+    test('nothing set is no arguments; unparsable extra arguments are dropped', () {
+      expect(const RunArguments().toFlutterArgs(), isEmpty);
+      expect(const RunArguments(extraArgs: '"oops').toFlutterArgs(), isEmpty);
+    });
+  });
+
+  group('AppRunRepositoryImpl', () {
+    late io.Directory root;
+    late Map<int, String> paths;
+    late String? flutterPath;
+    late List<ScriptedDaemonProcess> started;
+    late void Function(ScriptedDaemonProcess process, Map<String, Object?> request) onRequest;
+    late AppRunRepositoryImpl repository;
+    final subscriptions = <StreamSubscription<Object?>>[];
+
+    ScriptedDaemonProcess create() {
+      final process = ScriptedDaemonProcess();
+      process.onRequest = (request) => onRequest(process, request);
+      return process;
+    }
+
+    String project(String name, {String? pubspecName}) {
+      final dir = io.Directory(p.join(root.path, name))..createSync();
+      if (pubspecName != null) {
+        io.File(p.join(dir.path, 'pubspec.yaml')).writeAsStringSync('name: $pubspecName\n');
+      }
+      return dir.path;
+    }
+
+    List<RunState> states(int projectId) {
+      final out = <RunState>[];
+      subscriptions.add(repository.watchRun(projectId).listen(out.add));
+      return out;
+    }
+
+    List<LogEntry> logs(int projectId) {
+      final out = <LogEntry>[];
+      subscriptions.add(repository.logs(projectId).listen(out.add));
+      return out;
+    }
+
+    Future<void> startRun(
+      int projectId, {
+      RunArguments arguments = const RunArguments(),
+      BuildMode mode = BuildMode.debug,
+    }) async {
+      await repository.start(
+        projectId,
+        device: _macos,
+        mode: mode,
+        target: 'lib/main.dart',
+        arguments: arguments,
+      );
+      await pumpEventQueue();
+    }
+
+    Future<void> emit(
+      ScriptedDaemonProcess process,
+      String name, [
+      Map<String, Object?>? params,
+    ]) async {
+      process.emit(_event(name, params ?? const <String, Object?>{}));
+      await pumpEventQueue();
+    }
+
+    /// Brings [process] up to `app.started` with all three addresses.
+    Future<void> launch(ScriptedDaemonProcess process, {String appId = 'app-1'}) async {
+      await emit(process, 'app.start', <String, Object?>{'appId': appId, 'deviceId': 'macos'});
+      await emit(process, 'app.debugPort', <String, Object?>{
+        'appId': appId,
+        'port': 1234,
+        'wsUri': 'ws://127.0.0.1:1234/abc=/ws',
+      });
+      await emit(process, 'app.started', <String, Object?>{'appId': appId});
+    }
+
+    setUp(() {
+      root = io.Directory.systemTemp.createTempSync('app_run_repository_test');
+      paths = <int, String>{
+        1: project('one', pubspecName: 'demo_app'),
+        2: project('two', pubspecName: 'other_app'),
+      };
+      flutterPath = '/opt/flutter/bin/flutter';
+      started = <ScriptedDaemonProcess>[];
+      onRequest = (process, request) {
+        if (request['method'] == 'app.stop') {
+          process
+            ..respond(request['id']! as int, result: true)
+            ..exit(0);
+        }
+      };
+      repository = AppRunRepositoryImpl(
+        projectPath: (id) async => paths[id],
+        flutter: (_) => flutterPath,
+        environment: const <String, String>{'PATH': '/usr/bin'},
+        start: scriptedStarter(create, started: started),
+        stopTimeout: const Duration(milliseconds: 50),
+      );
+    });
+
+    tearDown(() async {
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+      subscriptions.clear();
+      await repository.dispose();
+      root.deleteSync(recursive: true);
+    });
+
+    test('is not a preview', () {
+      expect(repository.isPreview, isFalse);
+    });
+
+    test('runs `flutter run --machine` in the project folder with the arguments', () async {
+      final log = logs(1);
+      await startRun(
+        1,
+        arguments: const RunArguments(flavor: 'dev', dartDefines: <String>['A=1']),
+      );
+
+      final process = started.single;
+      expect(process.executable, '/opt/flutter/bin/flutter');
+      expect(process.arguments, <String>[
+        'run',
+        '--machine',
+        '-d',
+        'macos',
+        '--debug',
+        '-t',
+        'lib/main.dart',
+        '--flavor',
+        'dev',
+        '--dart-define',
+        'A=1',
+      ]);
+      expect(process.workingDirectory, paths[1]);
+      expect(process.environment, <String, String>{'PATH': '/usr/bin'});
+      expect(log.first.level, LogLevel.info);
+      expect(
+        log.first.text,
+        '/opt/flutter/bin/flutter run --machine -d macos --debug -t lib/main.dart '
+        '--flavor dev --dart-define A=1',
+      );
+    });
+
+    test('the build mode is passed as a flag', () async {
+      await startRun(1, mode: BuildMode.profile);
+
+      expect(started.single.arguments, contains('--profile'));
+    });
+
+    test('events move the run from building to running with the three addresses', () async {
+      final seen = states(1);
+      await pumpEventQueue();
+      await startRun(1);
+      final process = started.single;
+
+      await emit(process, 'app.start', <String, Object?>{'appId': 'app-1', 'deviceId': 'macos'});
+      await emit(process, 'app.progress', <String, Object?>{
+        'appId': 'app-1',
+        'id': '0',
+        'progressId': null,
+        'message': 'Building macOS application...',
+        'finished': false,
+      });
+      await emit(process, 'app.progress', <String, Object?>{
+        'appId': 'app-1',
+        'id': '0',
+        'finished': true,
+      });
+      await emit(process, 'app.debugPort', <String, Object?>{
+        'appId': 'app-1',
+        'port': 1234,
+        'wsUri': 'ws://127.0.0.1:1234/abc=/ws',
+      });
+      await emit(process, 'app.dtd', <String, Object?>{
+        'appId': 'app-1',
+        'uri': 'ws://127.0.0.1:5678/def=',
+      });
+      await emit(process, 'app.devTools', <String, Object?>{
+        'appId': 'app-1',
+        'uri': 'http://127.0.0.1:9100?uri=ws://127.0.0.1:1234/abc=/ws',
+      });
+      await emit(process, 'app.started', <String, Object?>{'appId': 'app-1'});
+
+      expect(seen, hasLength(4));
+      expect(seen.sublist(0, 3), <RunState>[
+        const RunIdle(),
+        const RunBuilding(),
+        const RunBuilding(label: 'Building macOS application...'),
+      ]);
+      final running = seen.last as RunRunning;
+      expect(running.device, _macos);
+      expect(running.mode, BuildMode.debug);
+      expect(running.vmServiceUri, Uri.parse('ws://127.0.0.1:1234/abc=/ws'));
+      expect(running.dtdUri, Uri.parse('ws://127.0.0.1:5678/def='));
+      expect(
+        running.devToolsUri,
+        Uri.parse('http://127.0.0.1:9100?uri=ws://127.0.0.1:1234/abc=/ws'),
+      );
+      expect(running.lastReload, isNull);
+    });
+
+    test('an address that comes after app.started gives a new running state with it', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      await emit(process, 'app.devTools', <String, Object?>{
+        'appId': 'app-1',
+        'uri': 'http://127.0.0.1:9100',
+      });
+
+      final last = seen.last as RunRunning;
+      expect(last.devToolsUri, Uri.parse('http://127.0.0.1:9100'));
+      expect(last.vmServiceUri, Uri.parse('ws://127.0.0.1:1234/abc=/ws'));
+      expect((seen[seen.length - 2] as RunRunning).devToolsUri, isNull);
+    });
+
+    test('an error block in app.log comes out as one line with the error', () async {
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+      final before = log.length;
+
+      for (final line in <String>[
+        'flutter: ══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY ╞═════════════════════════',
+        'flutter: The following assertion was thrown during layout:',
+        'flutter: A RenderFlex overflowed by 24 pixels on the right.',
+        'flutter: ════════════════════════════════════════════════════════════════════',
+      ]) {
+        await emit(process, 'app.log', <String, Object?>{'appId': 'app-1', 'log': line});
+      }
+
+      final added = log.sublist(before);
+      expect(added, hasLength(1));
+      expect(added.single.level, LogLevel.error);
+      expect(added.single.error, isNotNull);
+      expect(added.single.error!.title, 'Layout overflow');
+    });
+
+    test('daemon.logMessage and output outside the protocol go to the log', () async {
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+
+      await emit(process, 'daemon.logMessage', <String, Object?>{
+        'level': 'status',
+        'message': 'Launching lib/main.dart on macOS in debug mode...',
+      });
+      process
+        ..emitLine('Some plain stdout line')
+        ..emitError('Some stderr line');
+      await pumpEventQueue();
+
+      final texts = log.map((entry) => entry.text).toList();
+      expect(texts, contains('Launching lib/main.dart on macOS in debug mode...'));
+      expect(texts, contains('Some plain stdout line'));
+      final stderr = log.firstWhere((entry) => entry.text == 'Some stderr line');
+      expect(stderr.level, LogLevel.error);
+    });
+
+    test('hotReload sends app.restart and records the time on success', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+      onRequest = (process, request) {
+        if (request['method'] == 'app.restart') {
+          process.respond(
+            request['id']! as int,
+            result: <String, Object?>{'code': 0, 'message': ''},
+          );
+        }
+      };
+
+      final took = await repository.hotReload(1);
+      await pumpEventQueue();
+
+      final request = process.sent.lastWhere((request) => request['method'] == 'app.restart');
+      expect(request['params'], <String, Object?>{
+        'appId': 'app-1',
+        'fullRestart': false,
+        'reason': 'manual',
+      });
+      final last = seen.last as RunRunning;
+      expect(last.lastReload, took);
+      expect(last.vmServiceUri, Uri.parse('ws://127.0.0.1:1234/abc=/ws'));
+    });
+
+    test('hotRestart sends a full restart', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+      onRequest = (process, request) {
+        if (request['method'] == 'app.restart') {
+          process.respond(
+            request['id']! as int,
+            result: <String, Object?>{'code': 0, 'message': ''},
+          );
+        }
+      };
+
+      await repository.hotRestart(1);
+      await pumpEventQueue();
+
+      final request = process.sent.lastWhere((request) => request['method'] == 'app.restart');
+      expect((request['params']! as Map<String, Object?>)['fullRestart'], isTrue);
+      expect((seen.last as RunRunning).lastReload, isNotNull);
+    });
+
+    test('a rejected hot reload logs "Hot reload failed" and keeps the app running', () async {
+      final seen = states(1);
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+      onRequest = (process, request) {
+        if (request['method'] == 'app.restart') {
+          process.respond(
+            request['id']! as int,
+            result: <String, Object?>{'code': 1, 'message': 'Reload rejected'},
+          );
+        }
+      };
+      final statesBefore = seen.length;
+
+      final took = await repository.hotReload(1);
+      await pumpEventQueue();
+
+      expect(took, Duration.zero);
+      expect(seen.length, statesBefore);
+      expect(seen.last, isA<RunRunning>());
+      final failure = log.last;
+      expect(failure.level, LogLevel.error);
+      expect(failure.error, const RunError(title: 'Hot reload failed', message: 'Reload rejected'));
+    });
+
+    test(
+      'a hot restart answered with an error logs "Hot restart failed" and does not throw',
+      () async {
+        final log = logs(1);
+        await startRun(1);
+        final process = started.single;
+        await launch(process);
+        onRequest = (process, request) {
+          if (request['method'] == 'app.restart') {
+            process.respond(request['id']! as int, error: 'no isolate');
+          }
+        };
+
+        await repository.hotRestart(1);
+        await pumpEventQueue();
+
+        expect(log.last.error?.title, 'Hot restart failed');
+      },
+    );
+
+    test('hotReload does nothing unless the app is running', () async {
+      await startRun(1);
+
+      expect(await repository.hotReload(1), Duration.zero);
+      expect(started.single.sent, isEmpty);
+      expect(await repository.hotReload(2), Duration.zero);
+    });
+
+    test('stop sends app.stop, kills the group and ends stopped', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      await repository.stop(1);
+      await pumpEventQueue();
+
+      final request = process.sent.singleWhere((request) => request['method'] == 'app.stop');
+      expect(request['params'], <String, Object?>{'appId': 'app-1'});
+      expect(process.stopped, isTrue);
+      expect(seen.last, const RunStopped());
+    });
+
+    test('stop kills a process that does not answer app.stop within the timeout', () async {
+      onRequest = (_, _) {};
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      await repository.stop(1);
+      await pumpEventQueue();
+
+      expect(process.stopped, isTrue);
+      expect(seen.last, const RunStopped());
+    });
+
+    test('stop during the build kills the process and ends stopped', () async {
+      final seen = states(1);
+      await startRun(1);
+
+      await repository.stop(1);
+      await pumpEventQueue();
+
+      expect(started.single.stopped, isTrue);
+      expect(seen.last, const RunStopped());
+    });
+
+    test('stop does nothing when nothing runs', () async {
+      final seen = states(1);
+      await pumpEventQueue();
+
+      await repository.stop(1);
+      await pumpEventQueue();
+
+      expect(seen, <RunState>[const RunIdle()]);
+    });
+
+    test('a process that dies during the build fails with the first compile error', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await emit(process, 'app.start', <String, Object?>{'appId': 'app-1'});
+
+      process.emitError("lib/main.dart:3:1: Error: Expected ';' after this.");
+      await pumpEventQueue();
+      process.exit(1);
+      await pumpEventQueue();
+
+      final failed = seen.last as RunFailed;
+      expect(failed.error.title, 'Compilation error');
+      expect(failed.error.file, 'lib/main.dart');
+      expect(failed.error.line, 3);
+    });
+
+    test('a build that dies without a compile error fails with the last error lines', () async {
+      final seen = states(1);
+      await startRun(1);
+
+      started.single
+        ..emitError('** BUILD FAILED **')
+        ..emitError('Command PhaseScriptExecution failed with a nonzero exit code');
+      await pumpEventQueue();
+      started.single.exit(1);
+      await pumpEventQueue();
+
+      final failed = seen.last as RunFailed;
+      expect(failed.error.title, 'Build failed');
+      expect(failed.error.message, contains('** BUILD FAILED **'));
+      expect(failed.error.message, contains('PhaseScriptExecution'));
+    });
+
+    test('app.stop with an error before app.started fails with that error', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+
+      await emit(process, 'app.stop', <String, Object?>{
+        'appId': 'app-1',
+        'error': 'Unable to start the app on the device.',
+      });
+      process.exit(1);
+      await pumpEventQueue();
+
+      expect(
+        seen.last,
+        const RunFailed(
+          error: RunError(title: 'Build failed', message: 'Unable to start the app on the device.'),
+        ),
+      );
+    });
+
+    test('an exit with code 0 after app.started without a stop ends stopped', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      await emit(process, 'app.stop', <String, Object?>{'appId': 'app-1'});
+      process.exit(0);
+      await pumpEventQueue();
+
+      expect(seen.last, const RunStopped());
+    });
+
+    test('a crash after app.started fails as "App exited"', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      process.emitError('Lost connection to device.');
+      await pumpEventQueue();
+      process.exit(1);
+      await pumpEventQueue();
+
+      final failed = seen.last as RunFailed;
+      expect(failed.error.title, 'App exited');
+      expect(failed.error.message, contains('Lost connection to device.'));
+    });
+
+    test('an unhandled exception still being collected is flushed on exit', () async {
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      await emit(process, 'app.log', <String, Object?>{
+        'appId': 'app-1',
+        'log':
+            '[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: Bad state: x',
+        'error': true,
+      });
+      await emit(process, 'app.log', <String, Object?>{
+        'appId': 'app-1',
+        'log': '#0      main (package:demo_app/main.dart:5:3)',
+        'error': true,
+      });
+      process.exit(0);
+      await pumpEventQueue();
+
+      final error = log.lastWhere((entry) => entry.error != null).error!;
+      expect(error.file, 'lib/main.dart');
+    });
+
+    test('no project folder fails with "Project folder not found"', () async {
+      final seen = states(3);
+      await repository.start(3, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
+      await pumpEventQueue();
+
+      expect(started, isEmpty);
+      expect(
+        seen.last,
+        const RunFailed(
+          error: RunError(title: 'Project folder not found', message: ''),
+        ),
+      );
+    });
+
+    test('a folder that is gone fails with "Project folder not found"', () async {
+      paths[3] = p.join(root.path, 'missing');
+      final seen = states(3);
+      await repository.start(3, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
+      await pumpEventQueue();
+
+      expect(started, isEmpty);
+      expect((seen.last as RunFailed).error.title, 'Project folder not found');
+    });
+
+    test('no Flutter SDK fails with "Flutter SDK not found"', () async {
+      flutterPath = null;
+      final seen = states(1);
+      await startRun(1);
+
+      expect(started, isEmpty);
+      expect(
+        seen.last,
+        const RunFailed(
+          error: RunError(title: 'Flutter SDK not found', message: ''),
+        ),
+      );
+    });
+
+    test('the package name comes from pubspec.yaml, else from the folder name', () async {
+      Future<RunError> unhandledIn(int projectId, String frame) async {
+        final log = logs(projectId);
+        await repository.start(
+          projectId,
+          device: _macos,
+          mode: BuildMode.debug,
+          target: 'lib/main.dart',
+        );
+        await pumpEventQueue();
+        final process = started.last;
+        await launch(process);
+        for (final line in <String>[
+          '[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: Bad state: x',
+          frame,
+        ]) {
+          await emit(process, 'app.log', <String, Object?>{'appId': 'app-1', 'log': line});
+        }
+        await repository.stop(projectId);
+        await pumpEventQueue();
+        return log.lastWhere((entry) => entry.error != null).error!;
+      }
+
+      expect(
+        (await unhandledIn(1, '#0      main (package:demo_app/a.dart:2:1)')).file,
+        'lib/a.dart',
+      );
+      paths[3] = project('folder_name');
+      expect(
+        (await unhandledIn(3, '#0      main (package:folder_name/b.dart:4:1)')).file,
+        'lib/b.dart',
+      );
+    });
+
+    test('a second start stops the first process and ignores its late events', () async {
+      final seen = states(1);
+      await startRun(1);
+      final first = started.single;
+      await launch(first);
+
+      await startRun(1);
+      expect(started, hasLength(2));
+      expect(first.stopped, isTrue);
+      final second = started.last;
+      final afterRestart = seen.length;
+      expect(seen.last, const RunBuilding());
+
+      await emit(first, 'app.started', <String, Object?>{'appId': 'app-1'});
+      first.exit(1);
+      await pumpEventQueue();
+      expect(seen.length, afterRestart);
+
+      await launch(second, appId: 'app-2');
+      expect(seen.last, isA<RunRunning>());
+    });
+
+    test('the runs of two projects are independent', () async {
+      final one = states(1);
+      final two = states(2);
+      await startRun(1);
+      await startRun(2);
+      final first = started[0];
+      final second = started[1];
+      expect(second.workingDirectory, paths[2]);
+      await launch(first);
+      await launch(second, appId: 'app-2');
+
+      await repository.stop(1);
+      await pumpEventQueue();
+
+      expect(first.stopped, isTrue);
+      expect(second.stopped, isFalse);
+      expect(one.last, const RunStopped());
+      expect(two.last, isA<RunRunning>());
+    });
+
+    test('the buffer keeps the newest kRunLogLimit lines', () async {
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      for (var i = 0; i < 2500; i++) {
+        process.emit(_event('app.log', <String, Object?>{'appId': 'app-1', 'log': 'line $i'}));
+      }
+      await pumpEventQueue();
+
+      final replay = logs(1);
+      await pumpEventQueue();
+      expect(replay, hasLength(kRunLogLimit));
+      expect(replay.last.text, 'line 2499');
+      expect(replay.first.text, 'line ${2500 - kRunLogLimit}');
+    });
+
+    test('markSent survives a listener that comes back', () async {
+      final log = logs(1);
+      await startRun(1);
+      final seq = log.first.seq;
+
+      await repository.markSent(1, seq);
+      final replay = logs(1);
+      await pumpEventQueue();
+
+      expect(replay.first.sentToAgent, isTrue);
+    });
+
+    test('dispose stops every run and ends the streams', () async {
+      var statesDone = false;
+      var logsDone = false;
+      subscriptions
+        ..add(repository.watchRun(1).listen(null, onDone: () => statesDone = true))
+        ..add(repository.logs(1).listen(null, onDone: () => logsDone = true));
+      await startRun(1);
+      await startRun(2);
+      await launch(started[0]);
+
+      await repository.dispose();
+      await pumpEventQueue();
+
+      expect(started.every((process) => process.stopped), isTrue);
+      expect(statesDone, isTrue);
+      expect(logsDone, isTrue);
+      expect(repository.watchRun(1), emitsDone);
+    });
+  });
+}

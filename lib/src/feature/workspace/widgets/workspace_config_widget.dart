@@ -152,7 +152,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       run: runController,
       actions: runActionsController,
       reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
-      isLaunching: () => selectedDevice?.kind == DeviceKind.available,
+      selectedDevice: () => selectedDevice,
       isPreview: runIsPreview,
     );
     skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);

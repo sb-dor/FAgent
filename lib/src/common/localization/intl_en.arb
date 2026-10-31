@@ -263,6 +263,7 @@
   "pickWidgetHint": "Tap a widget in the running app…",
   "addToMessage": "Add to message",
   "runIdle": "Not running",
+  "runBuilding": "Building…",
   "chooseDevice": "Choose a device",
   "runChooseDeviceFirst": "Choose a device to run on",
   "runDevicesFailed": "Could not get the devices",

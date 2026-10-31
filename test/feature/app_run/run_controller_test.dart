@@ -7,10 +7,19 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+const Device _macos = Device(
+  id: 'macos',
+  name: 'macOS',
+  platform: DevicePlatform.macos,
+  kind: DeviceKind.running,
+);
 
 const _step = Duration(milliseconds: 1);
 
@@ -56,9 +65,10 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) async {}
 
   @override
@@ -139,7 +149,7 @@ void main() {
       final fakeController = RunController(repository: fake)..watch(1);
       addTearDown(fakeController.dispose);
       await pumpEventQueue();
-      await fake.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await fake.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await Future<void>.delayed(_step * 50);
       expect(fakeController.state.run, isA<RunRunning>());
       expect(fakeController.state.logs, isNotEmpty);
@@ -300,7 +310,7 @@ void main() {
       final fakeController = RunController(repository: fake)..watch(1);
       addTearDown(fakeController.dispose);
       await pumpEventQueue();
-      await fake.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await fake.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await Future<void>.delayed(_step * 50);
       await fake.hotReload(1);
       await Future<void>.delayed(_step * 50);
@@ -339,7 +349,7 @@ void main() {
       );
       addTearDown(actions.dispose);
 
-      actions.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      actions.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await Future<void>.delayed(_step * 50);
       expect(states.last, isA<RunRunning>());
       expect(actions.state, isA<RunActions$CompletedState>());

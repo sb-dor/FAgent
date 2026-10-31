@@ -227,6 +227,7 @@
   "pickWidgetHint": "Нажмите виджет в запущенном приложении…",
   "addToMessage": "В сообщение",
   "runIdle": "Не запущено",
+  "runBuilding": "Сборка…",
   "chooseDevice": "Выберите устройство",
   "runChooseDeviceFirst": "Выберите устройство для запуска",
   "runDevicesFailed": "Не удалось получить устройства",

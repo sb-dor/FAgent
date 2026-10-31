@@ -5,8 +5,10 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
@@ -47,12 +49,19 @@ final class _SpyRunRepository implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) {
-    started.add(deviceId);
-    return _inner.start(projectId, deviceId: deviceId, mode: mode, target: target);
+    started.add(device.id);
+    return _inner.start(
+      projectId,
+      device: device,
+      mode: mode,
+      target: target,
+      arguments: arguments,
+    );
   }
 
   @override
@@ -155,10 +164,10 @@ void main() {
 
   Future<void> startRun(WidgetTester tester) async {
     final workspace = workspaceOf(tester);
-    await until(tester, () => workspace.runController.state.selectedDeviceId != null);
+    await until(tester, () => workspace.selectedDevice != null);
     workspace.runActionsController.start(
       projectId,
-      deviceId: workspace.runController.state.selectedDeviceId!,
+      device: workspace.selectedDevice!,
       mode: BuildMode.debug,
       target: 'lib/main.dart',
     );

@@ -10,6 +10,13 @@ import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+const Device _macos = Device(
+  id: 'macos',
+  name: 'macOS',
+  platform: DevicePlatform.macos,
+  kind: DeviceKind.running,
+);
+
 const _step = Duration(milliseconds: 1);
 
 void main() {
@@ -19,7 +26,7 @@ void main() {
   tearDown(() => repository.dispose());
 
   Future<void> start([int project = 1]) =>
-      repository.start(project, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      repository.start(project, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
 
   /// Collects everything a stream emits until the test ends.
   List<T> collect<T>(Stream<T> stream) {
@@ -129,7 +136,7 @@ void main() {
       final quick = FakeAppRunRepositoryImpl(step: Duration.zero);
       addTearDown(quick.dispose);
       final states = collect(quick.watchRun(1));
-      await quick.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await quick.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await until(() => states.last is RunRunning);
       for (var i = 0; i < kRunLogLimit + 100; i++) {
         await quick.hotReload(1);

@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_card.dart';
@@ -104,14 +105,13 @@ class _RunTabState extends State<RunTab> {
     if (projectId == null) return;
     switch (action) {
       case RunAction.start:
-        final deviceId = state.selectedDeviceId;
-        if (deviceId != null) {
-          widget.actions.start(
-            projectId,
-            deviceId: deviceId,
-            mode: state.mode,
-            target: state.target,
-          );
+        final devices = switch (widget.devices.state) {
+          Devices$CompletedState(:final devices) => devices,
+          _ => const <Device>[],
+        };
+        final device = devices.where((device) => device.id == state.selectedDeviceId).firstOrNull;
+        if (device != null && device.kind == DeviceKind.running) {
+          widget.actions.start(projectId, device: device, mode: state.mode, target: state.target);
         }
       case RunAction.stop:
         widget.actions.stop(projectId);

@@ -104,7 +104,7 @@ class RunHeader extends StatelessWidget {
     };
     final selected = deviceList.where((device) => device.id == state.selectedDeviceId).firstOrNull;
     final launching = selected?.kind == DeviceKind.available;
-    final canStart = state.selectedDeviceId != null && !launching;
+    final canStart = selected?.kind == DeviceKind.running;
 
     Widget button(
       RunAction action,

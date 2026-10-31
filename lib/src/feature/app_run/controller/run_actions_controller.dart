@@ -1,7 +1,9 @@
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'run_actions_controller.freezed.dart';
@@ -36,15 +38,22 @@ final class RunActionsController extends StateController<RunActionsState>
   final IAppRunRepository _runRepository;
   final IWidgetPickerRepository _pickerRepository;
 
-  /// Starts the app of [projectId] with the selection the Run tab shows.
+  /// Starts the app of [projectId] on [device] with the selection the Run tab shows.
   void start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) => _run(
     projectId,
-    () => _runRepository.start(projectId, deviceId: deviceId, mode: mode, target: target),
+    () => _runRepository.start(
+      projectId,
+      device: device,
+      mode: mode,
+      target: target,
+      arguments: arguments,
+    ),
   );
 
   /// Stops the app.
