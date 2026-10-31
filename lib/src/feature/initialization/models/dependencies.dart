@@ -11,6 +11,7 @@ import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repo
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
 /// {@template dependencies}
@@ -64,6 +65,9 @@ class Dependencies {
 
   /// The Flutter SDK, its version and `flutter doctor`.
   late final IFlutterSdkRepository flutterSdkRepository;
+
+  /// Creates new Flutter projects.
+  late final IProjectCreationRepository projectCreationRepository;
 
   @override
   String toString() => 'Dependencies{}';
