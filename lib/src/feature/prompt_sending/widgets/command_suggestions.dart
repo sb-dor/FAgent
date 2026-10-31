@@ -5,7 +5,7 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 
-/// The list of commands under a typed `/`, in sections (app, then agent) in the order of
+/// The list of commands under a typed `/`, in sections (skills, app, then agent) in the order of
 /// [commands]. [highlighted] is the row Enter would insert; commands that are not enabled are
 /// dimmed with their hint and cannot be chosen.
 class CommandSuggestions extends StatelessWidget {
@@ -43,6 +43,7 @@ class CommandSuggestions extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
                   child: Text(
                     switch (command.source) {
+                      SlashSource.skill => localization.slashSectionSkills,
                       SlashSource.app => localization.slashSectionApp,
                       SlashSource.agent => localization.slashSectionAgent,
                     },

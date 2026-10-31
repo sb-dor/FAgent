@@ -1,0 +1,1246 @@
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/skill_list_tile.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/skills_list.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_skills_repository.dart';
+import '../../support/test_app.dart';
+
+const String _averaRoot = '/work/avera-hotel';
+const String _shopRoot = '/work/shop_app';
+const String _builtin = 'skill:builtin:feature-architecture';
+const String _mine = 'skill:user:avera-api-client';
+const String _generatePrompt =
+    'Write a Claude Code skill for this project in .claude/skills/<name>/SKILL.md '
+    '(frontmatter: name, description). The skill should: ';
+
+WorkspaceConfigWidgetState _workspace(WidgetTester tester) =>
+    WorkspaceConfigInhWidget.of(tester.element(find.byType(WorkspaceWidget)));
+
+WorkspaceDataController _data(WidgetTester tester) => _workspace(tester).dataController;
+
+SkillsConfigWidgetState _skills(WidgetTester tester) =>
+    SkillsConfigInhWidget.of(tester.element(find.byType(SkillsList)));
+
+/// Lets drift's real-async work finish, then rebuilds.
+Future<void> _settle(WidgetTester tester) async {
+  await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+  await tester.pump(const Duration(milliseconds: 100));
+}
+
+Future<void> _settleAll(WidgetTester tester, [int times = 3]) async {
+  for (var i = 0; i < times; i++) {
+    await _settle(tester);
+  }
+}
+
+Finder _row(String name) => find.widgetWithText(SkillListTile, name);
+
+Finder _globalSwitch() => find.byKey(const ValueKey<String>('skill-global-switch'));
+
+Finder _projectSwitch() => find.byKey(const ValueKey<String>('skill-project-switch'));
+
+Finder _editor() => find.byKey(const ValueKey<String>('skill-editor'));
+
+String _editorText(WidgetTester tester) => tester.widget<TextField>(_editor()).controller!.text;
+
+Finder _button(String label) => find.ancestor(
+  of: find.text(label),
+  matching: find.byWidgetPredicate((widget) => widget is ButtonStyleButton),
+);
+
+bool _enabled(WidgetTester tester, String label) =>
+    tester.widget<ButtonStyleButton>(_button(label)).onPressed != null;
+
+List<KnowledgeItem> _listed(WidgetTester tester, String name) => [
+  for (final tile in tester.widgetList<SkillListTile>(find.byType(SkillListTile)))
+    if (tile.item.name == name) tile.item,
+];
+
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  late Dependencies dependencies;
+  late MemorySkillsRepository repository;
+  late int averaId;
+  late int shopId;
+  late int chatId;
+
+  MemorySkillsRepository seeded() => MemorySkillsRepository(
+    items: [
+      memorySkill(
+        'feature-architecture',
+        description: 'New feature: config-widget',
+      ).copyWith(version: '1.3'),
+      memorySkill('avera-api-client', source: SkillSource.user, description: 'How to call the API'),
+      memorySkill('other-skill', source: SkillSource.user),
+      memorySkill(
+        'broken',
+        source: SkillSource.user,
+      ).copyWith(problem: KnowledgeProblem.badYaml, problemDetail: 'Unexpected end of flow'),
+      memoryRule('dart-style', description: 'Always format'),
+    ],
+    projectItems: {
+      _averaRoot: [memorySkill('c', source: SkillSource.project, description: 'From the repo')],
+      _shopRoot: [memorySkill('shop-deploy', source: SkillSource.project)],
+    },
+    texts: const {
+      _builtin: '---\nname: feature-architecture\nversion: 1.3\n---\n# Feature architecture\n',
+      _mine: '---\nname: avera-api-client\n---\n# API\n',
+      'skill:user:other-skill': '# other\n',
+      'skill:user:broken': 'oops',
+      'rule:builtin:dart-style': '# dart-style\n',
+      'skill:project:c': '# c\n',
+    },
+    importable: const {'/imports/pretty': '---\nname: pretty\n---\n# pretty\n'},
+  );
+
+  Future<void> pumpScreen(
+    WidgetTester tester, {
+    bool selectProject = true,
+    bool withChat = false,
+    Locale locale = const Locale('en'),
+    ThemeData? theme,
+  }) async {
+    dependencies = testDependencies(skillsRepository: repository);
+    await tester.runAsync(() async {
+      final database = dependencies.database;
+      averaId = await database
+          .into(database.projectsTable)
+          .insert(ProjectsTableCompanion.insert(path: _averaRoot, name: 'avera-hotel'));
+      shopId = await database
+          .into(database.projectsTable)
+          .insert(ProjectsTableCompanion.insert(path: _shopRoot, name: 'shop_app'));
+      chatId = await database
+          .into(database.sessionsTable)
+          .insert(
+            SessionsTableCompanion.insert(
+              projectId: averaId,
+              agentId: 'claude',
+              title: const Value<String>('A chat'),
+            ),
+          );
+    });
+    await tester.pumpWidget(
+      testApp(
+        const WorkspaceConfigWidget(),
+        dependencies: dependencies,
+        withSettings: true,
+        locale: locale,
+        theme: theme,
+      ),
+    );
+    await _settle(tester);
+    await tester.pumpAndSettle();
+    if (selectProject) _data(tester).selectProject(averaId);
+    if (withChat) _data(tester).selectSession(chatId);
+    await tester.pump();
+    await _settleAll(tester, withChat ? 5 : 1);
+    _data(tester).openView(WorkspaceView.skills);
+    await tester.pump();
+    await _settleAll(tester);
+  }
+
+  Future<void> select(WidgetTester tester, String name) async {
+    await tester.tap(_row(name));
+    await tester.pump();
+    await _settleAll(tester, 2);
+  }
+
+  Future<void> openAddMenu(WidgetTester tester) async {
+    await tester.tap(find.text('＋ Add'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> submitName(WidgetTester tester, String name) async {
+    await tester.enterText(
+      find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+      name,
+    );
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pump();
+    await _settleAll(tester, 2);
+  }
+
+  Future<void> chooseAdd(WidgetTester tester, String item) async {
+    await openAddMenu(tester);
+    await tester.tap(find.text(item));
+    await tester.pumpAndSettle();
+  }
+
+  setUp(() => repository = seeded());
+
+  group('Skill card', () {
+    testWidgets('nothing selected shows the hint', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      expect(find.text('Pick a skill or a rule'), findsOneWidget);
+      expect(_editor(), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('built-in card is read-only and duplicates into Mine', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await select(tester, 'feature-architecture');
+
+      expect(tester.widget<TextField>(_editor()).readOnly, isTrue);
+      expect(_editorText(tester), contains('# Feature architecture'));
+      expect(find.text('· v1.3'), findsOneWidget);
+      expect(
+        find.text('Built-in items are read-only. To change one, duplicate it.'),
+        findsOneWidget,
+      );
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Duplicate to Mine'), findsOneWidget);
+
+      await tester.tap(find.text('Duplicate to Mine'));
+      await tester.pump();
+      await _settleAll(tester);
+
+      expect(_skills(tester).view.selectedId, 'skill:user:feature-architecture');
+      expect(_listed(tester, 'feature-architecture').map((item) => item.source), [
+        SkillSource.builtin,
+        SkillSource.user,
+      ]);
+      expect(find.text('Duplicate to Mine'), findsNothing);
+      expect(tester.widget<TextField>(_editor()).readOnly, isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('editing and saving a user skill', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      expect(_editorText(tester), contains('# API'));
+      expect(_enabled(tester, 'Save'), isFalse);
+
+      await tester.enterText(_editor(), 'new text');
+      await tester.pump();
+      expect(_enabled(tester, 'Save'), isTrue);
+
+      await tester.tap(_button('Save'));
+      await tester.pump();
+      await _settleAll(tester);
+
+      expect(repository.textOf(_mine), 'new text');
+      expect(_enabled(tester, 'Save'), isFalse);
+      expect(_editorText(tester), 'new text');
+      expect(_skills(tester).hasUnsavedEdits, isFalse);
+
+      // Editing back to the saved text is not a change either.
+      await tester.enterText(_editor(), 'newer');
+      await tester.pump();
+      expect(_enabled(tester, 'Save'), isTrue);
+      await tester.enterText(_editor(), 'new text');
+      await tester.pump();
+      expect(_enabled(tester, 'Save'), isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('switching away from unsaved edits asks', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'edited');
+      await tester.pump();
+
+      await tester.tap(_row('other-skill'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_skills(tester).view.selectedId, _mine);
+      expect(_editorText(tester), 'edited');
+
+      await tester.tap(_row('other-skill'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+      expect(_skills(tester).view.selectedId, 'skill:user:other-skill');
+      expect(_editorText(tester), '# other\n');
+      expect(repository.textOf(_mine), contains('# API'));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('switching without edits does not ask', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      await select(tester, 'other-skill');
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_skills(tester).view.selectedId, 'skill:user:other-skill');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('switching the section with unsaved edits asks too', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'edited');
+      await tester.pump();
+
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('page-navigation')),
+          matching: find.text('Rules'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(_skills(tester).view.kind, KnowledgeKind.skill);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the global switch turns the skill off for everything', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'feature-architecture');
+
+      expect(find.text('Enabled'), findsOneWidget);
+      await tester.tap(_globalSwitch());
+      await tester.pump();
+      await _settleAll(tester, 2);
+
+      expect(repository.calls, contains('setEnabled $_builtin false project=null'));
+      expect(
+        tester
+            .widget<Switch>(find.descendant(of: _globalSwitch(), matching: find.byType(Switch)))
+            .value,
+        isFalse,
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('exceptions', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'feature-architecture');
+      expect(find.byTooltip('Remove the exception'), findsNothing);
+
+      await tester.tap(find.text('＋ exception'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('shop_app'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      expect(repository.calls, contains('setEnabled $_builtin false project=$shopId'));
+      expect(find.text('shop_app'), findsOneWidget);
+      expect(find.byTooltip('Remove the exception'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Remove the exception'));
+      await tester.pump();
+      await _settleAll(tester, 2);
+
+      expect(repository.calls, contains('clearException $_builtin project=$shopId'));
+      expect(find.text('shop_app'), findsNothing);
+      expect(find.byTooltip('Remove the exception'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a project skill has one switch, for the screen project', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'c');
+
+      expect(find.text('All projects'), findsNothing);
+      expect(find.text('＋ exception'), findsNothing);
+      await tester.tap(_projectSwitch());
+      await tester.pump();
+      await _settleAll(tester, 2);
+
+      expect(repository.calls, contains('setEnabled skill:project:c false project=$averaId'));
+      expect(repository.calls.where((call) => call.contains('project=null')), isEmpty);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('try in chat is only for project skills', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester, withChat: true);
+      await select(tester, 'feature-architecture');
+
+      expect(_enabled(tester, 'Try in chat'), isFalse);
+      await tester.longPress(_button('Try in chat'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Coming in M3'), findsOneWidget);
+
+      await select(tester, 'c');
+      expect(_enabled(tester, 'Try in chat'), isTrue);
+      await tester.tap(_button('Try in chat'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(_data(tester).view, WorkspaceView.chat);
+      expect(
+        tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text,
+        '/c ',
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('try in chat without a chat says so and stays', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'c');
+
+      await tester.tap(_button('Try in chat'));
+      await tester.pump();
+
+      expect(find.text('Open a chat to try the skill in it'), findsOneWidget);
+      expect(_data(tester).view, WorkspaceView.skills);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a skill with a problem shows it', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await select(tester, 'broken');
+
+      expect(find.text('The frontmatter is not valid YAML.'), findsOneWidget);
+      expect(find.text('Unexpected end of flow'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a rule has the same card without files', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('page-navigation')),
+          matching: find.text('Rules'),
+        ),
+      );
+      await tester.pump();
+
+      await select(tester, 'dart-style');
+
+      expect(_editorText(tester), '# dart-style\n');
+      expect(find.text('Files'), findsNothing);
+      expect(find.text('Duplicate to Mine'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('files are listed for a skill', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await select(tester, 'feature-architecture');
+
+      expect(find.text('Files'), findsOneWidget);
+      expect(find.text('SKILL.md'), findsOneWidget);
+      expect(find.text('Description'), findsOneWidget);
+      expect(find.text('When to use'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('Adding', () {
+    testWidgets('create validates the name', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await chooseAdd(tester, 'Create');
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.text('Lowercase letters, digits and hyphens, up to 64 characters'),
+        findsOneWidget,
+      );
+      await submitName(tester, 'Bad Name');
+
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(find.textContaining('This name is not allowed'), findsOneWidget);
+
+      await submitName(tester, 'avera-api-client');
+      expect(find.text('There is already an item with this name'), findsOneWidget);
+      expect(find.textContaining('This name is not allowed'), findsNothing);
+
+      await submitName(tester, 'ok-name');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, 'skill:user:ok-name');
+      expect(find.text('Something went wrong'), findsNothing);
+      expect(_editorText(tester), contains('# ok-name'));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('create in the rules section makes a rule and has no folder import', (
+      tester,
+    ) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('page-navigation')),
+          matching: find.text('Rules'),
+        ),
+      );
+      await tester.pump();
+
+      await openAddMenu(tester);
+      expect(find.text('From folder…'), findsNothing);
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+      await submitName(tester, 'my-rule');
+      await tester.pumpAndSettle();
+
+      expect(_skills(tester).view.selectedId, 'rule:user:my-rule');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('cancelling the name dialog creates nothing', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await chooseAdd(tester, 'Create');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(repository.calls.where((call) => call.startsWith('create')), isEmpty);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('from git says M3', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await chooseAdd(tester, 'From git repository…');
+
+      expect(find.text('Coming in M3'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('from folder imports the picked folder and opens it', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      final pickedWith = <String>[];
+      _skills(tester).pickFolder = (confirmText) async {
+        pickedWith.add(confirmText);
+        return '/imports/pretty';
+      };
+
+      await chooseAdd(tester, 'From folder…');
+      await _settleAll(tester);
+
+      expect(pickedWith, ['Choose a skill folder']);
+      expect(repository.calls, contains('importFolder /imports/pretty'));
+      expect(_skills(tester).view.selectedId, 'skill:user:pretty');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a cancelled folder picker does nothing', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      _skills(tester).pickFolder = (_) async => null;
+
+      await chooseAdd(tester, 'From folder…');
+      await _settleAll(tester);
+
+      expect(repository.calls.where((call) => call.startsWith('importFolder')), isEmpty);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a folder without SKILL.md says so', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      _skills(tester).pickFolder = (_) async => '/imports/empty';
+
+      await chooseAdd(tester, 'From folder…');
+      await _settleAll(tester);
+
+      expect(
+        find.text('This folder cannot be used as a skill. It needs a SKILL.md file.'),
+        findsOneWidget,
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('generate with an agent opens a chat with the prompt', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      await chooseAdd(tester, 'Generate with an agent');
+      for (var i = 0; i < 5; i++) {
+        await _settle(tester);
+      }
+
+      expect(_data(tester).view, WorkspaceView.chat);
+      expect(_data(tester).projectId, averaId);
+      expect(
+        tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text,
+        _generatePrompt,
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('generate with an agent needs a project', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester, selectProject: false);
+
+      await openAddMenu(tester);
+      await tester.tap(find.text('Generate with an agent'));
+      await tester.pumpAndSettle();
+
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_data(tester).sessionId, isNull);
+      // The menu stays open: the row is disabled.
+      expect(find.text('Create'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('Unsaved edits', () {
+    Future<void> editMine(WidgetTester tester) async {
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'edited');
+      await tester.pump();
+    }
+
+    testWidgets('create asks about the edits before the name dialog', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await chooseAdd(tester, 'Create');
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(find.text('Name'), findsNothing);
+
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Name'), findsOneWidget);
+      await submitName(tester, 'ok-name');
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      // No dialog is left behind and the new item is open, without a second question.
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, 'skill:user:ok-name');
+      expect(_editorText(tester), contains('# ok-name'));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('staying at the question creates nothing and keeps the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await chooseAdd(tester, 'Create');
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, _mine);
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('cancelling the name dialog after discarding still protects the edit', (
+      tester,
+    ) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await chooseAdd(tester, 'Create');
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(_editorText(tester), 'edited');
+      await tester.tap(_row('other-skill'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('importing a folder asks first, then opens the skill', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      var picked = 0;
+      _skills(tester).pickFolder = (_) async {
+        picked++;
+        return '/imports/pretty';
+      };
+      await editMine(tester);
+
+      await chooseAdd(tester, 'From folder…');
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(picked, 0);
+
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+
+      expect(picked, 1);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(_skills(tester).view.selectedId, 'skill:user:pretty');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the back button asks; Stay keeps the screen and the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await tester.tap(find.text('Back to chat'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_editorText(tester), 'edited');
+
+      await tester.tap(find.text('Back to chat'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.chat);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Esc asks too', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+      await tester.tap(_editor());
+      await tester.pump();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(_data(tester).view, WorkspaceView.skills);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_editorText(tester), 'edited');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.chat);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('leaving without edits does not ask', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      await tester.tap(find.text('Back to chat'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_data(tester).view, WorkspaceView.chat);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('Unsaved edits and the project', () {
+    Future<void> editMine(WidgetTester tester) async {
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'edited');
+      await tester.pump();
+    }
+
+    Future<void> pickProject(WidgetTester tester, String from, String to) async {
+      await tester.tap(find.text('Project: $from'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(Overlay), matching: find.text(to)).last);
+      await tester.pump(const Duration(milliseconds: 200));
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('switching the project asks; Stay keeps the project and the text', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await pickProject(tester, 'avera-hotel', 'shop_app');
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      expect(_skills(tester).view.projectId, averaId);
+      expect(find.text('Project: avera-hotel'), findsOneWidget);
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Discard switches the project and drops the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await pickProject(tester, 'avera-hotel', 'shop_app');
+      await tester.tap(find.text('Discard changes'));
+      await tester.pump();
+      await _settleAll(tester, 3);
+      await tester.pumpAndSettle();
+
+      expect(_skills(tester).view.projectId, shopId);
+      expect(find.text('Project: shop_app'), findsOneWidget);
+      expect(_skills(tester).view.selectedId, _mine);
+      expect(_editorText(tester), contains('# API'));
+      expect(_skills(tester).hasUnsavedEdits, isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('choosing the same project again does not ask', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await _skills(tester).chooseProject(averaId);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_editorText(tester), 'edited');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('switching the project without edits does not ask', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      await pickProject(tester, 'avera-hotel', 'shop_app');
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_skills(tester).view.projectId, shopId);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a library change for the same project keeps the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      repository.add(memorySkill('newcomer', source: SkillSource.user), text: '# new\n');
+      await _settleAll(tester, 2);
+
+      expect(_listed(tester, 'newcomer'), isNotEmpty);
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the library reloading for the same item keeps the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      // What a project switch or a removed project does: the library starts over, and the new one
+      // takes a while to arrive.
+      repository.holdFirstEmission = true;
+      _skills(tester).library.watch(projectId: shopId, projectRoot: _shopRoot);
+      await tester.pump();
+      await tester.pump();
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+
+      repository.release();
+      await _settleAll(tester, 2);
+
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('removing the project keeps the edit of a Mine skill', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      repository.holdFirstEmission = true;
+      await tester.runAsync(() async {
+        final database = dependencies.database;
+        await (database.delete(
+          database.projectsTable,
+        )..where((table) => table.id.equals(averaId))).go();
+      });
+      await _settleAll(tester, 3);
+      expect(_skills(tester).view.projectId, isNull);
+      expect(_editorText(tester), 'edited');
+
+      repository.release();
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+
+      expect(_skills(tester).view.selectedId, _mine);
+      expect(_editorText(tester), 'edited');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('The editor and the file on disk', () {
+    const outside = '---\nname: avera-api-client\n---\n# API, edited elsewhere\n';
+
+    testWidgets('a clean editor shows a change made outside the app', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      repository.editOutside(_mine, outside);
+      await _settleAll(tester, 2);
+
+      expect(_editorText(tester), outside);
+      expect(_enabled(tester, 'Save'), isFalse);
+      expect(_skills(tester).hasUnsavedEdits, isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a dirty editor keeps the edit when the file changes', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'mine');
+      await tester.pump();
+
+      repository.editOutside(_mine, outside);
+      await _settleAll(tester, 2);
+
+      expect(_editorText(tester), 'mine');
+      expect(_skills(tester).hasUnsavedEdits, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('saving over a change made outside asks what to do', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'mine');
+      await tester.pump();
+      repository.editOutside(_mine, outside);
+      await _settleAll(tester, 2);
+
+      await tester.tap(_button('Save'));
+      await tester.pump();
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Changed on disk'), findsOneWidget);
+      expect(find.text('Reload'), findsOneWidget);
+      expect(find.text('Overwrite'), findsOneWidget);
+      // The conflict is explained by the dialog alone.
+      expect(find.text('Something went wrong'), findsNothing);
+      expect(repository.textOf(_mine), outside);
+      expect(_editorText(tester), 'mine');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Reload shows the text on disk and drops the edit', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'mine');
+      await tester.pump();
+      repository.editOutside(_mine, outside);
+      await _settleAll(tester, 2);
+      await tester.tap(_button('Save'));
+      await tester.pump();
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Reload'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      expect(find.text('Changed on disk'), findsNothing);
+      expect(_editorText(tester), outside);
+      expect(_enabled(tester, 'Save'), isFalse);
+      expect(_skills(tester).hasUnsavedEdits, isFalse);
+      expect(repository.textOf(_mine), outside);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Overwrite saves the edit over the change', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'mine');
+      await tester.pump();
+      repository.editOutside(_mine, outside);
+      await _settleAll(tester, 2);
+      await tester.tap(_button('Save'));
+      await tester.pump();
+      await _settleAll(tester, 2);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Overwrite'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      expect(find.text('Changed on disk'), findsNothing);
+      expect(repository.textOf(_mine), 'mine');
+      expect(_editorText(tester), 'mine');
+      expect(_enabled(tester, 'Save'), isFalse);
+      expect(_skills(tester).hasUnsavedEdits, isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a normal save does not conflict with itself', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      for (final text in const ['one', 'two']) {
+        await tester.enterText(_editor(), text);
+        await tester.pump();
+        await tester.tap(_button('Save'));
+        await tester.pump();
+        await _settleAll(tester, 2);
+        expect(repository.textOf(_mine), text);
+      }
+
+      expect(find.text('Changed on disk'), findsNothing);
+      expect(_editorText(tester), 'two');
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('Leaving the screen', () {
+    Future<void> pressWithMeta(WidgetTester tester, LogicalKeyboardKey key) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+      await tester.sendKeyEvent(key);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> editMine(WidgetTester tester) async {
+      await select(tester, 'avera-api-client');
+      await tester.enterText(_editor(), 'edited');
+      await tester.pump();
+    }
+
+    testWidgets('⌘N asks first; Stay starts no chat', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      await _settleAll(tester, 2);
+
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_editorText(tester), 'edited');
+      final chats = await tester.runAsync(
+        () => dependencies.database.select(dependencies.database.sessionsTable).get(),
+      );
+      expect(chats, hasLength(1));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('⌘N after Discard leaves for a new chat', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 4; i++) {
+        await _settle(tester);
+      }
+
+      expect(_data(tester).view, WorkspaceView.chat);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('⌘, asks first; Stay keeps Skills, Discard opens Settings', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      await pressWithMeta(tester, LogicalKeyboardKey.comma);
+      expect(find.text('Discard changes?'), findsOneWidget);
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.skills);
+      expect(_editorText(tester), 'edited');
+
+      await pressWithMeta(tester, LogicalKeyboardKey.comma);
+      await tester.tap(find.text('Discard changes'));
+      await tester.pumpAndSettle();
+      expect(_data(tester).view, WorkspaceView.settings);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the Settings button of the sidebar asks too', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await editMine(tester);
+
+      _data(tester).openView(WorkspaceView.settings);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(_data(tester).view, WorkspaceView.skills);
+      await tester.tap(find.text('Stay'));
+      await tester.pumpAndSettle();
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('⌘, and ⌘N do not ask without edits', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+      await select(tester, 'avera-api-client');
+
+      await pressWithMeta(tester, LogicalKeyboardKey.comma);
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(_data(tester).view, WorkspaceView.settings);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('Failed actions say so', () {
+    testWidgets('a failed switch shows a message', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      // A project item has no global switch, so the repository refuses it.
+      _skills(tester).actions.setEnabled('skill:project:c', enabled: false);
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Something went wrong'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('writing to a built-in item says it is read-only', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      _skills(tester).actions.save(_builtin, 'x');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Built-in items cannot be changed'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('an item that is gone says it was not found', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      _skills(tester).actions.save('skill:user:gone', 'x');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('It was not found. It may have been deleted.'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  Future<void> noOverflow(
+    WidgetTester tester,
+    Size size,
+    Locale locale, {
+    required bool dark,
+  }) async {
+    tester.view
+      ..physicalSize = size
+      ..devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    repository = MemorySkillsRepository(
+      items: [
+        memorySkill(
+          'a-skill-with-a-really-long-name-that-goes-on-and-on-and-on',
+          description: 'A very long description. ' * 12,
+        ).copyWith(
+          title: 'A skill with a really long name that goes on and on and on and on',
+          whenToUse: 'When the user asks for something long. ' * 6,
+          version: '12.34.56',
+          problem: KnowledgeProblem.badYaml,
+          problemDetail: 'The frontmatter is broken in a really long and detailed way. ' * 3,
+          files: [for (var i = 0; i < 12; i++) 'templates/some-long-file-name-$i.dart'],
+        ),
+        memorySkill('short', source: SkillSource.user),
+      ],
+      projectItems: {
+        _averaRoot: [memorySkill('release-checklist', source: SkillSource.project)],
+        _shopRoot: const [],
+      },
+      texts: {
+        'skill:builtin:a-skill-with-a-really-long-name-that-goes-on-and-on-and-on': List.generate(
+          60,
+          (i) => 'line $i ' * 20,
+        ).join('\n'),
+        'skill:user:short': 'x',
+        'skill:project:release-checklist': 'y',
+      },
+    );
+    await pumpScreen(tester, locale: locale, theme: dark ? AppTheme.dark() : AppTheme.light());
+
+    for (final name in const [
+      'A skill with a really long name that goes on and on and on and on',
+      'short',
+      'release-checklist',
+    ]) {
+      await select(tester, name);
+      expect(tester.takeException(), isNull, reason: name);
+    }
+    // Exceptions make the scope row longer.
+    await select(tester, 'short');
+    _skills(tester).actions.setEnabled('skill:user:short', enabled: false, projectId: shopId);
+    await _settleAll(tester, 2);
+    _skills(tester).actions.setEnabled('skill:user:short', enabled: false, projectId: averaId);
+    await _settleAll(tester, 2);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.text(locale.languageCode == 'ru' ? '＋ Добавить' : '＋ Add'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await tester.tapAt(const Offset(5, 590));
+    await tester.pumpAndSettle();
+    await disposeTestApp(tester, dependencies);
+  }
+
+  group('Layout', () {
+    for (final locale in const [Locale('en'), Locale('ru')]) {
+      for (final dark in const [false, true]) {
+        testWidgets(
+          'the card does not overflow at 900×600 in ${locale.languageCode}, ${dark ? 'dark' : 'light'}',
+          (tester) => noOverflow(tester, const Size(900, 600), locale, dark: dark),
+        );
+      }
+    }
+  });
+}

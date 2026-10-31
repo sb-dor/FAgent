@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart'
 import 'package:flutter_code_agent/src/feature/chat/widgets/plan_card.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_call_card.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/widgets/turn_files_card.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
@@ -23,6 +24,8 @@ class ChatItemView extends StatelessWidget {
     this.onRejectAndSay,
     this.projectRoot,
     this.onOpenChange,
+    this.skills = ChatSkills.empty,
+    this.onOpenSkill,
     this.keyboardTarget = false,
     super.key,
   });
@@ -41,6 +44,13 @@ class ChatItemView extends StatelessWidget {
 
   /// Called with the file's path when the user clicks an edit row; `null` keeps edit rows plain.
   final ValueChanged<String>? onOpenChange;
+
+  /// The skills of the chat's project, for the line of a loaded skill.
+  final ChatSkills skills;
+
+  /// Called with the id of a skill when the user clicks the line of a loaded skill; `null` keeps
+  /// the line plain.
+  final ValueChanged<String>? onOpenSkill;
 
   /// This permission card is the one Enter and Esc answer (shows the key hints).
   final bool keyboardTarget;
@@ -101,6 +111,8 @@ class ChatItemView extends StatelessWidget {
         call: call,
         projectRoot: projectRoot,
         onOpenChange: onOpenChange,
+        skills: skills,
+        onOpenSkill: onOpenSkill,
       ),
       PlanItem(:final entries) => PlanCard(entries: entries),
       final PermissionItem permission => PermissionCard(

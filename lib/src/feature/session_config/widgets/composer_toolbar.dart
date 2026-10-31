@@ -7,11 +7,13 @@ import 'package:flutter_code_agent/src/feature/session_config/models/config_opti
 import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/bypass_confirm_dialog.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/model_menu_footer.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
+import 'package:flutter_code_agent/src/feature/skills/widgets/chat_skills_chip.dart';
 
 /// {@template composer_toolbar}
 /// The chips under the prompt: attach, agent, model (with effort in its menu), permission
-/// mode and any other setting the agent offers. The mode is coloured when it acts without
-/// asking; choosing `bypassPermissions` asks first.
+/// mode and any other setting the agent offers, then the skills of the project. The mode is
+/// coloured when it acts without asking; choosing `bypassPermissions` asks first.
 /// {@endtemplate}
 class ComposerToolbar extends StatelessWidget {
   /// {@macro composer_toolbar}
@@ -23,6 +25,8 @@ class ComposerToolbar extends StatelessWidget {
     required this.onChanged,
     required this.onAttach,
     required this.onMakeDefault,
+    this.chatSkills = ChatSkills.empty,
+    this.onOpenSkillLibrary,
     super.key,
   });
 
@@ -46,6 +50,12 @@ class ComposerToolbar extends StatelessWidget {
 
   /// "Make default for new chats" was ticked in the model menu.
   final VoidCallback onMakeDefault;
+
+  /// The skills of the chat's project, for the 🧩 chip.
+  final ChatSkills chatSkills;
+
+  /// The skill library was asked for from the 🧩 chip; `null` hides the chip.
+  final VoidCallback? onOpenSkillLibrary;
 
   @override
   Widget build(BuildContext context) {
@@ -79,6 +89,8 @@ class ComposerToolbar extends StatelessWidget {
           for (final option in options)
             if (!taken.contains(option)) _otherChip(option),
         ],
+        if (onOpenSkillLibrary != null)
+          ChatSkillsChip(skills: chatSkills, onOpenLibrary: onOpenSkillLibrary!),
       ],
     );
   }

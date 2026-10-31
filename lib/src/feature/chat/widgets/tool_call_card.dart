@@ -1,24 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/utils/line_diff.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/diff_lines_cache.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/skill_call.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/tool_row_label.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_path_text.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:path/path.dart' as p;
 
 /// {@template tool_call_card}
 /// A tool call as one compact row: icon, the agent's wording, the first touched file (name and
 /// folder, relative to [projectRoot]), the `+N −M` counter for edits and the status. Expands to
 /// diffs and output; edits start expanded, everything else collapsed.
+///
+/// The load of a skill is a line of its own ([skillNameOf]) that opens the skill from [skills].
 /// {@endtemplate}
 class ToolCallCard extends StatefulWidget {
   /// {@macro tool_call_card}
-  const ToolCallCard({required this.call, this.projectRoot, this.onOpenChange, super.key});
+  const ToolCallCard({
+    required this.call,
+    this.projectRoot,
+    this.onOpenChange,
+    this.skills = ChatSkills.empty,
+    this.onOpenSkill,
+    super.key,
+  });
 
   /// The tool call.
   final ToolCallItem call;
@@ -31,6 +43,14 @@ class ToolCallCard extends StatefulWidget {
   /// opens with a separate chevron. `null`, or a call without diffs, keeps the whole header as the
   /// expander.
   final ValueChanged<String>? onOpenChange;
+
+  /// The skills of the chat's project: the line of a loaded skill is clickable when it is among
+  /// them.
+  final ChatSkills skills;
+
+  /// Called with the id of the skill when the user clicks the line of a loaded skill; `null` leaves
+  /// the line plain.
+  final ValueChanged<String>? onOpenSkill;
 
   /// Icon for an ACP tool [kind].
   static IconData toolIcon(String? kind) => switch (kind) {
@@ -61,6 +81,16 @@ class _ToolCallCardState extends State<ToolCallCard> {
   @override
   Widget build(BuildContext context) {
     final call = widget.call;
+    final skillName = skillNameOf(call);
+    if (skillName != null) {
+      final skill = widget.skills.byName(skillName);
+      final onOpenSkill = widget.onOpenSkill;
+      return _SkillLine(
+        name: skillName,
+        status: call.status,
+        onTap: skill == null || onOpenSkill == null ? null : () => onOpenSkill(skill.id),
+      );
+    }
     final theme = Theme.of(context);
     final colors = context.colors;
     final diffs = call.diffs.toList();
@@ -174,5 +204,58 @@ class _StatusIcon extends StatelessWidget {
       'failed' => Icon(Icons.error_outline, size: 16, color: colors.danger),
       _ => const SizedBox.square(dimension: 12, child: CircularProgressIndicator(strokeWidth: 2)),
     };
+  }
+}
+
+/// The line of a loaded skill: 🧩, "Skill" and its name.
+class _SkillLine extends StatelessWidget {
+  const _SkillLine({required this.name, required this.status, required this.onTap});
+
+  final String name;
+  final String status;
+
+  /// Opens the skill; `null` when it cannot be found.
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final localization = Localization.of(context);
+    final colors = context.colors;
+    final style = Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted);
+    Widget line = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.extension_outlined, size: 16, color: colors.muted),
+          const SizedBox(width: 8),
+          Text(localization.skillUsed, style: style),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: style.copyWith(fontWeight: FontWeight.w600, color: colors.text),
+            ),
+          ),
+          // A finished call needs no mark; one that runs or failed does.
+          if (status != 'completed') ...<Widget>[
+            const SizedBox(width: 8),
+            _StatusIcon(status: status),
+          ],
+        ],
+      ),
+    );
+    if (onTap != null) {
+      line = Tooltip(
+        message: localization.skillUsedTooltip,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          onTap: onTap,
+          child: line,
+        ),
+      );
+    }
+    return Align(alignment: Alignment.centerLeft, child: line);
   }
 }

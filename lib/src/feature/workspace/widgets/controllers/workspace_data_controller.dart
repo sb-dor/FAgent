@@ -35,6 +35,7 @@ class WorkspaceDataController with ChangeNotifier {
   final Set<int> _collapsedProjects = <int>{};
   final ValueNotifier<ChatHandle?> _chatHandle = ValueNotifier<ChatHandle?>(null);
   String? _selectedChangePath;
+  ({String? itemId, int? projectId})? _skillsTarget;
 
   /// Selected project.
   int? get projectId => _projectId;
@@ -121,15 +122,77 @@ class WorkspaceDataController with ChangeNotifier {
   }
 
   /// Shows [view], on its [section] if given.
+  ///
+  /// Going from one screen to another asks [leaveGuard] first (see [whenMayLeave]), so the change
+  /// can come a little later than the call, or not at all.
   void openView(WorkspaceView view, {String? section}) {
     if (_view == view && _section == section) return;
+    if (_view == view) return _show(view, section);
+    whenMayLeave(() => _show(view, section));
+  }
+
+  void _show(WorkspaceView view, String? section) {
+    _navigations++;
     _view = view;
     _section = section;
     notifyListeners();
   }
 
-  /// Returns from Skills or Settings to the same chat.
+  /// Shows the Skills screen on the skill or rule [itemId] (its section follows the id) and, when
+  /// [projectId] is given, for that project instead of the selected one. The screen collects the
+  /// request with [takeSkillsTarget].
+  void openSkills({String? itemId, int? projectId}) {
+    _skillsTarget = (itemId: itemId, projectId: projectId);
+    if (itemId != null) {
+      _section = itemId.startsWith('rule:') ? 'rules' : 'skills';
+    } else if (_view != WorkspaceView.skills) {
+      _section = null;
+    }
+    _navigations++;
+    _view = WorkspaceView.skills;
+    notifyListeners();
+  }
+
+  /// The pending [openSkills] request, once: the Skills screen takes it and the next call gets
+  /// `null`.
+  ({String? itemId, int? projectId})? takeSkillsTarget() {
+    final target = _skillsTarget;
+    _skillsTarget = null;
+    return target;
+  }
+
+  /// Returns from Skills or Settings to the same chat (after [leaveGuard] agrees).
   void backToChat() => openView(WorkspaceView.chat);
+
+  /// Asked before the window leaves the open screen, whatever the way out (the back button, Esc,
+  /// a shortcut, a new chat); the screen may set it to ask about unsaved work. `false` keeps the
+  /// screen open.
+  Future<bool> Function()? leaveGuard;
+
+  bool _leaveApproved = false;
+
+  /// Counts the changes of the open screen, so a leaving that waited for the guard can tell that
+  /// the window went elsewhere in the meantime.
+  int _navigations = 0;
+
+  /// Runs [leave], which moves the window off the open screen: at once when the chat is open or
+  /// nothing guards the screen, else once [leaveGuard] agrees. It is dropped when the guard says
+  /// no, or when the open screen changed while it was asking. Whatever [leave] does to the view is
+  /// not asked about again.
+  void whenMayLeave(VoidCallback leave) {
+    final guard = leaveGuard;
+    if (_view == WorkspaceView.chat || guard == null || _leaveApproved) return leave();
+    final navigations = _navigations;
+    guard().then((agreed) {
+      if (!agreed || navigations != _navigations) return;
+      _leaveApproved = true;
+      try {
+        leave();
+      } finally {
+        _leaveApproved = false;
+      }
+    }).ignore();
+  }
 
   /// Selects a tab of the right pane.
   void selectPaneTab(RightPaneTab tab) {

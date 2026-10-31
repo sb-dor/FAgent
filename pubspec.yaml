@@ -52,6 +52,7 @@ dependencies:
   path_provider: ^2.1.6
   platform_info: ^5.0.0
   window_manager: ^0.5.2
+  yaml: ^3.1.4
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -81,10 +82,15 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # Built-in skills and rules. Flutter does not take subfolders on its own, so every folder is
+  # listed.
+  assets:
+    - assets/knowledge/rules/
+    - assets/knowledge/skills/feature-architecture/
+    - assets/knowledge/skills/feature-architecture/templates/
+    - assets/knowledge/skills/drift-migration/
+    - assets/knowledge/skills/pub-freshness/
+    - assets/knowledge/skills/widget-test/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

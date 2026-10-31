@@ -13,16 +13,23 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_r
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'memory_skills_repository.dart';
+
 /// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
 /// [appRunRepository], [devicesRepository] or [widgetPickerRepository].
+///
+/// The skills repository is an in-memory one with a built-in skill and rule unless the test passes
+/// its own [skillsRepository]; it never touches the file system.
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
   IDevicesRepository? devicesRepository,
   IWidgetPickerRepository? widgetPickerRepository,
+  ISkillsRepository? skillsRepository,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
@@ -32,7 +39,16 @@ Dependencies testDependencies({
     ..agentHub = AgentHub(database: database, environment: environment)
     ..devicesRepository = devicesRepository ?? FakeDevicesRepositoryImpl(step: step)
     ..appRunRepository = appRunRepository ?? FakeAppRunRepositoryImpl(step: step)
-    ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step);
+    ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
+    ..skillsRepository =
+        skillsRepository ??
+        MemorySkillsRepository(
+          items: [memorySkill('feature-architecture'), memoryRule('dart-style')],
+          texts: {
+            'skill:builtin:feature-architecture': '# feature-architecture\n',
+            'rule:builtin:dart-style': '# dart-style\n',
+          },
+        );
 }
 
 /// Wraps [child] in the app's localizations, [theme] (light by default) and [dependencies].

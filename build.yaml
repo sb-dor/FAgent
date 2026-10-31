@@ -1,0 +1,6 @@
+targets:
+  $default:
+    sources:
+      exclude:
+        # Template files shipped as assets are examples, not code to generate for.
+        - assets/**

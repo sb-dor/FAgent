@@ -13,7 +13,8 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 /// navigation of [sections] and the [child] of the [selected] section in a centered column.
 ///
 /// The navigation is 220 px wide, or a 56 px icon rail when the window is narrower than
-/// [kWideWindowWidth]. The column is at most 640 px wide with 32 px around it, and scrolls.
+/// [kWideWindowWidth]. The column is at most 640 px wide with 32 px around it, and scrolls; with
+/// [fill] the [child] instead takes all the room next to the navigation and brings its own layout.
 /// {@endtemplate}
 class WorkspacePageScaffold extends StatelessWidget {
   /// {@macro workspace_page_scaffold}
@@ -23,6 +24,10 @@ class WorkspacePageScaffold extends StatelessWidget {
     required this.selected,
     required this.onSelect,
     required this.child,
+    this.actions = const <Widget>[],
+    this.navigationFooter,
+    this.sectionBadges = const <String, String>{},
+    this.fill = false,
     super.key,
   });
 
@@ -40,6 +45,20 @@ class WorkspacePageScaffold extends StatelessWidget {
 
   /// Content of the open section.
   final Widget child;
+
+  /// Controls at the right of the title bar.
+  final List<Widget> actions;
+
+  /// Content of the navigation under the [sections]. It is laid out in the width of the
+  /// navigation, which is a narrow rail in a narrow window (see [kWideWindowWidth]).
+  final Widget? navigationFooter;
+
+  /// A short text (usually a count) at the right of a section, by section id.
+  final Map<String, String> sectionBadges;
+
+  /// The [child] takes all the room right of the navigation, without the heading, the 640 px
+  /// column and the scroll.
+  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -64,35 +83,45 @@ class WorkspacePageScaffold extends StatelessWidget {
             ),
           ],
           title: Text(title),
+          trailing: actions,
         ),
         Expanded(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              _Navigation(rail: rail, sections: sections, selected: selected, onSelect: onSelect),
+              _Navigation(
+                rail: rail,
+                sections: sections,
+                selected: selected,
+                onSelect: onSelect,
+                badges: sectionBadges,
+                footer: navigationFooter,
+              ),
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(32),
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: ConstrainedBox(
-                      key: const ValueKey<String>('page-content'),
-                      constraints: const BoxConstraints(maxWidth: 640),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: <Widget>[
-                          Text(
-                            label,
-                            style: Theme.of(context).textTheme.titleLarge!
-                                .copyWith(color: context.colors.text),
+                child: fill
+                    ? child
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(32),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: ConstrainedBox(
+                            key: const ValueKey<String>('page-content'),
+                            constraints: const BoxConstraints(maxWidth: 640),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: <Widget>[
+                                Text(
+                                  label,
+                                  style: Theme.of(context).textTheme.titleLarge!
+                                      .copyWith(color: context.colors.text),
+                                ),
+                                const SizedBox(height: 16),
+                                child,
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 16),
-                          child,
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
               ),
             ],
           ),
@@ -108,12 +137,16 @@ class _Navigation extends StatelessWidget {
     required this.sections,
     required this.selected,
     required this.onSelect,
+    required this.badges,
+    required this.footer,
   });
 
   final bool rail;
   final List<(String id, IconData icon, String label)> sections;
   final String selected;
   final ValueChanged<String> onSelect;
+  final Map<String, String> badges;
+  final Widget? footer;
 
   @override
   Widget build(BuildContext context) {
@@ -135,11 +168,13 @@ class _Navigation extends StatelessWidget {
                 child: _NavItem(
                   icon: icon,
                   label: label,
+                  badge: badges[id],
                   rail: rail,
                   selected: id == selected,
                   onTap: () => onSelect(id),
                 ),
               ),
+            ?footer,
           ],
         ),
       ),
@@ -151,6 +186,7 @@ class _NavItem extends StatelessWidget {
   const _NavItem({
     required this.icon,
     required this.label,
+    required this.badge,
     required this.rail,
     required this.selected,
     required this.onTap,
@@ -158,6 +194,7 @@ class _NavItem extends StatelessWidget {
 
   final IconData icon;
   final String label;
+  final String? badge;
   final bool rail;
   final bool selected;
   final VoidCallback onTap;
@@ -192,25 +229,28 @@ class _NavItem extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (badge != null) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Text(
+                    badge!,
+                    style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
+                  ),
+                  const SizedBox(width: 12),
+                ],
               ],
             ],
           ),
         ),
       ),
     );
-    return rail ? Tooltip(message: label, child: item) : item;
+    return rail ? Tooltip(message: badge == null ? label : '$label $badge', child: item) : item;
   }
 }
 
 /// Body of a section whose real content arrives in a later milestone.
 class SectionPlaceholder extends StatelessWidget {
   /// Creates a placeholder for the section named [title].
-  const SectionPlaceholder({
-    required this.icon,
-    required this.title,
-    this.milestone,
-    super.key,
-  });
+  const SectionPlaceholder({required this.icon, required this.title, this.milestone, super.key});
 
   /// Glyph of the section.
   final IconData icon;

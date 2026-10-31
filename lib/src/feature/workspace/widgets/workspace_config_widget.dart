@@ -26,6 +26,8 @@ import 'package:flutter_code_agent/src/feature/session_creation/data/session_cre
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/pending_chat_draft.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
@@ -71,10 +73,17 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final DevicesController devicesController;
   late final RunController runController;
   late final RunActionsController runActionsController;
+
+  /// The skills of the selected project, for the chats (the 🧩 chip, the `/` menu, the skill lines).
+  /// The Skills screen has a library of its own.
+  late final SkillLibraryController skillLibraryController;
   final WorkspaceDataController dataController = WorkspaceDataController();
 
   /// The run of the selected project and its ties to the selected chat.
   late final WorkspaceRunLink runLink;
+
+  /// The text for the chat that is being created (see [createChat]).
+  late final PendingChatDraft _draft = PendingChatDraft(data: dataController);
 
   /// Whether any of the run data (the run, the devices, the widget picker) is made up. Everything
   /// that shows it (the Run tab, the title bar, the `@` menu) says so.
@@ -125,17 +134,28 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
       isPreview: runIsPreview,
     );
+    skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
+    projectsController.addListener(_followSkills);
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
-    dataController.addListener(_followSelectedProject);
+    dataController
+      ..addListener(_followSelectedProject)
+      ..addListener(_followSkills)
+      ..addListener(_draft.onSelectionChanged)
+      ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
+    _followSkills();
   }
 
   @override
   void dispose() {
     runLink.dispose();
+    projectsController.removeListener(_followSkills);
     dataController
       ..removeListener(_followSelectedProject)
+      ..removeListener(_followSkills)
+      ..removeListener(_draft.onSelectionChanged)
+      ..chatHandle.removeListener(_draft.onHandleChanged)
       ..dispose();
     devicesController.removeListener(_chooseDefaultDevice);
     runController.removeListener(_chooseDefaultDevice);
@@ -143,6 +163,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..removeListener(_onRunAction)
       ..dispose();
     runController.dispose();
+    skillLibraryController.dispose();
     devicesController.dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
@@ -162,6 +183,16 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _followSelectedProject() {
     final id = dataController.projectId;
     if (id != null) runController.watch(id);
+  }
+
+  /// The skills follow the selected project. They wait for the project list, since the folder of
+  /// the project belongs to its skills; without a project (or with one that is gone) nothing new
+  /// is followed.
+  void _followSkills() {
+    final project = selectedProject;
+    if (project != null) {
+      skillLibraryController.watch(projectId: project.id, projectRoot: project.path);
+    }
   }
 
   /// Picks the first running device for the selected project while none is chosen and the devices
@@ -258,17 +289,26 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   }
 
   /// Starts a new chat in [projectId], by default in [newChatProjectId]; does nothing without a
-  /// project. The project becomes selected and the window leaves Skills or Settings for the chat;
-  /// the new chat is selected when it is created.
-  void createChat({int? projectId}) {
+  /// project. The project becomes selected and the window leaves Skills or Settings for the chat
+  /// (asking about unsaved work first); the new chat is selected when it is created.
+  ///
+  /// A [draft] is put into the composer of the new chat once it has opened. It is dropped when the
+  /// user opens another chat first, or when the chat cannot be created.
+  void createChat({int? projectId, String? draft}) {
     final project = projectId ?? newChatProjectId;
     if (project == null) return;
-    dataController.selectProject(project);
-    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
-    sessionCreationController.create(
-      projectId: project,
-      agentId: settingsController.settings.defaultAgentId,
-    );
+    dataController.whenMayLeave(() {
+      dataController.selectProject(project);
+      if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+      // A creation that is already running ignores this one, so it keeps the draft it was given.
+      if (sessionCreationController.state is! SessionCreation$InProgressState) {
+        _draft.expect(draft);
+      }
+      sessionCreationController.create(
+        projectId: project,
+        agentId: settingsController.settings.defaultAgentId,
+      );
+    });
   }
 
   /// Asks which chat to open, then opens it: its project and the chat become selected and the
@@ -276,10 +316,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   Future<void> openChatSearch() async {
     final result = await showChatSearch(context);
     if (result == null || !mounted) return;
-    dataController
-      ..selectProject(result.projectId)
-      ..selectSession(result.sessionId);
-    if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    dataController.whenMayLeave(() {
+      dataController
+        ..selectProject(result.projectId)
+        ..selectSession(result.sessionId);
+      if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    });
   }
 
   /// Shows [project]'s folder in Finder.
@@ -382,8 +424,14 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   }
 
   void _onSessionCreated() {
-    if (sessionCreationController.state case SessionCreation$CompletedState(:final sessionId)) {
-      dataController.selectSession(sessionId);
+    switch (sessionCreationController.state) {
+      case SessionCreation$CompletedState(:final sessionId):
+        _draft.created(sessionId);
+        dataController.selectSession(sessionId);
+      case SessionCreation$ErrorState():
+        _draft.forget();
+      default:
+        break;
     }
   }
 

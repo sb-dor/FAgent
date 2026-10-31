@@ -192,6 +192,19 @@ diff; кнопки по `options` агента: основная — перва�
   или по `/имя`.
 - **Правило** — короткий Markdown, действует всегда, уходит агенту в начале сессии.
 
+Решения этапа 5:
+- Одна модель `KnowledgeItem` (скилл или правило) и один поток `watch` вместо `Skill`/`Rule` и
+  `watchSkills`/`watchRules`; порядок в списке — источник, затем имя.
+- Чтение, запись и дублирование получают корень проекта явно (`projectRoot`), а не берут его из
+  состояния репозитория: два окна наблюдения за разными проектами (окно и экран) живут одновременно.
+- Проектные скиллы и правила включаются только по проекту, общего переключателя у них нет (id не
+  содержит проекта, глобальная строка протекла бы в другие проекты с тем же именем).
+- Git-источники: только «＋ Добавить источник…» с меткой Preview, без выдуманных скиллов.
+- Меню F («Скиллы» в поле ввода) без выбора на чат до M3: он появится вместе с доставкой агенту.
+- Папки скиллов опрашиваются раз в 2 с (watcher файловой системы пока не нужен).
+- «Попробовать в чате» и `/имя` работают только для проектных скиллов до M3: до доставки через MCP
+  (M3) приложение не передаёт агенту остальные скиллы.
+
 ### 3.8 Настройки (экран)
 Навигация 220 px (уже 1100 px окна — иконки 56 px); контент — одна колонка по центру, **max 640
 px**, отступы 32; карточки только в одну колонку, внутри перенос, а не обрезка. Разделы:
@@ -228,7 +241,7 @@ px**, отступы 32; карточки только в одну колонк�
 | `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `install(id)`, `login(id, method)`, `logout(id)` | Claude — Real (`AgentHub`, `AgentAuth`); Codex, Gemini, свой агент — Fake до M5 |
 | `session_config` (есть) | меню модели/режима/усилия поверх текущего | Real |
 | `chat_search` | `IChatSearchRepository.search(query)` | Real: drift читает чаты, совпадение по `sessions.title` считается в Dart (без учёта регистра, в том числе кириллицы; `%` и `_` ищутся буквально), т.к. SQLite `LIKE` не сворачивает регистр кириллицы |
-| `skills` | `ISkillsRepository`: `watchSkills(projectId)`, `watchRules(projectId)`, `read/write(id)`, `setEnabled(id, scope)`, `create`, `importFolder`, `addGitSource`, `duplicate` | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — Fake до M3; доставка агенту — M3 (MCP) |
+| `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка до M3, без данных; доставка агенту — M3 (MCP) |
 | `mcp_servers` | `IMcpServersRepository`: `watchServers(projectId)`, `add`, `remove`, `setEnabled` | Хранение — Real (drift); статус/инструменты — Fake до M3 |
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Fake до M2 (сценарий: сборка → работа → ошибка RenderFlex) |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
@@ -237,8 +250,9 @@ px**, отступы 32; карточки только в одну колонк�
 | `changes_pane`, `plan_pane` | читают `ChatTranscript` (`TurnFilesItem`, `ToolCallItem` с diff, `PlanItem`) | Real |
 
 Модели (freezed, кратко): `AgentInfo{id, name, version, status: ready|needsLogin|notInstalled|
-installing, account, isPreview}`, `Skill{id, name, description, whenToUse, source: builtin|user|
-project|git, path, version, enabled}`, `Rule{…как Skill без файлов}`, `McpServer{id, name, transport:
+installing, account, isPreview}`, `KnowledgeItem{id, kind: skill|rule, source: builtin|user|project|git, name, title, description,
+whenToUse, version, path, problem, enabled, enabledGlobally, exceptions}` (одна модель вместо `Skill` и
+`Rule`), `McpServer{id, name, transport:
 stdio|http, command|url, builtin, status, toolCount, isPreview}`, `Device{id, name, platform, kind:
 running|available, emulator}`, `RunState{idle | building(progress, label) | running(device, uptime,
 lastReload) | failed(error) | stopped}`, `LogEntry{time, level, text, error?}`, `RunError{title,

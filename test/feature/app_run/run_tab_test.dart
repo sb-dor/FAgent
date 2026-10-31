@@ -579,7 +579,11 @@ void main() {
       await tester.pump(const Duration(milliseconds: 20));
 
       expect(find.text('Layout overflow'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget, reason: 'the badge of the Run tab');
+      expect(
+        find.descendant(of: find.byType(WorkspaceRightPane), matching: find.text('1')),
+        findsOneWidget,
+        reason: 'the badge of the Run tab',
+      );
       await disposeTestApp(tester, dependencies);
     });
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
@@ -11,8 +12,11 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_r
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
 import 'package:l/l.dart';
+import 'package:path_provider/path_provider.dart';
 
 /// Initializes the app and returns a [Dependencies] object
 Future<Dependencies> $initializeDependencies({
@@ -62,4 +66,10 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         ).watch().first).sessionDefaults[agentId] ??
         const <String, String>{},
   ),
+  'Create skills repository': (dependencies) async =>
+      dependencies.skillsRepository = SkillsRepositoryImpl(
+        database: dependencies.database,
+        builtin: AssetBuiltinKnowledge(bundle: rootBundle),
+        userRoot: (await getApplicationSupportDirectory()).path,
+      ),
 };

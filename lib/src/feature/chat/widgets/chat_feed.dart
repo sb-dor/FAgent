@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/feed_grouping.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/read_group_row.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 
 /// {@template chat_feed}
 /// The feed, newest at the bottom; it sticks to the bottom while new items
@@ -18,6 +19,8 @@ class ChatFeed extends StatelessWidget {
     this.onRejectAndSay,
     this.projectRoot,
     this.onOpenChange,
+    this.skills = ChatSkills.empty,
+    this.onOpenSkill,
     this.keyboardRequestId,
     super.key,
   });
@@ -36,6 +39,13 @@ class ChatFeed extends StatelessWidget {
 
   /// Called with the file's path when the user clicks an edit row; `null` keeps edit rows plain.
   final ValueChanged<String>? onOpenChange;
+
+  /// The skills of the chat's project, for the line of a loaded skill.
+  final ChatSkills skills;
+
+  /// Called with the id of a skill when the user clicks the line of a loaded skill; `null` keeps
+  /// the line plain.
+  final ValueChanged<String>? onOpenSkill;
 
   /// `requestId` of the permission card that Enter and Esc answer (the latest waiting one); only
   /// that card shows the key hints.
@@ -70,6 +80,8 @@ class ChatFeed extends StatelessWidget {
                   onRejectAndSay: onRejectAndSay,
                   projectRoot: projectRoot,
                   onOpenChange: onOpenChange,
+                  skills: skills,
+                  onOpenSkill: onOpenSkill,
                   keyboardTarget: item is PermissionItem && item.requestId == keyboardRequestId,
                 ),
                 ReadGroupEntry(:final calls) => ReadGroupRow(
