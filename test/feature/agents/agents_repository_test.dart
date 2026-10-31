@@ -307,17 +307,38 @@ void main() {
       expect([result.exitCode, '${result.stdout}'.trim()], [0, 'hi']);
     });
 
-    test('kills a process that outlives the timeout', () async {
-      final stopwatch = Stopwatch()..start();
+    test('kills the whole group of a process that outlives the timeout', () async {
+      final dir = Directory.systemTemp.createTempSync('runner_test');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final marker = File('${dir.path}/alive');
+      // A child and a grandchild, like `npx` and `node`; each would write the marker after a second.
+      final script = '(sleep 1; echo x > "${marker.path}") & sleep 1; echo y > "${marker.path}"';
 
       await expectLater(
-        runProcessKillingOnTimeout('/bin/sleep', [
-          '30',
-        ], timeout: const Duration(milliseconds: 100)),
+        runProcessKillingOnTimeout('/bin/sh', [
+          '-c',
+          script,
+        ], timeout: const Duration(milliseconds: 200)),
         throwsA(isA<TimeoutException>()),
       );
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
 
-      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 5)));
+      expect(marker.existsSync(), isFalse);
+    });
+
+    test('kills what a finished process left running', () async {
+      final dir = Directory.systemTemp.createTempSync('runner_test');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final marker = File('${dir.path}/alive');
+
+      final result = await runProcessKillingOnTimeout('/bin/sh', [
+        '-c',
+        '(sleep 1; echo x > "${marker.path}") >/dev/null 2>&1 &',
+      ], timeout: const Duration(seconds: 5));
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+      expect(result.exitCode, 0);
+      expect(marker.existsSync(), isFalse);
     });
   });
 }
