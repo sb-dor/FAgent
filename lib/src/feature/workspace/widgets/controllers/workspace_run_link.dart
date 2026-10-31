@@ -24,6 +24,7 @@ class WorkspaceRunLink {
     required this._run,
     required this._actions,
     required this._reloadAfterTurn,
+    this._isLaunching = _never,
     this.isPreview = false,
   }) {
     _data.chatHandle.addListener(_onChatHandle);
@@ -33,6 +34,11 @@ class WorkspaceRunLink {
   final RunController _run;
   final RunActionsController _actions;
   final bool Function() _reloadAfterTurn;
+
+  /// Whether the chosen device is an emulator that is still booting.
+  final bool Function() _isLaunching;
+
+  static bool _never() => false;
 
   /// Whether the run data is made up; the `@` menu says so.
   final bool isPreview;
@@ -55,8 +61,12 @@ class WorkspaceRunLink {
   /// Whether the app of the selected project is building or running.
   bool get isActive => _projectId != null && (isRunning || _run.state.run is RunBuilding);
 
+  /// Whether the chosen device is an emulator that is still booting; the app cannot start on it yet.
+  bool get isLaunching =>
+      _projectId != null && _run.state.selectedDeviceId != null && _isLaunching();
+
   /// Whether there is a device to start the app on.
-  bool get canStart => _projectId != null && _run.state.selectedDeviceId != null;
+  bool get canStart => _projectId != null && _run.state.selectedDeviceId != null && !_isLaunching();
 
   /// Starts the app of the selected project on the chosen device.
   void start() {

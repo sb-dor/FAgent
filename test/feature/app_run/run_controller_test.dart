@@ -221,6 +221,16 @@ void main() {
       expect(controller.state.target, 'lib/main_dev.dart');
     });
 
+    test('clearDevice forgets the chosen device', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller
+        ..choose(deviceId: 'macos')
+        ..clearDevice();
+
+      expect(controller.state.selectedDeviceId, isNull);
+    });
+
     test('markSent flags one log entry as sent to the agent', () async {
       controller.watch(1);
       await pumpEventQueue();

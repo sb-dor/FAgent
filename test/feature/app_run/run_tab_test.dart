@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -69,6 +72,52 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   @override
   Future<void> dispose() => _live.close();
 }
+
+/// A devices repository whose stream fails with [error] (when set) and counts how often it was
+/// asked.
+final class _FailingDevicesRepository implements IDevicesRepository {
+  _FailingDevicesRepository(this.error);
+
+  final Object error;
+  int watches = 0;
+
+  @override
+  bool get isPreview => false;
+
+  @override
+  Stream<List<Device>> watchDevices() {
+    watches++;
+    final controller = StreamController<List<Device>>();
+    controller.onListen = () {
+      controller
+        ..addError(error)
+        ..close().ignore();
+    };
+    return controller.stream;
+  }
+
+  @override
+  Future<void> launch(String deviceId) async {}
+
+  @override
+  Future<void> dispose() async {}
+}
+
+const Device _pixelEmulator = Device(
+  id: 'emulator:Pixel_9',
+  name: 'Pixel 9',
+  platform: DevicePlatform.android,
+  kind: DeviceKind.available,
+  emulatorId: 'Pixel_9',
+);
+
+const Device _pixelRunning = Device(
+  id: 'emulator-5554',
+  name: 'sdk gphone64',
+  platform: DevicePlatform.android,
+  kind: DeviceKind.running,
+  emulatorId: 'Pixel_9',
+);
 
 const Device _macos = Device(
   id: 'macos',
@@ -140,6 +189,7 @@ void main() {
                 onSendError: sentErrors.add,
                 onAddWidget: (_) {},
                 onOpenFile: (path, line) => openedFiles.add((path, line)),
+                onOpenFlutterSettings: () {},
               ),
             ),
           ),
@@ -487,10 +537,172 @@ void main() {
     });
   });
 
+  group('RunTab with real devices', () {
+    late Dependencies dependencies;
+    late DevicesController devices;
+    late RunController run;
+    late RunActionsController actions;
+    late FakeDevicesRepositoryImpl fake;
+    late int settingsOpened;
+
+    Future<void> pumpTab(
+      WidgetTester tester, {
+      IDevicesRepository? repository,
+      Size size = const Size(1280, 800),
+      double width = 400,
+    }) async {
+      tester.view
+        ..physicalSize = size
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      fake = FakeDevicesRepositoryImpl(step: const Duration(milliseconds: 1));
+      dependencies = testDependencies(devicesRepository: repository ?? fake);
+      devices = DevicesController(repository: dependencies.devicesRepository);
+      run = RunController(repository: dependencies.appRunRepository);
+      actions = RunActionsController(
+        runRepository: dependencies.appRunRepository,
+        pickerRepository: dependencies.widgetPickerRepository,
+      );
+      settingsOpened = 0;
+      run.watch(1);
+      devices.watch();
+      await tester.pumpWidget(
+        testApp(
+          Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: width,
+              child: RunTab(
+                projectId: 1,
+                isPreview: false,
+                devices: devices,
+                run: run,
+                actions: actions,
+                onSendError: (_) {},
+                onAddWidget: (_) {},
+                onOpenFile: (path, line) {},
+                onOpenFlutterSettings: () => settingsOpened++,
+              ),
+            ),
+          ),
+          dependencies: dependencies,
+          withSettings: true,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+
+    Future<void> finish(WidgetTester tester) async {
+      devices.dispose();
+      run.dispose();
+      actions.dispose();
+      await disposeTestApp(tester, dependencies);
+    }
+
+    IconButton startButton(WidgetTester tester) => tester.widget<IconButton>(
+      find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(IconButton)),
+    );
+
+    testWidgets('no Flutter SDK says so and links to the Flutter settings', (tester) async {
+      await pumpTab(
+        tester,
+        repository: _FailingDevicesRepository(const FlutterNotFoundException()),
+      );
+
+      expect(find.text('Flutter SDK not found'), findsOneWidget);
+      expect(find.text('Choose a device'), findsNothing, reason: 'no device list to choose from');
+
+      await tester.tap(find.text('Settings → Flutter'));
+      expect(settingsOpened, 1);
+      await finish(tester);
+    });
+
+    testWidgets('another error offers a retry that follows the devices again', (tester) async {
+      final failing = _FailingDevicesRepository(StateError('daemon died'));
+      await pumpTab(tester, repository: failing);
+
+      expect(find.text('Could not get the devices'), findsOneWidget);
+      expect(find.text('Flutter SDK not found'), findsNothing);
+      expect(failing.watches, 1);
+
+      await tester.tap(find.text('Retry'));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      await tester.pump(const Duration(milliseconds: 20));
+
+      expect(failing.watches, 2);
+      await finish(tester);
+    });
+
+    testWidgets('an empty list tells to start a simulator or an emulator', (tester) async {
+      await pumpTab(tester);
+      fake.set(const <Device>[]);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      expect(find.text('No devices: start a simulator or an emulator'), findsOneWidget);
+      expect(find.text('Settings → Flutter'), findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('choosing an available device launches it and keeps Run disabled', (tester) async {
+      await pumpTab(tester);
+      fake.set(const <Device>[_macos, _pixelEmulator]);
+      await tester.pump(const Duration(milliseconds: 20));
+      run.choose(deviceId: 'macos');
+      await tester.pump();
+      expect(startButton(tester).onPressed, isNotNull);
+
+      await tester.tap(find.text('macOS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pixel 9'));
+      await tester.pumpAndSettle();
+
+      expect(fake.launched, <String>['emulator:Pixel_9']);
+      expect(run.state.selectedDeviceId, 'emulator:Pixel_9');
+      expect(startButton(tester).onPressed, isNull);
+      expect(find.text('Starting the emulator…'), findsOneWidget);
+      expect(find.text('Not running'), findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('choosing a running device launches nothing', (tester) async {
+      await pumpTab(tester);
+      fake.set(const <Device>[_macos, _pixelEmulator]);
+      await tester.pump(const Duration(milliseconds: 20));
+      run.choose(deviceId: 'emulator:Pixel_9');
+      await tester.pump();
+
+      await tester.tap(find.text('Pixel 9'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('macOS'));
+      await tester.pumpAndSettle();
+
+      expect(fake.launched, isEmpty);
+      expect(startButton(tester).onPressed, isNotNull);
+      expect(find.text('Starting the emulator…'), findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('the error states fit a 340 px pane', (tester) async {
+      await pumpTab(
+        tester,
+        repository: _FailingDevicesRepository(const FlutterNotFoundException()),
+        width: 340,
+        size: const Size(900, 600),
+      );
+
+      expect(tester.takeException(), isNull);
+      await finish(tester);
+    });
+  });
+
   group('in the right pane', () {
     late Dependencies dependencies;
+    late FakeDevicesRepositoryImpl fakeDevices;
 
-    setUp(() => dependencies = testDependencies());
+    setUp(() {
+      fakeDevices = FakeDevicesRepositoryImpl(step: const Duration(milliseconds: 1));
+      dependencies = testDependencies(devicesRepository: fakeDevices);
+    });
 
     /// The button of the right pane (the title bar has buttons with the same tooltips).
     Finder inPane(String tooltip) =>
@@ -566,6 +778,88 @@ void main() {
 
       expect(state.devicesController.state, isA<Devices$CompletedState>());
       expect(state.runController.state.selectedDeviceId, 'macos');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a booted emulator replaces the available entry the user chose', (tester) async {
+      final state = await pump(tester, openRunTab: false);
+      fakeDevices.set(const <Device>[_macos, _pixelEmulator]);
+      await settle(tester);
+      state.runController.choose(deviceId: 'emulator:Pixel_9');
+      await tester.pump();
+
+      fakeDevices.set(const <Device>[_macos, _pixelRunning]);
+      await settle(tester);
+
+      expect(state.runController.state.selectedDeviceId, 'emulator-5554');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the selected device leaving the list selects the first running one', (
+      tester,
+    ) async {
+      final state = await pump(tester, openRunTab: false);
+      fakeDevices.set(const <Device>[_macos, _pixelRunning]);
+      await settle(tester);
+      state.runController.choose(deviceId: 'emulator-5554');
+      await tester.pump();
+
+      fakeDevices.set(const <Device>[_macos]);
+      await settle(tester);
+
+      expect(state.runController.state.selectedDeviceId, 'macos');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('no running device left clears the selection', (tester) async {
+      final state = await pump(tester, openRunTab: false);
+      fakeDevices.set(const <Device>[_macos]);
+      await settle(tester);
+      expect(state.runController.state.selectedDeviceId, 'macos');
+
+      fakeDevices.set(const <Device>[_pixelEmulator]);
+      await settle(tester);
+
+      expect(state.runController.state.selectedDeviceId, isNull);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('an available device the user chose stays chosen while it boots', (tester) async {
+      final state = await pump(tester, openRunTab: false);
+      fakeDevices.set(const <Device>[_macos, _pixelEmulator]);
+      await settle(tester);
+      state.runController.choose(deviceId: 'emulator:Pixel_9');
+      await tester.pump();
+
+      fakeDevices.set(const <Device>[_macos, _pixelEmulator]);
+      await settle(tester);
+
+      expect(state.runController.state.selectedDeviceId, 'emulator:Pixel_9');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the title bar chip launches an available device and disables Run', (tester) async {
+      final state = await pump(tester, openRunTab: false);
+      fakeDevices.set(const <Device>[_macos, _pixelEmulator]);
+      await settle(tester);
+
+      await tester.tap(find.text('macOS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pixel 9'));
+      await tester.pumpAndSettle();
+
+      expect(fakeDevices.launched, <String>['emulator:Pixel_9']);
+      expect(state.runController.state.selectedDeviceId, 'emulator:Pixel_9');
+      expect(state.runLink.canStart, isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('an available device is not picked as the default', (tester) async {
+      final state = await pump(tester, openRunTab: false);
+      fakeDevices.set(const <Device>[_pixelEmulator]);
+      await settle(tester);
+
+      expect(state.runController.state.selectedDeviceId, isNull);
       await disposeTestApp(tester, dependencies);
     });
 

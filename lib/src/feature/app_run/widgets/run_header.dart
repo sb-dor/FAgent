@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
@@ -42,6 +44,11 @@ enum RunAction {
 /// {@template run_header}
 /// The top of the Run tab: the device, mode and entry point chips, the action buttons, the status
 /// line and the "reload after every agent turn" switch.
+///
+/// Where the device chip would be, the header says what is wrong with the devices instead: no
+/// Flutter SDK (with a link to its settings), a failure to get them (with a retry), or that there
+/// are none. While the chosen device is an emulator that is still booting, the status line says so
+/// and Run waits.
 /// {@endtemplate}
 class RunHeader extends StatelessWidget {
   /// {@macro run_header}
@@ -52,14 +59,16 @@ class RunHeader extends StatelessWidget {
     required this.onDevice,
     required this.onMode,
     required this.onAction,
+    required this.onRetryDevices,
+    required this.onOpenFlutterSettings,
     super.key,
   });
 
   /// What the tab shows for the project.
   final RunViewState state;
 
-  /// The devices known right now.
-  final List<Device> devices;
+  /// The devices, or why there are none.
+  final DevicesState devices;
 
   /// Whether the data is made up.
   final bool isPreview;
@@ -73,13 +82,25 @@ class RunHeader extends StatelessWidget {
   /// Called when the user presses one of the buttons.
   final ValueChanged<RunAction> onAction;
 
+  /// Called when the user asks to try getting the devices again.
+  final VoidCallback onRetryDevices;
+
+  /// Called when the user follows the link to the Flutter settings.
+  final VoidCallback onOpenFlutterSettings;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
     final localization = Localization.of(context);
     final run = state.run;
     final active = run is RunBuilding || run is RunRunning;
-    final canStart = state.selectedDeviceId != null;
+    final deviceList = switch (devices) {
+      Devices$CompletedState(:final devices) => devices,
+      _ => const <Device>[],
+    };
+    final selected = deviceList.where((device) => device.id == state.selectedDeviceId).firstOrNull;
+    final launching = selected?.kind == DeviceKind.available;
+    final canStart = state.selectedDeviceId != null && !launching;
 
     Widget button(
       RunAction action,
@@ -124,11 +145,28 @@ class RunHeader extends StatelessWidget {
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
-                RunDeviceChip(
-                  devices: devices,
-                  selectedDeviceId: state.selectedDeviceId,
-                  onSelected: onDevice,
-                ),
+                switch (devices) {
+                  Devices$ErrorState(:final error) when error is FlutterNotFoundException =>
+                    _DevicesProblem(
+                      message: localization.flutterSdkNotFound,
+                      action: localization.newProjectSdkSettings,
+                      onAction: onOpenFlutterSettings,
+                    ),
+                  Devices$ErrorState() => _DevicesProblem(
+                    message: localization.runDevicesFailed,
+                    action: localization.retry,
+                    onAction: onRetryDevices,
+                  ),
+                  Devices$CompletedState(:final devices) when devices.isEmpty => _DevicesProblem(
+                    message: localization.runNoDevices,
+                    muted: true,
+                  ),
+                  _ => RunDeviceChip(
+                    devices: deviceList,
+                    selectedDeviceId: state.selectedDeviceId,
+                    onSelected: onDevice,
+                  ),
+                },
                 SelectorChip<BuildMode>(
                   label: state.mode.name,
                   menuWidth: 160,
@@ -177,7 +215,11 @@ class RunHeader extends StatelessWidget {
                   button(
                     RunAction.start,
                     Icons.play_arrow,
-                    canStart ? localization.runStart : localization.runChooseDeviceFirst,
+                    canStart
+                        ? localization.runStart
+                        : launching
+                        ? localization.runLaunchingEmulator
+                        : localization.runChooseDeviceFirst,
                     enabled: canStart,
                     primary: true,
                   ),
@@ -204,12 +246,53 @@ class RunHeader extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            RunStatus(run: run),
+            if (launching)
+              Text(
+                localization.runLaunchingEmulator,
+                style: Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 11),
+              )
+            else
+              RunStatus(run: run),
             const SizedBox(height: 4),
             const RunReloadSwitch(),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// What is wrong with the devices, in the place of the device chip: [message] and, when there is
+/// something to do about it, a link [action].
+class _DevicesProblem extends StatelessWidget {
+  const _DevicesProblem({required this.message, this.action, this.onAction, this.muted = false});
+
+  final String message;
+  final String? action;
+  final VoidCallback? onAction;
+
+  /// Whether this is only a hint (no devices) and not a failure.
+  final bool muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final style = Theme.of(context).textTheme.bodySmall!;
+    return Wrap(
+      spacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: <Widget>[
+        Text(message, style: style.copyWith(color: muted ? colors.muted : colors.danger)),
+        if (action != null)
+          InkWell(
+            borderRadius: BorderRadius.circular(AppRadius.small),
+            onTap: onAction,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Text(action!, style: style.copyWith(color: colors.accent)),
+            ),
+          ),
+      ],
     );
   }
 }

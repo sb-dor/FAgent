@@ -147,6 +147,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                             onSendError: _scope.sendRunErrorToAgent,
                             onAddWidget: _scope.addRunWidgetToMessage,
                             onOpenFile: (path, line) => _scope.openRunFile(path, line).ignore(),
+                            onOpenFlutterSettings: _scope.openFlutterSettings,
                           ),
                         },
                       ),

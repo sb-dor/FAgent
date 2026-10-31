@@ -43,7 +43,7 @@ class WorkspaceRunControls extends StatelessWidget {
               child: RunDeviceChip(
                 devices: devices,
                 selectedDeviceId: scope.runController.state.selectedDeviceId,
-                onSelected: (id) => scope.runController.choose(deviceId: id),
+                onSelected: scope.chooseDevice,
               ),
             ),
             const SizedBox(width: 6),
@@ -56,7 +56,11 @@ class WorkspaceRunControls extends StatelessWidget {
               )
             else
               Tooltip(
-                message: link.canStart ? localization.runStart : localization.runChooseDeviceFirst,
+                message: link.canStart
+                    ? localization.runStart
+                    : link.isLaunching
+                    ? localization.runLaunchingEmulator
+                    : localization.runChooseDeviceFirst,
                 child: CompactButton(
                   primary: true,
                   icon: Icons.play_arrow,

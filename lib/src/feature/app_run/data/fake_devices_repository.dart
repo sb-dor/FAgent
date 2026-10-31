@@ -30,7 +30,8 @@ const List<Device> kFakeDevices = <Device>[
   ),
 ];
 
-/// Made-up devices until the Flutter tooling is wired in.
+/// Made-up devices until the Flutter tooling is wired in. A test can replace the list with [set]
+/// and read the emulators it asked to boot from [launched].
 final class FakeDevicesRepositoryImpl implements IDevicesRepository {
   /// Creates the repository; [step] is the time "detecting" the devices takes.
   FakeDevicesRepositoryImpl({this.step = const Duration(milliseconds: 400)});
@@ -38,8 +39,23 @@ final class FakeDevicesRepositoryImpl implements IDevicesRepository {
   /// The time one operation takes.
   final Duration step;
 
+  /// The ids passed to [launch] that belong to an available device, in order.
+  final List<String> launched = <String>[];
+
+  final List<StreamController<List<Device>>> _controllers = <StreamController<List<Device>>>[];
+  List<Device> _devices = kFakeDevices;
+
   @override
   bool get isPreview => true;
+
+  /// Replaces the device list: every listener gets [devices] now, and a listener that comes later
+  /// gets them as its first list.
+  void set(List<Device> devices) {
+    _devices = devices;
+    for (final controller in List<StreamController<List<Device>>>.of(_controllers)) {
+      if (!controller.isClosed) controller.add(devices);
+    }
+  }
 
   @override
   Stream<List<Device>> watchDevices() {
@@ -47,14 +63,31 @@ final class FakeDevicesRepositoryImpl implements IDevicesRepository {
     Timer? timer;
     controller
       ..onListen = () {
+        _controllers.add(controller);
         timer = Timer(step, () {
-          if (!controller.isClosed) controller.add(kFakeDevices);
+          if (!controller.isClosed) controller.add(_devices);
         });
       }
       ..onCancel = () async {
         timer?.cancel();
+        _controllers.remove(controller);
         if (!controller.isClosed) await controller.close();
       };
     return controller.stream;
+  }
+
+  @override
+  Future<void> launch(String deviceId) async {
+    final device = _devices.where((device) => device.id == deviceId).firstOrNull;
+    if (device != null && device.kind == DeviceKind.available) launched.add(deviceId);
+  }
+
+  @override
+  Future<void> dispose() async {
+    final controllers = List<StreamController<List<Device>>>.of(_controllers);
+    _controllers.clear();
+    for (final controller in controllers) {
+      if (!controller.isClosed) await controller.close();
+    }
   }
 }

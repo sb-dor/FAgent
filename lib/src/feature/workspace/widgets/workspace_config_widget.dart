@@ -152,6 +152,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       run: runController,
       actions: runActionsController,
       reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
+      isLaunching: () => selectedDevice?.kind == DeviceKind.available,
       isPreview: runIsPreview,
     );
     skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
@@ -216,17 +217,68 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     }
   }
 
-  /// Picks the first running device for the selected project while none is chosen and the devices
-  /// are known, so every way to start the app (the Run tab, the title bar) sees a device whether or
-  /// not the Run tab was ever opened. A device the user chose is never replaced.
+  /// The devices known right now; empty while they load or when they cannot be listed.
+  List<Device> get _devices => switch (devicesController.state) {
+    Devices$CompletedState(:final devices) => devices,
+    _ => const <Device>[],
+  };
+
+  /// The device chosen for the selected project, if it is in the list.
+  Device? get selectedDevice {
+    final id = runController.state.selectedDeviceId;
+    return id == null ? null : _devices.where((device) => device.id == id).firstOrNull;
+  }
+
+  /// The chosen device as it was the last time it was in the list: when it leaves the list it may
+  /// be because the emulator behind it has booted, and that is told by its `emulatorId`.
+  Device? _lastSelected;
+
+  /// Chooses [deviceId] for the next start; an emulator that is not running yet is booted.
+  void chooseDevice(String deviceId) {
+    runController.choose(deviceId: deviceId);
+    devicesController.launch(deviceId);
+  }
+
+  /// Opens Settings → Flutter (the Run tab links there when there is no Flutter SDK).
+  void openFlutterSettings() => dataController.openView(WorkspaceView.settings, section: 'flutter');
+
+  /// Keeps the chosen device in step with the devices that exist, for the selected project:
+  ///
+  /// - none chosen: the first running device, so every way to start the app (the Run tab, the title
+  ///   bar) sees a device whether or not the Run tab was ever opened;
+  /// - the chosen device is gone: if it was an emulator that has booted, the running device of the
+  ///   same emulator; otherwise the first running device, or none.
+  ///
+  /// A device the user chose that is still in the list is never replaced. Nothing changes while the
+  /// devices are not known (loading, or an error).
   void _chooseDefaultDevice() {
     final run = runController.state;
-    if (run.projectId == null || run.selectedDeviceId != null) return;
-    if (devicesController.state case Devices$CompletedState(:final devices)) {
-      final first = devices.where((device) => device.kind == DeviceKind.running).firstOrNull;
-      if (first != null) runController.choose(deviceId: first.id);
+    if (run.projectId == null) return;
+    if (devicesController.state is! Devices$CompletedState) return;
+    final devices = _devices;
+    final chosenId = run.selectedDeviceId;
+    final chosen = chosenId == null ? null : devices.where((d) => d.id == chosenId).firstOrNull;
+    if (chosen != null) {
+      _lastSelected = chosen;
+      return;
+    }
+    final booted = chosenId == null || _lastSelected == null || _lastSelected!.id != chosenId
+        ? null
+        : _runningOf(devices, _lastSelected!.emulatorId);
+    final next = booted ?? devices.where((d) => d.kind == DeviceKind.running).firstOrNull;
+    _lastSelected = null;
+    if (next != null) {
+      runController.choose(deviceId: next.id);
+    } else if (chosenId != null) {
+      runController.clearDevice();
     }
   }
+
+  static Device? _runningOf(List<Device> devices, String? emulatorId) => emulatorId == null
+      ? null
+      : devices
+            .where((d) => d.kind == DeviceKind.running && d.emulatorId == emulatorId)
+            .firstOrNull;
 
   /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.
   /// The pick may finish after the window moved to another project: the widget belongs to the

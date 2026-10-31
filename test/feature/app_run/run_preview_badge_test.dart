@@ -60,6 +60,12 @@ final class _RealDevices implements IDevicesRepository {
 
   @override
   Stream<List<Device>> watchDevices() => Stream<List<Device>>.value(const <Device>[]);
+
+  @override
+  Future<void> launch(String deviceId) async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 final class _RealPicker implements IWidgetPickerRepository {

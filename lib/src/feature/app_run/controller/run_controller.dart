@@ -90,6 +90,9 @@ final class RunController extends StateController<RunViewState> with SequentialC
     ),
   );
 
+  /// Forgets the chosen device, for when it is gone and there is none to take its place.
+  void clearDevice() => setState(state.copyWith(selectedDeviceId: null));
+
   /// Remembers the widget picked in the app, so later actions do not lose it; `null` forgets it.
   void setPicked(PickedWidget? picked) => setState(state.copyWith(picked: picked));
 

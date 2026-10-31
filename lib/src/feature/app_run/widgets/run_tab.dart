@@ -4,7 +4,6 @@ import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_card.dart';
@@ -30,6 +29,7 @@ class RunTab extends StatefulWidget {
     required this.onSendError,
     required this.onAddWidget,
     required this.onOpenFile,
+    required this.onOpenFlutterSettings,
     super.key,
   });
 
@@ -57,6 +57,9 @@ class RunTab extends StatefulWidget {
   /// Called with a file (as the run reports it) and a line when the user opens a file.
   final void Function(String path, int? line) onOpenFile;
 
+  /// Called when the user follows the link to the Flutter settings (shown when there is no SDK).
+  final VoidCallback onOpenFlutterSettings;
+
   @override
   State<RunTab> createState() => _RunTabState();
 }
@@ -77,16 +80,17 @@ class _RunTabState extends State<RunTab> {
     super.dispose();
   }
 
-  List<Device> get _devices => switch (widget.devices.state) {
-    Devices$CompletedState(:final devices) => devices,
-    _ => const <Device>[],
-  };
-
   void _onAction() {
     final state = widget.actions.state;
     if (_picking && (state is RunActions$CompletedState || state is RunActions$ErrorState)) {
       setState(() => _picking = false);
     }
+  }
+
+  /// Chooses the device; an emulator that is not running yet is booted.
+  void _chooseDevice(String id) {
+    widget.run.choose(deviceId: id);
+    widget.devices.launch(id);
   }
 
   void _comingInM2() {
@@ -143,9 +147,11 @@ class _RunTabState extends State<RunTab> {
           children: <Widget>[
             RunHeader(
               state: state,
-              devices: _devices,
+              devices: widget.devices.state,
               isPreview: widget.isPreview,
-              onDevice: (id) => widget.run.choose(deviceId: id),
+              onDevice: _chooseDevice,
+              onRetryDevices: widget.devices.watch,
+              onOpenFlutterSettings: widget.onOpenFlutterSettings,
               onMode: (mode) => widget.run.choose(mode: mode),
               onAction: _onRunAction,
             ),

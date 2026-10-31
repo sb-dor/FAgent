@@ -4,6 +4,7 @@ import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:l/l.dart';
 
 part 'devices_controller.freezed.dart';
 
@@ -35,6 +36,17 @@ final class DevicesController extends StateController<DevicesState>
       onError: (Object error) => setState(DevicesState.error(error: error)),
     );
   }, error: (error, stackTrace) async => setState(DevicesState.error(error: error)));
+
+  /// Boots the emulator behind [deviceId]; the booted device arrives through [watch]. A device
+  /// that is not an available emulator is left alone.
+  ///
+  /// Not queued behind [watch]: booting an emulator takes a while. A failure is logged only; the
+  /// device list stays as it is.
+  void launch(String deviceId) {
+    _repository.launch(deviceId).catchError((Object error, StackTrace stackTrace) {
+      l.w('DevicesController | cannot launch $deviceId: $error');
+    }).ignore();
+  }
 
   @override
   void dispose() {
