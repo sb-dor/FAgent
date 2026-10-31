@@ -34,11 +34,24 @@ final class AgentsController extends StateController<AgentsState> with Sequentia
   /// Starts following the agents. Calling it again changes nothing.
   void watch() => handle(() async {
     if (isDisposed || _subscription != null) return;
-    _subscription = _repository.watchAgents().listen(
-      (agents) => setState(AgentsState.completed(agents: _agents = agents)),
-      onError: (Object error) => setState(AgentsState.error(error: error, agents: _agents)),
-    );
+    _subscription = _subscribe();
   }, error: (error, stackTrace) async => setState(AgentsState.error(error: error, agents: _agents)));
+
+  /// Follows the agents again after the watch failed: drops the old subscription and starts a new
+  /// one.
+  void retry() => handle(() async {
+    if (isDisposed) return;
+    await _subscription?.cancel();
+    _subscription = null;
+    if (isDisposed) return;
+    setState(const AgentsState.initial());
+    _subscription = _subscribe();
+  }, error: (error, stackTrace) async => setState(AgentsState.error(error: error, agents: _agents)));
+
+  StreamSubscription<List<AgentInfo>> _subscribe() => _repository.watchAgents().listen(
+    (agents) => setState(AgentsState.completed(agents: _agents = agents)),
+    onError: (Object error) => setState(AgentsState.error(error: error, agents: _agents)),
+  );
 
   @override
   void dispose() {

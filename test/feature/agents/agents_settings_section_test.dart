@@ -102,12 +102,45 @@ final class _OpenLoginAgents implements IAgentsRepository {
   Future<void> openSettings(String agentId) => inner.openSettings(agentId);
 }
 
+/// A repository whose first watch fails with an error before any agent arrives.
+final class _FailingWatchAgents implements IAgentsRepository {
+  _FailingWatchAgents(this.inner);
+
+  final MemoryAgentsRepository inner;
+  int failures = 1;
+  int watches = 0;
+
+  @override
+  Stream<List<AgentInfo>> watchAgents() {
+    watches++;
+    if (failures > 0) {
+      failures--;
+      return Stream<List<AgentInfo>>.error(StateError('secret internal detail'));
+    }
+    return inner.watchAgents();
+  }
+
+  @override
+  Future<void> refresh(String agentId) => inner.refresh(agentId);
+
+  @override
+  Future<AgentLogin> login(String agentId, String methodId) => inner.login(agentId, methodId);
+
+  @override
+  Future<void> logout(String agentId) => inner.logout(agentId);
+
+  @override
+  Future<void> install(String agentId) => inner.install(agentId);
+
+  @override
+  Future<void> openSettings(String agentId) => inner.openSettings(agentId);
+}
+
 Finder _chip(String agentId, String role) =>
     find.byKey(ValueKey<String>('agent-default-$agentId-$role'));
 
 Finder _pageContent() => find.byKey(const ValueKey<String>('page-content'));
 
-/// Lets drift's real-async work finish, then rebuilds.
 /// Lets the snack bar finish showing, wait out its timer and leave.
 Future<void> _expireSnackBar(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 1));
@@ -115,6 +148,7 @@ Future<void> _expireSnackBar(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Lets drift's real-async work finish, then rebuilds.
 Future<void> _settle(WidgetTester tester) async {
   await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
   await tester.pump(const Duration(milliseconds: 100));
@@ -184,6 +218,26 @@ void main() {
       findsNWidgets(2),
     );
     expect(find.text('0.96.0 · Node 22.11'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a failed watch says so and can be retried', (tester) async {
+    final agents = _FailingWatchAgents(_repository());
+    await openSettings(tester, 'agents', agents);
+
+    expect(agents.watches, 1);
+    expect(find.text('Не удалось получить список агентов.'), findsOneWidget);
+    expect(find.textContaining('secret internal detail'), findsNothing);
+    expect(find.text('Claude Code'), findsNothing);
+
+    await tester.tap(find.text('Повторить'));
+    await tester.pumpAndSettle();
+    await _settle(tester);
+
+    expect(agents.watches, 2);
+    expect(find.text('Не удалось получить список агентов.'), findsNothing);
+    expect(find.text('Повторить'), findsNothing);
+    expect(find.text('Claude Code'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 

@@ -303,5 +303,8 @@
   "agentAddCustom": "＋ Свой ACP-агент",
   "agentSettingsMissing": "У Claude пока нет настроек, открывать нечего.",
   "agentActionFailed": "Действие с агентом не удалось: {error}",
-  "@agentActionFailed": {"placeholders": {"error": {"type": "String"}}}
+  "@agentActionFailed": {"placeholders": {"error": {"type": "String"}}},
+  "agentsChecking": "Проверяем агентов…",
+  "agentsLoadFailed": "Не удалось получить список агентов.",
+  "agentsRetry": "Повторить"
 }

@@ -339,5 +339,8 @@
   "agentAddCustom": "＋ Custom ACP agent",
   "agentSettingsMissing": "Claude has no settings yet, so there is nothing to open.",
   "agentActionFailed": "The agent action failed: {error}",
-  "@agentActionFailed": {"placeholders": {"error": {"type": "String"}}}
+  "@agentActionFailed": {"placeholders": {"error": {"type": "String"}}},
+  "agentsChecking": "Checking the agents…",
+  "agentsLoadFailed": "Could not get the list of agents.",
+  "agentsRetry": "Try again"
 }
