@@ -85,10 +85,12 @@ void main() {
     List<TurnObserver> observers = const <TurnObserver>[],
     Future<Map<String, String>> Function(String agentId)? sessionDefaults,
     Duration setupTimeout = const Duration(seconds: 60),
+    void Function(String agentId, List<Map<String, Object?>> options)? onConfigOptions,
   }) {
     final hub = AgentHub(
       observers: observers,
       sessionDefaults: sessionDefaults,
+      onConfigOptions: onConfigOptions,
       setupTimeout: setupTimeout,
       database: database,
       environment: environment,
@@ -141,6 +143,29 @@ void main() {
     expect(live.store.events.first.kind, SessionEventKind.prompt);
     expect(_agentText(live).join(), 'hello world');
     expect(live.store.events.last.payload, containsPair('stopReason', 'end_turn'));
+  });
+
+  test('config options reach onConfigOptions', () async {
+    final reported = <(String, List<Map<String, Object?>>)>[];
+    final hub = newHub(onConfigOptions: (agentId, options) => reported.add((agentId, options)));
+    final chat = await newChat();
+    await hub.session(chat);
+    expect(reported, isEmpty);
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(reported, isNotEmpty);
+    expect(reported.every((r) => r.$1 == 'fake' && r.$2.isNotEmpty), isTrue);
+    expect(reported.last.$2.any((o) => o['id'] == 'mode'), isTrue);
+  });
+
+  test('a failing onConfigOptions does not break the chat', () async {
+    final hub = newHub(onConfigOptions: (_, _) => throw StateError('catalog is gone'));
+    final chat = await newChat();
+
+    await hub.prompt(chat, 'echo hi');
+
+    expect(_agentText(await hub.session(chat)).join(), 'hi');
   });
 
   String? modeOf(LiveSession live) => [

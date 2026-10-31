@@ -5,6 +5,8 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
@@ -17,26 +19,32 @@ import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dar
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'memory_agents_repository.dart';
 import 'memory_skills_repository.dart';
 
 /// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
 /// [appRunRepository], [devicesRepository] or [widgetPickerRepository].
 ///
 /// The skills repository is an in-memory one with a built-in skill and rule unless the test passes
-/// its own [skillsRepository]; it never touches the file system.
+/// its own [skillsRepository]; it never touches the file system. The agents are an in-memory
+/// [MemoryAgentsRepository] (a signed-in Claude and the two preview agents) unless the test passes
+/// its own [agentsRepository].
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
   IDevicesRepository? devicesRepository,
   IWidgetPickerRepository? widgetPickerRepository,
   ISkillsRepository? skillsRepository,
+  IAgentsRepository? agentsRepository,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment
+    ..agentOptionsCatalog = AgentOptionsCatalogImpl(database: database)
     ..agentHub = AgentHub(database: database, environment: environment)
+    ..agentsRepository = agentsRepository ?? MemoryAgentsRepository()
     ..devicesRepository = devicesRepository ?? FakeDevicesRepositoryImpl(step: step)
     ..appRunRepository = appRunRepository ?? FakeAppRunRepositoryImpl(step: step)
     ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)

@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
@@ -30,8 +32,14 @@ class Dependencies {
   /// Login-shell environment for every child process (agents, `flutter`, `git`).
   late final ShellEnvironment shellEnvironment;
 
+  /// The settings (model, mode, …) the agents reported, kept between runs.
+  late final IAgentOptionsCatalog agentOptionsCatalog;
+
   /// Agent processes and the runtime state of every chat.
   late final AgentHub agentHub;
+
+  /// The agents, their state on this machine, and sign-in, sign-out and settings actions.
+  late final IAgentsRepository agentsRepository;
 
   /// The devices the app can run on.
   late final IDevicesRepository devicesRepository;

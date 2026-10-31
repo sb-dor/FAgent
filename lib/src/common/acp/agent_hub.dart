@@ -84,6 +84,7 @@ final class AgentHub {
     AgentConnector? connector,
     AgentAuth? auth,
     this._sessionDefaults,
+    this._onConfigOptions,
     this._observers = const <TurnObserver>[],
     this.setupTimeout = const Duration(seconds: 60),
     this.cancelTimeout = const Duration(seconds: 15),
@@ -108,6 +109,7 @@ final class AgentHub {
   final AppDatabase _database;
   final List<TurnObserver> _observers;
   final Future<Map<String, String>> Function(String agentId)? _sessionDefaults;
+  final void Function(String agentId, List<Map<String, Object?>> options)? _onConfigOptions;
   final Map<String, _AgentSlot> _slots;
   late final AgentConnector _connector;
 
@@ -174,13 +176,30 @@ final class AgentHub {
     if (!_slots.containsKey(record.agentId)) {
       throw StateError('Session $sessionId uses unknown agent ${record.agentId}');
     }
-    return _opened[sessionId] = LiveSession(
+    final live = LiveSession(
       id: sessionId,
       agentId: record.agentId,
       cwd: project.path,
       store: await SessionEventStore.open(_database, sessionId),
       acpSessionId: record.acpSessionId,
     )..bypassAcknowledged.value = record.bypassAllowedAt != null;
+    _reportConfigOptions(live);
+    return _opened[sessionId] = live;
+  }
+
+  /// Passes the settings the agent reports for [live] to the catalog callback.
+  void _reportConfigOptions(LiveSession live) {
+    final callback = _onConfigOptions;
+    if (callback == null) return;
+    live.configOptions.addListener(() {
+      final options = live.configOptions.value;
+      if (options.isEmpty) return;
+      try {
+        callback(live.agentId, options);
+      } on Object catch (error, stackTrace) {
+        l.w('AgentHub | the config options callback failed: $error', stackTrace);
+      }
+    });
   }
 
   // --- Prompt, stop, retry ---------------------------------------------------------

@@ -6,6 +6,8 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
@@ -56,6 +58,9 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ..appRunRepository = FakeAppRunRepositoryImpl()
       ..widgetPickerRepository = FakeWidgetPickerRepositoryImpl();
   },
+  // Remembers the settings every agent reports, for the Settings screen.
+  'Create agent options catalog': (dependencies) =>
+      dependencies.agentOptionsCatalog = AgentOptionsCatalogImpl(database: dependencies.database),
   'Create agent hub': (dependencies) => dependencies.agentHub = AgentHub(
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
@@ -65,7 +70,19 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
           database: dependencies.database,
         ).watch().first).sessionDefaults[agentId] ??
         const <String, String>{},
+    onConfigOptions: (agentId, options) => dependencies.agentOptionsCatalog
+        .save(agentId, options)
+        .catchError(
+          (Object error, StackTrace stackTrace) =>
+              l.w('Agent options | could not save the options of $agentId: $error', stackTrace),
+        ),
   ),
+  'Create agents repository': (dependencies) =>
+      dependencies.agentsRepository = AgentsRepositoryImpl(
+        hub: dependencies.agentHub,
+        environment: dependencies.shellEnvironment,
+        catalog: dependencies.agentOptionsCatalog,
+      ),
   'Create skills repository': (dependencies) async =>
       dependencies.skillsRepository = SkillsRepositoryImpl(
         database: dependencies.database,
