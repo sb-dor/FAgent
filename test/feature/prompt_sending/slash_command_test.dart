@@ -76,6 +76,13 @@ void main() {
       },
     );
 
+    test('outside a debug run reload, restart and screenshot ask for a debug run', () {
+      final commands = appCommandsFor(const RunMentions(isRunning: true), localization);
+
+      expect(commands.skip(1).every((c) => !c.enabled), isTrue);
+      expect(commands.skip(1).map((c) => c.hint), everyElement('Works in a debug run'));
+    });
+
     test('a command that is on has no hint', () {
       final commands = appCommandsFor(const RunMentions(canStart: true), localization);
 

@@ -109,9 +109,11 @@ class RunHeader extends StatelessWidget {
     final selected = deviceList.where((device) => device.id == state.selectedDeviceId).firstOrNull;
     final launching = selected?.kind == DeviceKind.available;
     final canStart = selected?.kind == DeviceKind.running;
-    // The inspector (screenshots) exists in debug only; DevTools needs the address `flutter run`
-    // reports a moment after the app is up.
-    final canScreenshot = run is RunRunning && run.mode == BuildMode.debug;
+    // Hot reload and restart need the JIT and the inspector (screenshots) exists in debug only;
+    // DevTools needs the address `flutter run` reports a moment after the app is up.
+    final inDebug = run is RunRunning && run.mode == BuildMode.debug;
+    final notInDebug = run is RunRunning && !inDebug;
+    final canScreenshot = inDebug;
     final canDevTools = run is RunRunning && run.devToolsUri != null;
 
     Widget button(
@@ -242,14 +244,14 @@ class RunHeader extends StatelessWidget {
                 button(
                   RunAction.reload,
                   Icons.bolt,
-                  localization.hotReload,
-                  enabled: run is RunRunning,
+                  notInDebug ? localization.hotReloadDebugOnly : localization.hotReload,
+                  enabled: inDebug,
                 ),
                 button(
                   RunAction.restart,
                   Icons.refresh,
-                  localization.hotRestart,
-                  enabled: run is RunRunning,
+                  notInDebug ? localization.hotRestartDebugOnly : localization.hotRestart,
+                  enabled: inDebug,
                 ),
                 button(
                   RunAction.pick,

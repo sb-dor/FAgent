@@ -102,11 +102,18 @@ class WorkspaceRunLink extends ChangeNotifier {
   /// the selected project is neither building nor running (the Run button is then not a Stop button).
   bool get _canStartNow => canStart && !isActive;
 
-  /// Whether a screenshot can be taken: the app runs in debug (the inspector exists in debug only).
-  bool get canScreenshot => switch (_run.state.run) {
+  /// Whether the app runs in debug: hot reload and restart need the JIT, and the inspector
+  /// (screenshots) exists in debug only.
+  bool get _runsInDebug => switch (_run.state.run) {
     RunRunning(:final mode) => _projectId != null && mode == BuildMode.debug,
     _ => false,
   };
+
+  /// Whether the app can be hot reloaded or restarted: it runs in debug.
+  bool get canReload => _runsInDebug;
+
+  /// Whether a screenshot can be taken: the app runs in debug (the inspector exists in debug only).
+  bool get canScreenshot => _runsInDebug;
 
   /// Does the app command [name] (`run`, `reload`, `restart` or `screenshot`) the `/` menu of the
   /// composer chose; an unknown name or a command that cannot work now does nothing.
@@ -135,14 +142,14 @@ class WorkspaceRunLink extends ChangeNotifier {
     if (_projectId case final projectId?) _actions.stop(projectId);
   }
 
-  /// Hot reloads the app; does nothing unless it is running.
+  /// Hot reloads the app; does nothing unless it runs in debug.
   void reload() {
-    if (isRunning) _actions.hotReload(_projectId!);
+    if (canReload) _actions.hotReload(_projectId!);
   }
 
-  /// Hot restarts the app; does nothing unless it is running.
+  /// Hot restarts the app; does nothing unless it runs in debug.
   void restart() {
-    if (isRunning) _actions.hotRestart(_projectId!);
+    if (canReload) _actions.hotRestart(_projectId!);
   }
 
   /// Puts the error of [entry] into the draft of the selected chat and marks the line as sent;
@@ -193,7 +200,8 @@ class WorkspaceRunLink extends ChangeNotifier {
     return RunMentions(
       isPreview: isPreview,
       canStart: _canStartNow,
-      canReload: isRunning,
+      isRunning: isRunning,
+      canReload: canReload,
       canScreenshot: canScreenshot,
       screenshot: shots.isEmpty
           ? null
@@ -226,7 +234,8 @@ class WorkspaceRunLink extends ChangeNotifier {
   }
 
   /// A turn of the open chat ended (busy to idle): hot reload once, when the user wants that and
-  /// the app runs. A status published again, or a chat that was never busy, reloads nothing.
+  /// the app runs in debug. A status published again, or a chat that was never busy, reloads
+  /// nothing.
   void _onChatHandle() {
     final handle = _data.chatHandle.value;
     if (handle == null) {

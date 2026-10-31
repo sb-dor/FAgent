@@ -73,8 +73,10 @@ class WorkspaceRunControls extends StatelessWidget {
             const SizedBox(width: 2),
             TitleBarButton(
               icon: Icons.bolt,
-              tooltip: localization.hotReload,
-              onPressed: link.isRunning ? link.reload : null,
+              tooltip: link.isRunning && !link.canReload
+                  ? localization.hotReloadDebugOnly
+                  : localization.hotReload,
+              onPressed: link.canReload ? link.reload : null,
             ),
             if (scope.runIsPreview) ...<Widget>[const SizedBox(width: 6), const PreviewBadge()],
           ],

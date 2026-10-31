@@ -63,8 +63,11 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                 );
               }
               return ListenableBuilder(
+                // The devices too: what `/run` can do changes when the chosen emulator has booted
+                // without the run changing.
                 listenable: Listenable.merge(<Listenable>[
                   _scope.runController,
+                  _scope.devicesController,
                   _scope.runLink,
                   _scope.skillLibraryController,
                 ]),

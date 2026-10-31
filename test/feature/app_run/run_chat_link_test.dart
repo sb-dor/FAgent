@@ -18,6 +18,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
@@ -25,6 +26,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_c
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_devices_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
 import '../../support/test_app.dart';
 
@@ -103,13 +105,15 @@ void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late Dependencies dependencies;
   late _SpyRunRepository spy;
+  late MemoryDevicesRepository devices;
   late int projectId;
   late int sessionId;
   late int otherSessionId;
 
   setUp(() {
     spy = _SpyRunRepository();
-    dependencies = testDependencies(appRunRepository: spy);
+    devices = MemoryDevicesRepository(step: const Duration(milliseconds: 1), isPreview: true);
+    dependencies = testDependencies(appRunRepository: spy, devicesRepository: devices);
   });
 
   Future<void> settle(WidgetTester tester) async {
@@ -446,6 +450,36 @@ void main() {
       expect(spy.started, <String?>[workspace.runController.state.selectedDeviceId]);
       expect(chat.textController.text, isEmpty);
       await until(tester, () => running(tester));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/run comes up once the chosen emulator has booted, with nothing else changing', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.selectedDevice != null);
+      workspace.chooseDevice('android-pixel-9');
+      await settle(tester);
+      RunMentions? offer() =>
+          tester.widget<ChatConfigWidget>(find.byType(ChatConfigWidget)).runContext;
+      expect(offer()!.canStart, isFalse, reason: 'the emulator is still booting');
+
+      devices.set(<Device>[
+        for (final device in kTestDevices)
+          if (device.id == 'android-pixel-9')
+            Device(
+              id: device.id,
+              name: device.name,
+              platform: device.platform,
+              kind: DeviceKind.running,
+            )
+          else
+            device,
+      ]);
+      await settle(tester);
+
+      expect(offer()!.canStart, isTrue);
       await disposeTestApp(tester, dependencies);
     });
 

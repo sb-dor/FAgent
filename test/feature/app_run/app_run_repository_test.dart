@@ -339,6 +339,26 @@ void main() {
       expect(stderr.level, LogLevel.error);
     });
 
+    test('a huge line is cut at kLogLineLimit characters and says how much is left out', () async {
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      await emit(process, 'app.log', <String, Object?>{
+        'appId': 'app-1',
+        'log': 'flutter: ${'x' * (kLogLineLimit + 500)}',
+      });
+      process.emitLine('y' * (kLogLineLimit + 1));
+      await pumpEventQueue();
+
+      // The cut comes first, then the parser drops the `flutter: ` of the print.
+      final printed = log.firstWhere((entry) => entry.text.startsWith('x'));
+      expect(printed.text, '${'x' * (kLogLineLimit - 9)}… (509 more characters)');
+      final plain = log.firstWhere((entry) => entry.text.startsWith('y'));
+      expect(plain.text, '${'y' * kLogLineLimit}… (1 more character)');
+    });
+
     test('hotReload sends app.restart and records the time on success', () async {
       final seen = states(1);
       await startRun(1);

@@ -447,7 +447,7 @@ void main() {
         await disposeTestApp(tester, dependencies);
       });
 
-      testWidgets('a profile run has DevTools but no screenshot', (tester) async {
+      testWidgets('a profile run has DevTools but no screenshot and no hot reload', (tester) async {
         await pumpTab(tester);
         run.choose(mode: BuildMode.profile);
         await tester.tap(find.byTooltip('Run'));
@@ -456,6 +456,10 @@ void main() {
         expect(enabled(tester, Icons.photo_camera_outlined), isFalse);
         expect(find.byTooltip('Screenshots are available in a debug run'), findsOneWidget);
         expect(enabled(tester, Icons.open_in_new), isTrue);
+        expect(enabled(tester, Icons.bolt), isFalse);
+        expect(enabled(tester, Icons.refresh), isFalse);
+        expect(find.byTooltip('Hot reload works in a debug run'), findsOneWidget);
+        expect(find.byTooltip('Hot restart works in a debug run'), findsOneWidget);
         await disposeTestApp(tester, dependencies);
       });
     });

@@ -25,6 +25,10 @@ export 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 /// How many of the newest log lines a project keeps (and replays to a new `logs` listener).
 const int kRunLogLimit = 2000;
 
+/// How many characters of one output line the log keeps; the rest of a longer line (one huge
+/// `print`) is left out and counted.
+const int kLogLineLimit = 16 * 1024;
+
 /// Runs a project's app (`flutter run`) and reports on it. Every method takes the project it is for.
 abstract interface class IAppRunRepository {
   /// Whether the data is made up (the repository is a stand-in until the real one lands).
@@ -707,12 +711,18 @@ final class _Launch {
 
   static Uri? _uri(Object? value) => value is String ? Uri.tryParse(value) : null;
 
-  /// Feeds [text] — possibly several lines — to the parser.
+  /// Feeds [text] — possibly several lines — to the parser, each cut at [kLogLineLimit].
   void _add(String text, {required bool isError}) {
     final lines = text.isEmpty ? const <String>[''] : const LineSplitter().convert(text);
     for (final line in lines) {
-      parser.add(line, isError: isError).forEach(_emit);
+      parser.add(_capped(line), isError: isError).forEach(_emit);
     }
+  }
+
+  static String _capped(String line) {
+    if (line.length <= kLogLineLimit) return line;
+    final more = line.length - kLogLineLimit;
+    return '${line.substring(0, kLogLineLimit)}… ($more more character${more == 1 ? '' : 's'})';
   }
 
   void _emit(ParsedLine line) {

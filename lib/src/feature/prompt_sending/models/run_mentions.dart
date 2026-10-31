@@ -21,8 +21,9 @@ final class RunMention {
 }
 
 /// What the running app offers the `@` menu: the picked widget, the last error and the last
-/// screenshot; and what the `/` app commands can do now. Plain data, so the chat does not depend on the run. Equal offers are equal, so a
-/// log line that changes no part does not rebuild the composer.
+/// screenshot; and what the `/` app commands can do now. Plain data, so the chat does not depend
+/// on the run. Equal offers are equal, so a log line that changes no part does not rebuild the
+/// composer.
 @immutable
 final class RunMentions {
   /// Creates the offer; an absent part is not shown.
@@ -33,6 +34,7 @@ final class RunMentions {
     this.attachable = const <String>{},
     this.isPreview = false,
     this.canStart = false,
+    this.isRunning = false,
     this.canReload = false,
     this.canScreenshot = false,
   });
@@ -58,7 +60,10 @@ final class RunMentions {
   /// Whether `/run` works now: a running device is chosen and the app is not up or building.
   final bool canStart;
 
-  /// Whether `/reload` and `/restart` work now: the app runs.
+  /// Whether the app runs (in any mode).
+  final bool isRunning;
+
+  /// Whether `/reload` and `/restart` work now: the app runs in debug (hot reload needs the JIT).
   final bool canReload;
 
   /// Whether `/screenshot` works now: the app runs in debug.
@@ -77,6 +82,7 @@ final class RunMentions {
           setEquals(other.attachable, attachable) &&
           other.isPreview == isPreview &&
           other.canStart == canStart &&
+          other.isRunning == isRunning &&
           other.canReload == canReload &&
           other.canScreenshot == canScreenshot;
 
@@ -88,6 +94,7 @@ final class RunMentions {
     Object.hashAllUnordered(attachable),
     isPreview,
     canStart,
+    isRunning,
     canReload,
     canScreenshot,
   );

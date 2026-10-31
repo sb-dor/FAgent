@@ -148,7 +148,7 @@ void main() {
       final picker = _CountingPicker(isPreview: true);
       final dependencies = testDependencies(
         appRunRepository: ScriptedAppRunRepository(step: const Duration(milliseconds: 1)),
-        devicesRepository: MemoryDevicesRepository(),
+        devicesRepository: MemoryDevicesRepository(step: const Duration(milliseconds: 1)),
         widgetPickerRepository: picker,
       );
       final state = await pump(tester, dependencies);
@@ -171,7 +171,7 @@ void main() {
       final picker = _CountingPicker(isPreview: false);
       final dependencies = testDependencies(
         appRunRepository: ScriptedAppRunRepository(step: const Duration(milliseconds: 1)),
-        devicesRepository: MemoryDevicesRepository(),
+        devicesRepository: MemoryDevicesRepository(step: const Duration(milliseconds: 1)),
         widgetPickerRepository: picker,
       );
       final state = await pump(tester, dependencies);

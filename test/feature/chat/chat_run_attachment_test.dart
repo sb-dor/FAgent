@@ -68,6 +68,7 @@ void main() {
         'type': 'resource_link',
         'uri': Uri.file(p.join(root.path, shot)).toString(),
         'name': 'screenshot-20261031-090507.png',
+        'mimeType': 'image/png',
       },
     ]);
   });

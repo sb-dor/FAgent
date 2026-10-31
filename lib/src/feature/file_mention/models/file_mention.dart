@@ -83,12 +83,22 @@ bool _isSpace(int unit) => unit == 0x20 || unit == 0x09 || unit == 0x0A || unit 
 bool _endsMention(String text, int end) =>
     end == text.length || _isSpace(text.codeUnitAt(end)) || '.,;:!?)]}\'"'.contains(text[end]);
 
-/// ACP `resource_link` blocks for [paths] relative to [root].
+/// ACP `resource_link` blocks for [paths] relative to [root]. An image (a screenshot of the run)
+/// names its `mimeType`, so the agent knows to look at it as one.
 List<Map<String, Object?>> resourceLinks(String root, List<String> paths) => <Map<String, Object?>>[
   for (final path in paths)
     <String, Object?>{
       'type': 'resource_link',
       'uri': Uri.file(p.join(root, path)).toString(),
       'name': p.basename(path),
+      'mimeType': ?_imageTypes[p.extension(path).toLowerCase()],
     },
 ];
+
+const Map<String, String> _imageTypes = <String, String>{
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+};
