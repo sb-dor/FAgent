@@ -1,7 +1,11 @@
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization_en.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_commands.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  final localization = GeneratedLocalizationEn();
   List<String> names(List<SlashCommand> commands) => <String>[for (final c in commands) c.name];
 
   SlashCommand agent(String name, [String? description]) =>
@@ -37,11 +41,45 @@ void main() {
     });
   });
 
-  group('appCommands', () {
-    test('are run, reload, restart and screenshot, all disabled until M2', () {
-      expect(names(appCommands), <String>['run', 'reload', 'restart', 'screenshot']);
-      expect(appCommands.every((c) => !c.enabled && c.hint == 'M2'), isTrue);
-      expect(appCommands.every((c) => c.source == SlashSource.app), isTrue);
+  group('appCommandsFor', () {
+    List<String> enabled(RunMentions? run) => [
+      for (final c in appCommandsFor(run, localization))
+        if (c.enabled) c.name,
+    ];
+
+    test('are run, reload, restart and screenshot, all from the app', () {
+      final commands = appCommandsFor(null, localization);
+
+      expect(names(commands), <String>['run', 'reload', 'restart', 'screenshot']);
+      expect(commands.every((c) => c.source == SlashSource.app), isTrue);
+    });
+
+    test('without a run all are disabled; run asks for a device, the others for a run', () {
+      final commands = appCommandsFor(null, localization);
+
+      expect(commands.every((c) => !c.enabled), isTrue);
+      expect(commands.first.hint, 'Choose a device');
+      expect(commands.skip(1).map((c) => c.hint), everyElement('App is not running'));
+    });
+
+    test(
+      'run is on with canStart, reload and restart with canReload, screenshot with canScreenshot',
+      () {
+        expect(enabled(const RunMentions(canStart: true)), <String>['run']);
+        expect(enabled(const RunMentions(canReload: true)), <String>['reload', 'restart']);
+        expect(enabled(const RunMentions(canScreenshot: true)), <String>['screenshot']);
+        expect(enabled(const RunMentions(canReload: true, canScreenshot: true)), <String>[
+          'reload',
+          'restart',
+          'screenshot',
+        ]);
+      },
+    );
+
+    test('a command that is on has no hint', () {
+      final commands = appCommandsFor(const RunMentions(canStart: true), localization);
+
+      expect(commands.first.hint, isNull);
     });
   });
 
@@ -86,7 +124,7 @@ void main() {
     test('app commands come first and the total stays within the limit', () {
       final all = <SlashCommand>[for (var i = 0; i < 20; i++) agent('c$i')];
 
-      final shown = slashSuggestions(appCommands, all, '');
+      final shown = slashSuggestions(appCommandsFor(null, localization), all, '');
 
       expect(shown, hasLength(12));
       expect(names(shown).take(4), <String>['run', 'reload', 'restart', 'screenshot']);
@@ -94,7 +132,9 @@ void main() {
     });
 
     test('a section without matches is empty', () {
-      final shown = slashSuggestions(appCommands, <SlashCommand>[agent('compact')], 'comp');
+      final shown = slashSuggestions(appCommandsFor(null, localization), <SlashCommand>[
+        agent('compact'),
+      ], 'comp');
       expect(names(shown), <String>['compact']);
     });
   });

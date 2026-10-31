@@ -201,6 +201,8 @@
   "commandReload": "Горячая перезагрузка",
   "commandRestart": "Горячий перезапуск",
   "commandScreenshot": "Снимок экрана устройства",
+  "runCommandNeedsDevice": "Выберите устройство",
+  "runCommandNeedsRun": "Приложение не запущено",
   "runStart": "Запустить",
   "runStop": "Остановить приложение",
   "hotReload": "Горячая перезагрузка",

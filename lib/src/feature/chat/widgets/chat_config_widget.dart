@@ -61,6 +61,7 @@ class ChatConfigWidget extends StatefulWidget {
     this.onHandle,
     this.onOpenChange,
     this.runContext,
+    this.onAppCommand,
     this.chatSkills = ChatSkills.empty,
     this.onOpenSkills,
     super.key,
@@ -86,6 +87,10 @@ class ChatConfigWidget extends StatefulWidget {
   /// What the running app offers the `@` menu of the composer; `null` offers nothing. May change
   /// while the chat is open.
   final RunMentions? runContext;
+
+  /// An app command (`run`, `reload`, `restart`, `screenshot`) was chosen in the `/` menu of the
+  /// composer; `null` leaves the commands as text.
+  final ValueChanged<String>? onAppCommand;
 
   /// The skills of the chat's project for the 🧩 chip, the `/` menu and the skill lines of the
   /// feed. May change while the chat is open.

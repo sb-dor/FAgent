@@ -18,6 +18,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_controls.dart';
@@ -345,7 +346,7 @@ void main() {
       await startRun(tester);
 
       workspaceOf(tester).runActionsController.screenshot(projectId);
-      await until(tester, () => workspaceOf(tester).runLink.mentions != null);
+      await until(tester, () => workspaceOf(tester).runLink.mentions?.screenshot != null);
       await tester.pump();
 
       expect(find.text('Open a chat to add the screenshot to the message'), findsOneWidget);
@@ -387,7 +388,7 @@ void main() {
       await settle(tester);
 
       expect(chat.textController.text, isEmpty);
-      expect(workspaceOf(tester).runLink.mentions, isNull);
+      expect(workspaceOf(tester).runLink.mentions?.screenshot, isNull);
       expect(find.byType(SnackBar), findsNothing);
       await disposeTestApp(tester, dependencies);
     });
@@ -400,6 +401,106 @@ void main() {
       await until(tester, () => spy.scripted.devToolsOpened.isNotEmpty);
 
       expect(spy.scripted.devToolsOpened, <int>[projectId]);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('app commands', () {
+    Finder row(String name) =>
+        find.descendant(of: find.byType(CommandSuggestions), matching: find.text(name));
+
+    /// Types [text] into the composer and presses Enter on the highlighted row.
+    Future<void> choose(WidgetTester tester, String text) async {
+      await tester.enterText(find.byType(TextField), text);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+    }
+
+    testWidgets('the offer tells what can be done: start with a device, the rest once running', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.selectedDevice != null);
+
+      var mentions = workspace.runLink.mentions!;
+      expect((mentions.canStart, mentions.canReload, mentions.canScreenshot), (true, false, false));
+
+      await startRun(tester);
+      mentions = workspace.runLink.mentions!;
+      expect((mentions.canStart, mentions.canReload, mentions.canScreenshot), (false, true, true));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/run starts the app on the chosen device and leaves the field empty', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.runController.state.selectedDeviceId != null);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      await choose(tester, '/run');
+
+      expect(spy.started, <String?>[workspace.runController.state.selectedDeviceId]);
+      expect(chat.textController.text, isEmpty);
+      await until(tester, () => running(tester));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/reload and /restart act on the running app', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      await choose(tester, '/reload');
+      expect((spy.reloads, spy.restarts), (1, 0));
+      await choose(tester, '/restart');
+      expect((spy.reloads, spy.restarts), (1, 1));
+      expect(chat.textController.text, isEmpty);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/screenshot puts @path into the draft of the chat', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      await choose(tester, '/screenshot');
+      await until(tester, () => chat.textController.text.isNotEmpty);
+
+      expect(chat.textController.text, '@${ScriptedAppRunRepository.defaultScreenshotPath}');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('while the app is not running /reload and /screenshot are not available', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      await tester.enterText(find.byType(TextField), '/re');
+      await tester.pump();
+
+      expect(find.text('App is not running'), findsNWidgets(3));
+      expect(row('/reload'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(spy.reloads, 0);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a running app is not started again by /run', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final started = spy.started.length;
+
+      await tester.enterText(find.byType(TextField), '/run');
+      await tester.pump();
+      expect(workspaceOf(tester).runLink.mentions!.canStart, isFalse);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+
+      expect(spy.started, hasLength(started));
       await disposeTestApp(tester, dependencies);
     });
   });

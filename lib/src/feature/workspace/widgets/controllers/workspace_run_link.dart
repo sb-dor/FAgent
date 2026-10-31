@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -97,6 +98,38 @@ class WorkspaceRunLink extends ChangeNotifier {
     );
   }
 
+  /// Whether the app can be started from the composer: a running device is chosen and the app of
+  /// the selected project is neither building nor running (the Run button is then not a Stop button).
+  bool get _canStartNow => canStart && !isActive;
+
+  /// Whether a screenshot can be taken: the app runs in debug (the inspector exists in debug only).
+  bool get canScreenshot => switch (_run.state.run) {
+    RunRunning(:final mode) => _projectId != null && mode == BuildMode.debug,
+    _ => false,
+  };
+
+  /// Does the app command [name] (`run`, `reload`, `restart` or `screenshot`) the `/` menu of the
+  /// composer chose; an unknown name or a command that cannot work now does nothing.
+  void runCommand(String name) {
+    switch (name) {
+      case 'run':
+        if (_canStartNow) start();
+      case 'reload':
+        reload();
+      case 'restart':
+        restart();
+      case 'screenshot':
+        screenshot();
+    }
+  }
+
+  /// Takes a screenshot of the running app of the selected project; does nothing unless it runs in
+  /// debug. The path goes into the draft when the shot is ready (the window hands it to
+  /// [addScreenshot]).
+  void screenshot() {
+    if (canScreenshot) _actions.screenshot(_projectId!);
+  }
+
   /// Stops the app of the selected project.
   void stop() {
     if (_projectId case final projectId?) _actions.stop(projectId);
@@ -148,17 +181,20 @@ class WorkspaceRunLink extends ChangeNotifier {
     return true;
   }
 
-  /// What the app offers the `@` menu of the selected project's chats: the picked widget, the last
-  /// error and the last screenshot; `null` when it has none of them.
+  /// What the app offers the selected project's chats: the picked widget, the last error and the
+  /// last screenshot for the `@` menu, and what the `/` app commands can do now; `null` only when
+  /// the run is not about the selected project.
   RunMentions? get mentions {
     final state = _run.state;
     if (state.projectId == null || state.projectId != _data.projectId) return null;
     final picked = state.picked;
     final error = state.logs.reversed.where((log) => log.error != null).firstOrNull?.error;
     final shots = _screenshots[state.projectId] ?? const <({String path, DateTime time})>[];
-    if (picked == null && error == null && shots.isEmpty) return null;
     return RunMentions(
       isPreview: isPreview,
+      canStart: _canStartNow,
+      canReload: isRunning,
+      canScreenshot: canScreenshot,
       screenshot: shots.isEmpty
           ? null
           : RunMention(detail: _clock(shots.last.time), text: _screenshotText(shots.last.path)),

@@ -20,7 +20,8 @@ import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 /// so the focus stays in the field). [toolbar] (the chips) sits under the field, the send button
 /// on its right. Typing `@` suggests project files (arrows choose, Enter or Tab inserts, Escape
 /// closes); a `/` at the start of the text suggests the project's [chatSkills], the app's commands
-/// and the agent's [commands] the same way. While a permission request waits, Enter and Escape
+/// (as [runContext] lets them work; choosing one calls [onAppCommand]) and the agent's [commands]
+/// the same way. While a permission request waits, Enter and Escape
 /// (without Shift, Command, Alt or Control) in an empty field call [onAcceptPending] and
 /// [onRejectPending].
 /// {@endtemplate}
@@ -41,6 +42,7 @@ class PromptComposer extends StatefulWidget {
     this.onAcceptPending,
     this.onRejectPending,
     this.runContext,
+    this.onAppCommand,
     this.chatSkills = ChatSkills.empty,
     super.key,
   });
@@ -86,6 +88,11 @@ class PromptComposer extends StatefulWidget {
 
   /// What the running app offers the `@` menu; `null` offers nothing.
   final RunMentions? runContext;
+
+  /// An app command (`run`, `reload`, `restart`, `screenshot`) was chosen in the `/` menu: the typed
+  /// `/query` is removed from the field and the name is passed here, nothing is inserted. `null`
+  /// inserts the command as text like any other.
+  final ValueChanged<String>? onAppCommand;
 
   /// The skills of the chat's project for the `/` menu (shown before the app's commands).
   final ChatSkills chatSkills;
@@ -169,9 +176,11 @@ class _PromptComposerState extends State<PromptComposer> {
         _rows = found;
       case _Trigger.command:
         final found = slashMenuRows(
+          localization: Localization.of(context),
           skills: widget.chatSkills,
           agent: widget.commands,
           query: _query,
+          run: widget.runContext,
         );
         if (refresh && listEquals(found, _commands)) return;
         keep = refresh && highlightedBefore >= 0 && highlightedBefore < _commands.length
@@ -236,7 +245,15 @@ class _PromptComposerState extends State<PromptComposer> {
   /// Inserts the row at [index] unless it is disabled; the list stays open then.
   void _pick(int index) {
     if (index < 0 || index >= _count || !_selectable(index)) return;
-    _insert(_trigger == _Trigger.mention ? _rows[index].insert : '/${_commands[index].name} ');
+    if (_trigger == _Trigger.mention) return _insert(_rows[index].insert);
+    final command = _commands[index];
+    final onAppCommand = widget.onAppCommand;
+    if (command.source == SlashSource.app && onAppCommand != null) {
+      _insert('');
+      onAppCommand(command.name);
+      return;
+    }
+    _insert('/${command.name} ');
   }
 
   /// Moves the highlight [step] rows, skipping the ones that cannot be chosen.

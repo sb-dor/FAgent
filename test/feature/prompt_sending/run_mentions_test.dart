@@ -41,6 +41,26 @@ void main() {
       );
     });
 
+    test('what can be done is part of the equality and is no offer for the @ menu', () {
+      expect(const RunMentions(), const RunMentions());
+      expect(const RunMentions(canStart: true), isNot(const RunMentions()));
+      expect(const RunMentions(canReload: true), isNot(const RunMentions()));
+      expect(const RunMentions(canScreenshot: true), isNot(const RunMentions()));
+      expect(
+        const RunMentions(canReload: true).hashCode,
+        const RunMentions(canReload: true).hashCode,
+      );
+      expect(
+        const RunMentions(canStart: true, canReload: true, canScreenshot: true).isEmpty,
+        isTrue,
+      );
+      const defaults = RunMentions();
+      expect(
+        (defaults.canStart, defaults.canReload, defaults.canScreenshot),
+        (false, false, false),
+      );
+    });
+
     test('a screenshot alone is an offer', () {
       expect(
         const RunMentions(

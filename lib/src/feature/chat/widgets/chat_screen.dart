@@ -92,6 +92,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 valueListenable: _scope.chatSkills,
                 builder: (context, chatSkills, _) => PromptComposer(
                   runContext: runContext,
+                  onAppCommand: _scope.widget.onAppCommand,
                   chatSkills: chatSkills,
                   controller: _scope.textController,
                   focusNode: _scope.composerFocus,

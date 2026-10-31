@@ -237,6 +237,8 @@
   "commandReload": "Hot reload",
   "commandRestart": "Hot restart",
   "commandScreenshot": "Screenshot of the device",
+  "runCommandNeedsDevice": "Choose a device",
+  "runCommandNeedsRun": "App is not running",
   "runStart": "Run",
   "runStop": "Stop the app",
   "hotReload": "Hot reload",

@@ -187,3 +187,21 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage7-new-pro
   - The repository class is `FakeProjectCreationRepositoryImpl` in `data/fake_project_creation_repository.dart` (the spec's fake naming rule wins over the plan's `ProjectCreationRepositoryImpl`); the interface, `TargetProblem` and the models stay in their own files
   - A creation stream that ends with a `failed` step maps to the controller's `failed` state, not `completed`
   - The progress chip sits directly under the "＋ Проект" button, which is below the project list in the sidebar
+
+## M2 follow-ups
+
+Deferred from the reviews of the M2 plan (docs/superpowers/plans/2026-10-31-m2-app-run.md). Paths are under `lib/src/`.
+
+- **Bugs and risks:**
+  - The output parser marks every stderr line of `flutter run` as an error before it checks for `warning:`, so Xcode warnings show up as errors in the Run tab and count in its badge (`feature/app_run/data/run_output_parser.dart`)
+  - The title-bar Run button keeps the tooltip "Starting the emulator…" after an emulator launch failed, though no emulator is starting any more (`feature/workspace/widgets/workspace_run_controls.dart`, `feature/workspace/widgets/controllers/workspace_run_link.dart`)
+  - The quit question (`busyChats`) counts chats with a turn in flight and a running login, not running apps: quitting with an app up asks nothing, although the app on the device is closed with the window (`feature/app_close/data/app_close_repository.dart`)
+  - The `/run` row says "Choose a device" also when the app is already running or building; the hint cannot tell the two cases apart (`feature/prompt_sending/models/slash_commands.dart`)
+- **Next steps:**
+  - DevTools inside the app window (the settings value "Окно приложения" works as the browser until a webview is added)
+  - Take runtime errors from the `Flutter.Error` event of the VM service instead of parsing the text of the output (needs the VM service connection M3 adds)
+  - Remember the build mode and the entry point per project (only the run arguments are stored in `run_configs`)
+  - Separate iOS simulators in "Available" (an unbooted simulator is listed as an emulator only)
+- **Rulings recorded during the stage** (revisit if they cost too much):
+  - The chat's `/` menu text for a command that cannot work now is the reason (`Choose a device`, `App is not running`), not a milestone; `SlashCommand.hint` is a ready string, so building the rows needs the localization
+  - `WorkspaceRunLink.mentions` is `null` only when the run state is not about the selected project; it always carries what the `/` commands can do (`canStart`, `canReload`, `canScreenshot`), and `isEmpty` still means nothing to offer the `@` menu

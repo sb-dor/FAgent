@@ -75,6 +75,7 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                   onHandle: _scope.dataController.publishChatHandle,
                   onOpenChange: _scope.openChange,
                   runContext: _scope.runLink.mentions,
+                  onAppCommand: _scope.runLink.runCommand,
                   chatSkills: _chatSkills(project),
                   onOpenSkills: _scope.dataController.openSkills,
                 ),
