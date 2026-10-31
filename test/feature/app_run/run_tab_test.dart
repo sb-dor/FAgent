@@ -664,6 +664,58 @@ void main() {
       await finish(tester);
     });
 
+    testWidgets('a failed launch shows an error with a retry instead of the progress', (
+      tester,
+    ) async {
+      await pumpTab(tester);
+      fake.set(const <Device>[_macos, _pixelEmulator]);
+      await tester.pump(const Duration(milliseconds: 20));
+      run.choose(deviceId: 'macos');
+      await tester.pump();
+      fake.launchError = Exception('no emulator');
+
+      await tester.tap(find.text('macOS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pixel 9'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not start the emulator'), findsOneWidget);
+      expect(find.text('Starting the emulator…'), findsNothing);
+      expect(startButton(tester).onPressed, isNull, reason: 'still not a running device');
+
+      fake.launchError = null;
+      await tester.tap(find.text('Retry'));
+      await tester.pumpAndSettle();
+
+      expect(fake.launched, <String>['emulator:Pixel_9', 'emulator:Pixel_9']);
+      expect(find.text('Starting the emulator…'), findsOneWidget);
+      expect(find.text('Could not start the emulator'), findsNothing);
+      await finish(tester);
+    });
+
+    testWidgets('choosing a device that is already launching does not launch it twice', (
+      tester,
+    ) async {
+      await pumpTab(tester);
+      fake.set(const <Device>[_macos, _pixelEmulator]);
+      await tester.pump(const Duration(milliseconds: 20));
+      run.choose(deviceId: 'macos');
+      await tester.pump();
+
+      await tester.tap(find.text('macOS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pixel 9'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pixel 9'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pixel 9').last);
+      await tester.pumpAndSettle();
+
+      expect(fake.launched, <String>['emulator:Pixel_9']);
+      expect(find.text('Starting the emulator…'), findsOneWidget);
+      await finish(tester);
+    });
+
     testWidgets('choosing a running device launches nothing', (tester) async {
       await pumpTab(tester);
       fake.set(const <Device>[_macos, _pixelEmulator]);

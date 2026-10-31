@@ -268,6 +268,7 @@
   "runDevicesFailed": "Could not get the devices",
   "runNoDevices": "No devices: start a simulator or an emulator",
   "runLaunchingEmulator": "Starting the emulator…",
+  "runLaunchFailed": "Could not start the emulator",
   "runNoProject": "Select a project to run its app",
   "runNoProjectHint": "The app runs per project, not per chat.",
   "fromRun": "From the run",

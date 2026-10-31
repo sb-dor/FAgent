@@ -61,6 +61,7 @@ class RunHeader extends StatelessWidget {
     required this.onAction,
     required this.onRetryDevices,
     required this.onOpenFlutterSettings,
+    this.launchFailed = false,
     super.key,
   });
 
@@ -87,6 +88,9 @@ class RunHeader extends StatelessWidget {
 
   /// Called when the user follows the link to the Flutter settings.
   final VoidCallback onOpenFlutterSettings;
+
+  /// Whether booting the chosen emulator failed; the status line says so, with a retry.
+  final bool launchFailed;
 
   @override
   Widget build(BuildContext context) {
@@ -218,7 +222,9 @@ class RunHeader extends StatelessWidget {
                     canStart
                         ? localization.runStart
                         : launching
-                        ? localization.runLaunchingEmulator
+                        ? (launchFailed
+                              ? localization.runLaunchFailed
+                              : localization.runLaunchingEmulator)
                         : localization.runChooseDeviceFirst,
                     enabled: canStart,
                     primary: true,
@@ -246,7 +252,13 @@ class RunHeader extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            if (launching)
+            if (launching && launchFailed)
+              _DevicesProblem(
+                message: localization.runLaunchFailed,
+                action: localization.retry,
+                onAction: () => onDevice(selected!.id),
+              )
+            else if (launching)
               Text(
                 localization.runLaunchingEmulator,
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(fontSize: 11),

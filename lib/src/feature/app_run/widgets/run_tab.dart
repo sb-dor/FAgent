@@ -152,6 +152,9 @@ class _RunTabState extends State<RunTab> {
               onDevice: _chooseDevice,
               onRetryDevices: widget.devices.watch,
               onOpenFlutterSettings: widget.onOpenFlutterSettings,
+              launchFailed:
+                  state.selectedDeviceId != null &&
+                  widget.devices.launchFailed(state.selectedDeviceId!),
               onMode: (mode) => widget.run.choose(mode: mode),
               onAction: _onRunAction,
             ),

@@ -42,6 +42,9 @@ final class FakeDevicesRepositoryImpl implements IDevicesRepository {
   /// The ids passed to [launch] that belong to an available device, in order.
   final List<String> launched = <String>[];
 
+  /// When set, [launch] fails with it (after recording the id).
+  Exception? launchError;
+
   final List<StreamController<List<Device>>> _controllers = <StreamController<List<Device>>>[];
   List<Device> _devices = kFakeDevices;
 
@@ -79,7 +82,9 @@ final class FakeDevicesRepositoryImpl implements IDevicesRepository {
   @override
   Future<void> launch(String deviceId) async {
     final device = _devices.where((device) => device.id == deviceId).firstOrNull;
-    if (device != null && device.kind == DeviceKind.available) launched.add(deviceId);
+    if (device == null || device.kind != DeviceKind.available) return;
+    launched.add(deviceId);
+    if (launchError case final error?) throw error;
   }
 
   @override
