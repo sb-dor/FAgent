@@ -17,8 +17,8 @@ const Map<CreationStepKind, Duration> kFakeStepDurations = <CreationStepKind, Du
   CreationStepKind.firstCommit: Duration(seconds: 1),
 };
 
-/// The lines a made-up step prints.
-List<String> _outputOf(CreationStepKind kind, String name) => switch (kind) {
+/// The lines a made-up step of the project [name] prints.
+List<String> fakeStepOutput(CreationStepKind kind, String name) => switch (kind) {
   CreationStepKind.flutterCreate => <String>['Creating project $name...', 'Wrote 130 files.'],
   CreationStepKind.agentSetup => const <String>[
     '✎ lib/src/common/localization/intl_en.arb',
@@ -114,7 +114,7 @@ final class FakeProjectCreationRepositoryImpl implements IProjectCreationReposit
     String name,
   ) sync* {
     for (var i = 0; i < steps.length; i++) {
-      final output = _outputOf(steps[i].kind, name);
+      final output = fakeStepOutput(steps[i].kind, name);
       yield (i, (step) => step.copyWith(status: CreationStepStatus.running));
       for (var line = 1; line <= output.length; line++) {
         yield (i, (step) => step.copyWith(output: output.sublist(0, line)));

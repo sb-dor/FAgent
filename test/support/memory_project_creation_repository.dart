@@ -1,13 +1,16 @@
 import 'dart:async';
 
+import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart'
+    show fakeStepOutput, kFakeStepDurations;
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 
 /// [IProjectCreationRepository] for tests: no file system, no timers beyond [step].
 ///
-/// [existing] are the full paths [checkTarget] reports as taken. [create] runs the steps of
-/// [creationStepsFor] one by one and records the request in [requests].
+/// [existing] are the full paths [checkTarget] reports as taken. [create] plays the same run as the
+/// fake repository (first all pending, then each step of [creationStepsFor] with its output and
+/// duration) and records the request in [requests].
 final class MemoryProjectCreationRepository implements IProjectCreationRepository {
   /// Creates the repository.
   MemoryProjectCreationRepository({
@@ -45,21 +48,28 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
     controller
       ..onListen = () {
         final kinds = creationStepsFor(request);
-        // Each step goes running, then done.
+        // Like the fake repository: all pending first, then each step starts, prints its lines
+        // one by one and finishes.
+        var steps = <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
         final snapshots = <List<CreationStep>>[];
-        for (var i = 0; i < kinds.length; i++) {
-          for (final status in [CreationStepStatus.running, CreationStepStatus.done]) {
-            snapshots.add([
-              for (var j = 0; j < kinds.length; j++)
-                CreationStep(
-                  kind: kinds[j],
-                  status: j < i
-                      ? CreationStepStatus.done
-                      : (j == i ? status : CreationStepStatus.pending),
-                ),
-            ]);
-          }
+        void change(int index, CreationStep Function(CreationStep) apply) {
+          steps = List<CreationStep>.of(steps)..[index] = apply(steps[index]);
+          snapshots.add(steps);
         }
+
+        for (var i = 0; i < kinds.length; i++) {
+          final output = fakeStepOutput(kinds[i], request.name);
+          change(i, (step) => step.copyWith(status: CreationStepStatus.running));
+          for (var line = 1; line <= output.length; line++) {
+            change(i, (step) => step.copyWith(output: output.sublist(0, line)));
+          }
+          change(
+            i,
+            (step) =>
+                step.copyWith(status: CreationStepStatus.done, took: kFakeStepDurations[step.kind]),
+          );
+        }
+        controller.add(<CreationStep>[for (final kind in kinds) CreationStep(kind: kind)]);
         var next = 0;
         void emit() {
           timer = Timer(step, () {

@@ -95,6 +95,31 @@ void main() {
     expect(failing.state, isA<ProjectCreation$IdleState>());
   });
 
+  test('a stream that ends with a failed step ends in failed, not completed', () async {
+    final failing = ProjectCreationController(repository: _FailedStepRepository());
+    addTearDown(failing.dispose);
+
+    failing.start(_request);
+    await _until(failing, () => failing.state is! ProjectCreation$RunningState);
+
+    final state = failing.state as ProjectCreation$FailedState;
+    expect(state.error, isA<CreationStepFailed>());
+    expect((state.error as CreationStepFailed).kind, CreationStepKind.flutterCreate);
+    expect(state.steps.first.status, CreationStepStatus.failed);
+    expect(state.steps.last.status, CreationStepStatus.pending);
+  });
+
+  test('the failure names the step that failed', () async {
+    final failing = ProjectCreationController(repository: _FailedStepRepository(failAt: 1));
+    addTearDown(failing.dispose);
+
+    failing.start(_request);
+    await _until(failing, () => failing.state is! ProjectCreation$RunningState);
+
+    final state = failing.state as ProjectCreation$FailedState;
+    expect((state.error as CreationStepFailed).kind, creationStepsFor(_request)[1]);
+  });
+
   test('dispose cancels the subscription', () async {
     final slow = MemoryProjectCreationRepository(step: const Duration(milliseconds: 5));
     final sliding = ProjectCreationController(repository: slow)..start(_request);
@@ -123,5 +148,36 @@ final class _FailingRepository implements IProjectCreationRepository {
       CreationStep(kind: creationStepsFor(request).first, status: CreationStepStatus.running),
     ];
     throw StateError('flutter create failed');
+  }
+}
+
+/// A stream whose last snapshot has the step at [failAt] failed and ends without an error.
+final class _FailedStepRepository implements IProjectCreationRepository {
+  _FailedStepRepository({this.failAt = 0});
+
+  final int failAt;
+
+  @override
+  bool get isPreview => true;
+
+  @override
+  Future<String> defaultParent() async => '/Users/test/StudioProjects';
+
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async => null;
+
+  @override
+  Stream<List<CreationStep>> create(NewProjectRequest request) async* {
+    final kinds = creationStepsFor(request);
+    yield <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
+    yield <CreationStep>[
+      for (var i = 0; i < kinds.length; i++)
+        CreationStep(
+          kind: kinds[i],
+          status: i < failAt
+              ? CreationStepStatus.done
+              : (i == failAt ? CreationStepStatus.failed : CreationStepStatus.pending),
+        ),
+    ];
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/creation_chip.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
@@ -43,7 +44,7 @@ final class _HintItem extends _ListItem {
 
 /// {@template workspace_sidebar}
 /// New chat and search on top, then the chats of every project grouped by project, then the
-/// add-project button and the footer.
+/// add-project button, the chip of a new project's creation under it, and the footer.
 ///
 /// Projects are ordered by their most recent chat; projects without chats follow in the order of
 /// the project list. A group can be collapsed; that is remembered only while the window lives
@@ -106,6 +107,11 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
                 trailing: Icon(Icons.expand_more, size: 16, color: context.colors.muted),
                 onTap: () => _openAddProjectMenu(_rectOf(rowContext)),
               ),
+            ),
+            CreationChip(
+              controller: _scope.projectCreation,
+              onOpen: () => _scope.openNewProject().ignore(),
+              onHide: _scope.projectCreation.reset,
             ),
             const SizedBox(height: 4),
             Divider(color: context.colors.border),

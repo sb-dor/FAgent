@@ -3,27 +3,53 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/creation_progress.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_form.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_header.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 
 /// {@template new_project_dialog}
 /// The New project wizard: a 560 px dialog that asks for the project ([NewProjectForm]) and, once
-/// the creation has started, shows how it goes.
+/// the creation has started, shows how it goes ([CreationProgress]).
 ///
 /// It reads the window's [ProjectCreationController] from the workspace, so it has to be shown
 /// under a [WorkspaceConfigInhWidget] (`WorkspaceConfigWidgetState.openNewProject` does that).
-/// Closing it does not stop a creation: the controller lives as long as the window.
+/// Closing it does not stop a creation: the controller lives as long as the window, and the
+/// dialog opens on the progress again while the creation runs or waits for its "Done".
 /// {@endtemplate}
-class NewProjectDialog extends StatelessWidget {
+class NewProjectDialog extends StatefulWidget {
   /// {@macro new_project_dialog}
   const NewProjectDialog({super.key});
 
   @override
+  State<NewProjectDialog> createState() => _NewProjectDialogState();
+}
+
+class _NewProjectDialogState extends State<NewProjectDialog> {
+  late final _creation = WorkspaceConfigInhWidget.of(context).projectCreation;
+
+  /// Closes the dialog and, once it has faded out (so the empty form does not flash), resets the
+  /// finished creation.
+  void _done() {
+    final creation = _creation;
+    final animation = ModalRoute.of(context)?.animation;
+    Navigator.of(context).pop();
+    if (animation == null || animation.isDismissed) {
+      creation.reset();
+      return;
+    }
+    void onStatus(AnimationStatus status) {
+      if (status != AnimationStatus.dismissed) return;
+      animation.removeStatusListener(onStatus);
+      if (!creation.isDisposed) creation.reset();
+    }
+
+    animation.addStatusListener(onStatus);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final localization = Localization.of(context);
     final colors = context.colors;
-    final creation = WorkspaceConfigInhWidget.of(context).projectCreation;
     return Actions(
       // The dialog is not dismissible by its barrier, so Esc is handled here.
       actions: <Type, Action<Intent>>{
@@ -44,51 +70,19 @@ class NewProjectDialog extends StatelessWidget {
         clipBehavior: Clip.antiAlias,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 8, 4),
-                child: Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Text(
-                        localization.newProjectTitle,
-                        style: Theme.of(context).textTheme.titleMedium!
-                            .copyWith(color: colors.text, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: localization.close,
-                      icon: Icon(Icons.close, size: 18, color: colors.muted),
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ],
-                ),
+          child: ListenableBuilder(
+            listenable: _creation,
+            builder: (context, _) => switch (_creation.state) {
+              ProjectCreation$IdleState() => Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  NewProjectHeader(title: Localization.of(context).newProjectTitle),
+                  const Flexible(child: NewProjectForm()),
+                ],
               ),
-              Flexible(
-                child: ListenableBuilder(
-                  listenable: creation,
-                  builder: (context, _) => switch (creation.state) {
-                    ProjectCreation$IdleState() => const NewProjectForm(),
-                    // Task 3 replaces this with the progress of the steps.
-                    ProjectCreation$RunningState(:final steps) ||
-                    ProjectCreation$CompletedState(:final steps) ||
-                    ProjectCreation$FailedState(:final steps) => Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
-                      child: Text(
-                        localization.newProjectStepsDone(
-                          steps.where((step) => step.status == CreationStepStatus.done).length,
-                          steps.length,
-                        ),
-                        style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: colors.text),
-                      ),
-                    ),
-                  },
-                ),
-              ),
-            ],
+              _ => CreationProgress(controller: _creation, onDone: _done),
+            },
           ),
         ),
       ),

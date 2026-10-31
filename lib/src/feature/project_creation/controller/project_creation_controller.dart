@@ -49,6 +49,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
   StreamSubscription<List<CreationStep>>? _subscription;
   Completer<void>? _finished;
 
+  /// Whether the creation is a made-up run that writes nothing (until milestone M4).
+  bool get isPreview => _repository.isPreview;
+
   /// The folder to suggest as the parent of a new project.
   Future<String> defaultParent() => _repository.defaultParent();
 
@@ -86,7 +89,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     await finished.future;
     _subscription = null;
     if (isDisposed) return;
-    final error = failure;
+    // A stream that ends normally with a failed step is a failed creation too.
+    final failedStep = steps.where((step) => step.status == CreationStepStatus.failed).firstOrNull;
+    final error = failure ?? (failedStep == null ? null : CreationStepFailed(failedStep.kind));
     setState(
       error == null
           ? ProjectCreationState.completed(request: request, steps: steps)

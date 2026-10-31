@@ -53,6 +53,18 @@ abstract class CreationStep with _$CreationStep {
   }) = _CreationStep;
 }
 
+/// A creation whose steps ended with the step [kind] failed.
+final class CreationStepFailed implements Exception {
+  /// Creates the error.
+  const CreationStepFailed(this.kind);
+
+  /// The step that failed.
+  final CreationStepKind kind;
+
+  @override
+  String toString() => 'CreationStepFailed(${kind.name})';
+}
+
 /// The stages [request] goes through, in order.
 List<CreationStepKind> creationStepsFor(NewProjectRequest request) => <CreationStepKind>[
   CreationStepKind.flutterCreate,
