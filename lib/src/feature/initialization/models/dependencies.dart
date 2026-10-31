@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
 /// {@template dependencies}
@@ -52,6 +53,9 @@ class Dependencies {
 
   /// Skills and rules: the built-in ones, the user's and the projects', and where they are on.
   late final ISkillsRepository skillsRepository;
+
+  /// The MCP servers handed to agents: the built-in ones and the user's own.
+  late final IMcpServersRepository mcpServersRepository;
 
   @override
   String toString() => 'Dependencies{}';

@@ -14,6 +14,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_r
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
@@ -89,4 +90,6 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create MCP servers repository': (dependencies) =>
+      dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
 };

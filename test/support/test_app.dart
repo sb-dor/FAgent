@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_r
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,7 +29,8 @@ import 'memory_skills_repository.dart';
 /// The skills repository is an in-memory one with a built-in skill and rule unless the test passes
 /// its own [skillsRepository]; it never touches the file system. The agents are an in-memory
 /// [MemoryAgentsRepository] (a signed-in Claude and the two preview agents) unless the test passes
-/// its own [agentsRepository].
+/// its own [agentsRepository]. The MCP servers repository runs on the in-memory database unless the
+/// test passes its own [mcpServersRepository].
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
@@ -36,6 +38,7 @@ Dependencies testDependencies({
   IWidgetPickerRepository? widgetPickerRepository,
   ISkillsRepository? skillsRepository,
   IAgentsRepository? agentsRepository,
+  IMcpServersRepository? mcpServersRepository,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
@@ -48,6 +51,7 @@ Dependencies testDependencies({
     ..devicesRepository = devicesRepository ?? FakeDevicesRepositoryImpl(step: step)
     ..appRunRepository = appRunRepository ?? FakeAppRunRepositoryImpl(step: step)
     ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
+    ..mcpServersRepository = mcpServersRepository ?? McpServersRepositoryImpl(database: database)
     ..skillsRepository =
         skillsRepository ??
         MemorySkillsRepository(
