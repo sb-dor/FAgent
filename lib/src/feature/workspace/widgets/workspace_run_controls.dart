@@ -43,7 +43,9 @@ class WorkspaceRunControls extends StatelessWidget {
               child: RunDeviceChip(
                 devices: devices,
                 selectedDeviceId: scope.runController.state.selectedDeviceId,
+                arguments: scope.runController.state.arguments,
                 onSelected: scope.chooseDevice,
+                onEditArguments: scope.editRunArguments,
               ),
             ),
             const SizedBox(width: 6),

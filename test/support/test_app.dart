@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dar
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
@@ -26,11 +27,13 @@ import 'memory_agents_repository.dart';
 import 'memory_devices_repository.dart';
 import 'memory_permission_rules_repository.dart';
 import 'memory_project_creation_repository.dart';
+import 'memory_run_config_repository.dart';
 import 'memory_skills_repository.dart';
 import 'scripted_app_run_repository.dart';
 
 /// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
-/// [appRunRepository], [devicesRepository] or [widgetPickerRepository].
+/// [appRunRepository], [devicesRepository], [widgetPickerRepository] or [runConfigRepository] (a
+/// [MemoryRunConfigRepository] by default).
 ///
 /// The run and the devices are a [ScriptedAppRunRepository] and a [MemoryDevicesRepository], both
 /// marked as previews, so the Preview badges show unless the test passes real-looking ones.
@@ -50,6 +53,7 @@ Dependencies testDependencies({
   IAppRunRepository? appRunRepository,
   IDevicesRepository? devicesRepository,
   IWidgetPickerRepository? widgetPickerRepository,
+  IRunConfigRepository? runConfigRepository,
   ISkillsRepository? skillsRepository,
   IAgentsRepository? agentsRepository,
   IMcpServersRepository? mcpServersRepository,
@@ -68,6 +72,7 @@ Dependencies testDependencies({
     ..devicesRepository = devicesRepository ?? MemoryDevicesRepository(step: step, isPreview: true)
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)
     ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
+    ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
     ..mcpServersRepository = mcpServersRepository ?? McpServersRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()

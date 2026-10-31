@@ -145,6 +145,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                             devices: _scope.devicesController,
                             run: _scope.runController,
                             actions: _scope.runActionsController,
+                            runConfig: _scope.runConfigController,
                             onSendError: _scope.sendRunErrorToAgent,
                             onAddWidget: _scope.addRunWidgetToMessage,
                             onOpenFile: (path, line) => _scope.openRunFile(path, line).ignore(),

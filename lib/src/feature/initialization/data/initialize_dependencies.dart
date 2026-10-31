@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dar
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
@@ -106,6 +107,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create run config repository': (dependencies) =>
+      dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
   'Create MCP servers repository': (dependencies) =>
       dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
   'Create permission rules repository': (dependencies) =>

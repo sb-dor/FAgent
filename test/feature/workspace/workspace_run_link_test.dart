@@ -13,6 +13,9 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/wor
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_run_config_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
+
 /// Replays the lines a test preloads.
 final class _ScriptedRun implements IAppRunRepository {
   _ScriptedRun(this.lines);
@@ -66,7 +69,8 @@ void main() {
       ),
     ]);
     final data = WorkspaceDataController()..selectProject(1);
-    final run = RunController(repository: repository)..watch(1);
+    final run = RunController(repository: repository, configRepository: MemoryRunConfigRepository())
+      ..watch(1);
     final actions = RunActionsController(
       runRepository: repository,
       pickerRepository: FakeWidgetPickerRepositoryImpl(),
@@ -86,6 +90,45 @@ void main() {
     data.dispose();
     return text;
   }
+
+  test('start passes the saved run arguments of the project', () async {
+    final repository = ScriptedAppRunRepository(step: const Duration(milliseconds: 1));
+    final config = MemoryRunConfigRepository(
+      initial: <int, RunArguments>{1: const RunArguments(flavor: 'dev')},
+    );
+    const macos = Device(
+      id: 'macos',
+      name: 'macOS',
+      platform: DevicePlatform.macos,
+      kind: DeviceKind.running,
+    );
+    final data = WorkspaceDataController()..selectProject(1);
+    final run = RunController(repository: repository, configRepository: config)..watch(1);
+    final actions = RunActionsController(
+      runRepository: repository,
+      pickerRepository: FakeWidgetPickerRepositoryImpl(),
+    );
+    final link = WorkspaceRunLink(
+      data: data,
+      run: run,
+      actions: actions,
+      reloadAfterTurn: () => false,
+      selectedDevice: () => macos,
+    );
+    addTearDown(() async {
+      link.dispose();
+      actions.dispose();
+      run.dispose();
+      data.dispose();
+      await repository.dispose();
+    });
+    await pumpEventQueue();
+
+    link.start();
+    await pumpEventQueue();
+
+    expect(repository.starts.single.arguments, const RunArguments(flavor: 'dev'));
+  });
 
   group('the @error offer', () {
     test('names the file and the line', () async {
@@ -149,7 +192,10 @@ void main() {
           ),
         ]);
         final data = WorkspaceDataController()..selectProject(1);
-        final run = RunController(repository: repository)..watch(1);
+        final run = RunController(
+          repository: repository,
+          configRepository: MemoryRunConfigRepository(),
+        )..watch(1);
         final actions = RunActionsController(
           runRepository: repository,
           pickerRepository: FakeWidgetPickerRepositoryImpl(),

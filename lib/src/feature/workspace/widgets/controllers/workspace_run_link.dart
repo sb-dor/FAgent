@@ -74,7 +74,13 @@ class WorkspaceRunLink {
     final state = _run.state;
     final device = _selectedDevice();
     if (projectId == null || device == null || device.kind != DeviceKind.running) return;
-    _actions.start(projectId, device: device, mode: state.mode, target: state.target);
+    _actions.start(
+      projectId,
+      device: device,
+      mode: state.mode,
+      target: state.target,
+      arguments: state.arguments,
+    );
   }
 
   /// Stops the app of the selected project.

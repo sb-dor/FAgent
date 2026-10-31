@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
@@ -23,6 +24,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widge
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
 import '../../support/test_app.dart';
 
 /// A repository that replays what a test preloads and emits what it pushes.
@@ -139,17 +141,22 @@ void main() {
     late DevicesController devices;
     late RunController run;
     late RunActionsController actions;
+    late RunConfigController runConfig;
     late List<LogEntry> sentErrors;
     late List<(String, int?)> openedFiles;
 
     setUp(() {
       dependencies = testDependencies();
       devices = DevicesController(repository: dependencies.devicesRepository);
-      run = RunController(repository: dependencies.appRunRepository);
+      run = RunController(
+        repository: dependencies.appRunRepository,
+        configRepository: dependencies.runConfigRepository,
+      );
       actions = RunActionsController(
         runRepository: dependencies.appRunRepository,
         pickerRepository: dependencies.widgetPickerRepository,
       );
+      runConfig = RunConfigController(repository: dependencies.runConfigRepository);
       sentErrors = <LogEntry>[];
       openedFiles = <(String, int?)>[];
     });
@@ -158,6 +165,7 @@ void main() {
       devices.dispose();
       run.dispose();
       actions.dispose();
+      runConfig.dispose();
     });
 
     Future<void> pumpTab(
@@ -189,6 +197,7 @@ void main() {
                 devices: devices,
                 run: run,
                 actions: actions,
+                runConfig: runConfig,
                 onSendError: sentErrors.add,
                 onAddWidget: (_) {},
                 onOpenFile: (path, line) => openedFiles.add((path, line)),
@@ -310,7 +319,7 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('devices menu shows running and available devices; arguments say M2', (
+    testWidgets('devices menu shows running and available devices and the run arguments', (
       tester,
     ) async {
       await pumpTab(tester);
@@ -323,21 +332,61 @@ void main() {
       expect(find.text('Available to launch'), findsOneWidget);
       expect(find.text('macOS'), findsOneWidget);
       expect(find.text('Pixel 9 API 35'), findsOneWidget);
-      expect(find.textContaining('--flavor'), findsOneWidget);
-      expect(find.text('Coming in M2'), findsOneWidget);
-
-      await tester.tap(find.textContaining('--flavor'));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Pixel 9 API 35'),
-        findsOneWidget,
-        reason: 'the disabled item keeps the menu',
-      );
+      expect(find.text('Run arguments…'), findsOneWidget);
+      expect(find.text('None'), findsOneWidget, reason: 'no arguments yet');
+      expect(find.textContaining('Coming in'), findsNothing);
 
       await tester.tap(find.text('Pixel 9 API 35'));
       await tester.pumpAndSettle();
       expect(run.state.selectedDeviceId, 'android-pixel-9');
       expect(find.text('Pixel 9 API 35'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Run arguments… opens the dialog; a saved flavor is summed up and started with', (
+      tester,
+    ) async {
+      final scripted = dependencies.appRunRepository as ScriptedAppRunRepository;
+      await pumpTab(tester);
+
+      await tester.tap(find.text('iPhone 16 Pro'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Run arguments…'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      await tester.enterText(find.byKey(const ValueKey<String>('run-arguments-flavor')), 'dev');
+      await tester.enterText(
+        find.byKey(const ValueKey<String>('run-arguments-defines')),
+        'A=1\nB=2',
+      );
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(
+        run.state.arguments,
+        const RunArguments(flavor: 'dev', dartDefines: <String>['A=1', 'B=2']),
+      );
+
+      await tester.tap(find.text('iPhone 16 Pro'));
+      await tester.pumpAndSettle();
+      expect(find.text('--flavor dev · 2 defines'), findsOneWidget);
+      await tester.tapAt(const Offset(1200, 700));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Run'));
+      await elapse(tester);
+
+      expect(scripted.starts, hasLength(1));
+      expect(scripted.starts.single.arguments.toFlutterArgs(), <String>[
+        '--flavor',
+        'dev',
+        '--dart-define',
+        'A=1',
+        '--dart-define',
+        'B=2',
+      ]);
       await disposeTestApp(tester, dependencies);
     });
 
@@ -440,7 +489,10 @@ void main() {
           scripted.buffer.add(_line(i, level: i % 500 == 0 ? LogLevel.error : LogLevel.info));
         }
         run.dispose();
-        run = RunController(repository: scripted);
+        run = RunController(
+          repository: scripted,
+          configRepository: dependencies.runConfigRepository,
+        );
         await pumpTab(tester, size: const Size(900, 600));
       }
 
@@ -545,6 +597,7 @@ void main() {
     late DevicesController devices;
     late RunController run;
     late RunActionsController actions;
+    late RunConfigController runConfig;
     late MemoryDevicesRepository fake;
     late int settingsOpened;
 
@@ -561,11 +614,15 @@ void main() {
       fake = MemoryDevicesRepository(step: const Duration(milliseconds: 1));
       dependencies = testDependencies(devicesRepository: repository ?? fake);
       devices = DevicesController(repository: dependencies.devicesRepository);
-      run = RunController(repository: dependencies.appRunRepository);
+      run = RunController(
+        repository: dependencies.appRunRepository,
+        configRepository: dependencies.runConfigRepository,
+      );
       actions = RunActionsController(
         runRepository: dependencies.appRunRepository,
         pickerRepository: dependencies.widgetPickerRepository,
       );
+      runConfig = RunConfigController(repository: dependencies.runConfigRepository);
       settingsOpened = 0;
       run.watch(1);
       devices.watch();
@@ -582,6 +639,7 @@ void main() {
                 devices: devices,
                 run: run,
                 actions: actions,
+                runConfig: runConfig,
                 onSendError: (_) {},
                 onAddWidget: (_) {},
                 onOpenFile: (path, line) {},
@@ -600,6 +658,7 @@ void main() {
       devices.dispose();
       run.dispose();
       actions.dispose();
+      runConfig.dispose();
       await disposeTestApp(tester, dependencies);
     }
 

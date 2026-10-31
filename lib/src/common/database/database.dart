@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/database/database.steps.dart';
 import 'package:flutter_code_agent/src/common/database/tables/app_settings_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/mcp_servers_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/projects_table.dart';
+import 'package:flutter_code_agent/src/common/database/tables/run_configs_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/session_events_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/sessions_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/skill_states_table.dart';
@@ -23,6 +24,7 @@ part 'database.g.dart';
     SkillStatesTable,
     McpServersTable,
     McpServerStatesTable,
+    RunConfigsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -44,7 +46,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -68,6 +70,9 @@ class AppDatabase extends _$AppDatabase {
       from5To6: (m, schema) async {
         await m.createTable(schema.mcpServers);
         await m.createTable(schema.mcpServerStates);
+      },
+      from6To7: (m, schema) async {
+        await m.createTable(schema.runConfigs);
       },
     ),
     // SQLite ignores foreign keys (and ON DELETE CASCADE) unless enabled per connection.

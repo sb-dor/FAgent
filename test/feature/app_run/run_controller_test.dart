@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
@@ -13,6 +14,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
+import '../../support/memory_run_config_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
 
 const Device _macos = Device(
@@ -102,7 +104,10 @@ void main() {
 
     setUp(() {
       scripted = _ScriptedRunRepository();
-      controller = RunController(repository: scripted);
+      controller = RunController(
+        repository: scripted,
+        configRepository: MemoryRunConfigRepository(),
+      );
     });
 
     tearDown(() async {
@@ -147,7 +152,10 @@ void main() {
     test('switching projects drops the old run and logs', () async {
       final fake = ScriptedAppRunRepository(step: _step);
       addTearDown(fake.dispose);
-      final fakeController = RunController(repository: fake)..watch(1);
+      final fakeController = RunController(
+        repository: fake,
+        configRepository: MemoryRunConfigRepository(),
+      )..watch(1);
       addTearDown(fakeController.dispose);
       await pumpEventQueue();
       await fake.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
@@ -308,7 +316,10 @@ void main() {
     test('coming back to a running project restores its logs, error and sent flags', () async {
       final fake = ScriptedAppRunRepository(step: _step);
       addTearDown(fake.dispose);
-      final fakeController = RunController(repository: fake)..watch(1);
+      final fakeController = RunController(
+        repository: fake,
+        configRepository: MemoryRunConfigRepository(),
+      )..watch(1);
       addTearDown(fakeController.dispose);
       await pumpEventQueue();
       await fake.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
@@ -334,6 +345,117 @@ void main() {
       expect(after.errorCount, 1);
       expect(after.logs.first.sentToAgent, isTrue);
       expect(after.logs.skip(1).any((log) => log.sentToAgent), isFalse);
+    });
+  });
+
+  group('RunController arguments', () {
+    late _ScriptedRunRepository scripted;
+    late MemoryRunConfigRepository config;
+    late RunController controller;
+
+    setUp(() {
+      scripted = _ScriptedRunRepository();
+      config = MemoryRunConfigRepository(
+        initial: <int, RunArguments>{
+          1: const RunArguments(flavor: 'dev'),
+          2: const RunArguments(dartDefines: <String>['A=1']),
+        },
+      );
+      controller = RunController(repository: scripted, configRepository: config);
+    });
+
+    tearDown(() async {
+      controller.dispose();
+      await scripted.dispose();
+    });
+
+    test('follow the saved arguments of the project and change with them', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      expect(controller.state.arguments, const RunArguments(flavor: 'dev'));
+
+      await config.save(1, const RunArguments(flavor: 'prod'));
+      await pumpEventQueue();
+      expect(controller.state.arguments, const RunArguments(flavor: 'prod'));
+    });
+
+    test('belong to the project: a switch brings the other project\'s arguments', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.watch(2);
+      await pumpEventQueue();
+      expect(controller.state.arguments, const RunArguments(dartDefines: <String>['A=1']));
+
+      await config.save(1, const RunArguments(flavor: 'late'));
+      await pumpEventQueue();
+      expect(
+        controller.state.arguments,
+        const RunArguments(dartDefines: <String>['A=1']),
+        reason: 'a save for the project that was left changes nothing',
+      );
+    });
+
+    test('a start after a save carries the saved flavor', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final run = RunController(repository: repository, configRepository: config)..watch(1);
+      addTearDown(run.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+      );
+      addTearDown(actions.dispose);
+      await pumpEventQueue();
+
+      actions.start(
+        1,
+        device: _macos,
+        mode: run.state.mode,
+        target: run.state.target,
+        arguments: run.state.arguments,
+      );
+      await Future<void>.delayed(_step * 50);
+
+      expect(repository.starts.single.arguments.toFlutterArgs(), <String>['--flavor', 'dev']);
+    });
+  });
+
+  group('RunConfigController', () {
+    test('save stores the arguments and completes', () async {
+      final repository = MemoryRunConfigRepository();
+      final controller = RunConfigController(repository: repository);
+      addTearDown(controller.dispose);
+
+      controller.save(1, const RunArguments(flavor: 'dev'));
+      expect(controller.state, isA<RunConfig$InProgressState>());
+      await pumpEventQueue();
+
+      expect(controller.state, isA<RunConfig$CompletedState>());
+      expect(repository.saved.single, (1, const RunArguments(flavor: 'dev')));
+    });
+
+    test('a failed save is an error state', () async {
+      final repository = MemoryRunConfigRepository()..saveError = Exception('no');
+      final controller = RunConfigController(repository: repository);
+      addTearDown(controller.dispose);
+
+      controller.save(1, const RunArguments());
+      await pumpEventQueue();
+
+      expect(controller.state, isA<RunConfig$ErrorState>());
+    });
+
+    test('drops a save made while another is in progress', () async {
+      final repository = MemoryRunConfigRepository();
+      final controller = RunConfigController(repository: repository);
+      addTearDown(controller.dispose);
+
+      controller
+        ..save(1, const RunArguments(flavor: 'a'))
+        ..save(1, const RunArguments(flavor: 'b'));
+      await pumpEventQueue();
+
+      expect(repository.saved.map((e) => e.$2.flavor), <String?>['a']);
     });
   });
 

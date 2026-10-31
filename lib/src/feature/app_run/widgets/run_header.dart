@@ -57,6 +57,7 @@ class RunHeader extends StatelessWidget {
     required this.devices,
     required this.isPreview,
     required this.onDevice,
+    required this.onEditArguments,
     required this.onMode,
     required this.onAction,
     required this.onRetryDevices,
@@ -76,6 +77,9 @@ class RunHeader extends StatelessWidget {
 
   /// Called with the id of the device the user chose.
   final ValueChanged<String> onDevice;
+
+  /// Called when the user asks to edit the run arguments of the project.
+  final VoidCallback onEditArguments;
 
   /// Called with the build mode the user chose.
   final ValueChanged<BuildMode> onMode;
@@ -168,7 +172,9 @@ class RunHeader extends StatelessWidget {
                   _ => RunDeviceChip(
                     devices: deviceList,
                     selectedDeviceId: state.selectedDeviceId,
+                    arguments: state.arguments,
                     onSelected: onDevice,
+                    onEditArguments: onEditArguments,
                   ),
                 },
                 SelectorChip<BuildMode>(

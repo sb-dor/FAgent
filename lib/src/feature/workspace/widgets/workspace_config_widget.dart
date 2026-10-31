@@ -6,10 +6,12 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -80,6 +82,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final RunController runController;
   late final RunActionsController runActionsController;
 
+  /// Saves the run arguments the user edits in the dialog of the device menu.
+  late final RunConfigController runConfigController;
+
   /// The skills of the selected project, for the chats (the 🧩 chip, the `/` menu, the skill lines).
   /// The Skills screen has a library of its own.
   late final SkillLibraryController skillLibraryController;
@@ -145,7 +150,11 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
         dependencies.appRunRepository.isPreview || dependencies.devicesRepository.isPreview;
     pickerIsPreview = dependencies.widgetPickerRepository.isPreview;
     devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
-    runController = RunController(repository: dependencies.appRunRepository);
+    runController = RunController(
+      repository: dependencies.appRunRepository,
+      configRepository: dependencies.runConfigRepository,
+    );
+    runConfigController = RunConfigController(repository: dependencies.runConfigRepository);
     runActionsController = RunActionsController(
       runRepository: dependencies.appRunRepository,
       pickerRepository: dependencies.widgetPickerRepository,
@@ -187,6 +196,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..removeListener(_onRunAction)
       ..dispose();
     runController.dispose();
+    runConfigController.dispose();
     skillLibraryController.dispose();
     devicesController.dispose();
     projectCreation.dispose();
@@ -240,6 +250,19 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void chooseDevice(String deviceId) {
     runController.choose(deviceId: deviceId);
     devicesController.launch(deviceId);
+  }
+
+  /// Opens the run arguments (flavor, defines, own flags) of the selected project; nothing happens
+  /// without one.
+  void editRunArguments() {
+    final projectId = dataController.projectId;
+    if (projectId == null) return;
+    RunArgumentsDialog.show(
+      context,
+      projectId: projectId,
+      arguments: runController.state.arguments,
+      controller: runConfigController,
+    );
   }
 
   /// Opens Settings → Flutter (the Run tab links there when there is no Flutter SDK).

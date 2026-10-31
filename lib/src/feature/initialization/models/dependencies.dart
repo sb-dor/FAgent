@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
@@ -50,6 +51,9 @@ class Dependencies {
 
   /// Runs of the projects' apps (`flutter run`).
   late final IAppRunRepository appRunRepository;
+
+  /// The arguments each project adds to `flutter run`.
+  late final IRunConfigRepository runConfigRepository;
 
   /// Picks a widget in a running app.
   late final IWidgetPickerRepository widgetPickerRepository;

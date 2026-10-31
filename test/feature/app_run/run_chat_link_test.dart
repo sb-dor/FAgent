@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
@@ -19,6 +20,7 @@ import 'package:flutter_code_agent/src/feature/initialization/models/dependencie
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_controls.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,6 +33,10 @@ final class _SpyRunRepository implements IAppRunRepository {
 
   final ScriptedAppRunRepository _inner;
   final List<String> started = <String>[];
+
+  /// The arguments each start was given.
+  List<RunArguments> get startedArguments =>
+      _inner.starts.map((start) => start.arguments).toList(growable: false);
   int reloads = 0;
   int restarts = 0;
 
@@ -407,6 +413,37 @@ void main() {
       expect(spy.started, <String?>[workspace.runController.state.selectedDeviceId]);
       await until(tester, () => running(tester));
       expect(find.byTooltip('Stop the app'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the device chip edits the run arguments and the run button starts with them', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.runController.state.selectedDeviceId != null);
+
+      final chip = find.descendant(
+        of: find.byType(WorkspaceRunControls),
+        matching: find.byType(RunDeviceChip),
+      );
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Run arguments…'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey<String>('run-arguments-flavor')), 'dev');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await settle(tester);
+      await until(
+        tester,
+        () => workspace.runController.state.arguments == const RunArguments(flavor: 'dev'),
+      );
+
+      await tester.tap(find.byTooltip('Run'));
+      await settle(tester);
+
+      expect(spy.startedArguments, <RunArguments>[const RunArguments(flavor: 'dev')]);
       await disposeTestApp(tester, dependencies);
     });
 

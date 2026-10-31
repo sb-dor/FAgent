@@ -3,11 +3,13 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_card.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_logs.dart';
 
@@ -28,6 +30,7 @@ class RunTab extends StatefulWidget {
     required this.devices,
     required this.run,
     required this.actions,
+    required this.runConfig,
     required this.onSendError,
     required this.onAddWidget,
     required this.onOpenFile,
@@ -53,6 +56,9 @@ class RunTab extends StatefulWidget {
 
   /// The actions (start, stop, reload, pick a widget).
   final RunActionsController actions;
+
+  /// Saves the run arguments the user edits in the dialog the device menu opens.
+  final RunConfigController runConfig;
 
   /// Called with the log line when the user sends its error to the agent.
   final ValueChanged<LogEntry> onSendError;
@@ -99,6 +105,17 @@ class _RunTabState extends State<RunTab> {
     widget.devices.launch(id);
   }
 
+  void _editArguments() {
+    final projectId = widget.projectId;
+    if (projectId == null) return;
+    RunArgumentsDialog.show(
+      context,
+      projectId: projectId,
+      arguments: widget.run.state.arguments,
+      controller: widget.runConfig,
+    );
+  }
+
   void _comingIn(String milestone) {
     final message = Localization.of(context).comingInMilestone(milestone);
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
@@ -116,7 +133,13 @@ class _RunTabState extends State<RunTab> {
         };
         final device = devices.where((device) => device.id == state.selectedDeviceId).firstOrNull;
         if (device != null && device.kind == DeviceKind.running) {
-          widget.actions.start(projectId, device: device, mode: state.mode, target: state.target);
+          widget.actions.start(
+            projectId,
+            device: device,
+            mode: state.mode,
+            target: state.target,
+            arguments: state.arguments,
+          );
         }
       case RunAction.stop:
         widget.actions.stop(projectId);
@@ -159,6 +182,7 @@ class _RunTabState extends State<RunTab> {
               devices: widget.devices.state,
               isPreview: widget.isPreview,
               onDevice: _chooseDevice,
+              onEditArguments: _editArguments,
               onRetryDevices: widget.devices.watch,
               onOpenFlutterSettings: widget.onOpenFlutterSettings,
               launchFailed:
