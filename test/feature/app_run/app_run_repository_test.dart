@@ -751,6 +751,19 @@ void main() {
       expect(error.message, contains('PATH'));
     });
 
+    test('a project whose fvm SDK is missing says to install it', () async {
+      io.File(p.join(paths[1]!, '.fvmrc')).writeAsStringSync('{"flutter":"3.24.0"}');
+      flutterPath = null;
+      final seen = states(1);
+      await startRun(1);
+
+      expect(started, isEmpty);
+      final error = (seen.last as RunFailed).error;
+      expect(error.title, 'Flutter SDK not found');
+      expect(error.message, contains('pins Flutter 3.24.0 with fvm'));
+      expect(error.message, contains('fvm install'));
+    });
+
     test('the package name comes from pubspec.yaml, else from the folder name', () async {
       Future<RunError> unhandledIn(int projectId, String frame) async {
         final log = logs(projectId);
