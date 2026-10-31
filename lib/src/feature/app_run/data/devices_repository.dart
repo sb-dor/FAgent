@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
+import 'package:flutter_code_agent/src/common/flutter_daemon/emulator_launcher.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:l/l.dart';
@@ -17,7 +18,8 @@ abstract interface class IDevicesRepository {
   Stream<List<Device>> watchDevices();
 
   /// Boots the emulator behind [deviceId]. Does nothing for a device that is not
-  /// [DeviceKind.available]. The booted device shows up in [watchDevices].
+  /// [DeviceKind.available]. The booted device shows up in [watchDevices]; it keeps running when
+  /// the app quits.
   Future<void> launch(String deviceId);
 
   /// Stops following the devices and ends every stream.
@@ -26,17 +28,23 @@ abstract interface class IDevicesRepository {
 
 /// The devices of one `flutter daemon` shared by every listener: it starts with the first one and
 /// stops when the last one leaves.
+///
+/// Emulators are booted by a launcher of their own ([launchEmulatorDetached]), not by the daemon:
+/// an emulator the daemon starts is a member of its process group, and ending the group (on quit,
+/// or when the daemon fails) would shut the emulator down with it.
 final class DevicesRepositoryImpl implements IDevicesRepository {
   DevicesRepositoryImpl({
     required this._flutter,
     required this._environment,
     this._start = startGroupedDaemonProcess,
+    this._launchEmulator = launchEmulatorDetached,
   });
 
   /// The `flutter` executable to run; `null` when there is none.
   final String? Function() _flutter;
   final Map<String, String> _environment;
   final DaemonProcessStarter _start;
+  final EmulatorLauncher _launchEmulator;
 
   final List<StreamController<List<Device>>> _watchers = <StreamController<List<Device>>>[];
   _DaemonSession? _session;
@@ -72,9 +80,13 @@ final class DevicesRepositoryImpl implements IDevicesRepository {
   @override
   Future<void> launch(String deviceId) async {
     if (!deviceId.startsWith(_emulatorPrefix)) return;
-    final session = _session;
-    if (session == null) throw const DaemonClosedException(method: 'emulator.launch');
-    await session.launch(deviceId.substring(_emulatorPrefix.length));
+    final executable = _flutter();
+    if (executable == null) throw const FlutterNotFoundException();
+    await _launchEmulator(
+      executable,
+      deviceId.substring(_emulatorPrefix.length),
+      environment: _environment,
+    );
   }
 
   @override
@@ -166,16 +178,6 @@ final class _DaemonSession {
     _stopped = true;
     await _events?.cancel();
     await _connection?.close();
-  }
-
-  Future<void> launch(String emulatorId) async {
-    final connection = _connection;
-    if (connection == null || _stopped)
-      throw const DaemonClosedException(method: 'emulator.launch');
-    await connection.request('emulator.launch', <String, Object?>{
-      'emulatorId': emulatorId,
-      'coldBoot': false,
-    });
   }
 
   Future<void> _start() async {

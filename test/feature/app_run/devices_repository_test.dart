@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter_code_agent/src/common/flutter_daemon/emulator_launcher.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
@@ -47,6 +48,8 @@ void main() {
     late List<List<Device>> lists;
     late List<Object> errors;
     late bool done;
+    late List<({String executable, String emulatorId, Map<String, String>? environment})> launches;
+    late Exception? launchError;
     final subscriptions = <StreamSubscription<List<Device>>>[];
 
     ScriptedDaemonProcess create() {
@@ -98,10 +101,16 @@ void main() {
       lists = <List<Device>>[];
       errors = <Object>[];
       done = false;
+      launches = <({String executable, String emulatorId, Map<String, String>? environment})>[];
+      launchError = null;
       repository = DevicesRepositoryImpl(
         flutter: () => flutterPath,
         environment: const <String, String>{'PATH': '/usr/bin'},
         start: scriptedStarter(create, started: started),
+        launchEmulator: (executable, emulatorId, {environment}) async {
+          launches.add((executable: executable, emulatorId: emulatorId, environment: environment));
+          if (launchError case final error?) throw error;
+        },
       );
     });
 
@@ -271,15 +280,35 @@ void main() {
       expect(lists.last.where((device) => device.id == 'macos').single.name, 'My Mac');
     });
 
-    test('launch asks the daemon to start the emulator without a cold boot', () async {
+    test('launch boots the emulator outside the daemon, which is never asked', () async {
       watch();
       await connect();
+      final before = started.single.sent.length;
 
       await repository.launch('emulator:Pixel_Tablet');
 
-      final request = started.single.sent.last;
-      expect(request['method'], 'emulator.launch');
-      expect(request['params'], <String, Object?>{'emulatorId': 'Pixel_Tablet', 'coldBoot': false});
+      expect(launches.single.executable, '/opt/flutter/bin/flutter');
+      expect(launches.single.emulatorId, 'Pixel_Tablet');
+      expect(launches.single.environment, <String, String>{'PATH': '/usr/bin'});
+      expect(started.single.sent, hasLength(before), reason: 'no emulator.launch to the daemon');
+    });
+
+    test('launch works before the daemon is up and after it is gone', () async {
+      await repository.launch('emulator:Pixel_Tablet');
+
+      expect(launches.single.emulatorId, 'Pixel_Tablet');
+      expect(started, isEmpty);
+    });
+
+    test('quitting stops the daemon but not a booted emulator', () async {
+      watch();
+      await connect();
+      await repository.launch('emulator:Pixel_Tablet');
+
+      await repository.dispose();
+
+      expect(started.single.stopped, isTrue);
+      expect(started, hasLength(1), reason: 'the emulator was never a part of the daemon');
     });
 
     test('launch of a device that is not an emulator does nothing', () async {
@@ -290,17 +319,26 @@ void main() {
       await repository.launch('macos');
 
       expect(started.single.sent, hasLength(before));
+      expect(launches, isEmpty);
     });
 
-    test('launch fails when the daemon rejects it', () async {
-      watch();
-      await connect();
-      silentMethods.add('emulator.launch');
-      final result = repository.launch('emulator:Pixel_Tablet');
-      await pumpEventQueue();
-      started.single.respond(started.single.sent.last['id']! as int, error: 'no such emulator');
+    test('launch fails when the launcher fails', () async {
+      launchError = const EmulatorLaunchException(exitCode: 1, output: 'no such emulator');
 
-      await expectLater(result, throwsA(isA<Object>()));
+      await expectLater(
+        repository.launch('emulator:Pixel_Tablet'),
+        throwsA(isA<EmulatorLaunchException>()),
+      );
+    });
+
+    test('launch without a Flutter SDK fails with FlutterNotFoundException', () async {
+      flutterPath = null;
+
+      await expectLater(
+        repository.launch('emulator:Pixel_Tablet'),
+        throwsA(isA<FlutterNotFoundException>()),
+      );
+      expect(launches, isEmpty);
     });
 
     test('a missing Flutter SDK ends the stream with FlutterNotFoundException', () async {
