@@ -754,5 +754,16 @@ void main() {
       expect(logsDone, isTrue);
       expect(repository.watchRun(1), emitsDone);
     });
+
+    test('disposing twice is harmless: quitting disposes, then the app disposes again', () async {
+      await startRun(1);
+      await launch(started[0]);
+
+      await repository.dispose();
+      await repository.dispose();
+
+      expect(started.single.stopped, isTrue);
+      expect(repository.watchRun(1), emitsDone);
+    });
   });
 }

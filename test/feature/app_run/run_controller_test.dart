@@ -4,8 +4,6 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/devices_contro
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
@@ -13,6 +11,9 @@ import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_devices_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
 
 const Device _macos = Device(
   id: 'macos',
@@ -144,7 +145,7 @@ void main() {
     });
 
     test('switching projects drops the old run and logs', () async {
-      final fake = FakeAppRunRepositoryImpl(step: _step);
+      final fake = ScriptedAppRunRepository(step: _step);
       addTearDown(fake.dispose);
       final fakeController = RunController(repository: fake)..watch(1);
       addTearDown(fakeController.dispose);
@@ -305,7 +306,7 @@ void main() {
     );
 
     test('coming back to a running project restores its logs, error and sent flags', () async {
-      final fake = FakeAppRunRepositoryImpl(step: _step);
+      final fake = ScriptedAppRunRepository(step: _step);
       addTearDown(fake.dispose);
       final fakeController = RunController(repository: fake)..watch(1);
       addTearDown(fakeController.dispose);
@@ -338,7 +339,7 @@ void main() {
 
   group('RunActionsController', () {
     test('start, reload and stop go to the repository and complete', () async {
-      final repository = FakeAppRunRepositoryImpl(step: _step);
+      final repository = ScriptedAppRunRepository(step: _step);
       addTearDown(repository.dispose);
       final states = <RunState>[];
       final subscription = repository.watchRun(1).listen(states.add);
@@ -364,7 +365,7 @@ void main() {
     });
 
     test('pickWidget completes with the picked widget', () async {
-      final repository = FakeAppRunRepositoryImpl(step: _step);
+      final repository = ScriptedAppRunRepository(step: _step);
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
@@ -381,7 +382,7 @@ void main() {
     });
 
     test('drops a second action while one is in progress', () async {
-      final repository = FakeAppRunRepositoryImpl(step: _step * 20);
+      final repository = ScriptedAppRunRepository(step: _step * 20);
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
@@ -400,7 +401,7 @@ void main() {
 
   group('DevicesController', () {
     test('completes with the devices', () async {
-      final controller = DevicesController(repository: FakeDevicesRepositoryImpl(step: _step))
+      final controller = DevicesController(repository: MemoryDevicesRepository(step: _step))
         ..watch();
       addTearDown(controller.dispose);
       expect(controller.state, isA<Devices$InProgressState>());

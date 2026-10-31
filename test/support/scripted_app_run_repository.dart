@@ -70,21 +70,34 @@ final class _FakeRun {
   }
 }
 
-/// A made-up run: build, run, a layout overflow after the first hot reload.
+/// One call of [ScriptedAppRunRepository.start].
+typedef RunStart = ({
+  int projectId,
+  Device device,
+  BuildMode mode,
+  String target,
+  RunArguments arguments,
+});
+
+/// A scripted run for tests: build, run, a layout overflow after the first hot reload.
 ///
-/// Every delay is [step], so a test passes a tiny one. State is kept per project.
-final class FakeAppRunRepositoryImpl implements IAppRunRepository {
+/// Every delay is [step], so a test passes a tiny one. State is kept per project. It is a stand-in
+/// only when [isPreview] says so.
+class ScriptedAppRunRepository implements IAppRunRepository {
   /// Creates the repository.
-  FakeAppRunRepositoryImpl({this.step = const Duration(milliseconds: 600)});
+  ScriptedAppRunRepository({this.step = const Duration(milliseconds: 600), this.isPreview = false});
 
   /// The time one phase of the scenario takes.
   final Duration step;
+
+  /// The calls of [start], in order.
+  final List<RunStart> starts = <RunStart>[];
 
   final Map<int, _FakeRun> _runs = <int, _FakeRun>{};
   bool _disposed = false;
 
   @override
-  bool get isPreview => true;
+  final bool isPreview;
 
   _FakeRun _run(int projectId) => _runs.putIfAbsent(projectId, _FakeRun.new);
 
@@ -145,6 +158,13 @@ final class FakeAppRunRepositoryImpl implements IAppRunRepository {
     RunArguments arguments = const RunArguments(),
   }) async {
     if (_disposed) return;
+    starts.add((
+      projectId: projectId,
+      device: device,
+      mode: mode,
+      target: target,
+      arguments: arguments,
+    ));
     final run = _run(projectId);
     if (run.state is RunBuilding || run.state is RunRunning) await stop(projectId);
     run.reloads = 0;

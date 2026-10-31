@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -23,13 +22,14 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/scripted_app_run_repository.dart';
 import '../../support/test_app.dart';
 
 /// The fake run that counts what the window asks it to do.
 final class _SpyRunRepository implements IAppRunRepository {
-  _SpyRunRepository() : _inner = FakeAppRunRepositoryImpl(step: const Duration(milliseconds: 1));
+  _SpyRunRepository() : _inner = ScriptedAppRunRepository(step: const Duration(milliseconds: 1));
 
-  final FakeAppRunRepositoryImpl _inner;
+  final ScriptedAppRunRepository _inner;
   final List<String> started = <String>[];
   int reloads = 0;
   int restarts = 0;

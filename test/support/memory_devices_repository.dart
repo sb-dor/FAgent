@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 
-/// The devices the fake repositories know. Deterministic.
-const List<Device> kFakeDevices = <Device>[
+/// The devices [MemoryDevicesRepository] starts with. Deterministic.
+const List<Device> kTestDevices = <Device>[
   Device(
     id: 'ios-sim-16-pro',
     name: 'iPhone 16 Pro',
@@ -30,11 +30,11 @@ const List<Device> kFakeDevices = <Device>[
   ),
 ];
 
-/// Made-up devices until the Flutter tooling is wired in. A test can replace the list with [set]
-/// and read the emulators it asked to boot from [launched].
-final class FakeDevicesRepositoryImpl implements IDevicesRepository {
+/// In-memory devices for tests. A test can replace the list with [set] and read the emulators it
+/// asked to boot from [launched]. It is a stand-in only when [isPreview] says so.
+class MemoryDevicesRepository implements IDevicesRepository {
   /// Creates the repository; [step] is the time "detecting" the devices takes.
-  FakeDevicesRepositoryImpl({this.step = const Duration(milliseconds: 400)});
+  MemoryDevicesRepository({this.step = const Duration(milliseconds: 400), this.isPreview = false});
 
   /// The time one operation takes.
   final Duration step;
@@ -46,10 +46,10 @@ final class FakeDevicesRepositoryImpl implements IDevicesRepository {
   Exception? launchError;
 
   final List<StreamController<List<Device>>> _controllers = <StreamController<List<Device>>>[];
-  List<Device> _devices = kFakeDevices;
+  List<Device> _devices = kTestDevices;
 
   @override
-  bool get isPreview => true;
+  final bool isPreview;
 
   /// Replaces the device list: every listener gets [devices] now, and a listener that comes later
   /// gets them as its first list.

@@ -91,9 +91,13 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// The text for the chat that is being created (see [createChat]).
   late final PendingChatDraft _draft = PendingChatDraft(data: dataController);
 
-  /// Whether any of the run data (the run, the devices, the widget picker) is made up. Everything
-  /// that shows it (the Run tab, the title bar, the `@` menu) says so.
+  /// Whether the run or the devices are made up. Everything that shows it (the Run tab, the title
+  /// bar, the `@` menu) says so. The widget picker is separate: see [pickerIsPreview].
   late final bool runIsPreview;
+
+  /// Whether the widget picker is made up. Next to a real run its widget (a `BookingCard` that is
+  /// not in the app) would be a lie, so the Run tab says "Coming in M6" instead of picking.
+  late final bool pickerIsPreview;
 
   /// Asks the user for a folder; the argument is the text of the confirm button. Tests replace it,
   /// because the native picker cannot be driven from a widget test.
@@ -138,9 +142,8 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     )..addListener(_onSessionCreated);
     sessionsController.watchAll();
     runIsPreview =
-        dependencies.appRunRepository.isPreview ||
-        dependencies.devicesRepository.isPreview ||
-        dependencies.widgetPickerRepository.isPreview;
+        dependencies.appRunRepository.isPreview || dependencies.devicesRepository.isPreview;
+    pickerIsPreview = dependencies.widgetPickerRepository.isPreview;
     devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
     runController = RunController(repository: dependencies.appRunRepository);
     runActionsController = RunActionsController(

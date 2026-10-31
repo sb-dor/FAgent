@@ -24,6 +24,7 @@ class RunTab extends StatefulWidget {
   const RunTab({
     required this.projectId,
     required this.isPreview,
+    required this.pickerIsPreview,
     required this.devices,
     required this.run,
     required this.actions,
@@ -39,6 +40,10 @@ class RunTab extends StatefulWidget {
 
   /// Whether the run data is made up.
   final bool isPreview;
+
+  /// Whether the widget picker is made up. Next to a real run it is not offered: the button says
+  /// the picker comes in M6, because a made-up widget would not be in the app.
+  final bool pickerIsPreview;
 
   /// The devices that can run the app.
   final DevicesController devices;
@@ -94,8 +99,8 @@ class _RunTabState extends State<RunTab> {
     widget.devices.launch(id);
   }
 
-  void _comingInM2() {
-    final message = Localization.of(context).comingInMilestone('M2');
+  void _comingIn(String milestone) {
+    final message = Localization.of(context).comingInMilestone(milestone);
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -120,10 +125,14 @@ class _RunTabState extends State<RunTab> {
       case RunAction.restart:
         widget.actions.hotRestart(projectId);
       case RunAction.pick:
+        if (widget.pickerIsPreview && !widget.isPreview) {
+          _comingIn('M6');
+          return;
+        }
         setState(() => _picking = true);
         widget.actions.pickWidget(projectId);
       case RunAction.screenshot || RunAction.devTools:
-        _comingInM2();
+        _comingIn('M2');
     }
   }
 

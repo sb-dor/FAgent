@@ -2,9 +2,10 @@ import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_devices_repository.dart';
 
 const _step = Duration(milliseconds: 1);
 
@@ -18,10 +19,10 @@ const Device _pixel = Device(
 
 void main() {
   group('DevicesController', () {
-    late FakeDevicesRepositoryImpl repository;
+    late MemoryDevicesRepository repository;
     late DevicesController controller;
 
-    setUp(() => repository = FakeDevicesRepositoryImpl(step: _step));
+    setUp(() => repository = MemoryDevicesRepository(step: _step));
 
     tearDown(() async {
       controller.dispose();

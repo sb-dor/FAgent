@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_devices_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
 
 const Device _macos = Device(
   id: 'macos',
@@ -20,9 +21,9 @@ const Device _macos = Device(
 const _step = Duration(milliseconds: 1);
 
 void main() {
-  late FakeAppRunRepositoryImpl repository;
+  late ScriptedAppRunRepository repository;
 
-  setUp(() => repository = FakeAppRunRepositoryImpl(step: _step));
+  setUp(() => repository = ScriptedAppRunRepository(step: _step));
   tearDown(() => repository.dispose());
 
   Future<void> start([int project = 1]) =>
@@ -43,8 +44,11 @@ void main() {
     expect(condition(), isTrue, reason: 'condition was not met in time');
   }
 
-  group('FakeAppRunRepositoryImpl', () {
-    test('is a preview', () => expect(repository.isPreview, isTrue));
+  group('ScriptedAppRunRepository', () {
+    test('is not a preview unless it is told so', () {
+      expect(repository.isPreview, isFalse);
+      expect(ScriptedAppRunRepository(isPreview: true).isPreview, isTrue);
+    });
 
     test('start builds, then runs, then reload reports an overflow', () async {
       final states = collect(repository.watchRun(1));
@@ -133,7 +137,7 @@ void main() {
     });
 
     test('the log buffer never holds more than $kRunLogLimit lines', () async {
-      final quick = FakeAppRunRepositoryImpl(step: Duration.zero);
+      final quick = ScriptedAppRunRepository(step: Duration.zero);
       addTearDown(quick.dispose);
       final states = collect(quick.watchRun(1));
       await quick.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
@@ -261,13 +265,14 @@ void main() {
     });
   });
 
-  group('FakeDevicesRepositoryImpl', () {
+  group('MemoryDevicesRepository', () {
     test('lists running and available devices', () async {
-      final devices = FakeDevicesRepositoryImpl(step: _step);
+      final devices = MemoryDevicesRepository(step: _step);
 
       final list = await devices.watchDevices().first;
 
-      expect(devices.isPreview, isTrue);
+      expect(devices.isPreview, isFalse);
+      expect(MemoryDevicesRepository(isPreview: true).isPreview, isTrue);
       expect(
         list.where((device) => device.kind == DeviceKind.running).map((device) => device.name),
         <String>['iPhone 16 Pro', 'macOS', 'Chrome'],
@@ -280,7 +285,7 @@ void main() {
     });
 
     test('the stream closes when the listener cancels', () async {
-      final devices = FakeDevicesRepositoryImpl(step: _step);
+      final devices = MemoryDevicesRepository(step: _step);
       final subscription = devices.watchDevices().listen((_) {});
 
       await subscription.cancel();

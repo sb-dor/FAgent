@@ -1,81 +1,35 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_right_pane.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_controls.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_devices_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
 import '../../support/test_app.dart';
 
-/// A run repository that is not a stand-in: it runs nothing and says so.
-final class _RealRun implements IAppRunRepository {
-  @override
-  bool get isPreview => false;
+/// A picker that counts the picks it is asked for.
+final class _CountingPicker implements IWidgetPickerRepository {
+  _CountingPicker({required this.isPreview});
 
   @override
-  Stream<RunState> watchRun(int projectId) => Stream<RunState>.value(const RunIdle());
+  final bool isPreview;
+
+  int picks = 0;
 
   @override
-  Stream<LogEntry> logs(int projectId) => const Stream<LogEntry>.empty();
-
-  @override
-  Future<void> markSent(int projectId, int seq) async {}
-
-  @override
-  Future<void> start(
-    int projectId, {
-    required Device device,
-    required BuildMode mode,
-    required String target,
-    RunArguments arguments = const RunArguments(),
-  }) async {}
-
-  @override
-  Future<void> stop(int projectId) async {}
-
-  @override
-  Future<Duration> hotReload(int projectId) async => Duration.zero;
-
-  @override
-  Future<void> hotRestart(int projectId) async {}
-
-  @override
-  Future<void> dispose() async {}
-}
-
-final class _RealDevices implements IDevicesRepository {
-  @override
-  bool get isPreview => false;
-
-  @override
-  Stream<List<Device>> watchDevices() => Stream<List<Device>>.value(const <Device>[]);
-
-  @override
-  Future<void> launch(String deviceId) async {}
-
-  @override
-  Future<void> dispose() async {}
-}
-
-final class _RealPicker implements IWidgetPickerRepository {
-  @override
-  bool get isPreview => false;
-
-  @override
-  Future<PickedWidget?> pick(int projectId) async => null;
+  Future<PickedWidget?> pick(int projectId) async {
+    picks++;
+    return null;
+  }
 }
 
 void main() {
@@ -116,30 +70,44 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('are not marked when run, devices and picker are real', (tester) async {
+    testWidgets('are not marked when the run and the devices are real', (tester) async {
       final dependencies = testDependencies(
-        appRunRepository: _RealRun(),
-        devicesRepository: _RealDevices(),
-        widgetPickerRepository: _RealPicker(),
+        appRunRepository: ScriptedAppRunRepository(),
+        devicesRepository: MemoryDevicesRepository(),
+        widgetPickerRepository: _CountingPicker(isPreview: false),
       );
       final state = await pump(tester, dependencies);
 
       expect(state.runIsPreview, isFalse);
+      expect(state.pickerIsPreview, isFalse);
       expect(find.byType(WorkspaceRunControls), findsOneWidget);
       expect(badgeInTitleBar(), findsNothing);
       await disposeTestApp(tester, dependencies);
     });
 
-    for (final (name, run, devices, picker) in <(String, bool, bool, bool)>[
-      ('only the run is made up', true, false, false),
-      ('only the devices are made up', false, true, false),
-      ('only the picker is made up', false, false, true),
+    testWidgets('are not marked when only the picker is made up', (tester) async {
+      final dependencies = testDependencies(
+        appRunRepository: ScriptedAppRunRepository(),
+        devicesRepository: MemoryDevicesRepository(),
+        widgetPickerRepository: _CountingPicker(isPreview: true),
+      );
+      final state = await pump(tester, dependencies);
+
+      expect(state.runIsPreview, isFalse);
+      expect(state.pickerIsPreview, isTrue);
+      expect(badgeInTitleBar(), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    for (final (name, run, devices) in <(String, bool, bool)>[
+      ('only the run is made up', true, false),
+      ('only the devices are made up', false, true),
     ]) {
       testWidgets('are marked when $name', (tester) async {
         final dependencies = testDependencies(
-          appRunRepository: run ? FakeAppRunRepositoryImpl() : _RealRun(),
-          devicesRepository: devices ? FakeDevicesRepositoryImpl() : _RealDevices(),
-          widgetPickerRepository: picker ? FakeWidgetPickerRepositoryImpl() : _RealPicker(),
+          appRunRepository: ScriptedAppRunRepository(isPreview: run),
+          devicesRepository: MemoryDevicesRepository(isPreview: devices),
+          widgetPickerRepository: _CountingPicker(isPreview: false),
         );
         final state = await pump(tester, dependencies);
 
@@ -148,5 +116,87 @@ void main() {
         await disposeTestApp(tester, dependencies);
       });
     }
+  });
+
+  group('the Run tab with a real run', () {
+    Finder inPane(String tooltip) =>
+        find.descendant(of: find.byType(WorkspaceRightPane), matching: find.byTooltip(tooltip));
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    /// Runs the app of the selected project: picking needs a running app.
+    Future<void> runApp(WidgetTester tester, WorkspaceConfigWidgetState state, int project) async {
+      state.dataController
+        ..selectProject(project)
+        ..selectPaneTab(RightPaneTab.run);
+      for (var i = 0; i < 3; i++) {
+        await settle(tester);
+      }
+      await tester.tap(inPane('Run'));
+      for (var i = 0; i < 3 && state.runController.state.run is! RunRunning; i++) {
+        await settle(tester);
+      }
+      expect(state.runController.state.run, isA<RunRunning>());
+    }
+
+    testWidgets('have no Preview badge in the header, and the picker says Coming in M6', (
+      tester,
+    ) async {
+      final picker = _CountingPicker(isPreview: true);
+      final dependencies = testDependencies(
+        appRunRepository: ScriptedAppRunRepository(step: const Duration(milliseconds: 1)),
+        devicesRepository: MemoryDevicesRepository(),
+        widgetPickerRepository: picker,
+      );
+      final state = await pump(tester, dependencies);
+      await runApp(tester, state, state.dataController.projectId!);
+
+      expect(
+        find.descendant(of: find.byType(WorkspaceRightPane), matching: find.byType(PreviewBadge)),
+        findsNothing,
+      );
+      await tester.tap(inPane('Pick a widget in the app'));
+      await tester.pump();
+
+      expect(find.text('Coming in M6'), findsOneWidget);
+      expect(picker.picks, 0);
+      expect(find.text('Tap a widget in the running app…'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('use a real picker as usual', (tester) async {
+      final picker = _CountingPicker(isPreview: false);
+      final dependencies = testDependencies(
+        appRunRepository: ScriptedAppRunRepository(step: const Duration(milliseconds: 1)),
+        devicesRepository: MemoryDevicesRepository(),
+        widgetPickerRepository: picker,
+      );
+      final state = await pump(tester, dependencies);
+      await runApp(tester, state, state.dataController.projectId!);
+
+      await tester.tap(inPane('Pick a widget in the app'));
+      await tester.pump();
+
+      expect(find.text('Coming in M6'), findsNothing);
+      expect(picker.picks, 1);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('keep picking when the run is made up too', (tester) async {
+      final picker = _CountingPicker(isPreview: true);
+      final dependencies = testDependencies(widgetPickerRepository: picker);
+      final state = await pump(tester, dependencies);
+      await runApp(tester, state, state.dataController.projectId!);
+
+      await tester.tap(inPane('Pick a widget in the app'));
+      await tester.pump();
+
+      expect(find.text('Coming in M6'), findsNothing);
+      expect(picker.picks, 1);
+      await disposeTestApp(tester, dependencies);
+    });
   });
 }

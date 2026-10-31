@@ -9,7 +9,6 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_co
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -23,6 +22,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_right
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_devices_repository.dart';
 import '../../support/test_app.dart';
 
 /// A repository that replays what a test preloads and emits what it pushes.
@@ -185,6 +185,7 @@ void main() {
               child: RunTab(
                 projectId: projectId,
                 isPreview: true,
+                pickerIsPreview: true,
                 devices: devices,
                 run: run,
                 actions: actions,
@@ -544,7 +545,7 @@ void main() {
     late DevicesController devices;
     late RunController run;
     late RunActionsController actions;
-    late FakeDevicesRepositoryImpl fake;
+    late MemoryDevicesRepository fake;
     late int settingsOpened;
 
     Future<void> pumpTab(
@@ -557,7 +558,7 @@ void main() {
         ..physicalSize = size
         ..devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      fake = FakeDevicesRepositoryImpl(step: const Duration(milliseconds: 1));
+      fake = MemoryDevicesRepository(step: const Duration(milliseconds: 1));
       dependencies = testDependencies(devicesRepository: repository ?? fake);
       devices = DevicesController(repository: dependencies.devicesRepository);
       run = RunController(repository: dependencies.appRunRepository);
@@ -577,6 +578,7 @@ void main() {
               child: RunTab(
                 projectId: 1,
                 isPreview: false,
+                pickerIsPreview: false,
                 devices: devices,
                 run: run,
                 actions: actions,
@@ -751,10 +753,10 @@ void main() {
 
   group('in the right pane', () {
     late Dependencies dependencies;
-    late FakeDevicesRepositoryImpl fakeDevices;
+    late MemoryDevicesRepository fakeDevices;
 
     setUp(() {
-      fakeDevices = FakeDevicesRepositoryImpl(step: const Duration(milliseconds: 1));
+      fakeDevices = MemoryDevicesRepository(step: const Duration(milliseconds: 1));
       dependencies = testDependencies(devicesRepository: fakeDevices);
     });
 

@@ -141,6 +141,7 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                             key: ValueKey<int?>(_scope.dataController.projectId),
                             projectId: _scope.dataController.projectId,
                             isPreview: _scope.runIsPreview,
+                            pickerIsPreview: _scope.pickerIsPreview,
                             devices: _scope.devicesController,
                             run: _scope.runController,
                             actions: _scope.runActionsController,
