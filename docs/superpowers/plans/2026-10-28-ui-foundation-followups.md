@@ -136,10 +136,10 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage6-setting
 
 - **Bugs and risks:**
   - Agents repository: it has no timeout of its own if a `ProcessRunner` ignores `timeout`; `openSettings` ignores the exit code of `open` and uses `File`/`Directory` directly (only `homeDirectory` is injected); `GroupedProcess.stderrLines` is a broadcast stream and can drop the first stderr lines, so a logout error text may be missing (`agents/data/agents_repository.dart`, `common/process/`)
-  - Agents screen: the actions controller lives only while General/Agents is open, so leaving mid-login drops the login output view; an action failure puts the raw exception text in the SnackBar; the "note — " separator is glued in code and not localizable; the default-agent chip shows the raw id `claude` until agents load; each visit re-subscribes and runs one `auth status` probe (`agents/widgets/`, `app_settings/widgets/general_settings_section.dart`)
-  - MCP repository: `setEnabled` with a `projectId` does not check that the user server exists (an unknown project is a raw FK error); `importMcpJson` lets `FileSystemException` and a UTF-8 `FormatException` through while the doc says `McpJsonException`; an unknown `type` with a `url` is treated as `http`; the reserved name `dart mcp` is unreachable because the name regex rejects the space (`mcp_servers/data/mcp_servers_repository.dart`, `mcp_json.dart`)
+  - Agents screen: the actions controller lives only while General/Agents is open, so leaving mid-login drops the login output view; an action failure puts the raw exception text in the SnackBar; the default-agent chip shows the raw id `claude` until agents load; each visit re-subscribes and runs one `auth status` probe (`agents/widgets/`, `app_settings/widgets/general_settings_section.dart`)
+  - MCP repository: `setEnabled` with a `projectId` does not check that the user server exists (an unknown project is a raw FK error); an unknown `type` with a `url` is treated as `http`; the reserved name `dart mcp` is unreachable because the name regex rejects the space (`mcp_servers/data/mcp_servers_repository.dart`, `mcp_json.dart`)
   - MCP screen: the per-project check ignores a user server's global `enabled`; a switch toggled during another action is dropped silently; a Droppable `add` can be dropped while another action runs and the dialog would close on an unrelated `Completed` (`mcp_servers/controller/mcp_server_actions_controller.dart`, `mcp_servers/widgets/`)
-  - Permissions: the rename over `settings.local.json` resets the file mode, and an adapter write between the re-read and the rename is lost (inherent to a temp-file rename); a remove failure shows raw English exception text in the SnackBar (`permission_rules/data/permission_rules_repository.dart`, `permission_rules/widgets/`)
+  - Permissions: an adapter write to `settings.local.json` between the re-read and the rename is lost (inherent to a temp-file rename); a remove failure shows raw English exception text in the SnackBar (`permission_rules/data/permission_rules_repository.dart`, `permission_rules/widgets/`)
   - Flutter section: it waits forever if `ProjectsController` errors while a project is selected; a `doctor()` failure puts the controller into error, which shows the wrong SDK message and disables the doctor button (matters when M4 makes `doctor()` real); the org field reads `projectOrg` only in `initState`, and `copyWith(projectOrg:)` is not validated (the field validates) (`flutter_sdk/controller/flutter_sdk_controller.dart`, `flutter_sdk/widgets/flutter_settings_section.dart`, `app_settings/models/app_settings.dart`)
   - Chat feed: it regroups the whole feed (`groupFeed`) on any settings change, e.g. a pane drag; select the density only (`chat_feed`)
 - **Test gaps:**
@@ -149,7 +149,7 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage6-setting
 - **Polish:**
   - `SettingsCard` repeats the decoration of `AppCard` (`AppCard` needs a header: make it optional and reuse); the widget `McpServerRow` clashes with drift's `McpServerRow` data class (plan-mandated name; rename one); `McpServersConfigWidget` has an unused `projectsListenable`; `AddMcpServerDialog` takes the whole config state but needs only the actions
   - The "Ask" label beside the quit `Switch` has no semantics link; the extra hint strings `settingsQuitHint` and `settingsDensityHint` can be merged into the row labels if the copy is too long
-  - `_onProjects` and `refresh` in the permissions controller duplicate the load block; `SizedBox(height: 2)` in `permissions_settings_section.dart` is off the 4 px grid
+  - `_onProjects` and `refresh` in the permissions controller duplicate the load block
 - **Rulings recorded during the stage** (revisit if they cost too much):
   - Work happened on branch `ui-stage6` in the main checkout, no extra worktree
   - `AgentLogin` has a `@visibleForTesting` constructor `AgentLogin.forTest` and `addLine`/`finish`, so `MemoryAgentsRepository.login` can return the real class the hub hands out (a test-only API on a production class)
@@ -159,3 +159,29 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage6-setting
   - Permissions read and edit only `permissions.allow` of `<project>/.claude/settings.local.json`; the shared `.claude/settings.json` is never touched
   - `MemoryAgentsRepository` and a real `McpServersRepositoryImpl` on an in-memory database are the defaults of `testDependencies`; real process and file repositories are tested in plain `test` with temp dirs
   - Preview until a milestone: Codex, Gemini and custom ACP agents (M5), Flutter version and `flutter doctor` (M4), the `git` project template (M4), in-app DevTools (M2), MCP status, tool counts and delivery to the agent (M3)
+
+## Stage 7 follow-ups
+
+Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage7-new-project.md. Paths are under `lib/src/feature/project_creation/`.
+
+- **Bugs and risks:**
+  - SnackBars shown from inside the dialog ("Из git-шаблона…", "Открыть чат агента") render in the window's `Scaffold`, under the modal barrier, so they may be dimmed or hidden behind the dialog; check in the running app and, if so, show them through a `Scaffold` inside the dialog or keep the message inline (`widgets/new_project_form.dart`, `widgets/creation_progress.dart`)
+  - The form swallows errors from `defaultParent`/`checkTarget` (`.ignore()`): Create stays disabled with no message (`widgets/new_project_form.dart`)
+  - `defaultParent` looks only at the most recently opened project; if its folder is gone it falls straight to `~/StudioProjects` instead of trying the next project (`data/fake_project_creation_repository.dart`)
+  - A tap on the sidebar chip during the 150 ms fade-out after "Done" reopens the dialog, and the delayed `reset` then flips it back to the form (`widgets/new_project_dialog.dart`, `widgets/creation_chip.dart`)
+  - A failed step shows no text about what failed, only the failed mark and the title; the real creation (M4) needs the step's output or error there (`widgets/creation_progress.dart`)
+  - Enter in the org field also creates the project (`widgets/new_project_form.dart`)
+- **M4 hand-over (the fake is replaced):**
+  - "Открыть чат агента" shows the "Появится в M4" SnackBar without asking `isPreview`; M4 must replace it with the real chat and stop the SnackBar for a real repository (`widgets/creation_progress.dart`)
+  - `FakeProjectCreationRepositoryImpl` keeps the real `checkTarget`/`defaultParent`; the real implementation reuses them and drops the fake's step timings and output (`data/fake_project_creation_repository.dart`)
+  - `NewProjectRequest.openChat` has no consumer until M4: the fake ignores it, and the agent step of the architecture template is only played (`models/new_project_request.dart`)
+- **Test gaps:**
+  - `TargetProblem.parentMissing` is never asserted in the form tests; the `defaultParent` test titled "skips a parent that is gone" proves only the one-project case
+  - The Pattern 1 scaffolding of a creation stream is duplicated between the fake and the test double `MemoryProjectCreationRepository`; the double builds the pending snapshot twice
+- **Polish:**
+  - The form, the progress view and the platform chips use radius arithmetic (`AppRadius.medium - 2`, `AppRadius.small + 2`) instead of a token; `_checkTarget` repeats the reset of the check state; `CreationChip` computes placeholders it discards while idle
+- **Rulings recorded during the stage** (revisit if they cost too much):
+  - Work happened on branch `ui-stage7` in the main checkout, no extra worktree
+  - The repository class is `FakeProjectCreationRepositoryImpl` in `data/fake_project_creation_repository.dart` (the spec's fake naming rule wins over the plan's `ProjectCreationRepositoryImpl`); the interface, `TargetProblem` and the models stay in their own files
+  - A creation stream that ends with a `failed` step maps to the controller's `failed` state, not `completed`
+  - The progress chip sits directly under the "＋ Проект" button, which is below the project list in the sidebar

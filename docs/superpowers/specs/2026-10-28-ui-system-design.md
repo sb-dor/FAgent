@@ -247,6 +247,35 @@ px**, отступы 32; карточки только в одну колонк�
 «Открыть чат после создания». Затем прогресс: `flutter create` → `git init` → шаг агента (обычный чат
 «Новый проект» со своими разрешениями) → `flutter analyze` → коммит. Диалог можно свернуть.
 
+Решения этапа 7:
+- Правила имени взяты из `flutter_tools` (`create_base.dart`): строчные латинские буквы, цифры и `_`,
+  не с цифры; не слово Dart; не `collection`, `flutter`, `flutter_test`, `meta`. `suggestPackageName`
+  намеренно отличается от `flutter create`: `-` и пробелы становятся `_`, прочие недопустимые символы
+  отбрасываются, а если не осталось ни буквы, ни цифры — подсказки нет.
+- Цель — новая папка `<родитель>/<имя>`; всё, что уже лежит по этому пути (папка, даже пустая, файл,
+  ссылка), запрещено (`TargetProblem.exists`); нет самого родителя — `parentMissing`. «Создать»
+  доступно, только когда имя, org (`orgPattern`), цель (проверка завершена) и хотя бы одна платформа
+  в порядке и найден Flutter SDK.
+- Родитель по умолчанию: родитель последнего открытого проекта, если он есть на диске; иначе
+  `~/StudioProjects`, если есть; иначе домашняя папка. Org и шаблон берутся из настроек; сохранённый
+  шаблон «git» в форме заменяется на «Мою архитектуру».
+- Создание — поток снимков `Stream<List<CreationStep>>` (весь список шагов при каждом изменении, поток
+  закрывается после последнего шага). Шаги зависят от запроса: `git init` и коммит — при «git init +
+  первый коммит», шаг агента — только у шаблона «Моя архитектура». Поток, закончившийся шагом
+  `failed`, — это `failed`, а не `completed`.
+- `ProjectCreationController` живёт на уровне окна (`WorkspaceConfigWidget`), создание одно за раз;
+  закрытие диалога (Свернуть, Esc) его не останавливает, диалог не закрывается кликом по фону. Пока
+  создание идёт или ждёт «Готово», диалог открывается сразу на прогрессе; «Готово» закрывает диалог и
+  после его исчезновения сбрасывает контроллер.
+- Чип прогресса («Создаю имя · N/M» / «имя: готово» / «имя: ошибка», у завершённого есть ✕) стоит
+  в сайдбаре сразу под кнопкой «＋ Проект», к которой относится; нажатие открывает диалог на прогрессе.
+- Репозиторий — `FakeProjectCreationRepositoryImpl` (правило фейков, §4); `checkTarget` и
+  `defaultParent` настоящие (читают диск и таблицу проектов), `create` ничего не пишет и не создаёт
+  чат: проигрывает шаги с задержкой и выводом. `isPreview` → «имя: готово (Preview)» и пометка в
+  диалоге. «Открыть чат агента» и настоящий шаг агента — M4.
+- «Из git-шаблона…» в форме и «Клонировать из git…» в меню «＋ Проект» остаются SnackBar «Появится в
+  M4», без выдуманной формы.
+
 ### 3.10 Пустые и ошибочные состояния
 Нет проектов (приглашение открыть или создать) · проект без чатов · агент не установлен / нужен вход
 (карточка с действием, как сейчас) · нет устройств (подсказка запустить эмулятор) · Flutter SDK не
@@ -268,7 +297,7 @@ px**, отступы 32; карточки только в одну колонк�
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Fake до M2 (сценарий: сборка → работа → ошибка RenderFlex) |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
 | `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`) и версия fvm проекта — Real; версия Flutter и `doctor()` — Fake до M4 |
-| `project_creation` | `IProjectCreationRepository.create(NewProjectRequest) → Stream<CreationStep>` | Fake до M4 |
+| `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<List<CreationStep>>`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?`, `isPreview` (решения этапа 7 — в §3.9) | `create` — Fake до M4 (`FakeProjectCreationRepositoryImpl`); `defaultParent`, `checkTarget` — Real |
 | `changes_pane`, `plan_pane` | читают `ChatTranscript` (`TurnFilesItem`, `ToolCallItem` с diff, `PlanItem`) | Real |
 
 Модели (freezed, кратко): `AgentInfo{id, name, version, status: ready|needsLogin|notInstalled|
@@ -279,7 +308,8 @@ stdio|http, command|url, builtin, status, toolCount, isPreview}`, `Device{id, na
 running|available, emulator}`, `RunState{idle | building(progress, label) | running(device, uptime,
 lastReload) | failed(error) | stopped}`, `LogEntry{time, level, text, error?}`, `RunError{title,
 message, location, stack}`, `PickedWidget{name, file, line, ancestors}`, `NewProjectRequest{name,
-org, folder, platforms, template, gitInit, openChat}`, `CreationStep{label, status, output}`.
+org, parent, platforms, template, gitInit, openChat}` (папка проекта — `parent/name`), `CreationStep{kind,
+status: pending|running|done|failed, output, took}`.
 
 ### Фейковые репозитории
 - Файл `data/fake_<name>_repository.dart`, класс `Fake<Name>RepositoryImpl implements I<Name>Repository`.
