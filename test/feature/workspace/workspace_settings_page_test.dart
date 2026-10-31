@@ -132,7 +132,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('agents and MCP show their subtitle above the placeholder', (tester) async {
+  testWidgets('agents shows its subtitle above the cards', (tester) async {
     await openSettings(tester, 'agents');
     expect(find.textContaining('Agent Client Protocol'), findsOneWidget);
     await disposeTestApp(tester, dependencies);

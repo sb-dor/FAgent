@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/agents/widgets/agents_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/appearance_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/general_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
@@ -17,7 +19,6 @@ class WorkspaceSettingsPage extends StatelessWidget {
 
   /// Where each section comes from; the rest have no milestone yet and say "coming soon".
   static const Map<String, String> _milestones = <String, String>{
-    'agents': 'M5',
     'mcp': 'M5',
     'flutter': 'M2',
   };
@@ -53,7 +54,8 @@ class WorkspaceSettingsPage extends StatelessWidget {
             _ => null,
           },
           child: switch (selected.$1) {
-            'general' => const GeneralSettingsSection(),
+            'general' => const AgentsConfigWidget(child: GeneralSettingsSection()),
+            'agents' => const AgentsConfigWidget(child: AgentsSettingsSection()),
             'appearance' => const AppearanceSettingsSection(),
             'shortcuts' => const ShortcutsSettingsSection(),
             _ => SectionPlaceholder(

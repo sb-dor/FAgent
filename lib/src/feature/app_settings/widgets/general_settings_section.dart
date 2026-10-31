@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
+import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
+import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/settings_row.dart';
 
 /// {@template general_settings_section}
-/// The "General" section of Settings: the app language and whether quitting asks first.
+/// The "General" section of Settings: the app language, the agent a new chat starts with and
+/// whether quitting asks first.
 /// {@endtemplate}
 class GeneralSettingsSection extends StatelessWidget {
   /// {@macro general_settings_section}
@@ -19,8 +22,9 @@ class GeneralSettingsSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final localization = Localization.of(context);
     final controller = AppSettingsConfigInhWidget.of(context).controller;
+    final agents = AgentsConfigInhWidget.of(context).agents;
     return ListenableBuilder(
-      listenable: controller,
+      listenable: Listenable.merge(<Listenable>[controller, agents]),
       builder: (context, _) {
         final settings = controller.settings;
         final current = settings.locale?.languageCode ?? _system;
@@ -49,6 +53,35 @@ class GeneralSettingsSection extends StatelessWidget {
                       ? s.copyWith(resetLocale: true)
                       : s.copyWith(locale: Locale(code)),
                 ),
+              ),
+            ),
+            SettingsRow(
+              label: localization.settingsDefaultAgent,
+              hint: localization.settingsDefaultAgentHint,
+              control: SelectorChip<String>(
+                label:
+                    agents.agents
+                        .where((agent) => agent.id == settings.defaultAgentId)
+                        .firstOrNull
+                        ?.name ??
+                    settings.defaultAgentId,
+                icon: Icons.smart_toy_outlined,
+                menuWidth: 240,
+                sections: <AppMenuSection<String>>[
+                  AppMenuSection<String>(
+                    items: <AppMenuItem<String>>[
+                      for (final agent in agents.agents)
+                        AppMenuItem<String>(
+                          value: agent.id,
+                          title: agent.name,
+                          selected: agent.id == settings.defaultAgentId,
+                          enabled: agent.canStartChats,
+                          badge: agent.canStartChats ? null : const PreviewBadge(),
+                        ),
+                    ],
+                  ),
+                ],
+                onSelected: (id) => controller.update((s) => s.copyWith(defaultAgentId: id)),
               ),
             ),
             SettingsRow(

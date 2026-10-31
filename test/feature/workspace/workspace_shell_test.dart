@@ -407,7 +407,12 @@ void main() {
       expect(find.textContaining('UI stage'), findsNothing);
       await tester.tap(find.text('Agents'));
       await tester.pump();
+      await tester.pump();
       expect(dataOf(tester).section, 'agents');
+      expect(find.text('Claude Code'), findsOneWidget);
+      expect(find.text('Coming in M5'), findsNothing);
+      await tester.tap(find.text('MCP servers'));
+      await tester.pump();
       expect(find.text('Coming in M5'), findsOneWidget);
       expect(find.text('Preview'), findsOneWidget);
 
