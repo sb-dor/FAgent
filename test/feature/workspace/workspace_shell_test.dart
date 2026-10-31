@@ -410,15 +410,16 @@ void main() {
       await tester.pump();
       expect(dataOf(tester).section, 'agents');
       expect(find.text('Claude Code'), findsOneWidget);
-      expect(find.text('Coming in M5'), findsNothing);
       await tester.tap(find.text('MCP servers'));
       await tester.pump();
-      expect(find.text('Coming in M5'), findsOneWidget);
-      expect(find.text('Preview'), findsOneWidget);
+      await tester.pump();
+      expect(dataOf(tester).section, 'mcp');
+      expect(find.text('Coming soon'), findsNothing);
 
       await tester.tap(find.text('Flutter'));
       await tester.pump();
       expect(find.text('Coming in M2'), findsOneWidget);
+      expect(find.text('Preview'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
 

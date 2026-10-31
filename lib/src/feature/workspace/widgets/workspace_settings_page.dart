@@ -4,6 +4,8 @@ import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widg
 import 'package:flutter_code_agent/src/feature/agents/widgets/agents_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/appearance_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/general_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_servers_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/shortcuts_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
@@ -18,10 +20,7 @@ class WorkspaceSettingsPage extends StatelessWidget {
   const WorkspaceSettingsPage({super.key});
 
   /// Where each section comes from; the rest have no milestone yet and say "coming soon".
-  static const Map<String, String> _milestones = <String, String>{
-    'mcp': 'M5',
-    'flutter': 'M2',
-  };
+  static const Map<String, String> _milestones = <String, String>{'flutter': 'M2'};
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +55,7 @@ class WorkspaceSettingsPage extends StatelessWidget {
           child: switch (selected.$1) {
             'general' => const AgentsConfigWidget(child: GeneralSettingsSection()),
             'agents' => const AgentsConfigWidget(child: AgentsSettingsSection()),
+            'mcp' => const McpServersConfigWidget(child: McpSettingsSection()),
             'appearance' => const AppearanceSettingsSection(),
             'shortcuts' => const ShortcutsSettingsSection(),
             _ => SectionPlaceholder(
