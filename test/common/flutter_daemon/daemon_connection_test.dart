@@ -134,6 +134,30 @@ void main() {
     expect(await request, 'bye');
   });
 
+  test('stderr lines that arrive after the exit code and stdout end are not lost', () async {
+    final lines = connection.output.toList();
+
+    process
+      ..emitError('before exit')
+      ..emitLine('last stdout line')
+      ..exit(1, closePipes: false)
+      ..closeStdout();
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    process
+      ..emitError('Unhandled exception: boom')
+      ..closePipes();
+
+    expect(await connection.done, 1);
+    expect(
+      (await lines).map((line) => (line.text, line.isError)),
+      unorderedEquals(<Object>[
+        ('before exit', true),
+        ('last stdout line', false),
+        ('Unhandled exception: boom', true),
+      ]),
+    );
+  });
+
   test('a frame of 5 MB is parsed', () async {
     final payload = 'x' * (5 * 1024 * 1024);
     final request = connection.request('app.callServiceExtension');

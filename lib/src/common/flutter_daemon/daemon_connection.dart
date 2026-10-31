@@ -46,12 +46,15 @@ final class DaemonConnection {
     _stderrSubscription = _process.stderrLines.listen(
       (line) => _addOutput(line, isError: true),
       onError: (Object error) => l.w('DaemonConnection | stderr error: $error'),
+      onDone: () {
+        if (!_stderrDone.isCompleted) _stderrDone.complete();
+      },
     );
     _done = _process.exitCode.then(_finish);
   }
 
-  /// How long to wait, after the exit, for the rest of stdout: a leftover of
-  /// the process group may keep the pipe open.
+  /// How long to wait, after the exit, for the rest of stdout and stderr: a
+  /// leftover of the process group may keep a pipe open.
   static const Duration _drainTimeout = Duration(seconds: 1);
 
   final DaemonProcess _process;
@@ -61,6 +64,7 @@ final class DaemonConnection {
   final Map<int, ({String method, Completer<Object?> completer})> _pending =
       <int, ({String method, Completer<Object?> completer})>{};
   final Completer<void> _stdoutDone = Completer<void>();
+  final Completer<void> _stderrDone = Completer<void>();
   late final StreamSubscription<String> _stdoutSubscription;
   late final StreamSubscription<String> _stderrSubscription;
   late final Future<int> _done;
@@ -120,8 +124,12 @@ final class DaemonConnection {
 
   Future<int> _finish(int code) async {
     _exited = true;
-    // The exit code can arrive before the last stdout lines are read.
-    await _stdoutDone.future.timeout(_drainTimeout, onTimeout: () {});
+    // The exit code can arrive before the last stdout and stderr lines (the
+    // crash diagnostics) are read.
+    await Future.wait<void>(<Future<void>>[
+      _stdoutDone.future.timeout(_drainTimeout, onTimeout: () {}),
+      _stderrDone.future.timeout(_drainTimeout, onTimeout: () {}),
+    ]);
     final pending = _pending.values.toList();
     _pending.clear();
     for (final request in pending) {

@@ -77,25 +77,36 @@ final class ScriptedDaemonProcess implements DaemonProcess {
 
   /// Writes [line] to stdout as is.
   void emitLine(String line) {
-    if (!_exit.isCompleted) _stdout.add(line);
+    if (!_stdout.isClosed) _stdout.add(line);
   }
 
   /// Writes [line] to stderr.
   void emitError(String line) {
-    if (!_exit.isCompleted) _stderr.add(line);
+    if (!_stderr.isClosed) _stderr.add(line);
   }
 
   /// Answers request [id] with [result], or with [error] when it is not null.
   void respond(int id, {Object? result, Object? error}) =>
       emit(<String, Object?>{'id': id, if (error != null) 'error': error else 'result': result});
 
-  /// Ends the process with [code]: closes both output streams.
-  void exit(int code) {
+  /// Ends the process with [code] and, unless [closePipes] is false, closes
+  /// both output streams. With `closePipes: false` the pipes stay open for
+  /// [emitLine] / [emitError] (the exit code can arrive before the pipes are
+  /// drained) until [closePipes] is called.
+  void exit(int code, {bool closePipes = true}) {
     if (_exit.isCompleted) return;
     _exit.complete(code);
-    unawaited(_stdout.close());
+    if (closePipes) this.closePipes();
+  }
+
+  /// Closes stdout and stderr.
+  void closePipes() {
+    closeStdout();
     unawaited(_stderr.close());
   }
+
+  /// Closes stdout only; stderr stays open for [emitError].
+  void closeStdout() => unawaited(_stdout.close());
 
   @override
   Future<void> stop() async {
