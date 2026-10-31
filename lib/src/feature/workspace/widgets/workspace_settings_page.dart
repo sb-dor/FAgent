@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/agents/widgets/agents_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/appearance_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/general_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/widgets/flutter_sdk_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/widgets/flutter_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_servers_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/widgets/permission_rules_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/widgets/permissions_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/shortcuts_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_page_scaffold.dart';
 
 /// {@template workspace_settings_page}
-/// The Settings screen. Sections are placeholders until the milestones that deliver them.
+/// The Settings screen: a rail or list of sections and the one that is open.
 /// {@endtemplate}
 class WorkspaceSettingsPage extends StatelessWidget {
   /// {@macro workspace_settings_page}
   const WorkspaceSettingsPage({super.key});
-
-  /// Where each section comes from; the rest have no milestone yet and say "coming soon".
-  static const Map<String, String> _milestones = <String, String>{
-    'agents': 'M5',
-    'mcp': 'M5',
-    'flutter': 'M2',
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -34,20 +38,30 @@ class WorkspaceSettingsPage extends StatelessWidget {
     return ListenableBuilder(
       listenable: data,
       builder: (context, _) {
-        final selected = sections.firstWhere(
-          (section) => section.$1 == data.section,
-          orElse: () => sections.first,
-        );
+        final current = data.section;
+        final selected = sections.any((section) => section.$1 == current)
+            ? current!
+            : sections.first.$1;
         return WorkspacePageScaffold(
           title: localization.settings,
           sections: sections,
-          selected: selected.$1,
+          selected: selected,
           onSelect: (id) => data.openView(WorkspaceView.settings, section: id),
-          child: SectionPlaceholder(
-            icon: selected.$2,
-            title: selected.$3,
-            milestone: _milestones[selected.$1],
-          ),
+          subtitle: switch (selected) {
+            'agents' => localization.settingsAgentsSubtitle,
+            'mcp' => localization.settingsMcpSubtitle,
+            'permissions' => localization.settingsPermissionsSubtitle,
+            _ => null,
+          },
+          child: switch (selected) {
+            'agents' => const AgentsConfigWidget(child: AgentsSettingsSection()),
+            'mcp' => const McpServersConfigWidget(child: McpSettingsSection()),
+            'permissions' => const PermissionRulesConfigWidget(child: PermissionsSettingsSection()),
+            'appearance' => const AppearanceSettingsSection(),
+            'shortcuts' => const ShortcutsSettingsSection(),
+            'flutter' => const FlutterSdkConfigWidget(child: FlutterSettingsSection()),
+            _ => const AgentsConfigWidget(child: GeneralSettingsSection()),
+          },
         );
       },
     );

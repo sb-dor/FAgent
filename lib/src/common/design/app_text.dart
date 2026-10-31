@@ -9,6 +9,10 @@ abstract final class AppText {
   static const String monoFamily = 'JetBrainsMono';
 
   /// Monospace style for code, paths and logs. Line height is 18/12.
-  static TextStyle mono(BuildContext context, {double size = 12}) =>
-      TextStyle(fontFamily: monoFamily, fontSize: size, height: 18 / 12, color: context.colors.text);
+  static TextStyle mono(BuildContext context, {double size = 12}) => TextStyle(
+    fontFamily: monoFamily,
+    fontSize: size,
+    height: 18 / 12,
+    color: context.colors.text,
+  );
 }

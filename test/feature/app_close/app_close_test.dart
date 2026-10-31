@@ -9,9 +9,10 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/test_app.dart';
 
 final class _FakeAppCloseRepository implements IAppCloseRepository {
-  _FakeAppCloseRepository({this.busy = 0});
+  _FakeAppCloseRepository({this.busy = 0, this.ask = true});
 
   int busy;
+  bool ask;
   final StreamController<void> requests = StreamController<void>.broadcast();
   final List<String> calls = <String>[];
   Completer<void>? shutdownGate;
@@ -23,6 +24,9 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
 
   @override
   Future<int> busyChats() async => busy;
+
+  @override
+  Future<bool> askBeforeQuit() async => ask;
 
   @override
   Future<void> shutdown() async {
@@ -43,10 +47,11 @@ void main() {
   Future<_FakeAppCloseRepository> pumpGuard(
     WidgetTester tester, {
     int busy = 0,
+    bool ask = true,
     Locale locale = const Locale('en'),
   }) async {
     useDesktopView(tester);
-    final repository = _FakeAppCloseRepository(busy: busy);
+    final repository = _FakeAppCloseRepository(busy: busy, ask: ask);
     dependencies = testDependencies();
     await tester.pumpWidget(
       testApp(
@@ -61,6 +66,18 @@ void main() {
 
   testWidgets('closing an idle app quits without asking', (tester) async {
     final repository = await pumpGuard(tester);
+
+    repository.close();
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(repository.calls, <String>['shutdown', 'quit']);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('quits without asking when askBeforeQuit is off', (tester) async {
+    final repository = await pumpGuard(tester, busy: 2, ask: false);
 
     repository.close();
     await tester.pump();

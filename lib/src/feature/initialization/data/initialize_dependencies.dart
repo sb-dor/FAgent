@@ -6,12 +6,17 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
@@ -56,6 +61,9 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ..appRunRepository = FakeAppRunRepositoryImpl()
       ..widgetPickerRepository = FakeWidgetPickerRepositoryImpl();
   },
+  // Remembers the settings every agent reports, for the Settings screen.
+  'Create agent options catalog': (dependencies) =>
+      dependencies.agentOptionsCatalog = AgentOptionsCatalogImpl(database: dependencies.database),
   'Create agent hub': (dependencies) => dependencies.agentHub = AgentHub(
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
@@ -65,11 +73,30 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
           database: dependencies.database,
         ).watch().first).sessionDefaults[agentId] ??
         const <String, String>{},
+    onConfigOptions: (agentId, options) => dependencies.agentOptionsCatalog
+        .save(agentId, options)
+        .catchError(
+          (Object error, StackTrace stackTrace) =>
+              l.w('Agent options | could not save the options of $agentId: $error', stackTrace),
+        ),
   ),
+  'Create agents repository': (dependencies) =>
+      dependencies.agentsRepository = AgentsRepositoryImpl(
+        hub: dependencies.agentHub,
+        environment: dependencies.shellEnvironment,
+        catalog: dependencies.agentOptionsCatalog,
+      ),
   'Create skills repository': (dependencies) async =>
       dependencies.skillsRepository = SkillsRepositoryImpl(
         database: dependencies.database,
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create MCP servers repository': (dependencies) =>
+      dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
+  'Create permission rules repository': (dependencies) =>
+      dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
+  // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
+  'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
+      FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
 };

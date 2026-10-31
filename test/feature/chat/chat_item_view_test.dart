@@ -4,6 +4,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
@@ -259,6 +261,39 @@ void main() {
 
       expect(_richText(tester, 'hello.txt'), 'hello.txt lib/src/feature/booking/widgets/screens/');
     });
+  });
+
+  testWidgets('compact density tightens the feed', (tester) async {
+    useDesktopView(tester);
+    final dependencies = testDependencies();
+    await tester.pumpWidget(
+      testApp(
+        ChatFeed(
+          items: const <ChatItem>[AgentMessageItem(0, text: 'hello')],
+          onAnswerPermission: (_, _) {},
+        ),
+        dependencies: dependencies,
+        withSettings: true,
+      ),
+    );
+    await tester.pump();
+
+    double rowPadding() =>
+        tester
+            .widget<Padding>(
+              find.ancestor(of: find.byType(ChatItemView), matching: find.byType(Padding)).first,
+            )
+            .padding
+            .vertical /
+        2;
+
+    expect(rowPadding(), 6);
+
+    AppSettingsConfigInhWidget.of(tester.element(find.byType(ChatFeed))).controller
+        .update((current) => current.copyWith(feedDensity: FeedDensity.compact));
+    await tester.pumpAndSettle();
+    expect(rowPadding(), 2);
+    await disposeTestApp(tester, dependencies);
   });
 
   testWidgets('an edit without diffs has no counter', (tester) async {

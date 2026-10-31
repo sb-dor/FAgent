@@ -8,6 +8,7 @@ import '../../generated_migrations/schema_v1.dart' as v1;
 import '../../generated_migrations/schema_v2.dart' as v2;
 import '../../generated_migrations/schema_v3.dart' as v3;
 import '../../generated_migrations/schema_v4.dart' as v4;
+import '../../generated_migrations/schema_v5.dart' as v5;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -86,5 +87,26 @@ void main() {
     final setting = await database.select(database.appSettingsTable).getSingle();
     expect(setting.key, 'app');
     expect(await database.select(database.skillStatesTable).get(), isEmpty);
+  });
+
+  test('v5 → v6 adds mcp tables and keeps skill states', () async {
+    final schema = await verifier.schemaAt(5);
+    final old = v5.DatabaseAtV5(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO skill_states (skill_id, project_id, enabled) VALUES ('skill:user:a', 1, 0)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 6);
+
+    final state = await database.select(database.skillStatesTable).getSingle();
+    expect(state.skillId, 'skill:user:a');
+    expect(await database.select(database.mcpServersTable).get(), isEmpty);
+    expect(await database.select(database.mcpServerStatesTable).get(), isEmpty);
   });
 }

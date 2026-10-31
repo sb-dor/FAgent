@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:async/async.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
@@ -152,19 +153,26 @@ void main() {
   });
 
   test('emits again only when files change', () async {
-    await put(userFile('skills/b/SKILL.md'), _doc('b'));
-    final emitted = <SkillLibrary>[];
-    final subscription = repository.watch().listen(emitted.add);
+    final file = userFile('skills/b/SKILL.md');
+    await put(file, _doc('b'));
+    final events = StreamQueue<SkillLibrary>(repository.watch());
+    addTearDown(events.cancel);
 
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    expect(emitted, hasLength(1));
+    await events.next.timeout(const Duration(seconds: 5));
+    // Unchanged files: the poll runs many times (every 20 ms) and emits nothing.
+    expect(
+      await events.hasNext.timeout(const Duration(milliseconds: 200), onTimeout: () => false),
+      isFalse,
+    );
 
-    await put(userFile('skills/b/SKILL.md'), _doc('b', description: 'changed'));
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    await subscription.cancel();
+    // Atomic, so a poll never sees the file truncated or half written; the temporary file lies
+    // outside the watched folders, on the same volume.
+    File('${temp.path}/changed.tmp')
+      ..writeAsStringSync(_doc('b', description: 'changed'))
+      ..renameSync(file.path);
 
-    expect(emitted, hasLength(2));
-    expect(emitted.last.byId('skill:user:b')!.description, 'changed');
+    final changed = await events.next.timeout(const Duration(seconds: 5));
+    expect(changed.byId('skill:user:b')!.description, 'changed');
   });
 
   test('enabled by default; a project exception', () async {

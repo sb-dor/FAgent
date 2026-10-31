@@ -49,6 +49,38 @@ void main() {
     expect(enabled.hashCode, isNot(const AppSettings().hashCode));
   });
 
+  test('new fields default and round trip', () {
+    const defaults = AppSettings();
+    expect(defaults.askBeforeQuit, isTrue);
+    expect(defaults.feedDensity, FeedDensity.comfortable);
+    expect(defaults.projectOrg, 'com.example');
+    expect(defaults.projectTemplate, NewProjectTemplate.architecture);
+    expect(defaults.devToolsTarget, DevToolsTarget.browser);
+
+    final changed = defaults.copyWith(
+      askBeforeQuit: false,
+      feedDensity: FeedDensity.compact,
+      projectOrg: 'dev.avaz',
+      projectTemplate: NewProjectTemplate.plain,
+      devToolsTarget: DevToolsTarget.app,
+    );
+    expect(AppSettings.fromJson(changed.toJson()), changed);
+    expect(changed, isNot(defaults));
+    expect(changed.hashCode, isNot(defaults.hashCode));
+    expect(AppSettings.fromJson(changed.toJson()).askBeforeQuit, isFalse);
+  });
+
+  test('bad stored values fall back', () {
+    final settings = AppSettings.fromJson(const <String, Object?>{
+      'feedDensity': 'huge',
+      'projectOrg': 'Com.Example',
+      'projectTemplate': 1,
+      'askBeforeQuit': 'no',
+      'devToolsTarget': 'moon',
+    });
+    expect(settings, const AppSettings());
+  });
+
   test('session defaults round-trip and never keep bypass', () {
     final settings = AppSettings.fromJson(const <String, Object?>{
       'sessionDefaults': <String, Object?>{

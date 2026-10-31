@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/feed_grouping.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
@@ -53,6 +55,17 @@ class ChatFeed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final settings = AppSettingsConfigInhWidget.maybeOf(context)?.controller;
+    if (settings == null) return _buildFeed(context, FeedDensity.comfortable);
+    // Rebuilds on any settings change; cheap, as only the visible rows are built.
+    return ListenableBuilder(
+      listenable: settings,
+      builder: (context, _) => _buildFeed(context, settings.settings.feedDensity),
+    );
+  }
+
+  Widget _buildFeed(BuildContext context, FeedDensity density) {
+    final rowPadding = density == FeedDensity.compact ? 2.0 : 6.0;
     final entries = groupFeed(items);
     final indexBySeq = <int, int>{
       for (var i = 0; i < entries.length; i++) entries[i].seq: entries.length - 1 - i,
@@ -69,7 +82,7 @@ class ChatFeed extends StatelessWidget {
         // The same outer padding as the composer, so both columns line up.
         return Padding(
           key: ValueKey<int>(entry.seq),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 6),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: rowPadding),
           child: Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: kChatColumnWidth),

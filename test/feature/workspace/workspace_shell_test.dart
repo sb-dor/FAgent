@@ -393,23 +393,36 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('settings sections switch and show their placeholder', (tester) async {
+    testWidgets('settings sections switch and show their content', (tester) async {
       useWindow(tester, 1280, 800);
       await pumpShell(tester);
       dataOf(tester).openView(WorkspaceView.settings);
       await tester.pump();
 
-      expect(find.text('Coming soon'), findsOneWidget);
+      expect(find.text('Language'), findsOneWidget);
+      expect(find.text('Coming soon'), findsNothing);
+      await tester.tap(find.text('Permissions'));
+      await tester.pump();
+      expect(dataOf(tester).section, 'permissions');
+      expect(find.text('Coming soon'), findsNothing);
       expect(find.textContaining('UI stage'), findsNothing);
       await tester.tap(find.text('Agents'));
       await tester.pump();
+      await tester.pump();
       expect(dataOf(tester).section, 'agents');
-      expect(find.text('Coming in M5'), findsOneWidget);
-      expect(find.text('Preview'), findsOneWidget);
+      expect(find.text('Claude Code'), findsOneWidget);
+      await tester.tap(find.text('MCP servers'));
+      await tester.pump();
+      await tester.pump();
+      expect(dataOf(tester).section, 'mcp');
+      expect(find.text('Coming soon'), findsNothing);
 
       await tester.tap(find.text('Flutter'));
       await tester.pump();
-      expect(find.text('Coming in M2'), findsOneWidget);
+      await tester.pump();
+      expect(dataOf(tester).section, 'flutter');
+      expect(find.text('Flutter SDK'), findsOneWidget);
+      expect(find.text('Coming soon'), findsNothing);
       await disposeTestApp(tester, dependencies);
     });
 

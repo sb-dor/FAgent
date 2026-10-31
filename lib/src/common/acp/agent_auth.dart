@@ -13,6 +13,10 @@ import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 final class AgentLogin {
   AgentLogin._(this.agentId, this.methodId);
 
+  /// A login that runs no process; its output and result are set by the test.
+  @visibleForTesting
+  AgentLogin.forTest(this.agentId, this.methodId);
+
   /// Agent being logged in.
   final String agentId;
 
@@ -32,6 +36,16 @@ final class AgentLogin {
   void _line(String line) {
     _output.add(line);
     output.value = _output.items;
+  }
+
+  /// Appends [line] to [output] the way a running login does.
+  @visibleForTesting
+  void addLine(String line) => _line(line);
+
+  /// Completes [succeeded] the way the end of a login command does.
+  @visibleForTesting
+  void finish({required bool succeeded}) {
+    if (!_done.isCompleted) _done.complete(succeeded);
   }
 }
 

@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:l/l.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -16,6 +17,9 @@ abstract interface class IAppCloseRepository {
 
   /// Chats with a turn or setup in flight, plus a running login.
   Future<int> busyChats();
+
+  /// Whether quitting while agents work asks the user first (a setting).
+  Future<bool> askBeforeQuit();
 
   /// Stops the agents and closes the database.
   Future<void> shutdown();
@@ -30,10 +34,11 @@ abstract interface class IAppCloseRepository {
 /// window_manager-backed [IAppCloseRepository].
 final class AppCloseRepositoryImpl implements IAppCloseRepository {
   /// Creates the repository.
-  AppCloseRepositoryImpl({required this._hub, required this._database});
+  AppCloseRepositoryImpl({required this._hub, required this._database, required this._settings});
 
   final AgentHub _hub;
   final AppDatabase _database;
+  final IAppSettingsRepository _settings;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -60,6 +65,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   @override
   Future<int> busyChats() async =>
       (await _hub.busySessions()).length + (_hub.auth.isRunning ? 1 : 0);
+
+  @override
+  Future<bool> askBeforeQuit() async => (await _settings.watch().first).askBeforeQuit;
 
   @override
   Future<void> shutdown() async {
