@@ -77,8 +77,11 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   @override
   Future<void> markSent(int projectId, int seq) async => marked.add((projectId, seq));
 
+  /// The projects `stop` was called for.
+  final List<int> stops = <int>[];
+
   @override
-  Future<void> stop(int projectId) async {}
+  Future<void> stop(int projectId) async => stops.add(projectId);
 
   @override
   Future<Duration> hotReload(int projectId) async => Duration.zero;
@@ -89,8 +92,11 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   @override
   Future<void> openDevTools(int projectId) async {}
 
+  /// When set, `screenshot` waits for it (a shot that hangs).
+  Completer<String?>? screenshotGate;
+
   @override
-  Future<String?> screenshot(int projectId) async => null;
+  Future<String?> screenshot(int projectId) async => screenshotGate?.future;
 
   @override
   Future<void> dispose() async {
@@ -507,6 +513,27 @@ void main() {
 
       final state = actions.state as RunActions$CompletedState;
       expect(state.picked!.name, 'BookingCard');
+    });
+
+    test('stop is not dropped while another action hangs', () async {
+      final repository = _ScriptedRunRepository()..screenshotGate = Completer<String?>();
+      addTearDown(repository.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+      );
+      addTearDown(actions.dispose);
+
+      actions.screenshot(1);
+      await pumpEventQueue();
+      expect(actions.isProcessing, isTrue);
+      actions.stop(1);
+      await pumpEventQueue();
+
+      expect(repository.stops, <int>[1]);
+      repository.screenshotGate!.complete(null);
+      await pumpEventQueue();
+      expect(actions.state, isA<RunActions$CompletedState>());
     });
 
     test('drops a second action while one is in progress', () async {

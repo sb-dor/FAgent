@@ -41,6 +41,9 @@ final class ScriptedDaemonProcess implements DaemonProcess {
   /// Whether [stop] was called.
   bool stopped = false;
 
+  /// When set, [stop] ends the process and then throws it (a group that cannot be signalled).
+  Error? stopError;
+
   final StreamController<String> _stdout = StreamController<String>();
   final StreamController<String> _stderr = StreamController<String>.broadcast();
   final Completer<int> _exit = Completer<int>();
@@ -112,6 +115,7 @@ final class ScriptedDaemonProcess implements DaemonProcess {
   Future<void> stop() async {
     stopped = true;
     exit(0);
+    if (stopError case final error?) throw error;
   }
 }
 

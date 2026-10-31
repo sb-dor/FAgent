@@ -169,6 +169,7 @@ void main() {
         environment: const <String, String>{'PATH': '/usr/bin'},
         start: scriptedStarter(create, started: started),
         stopTimeout: const Duration(milliseconds: 50),
+        restartTimeout: const Duration(milliseconds: 50),
         openUrl: (url) async => opened.add(url),
         now: () => clock,
       );
@@ -435,6 +436,23 @@ void main() {
       },
     );
 
+    test('a hot reload that gets no answer times out and keeps the app running', () async {
+      final seen = states(1);
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+      onRequest = (_, _) {};
+
+      final took = await repository.hotReload(1);
+      await pumpEventQueue();
+
+      expect(took, Duration.zero);
+      expect(seen.last, isA<RunRunning>());
+      expect(log.last.error, const RunError(title: 'Hot reload failed', message: 'timed out'));
+      expect(log.last.text, 'Hot reload failed: timed out');
+    });
+
     test('hotReload does nothing unless the app is running', () async {
       await startRun(1);
 
@@ -508,6 +526,7 @@ void main() {
       expect(failed.error.title, 'Compilation error');
       expect(failed.error.file, 'lib/main.dart');
       expect(failed.error.line, 3);
+      expect(process.stopped, isTrue, reason: 'an exit before app.started ends the group too');
     });
 
     test('a build that dies without a compile error fails with the last error lines', () async {
@@ -545,6 +564,36 @@ void main() {
           error: RunError(title: 'Build failed', message: 'Unable to start the app on the device.'),
         ),
       );
+      expect(process.stopped, isTrue);
+    });
+
+    test('a process group that cannot be stopped is logged, not thrown', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single..stopError = StateError('kill failed');
+      await launch(process);
+
+      process
+        ..emitError('Lost connection to device.')
+        ..exit(1);
+      await pumpEventQueue();
+
+      expect(process.stopped, isTrue);
+      expect((seen.last as RunFailed).error.title, 'App exited');
+    });
+
+    test('an app.stop whose group cannot be stopped is logged, not thrown', () async {
+      final seen = states(1);
+      await startRun(1);
+      final process = started.single..stopError = StateError('kill failed');
+      await launch(process);
+
+      await emit(process, 'app.stop', <String, Object?>{'appId': 'app-1'});
+      process.exit(0);
+      await pumpEventQueue();
+
+      expect(process.stopped, isTrue);
+      expect(seen.last, const RunStopped());
     });
 
     test('an exit with code 0 after app.started without a stop ends stopped', () async {
@@ -574,6 +623,7 @@ void main() {
       final failed = seen.last as RunFailed;
       expect(failed.error.title, 'App exited');
       expect(failed.error.message, contains('Lost connection to device.'));
+      expect(process.stopped, isTrue, reason: 'the leftovers of the group are ended too');
     });
 
     test('an unhandled exception still being collected is flushed on exit', () async {

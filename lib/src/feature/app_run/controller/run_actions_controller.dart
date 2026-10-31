@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:l/l.dart';
 
 part 'run_actions_controller.freezed.dart';
 
@@ -31,8 +32,8 @@ sealed class RunActionsState with _$RunActionsState {
 /// The buttons of the Run tab: start, stop, hot reload, hot restart, the widget picker, DevTools
 /// and the screenshot.
 ///
-/// One action at a time: a tap during another one is dropped. The run itself is observed through
-/// `RunController`.
+/// One action at a time: a tap during another one is dropped — except Stop, which never waits
+/// behind a reload or a screenshot that hangs. The run itself is observed through `RunController`.
 final class RunActionsController extends StateController<RunActionsState>
     with DroppableControllerHandler {
   RunActionsController({
@@ -62,8 +63,15 @@ final class RunActionsController extends StateController<RunActionsState>
     ),
   );
 
-  /// Stops the app.
-  void stop(int projectId) => _run(projectId, () => _runRepository.stop(projectId));
+  /// Stops the app. While another action is in progress the stop goes to the repository at once
+  /// (ending the run also ends what that action waits for) and the state is left to that action;
+  /// a failure is then logged.
+  void stop(int projectId) {
+    if (!isProcessing) return _run(projectId, () => _runRepository.stop(projectId));
+    _runRepository.stop(projectId).catchError((Object error, StackTrace stackTrace) {
+      l.w('RunActionsController | cannot stop the app of $projectId: $error', stackTrace);
+    }).ignore();
+  }
 
   /// Hot-reloads the app.
   void hotReload(int projectId) => _run(projectId, () => _runRepository.hotReload(projectId));

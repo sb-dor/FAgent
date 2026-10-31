@@ -94,14 +94,16 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   ///
   /// [projectPath] gives the folder of a project (`null` when it is unknown), [flutter] the
   /// `flutter` executable for a project folder (`null` when there is no SDK). [stopTimeout] is how
-  /// long a stopped app may take to exit before its process group is killed. [openUrl] opens
-  /// DevTools in the browser, [now] names the screenshots.
+  /// long a stopped app may take to exit before its process group is killed, [restartTimeout] how
+  /// long a hot reload or restart may take before it counts as failed. [openUrl] opens DevTools in
+  /// the browser, [now] names the screenshots.
   AppRunRepositoryImpl({
     required this._projectPath,
     required this._flutter,
     required this._environment,
     this._start = startGroupedDaemonProcess,
     this._stopTimeout = const Duration(seconds: 5),
+    this._restartTimeout = const Duration(seconds: 30),
     this._openUrl = openUrl,
     this._now = DateTime.now,
   });
@@ -111,6 +113,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   final Map<String, String> _environment;
   final DaemonProcessStarter _start;
   final Duration _stopTimeout;
+  final Duration _restartTimeout;
   final UrlOpener _openUrl;
   final DateTime Function() _now;
 
@@ -266,7 +269,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     final stopwatch = Stopwatch()..start();
     String message;
     try {
-      final result = await launch.restart(full: full);
+      final result = await launch.restart(full: full).timeout(_restartTimeout);
       stopwatch.stop();
       if (result is Map && result['code'] == 0) {
         final took = stopwatch.elapsed;
@@ -276,6 +279,8 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       message = result is Map ? '${result['message'] ?? ''}' : '$result';
     } on DaemonRequestException catch (error) {
       message = '${error.error}';
+    } on TimeoutException {
+      message = 'timed out';
     } on Object catch (error) {
       l.w('AppRunRepository | ${full ? 'hot restart' : 'hot reload'} of $projectId failed: $error');
       message = '$error';
@@ -504,6 +509,9 @@ final class _Launch {
   /// The `error` of `app.stop`, if it had one.
   String? _stopError;
 
+  /// Whether the process has exited.
+  bool _exited = false;
+
   /// Spawns the process with [spawn] and starts following it.
   Future<void> begin(Future<DaemonProcess> Function() spawn) async {
     final DaemonProcess process;
@@ -526,13 +534,13 @@ final class _Launch {
       ..add(connection.events.listen(_onEvent))
       ..add(connection.output.listen((line) => _add(line.text, isError: line.isError)));
     unawaited(connection.done.then(_onExit, onError: (Object _) => _onExit(-1)));
-    if (_stopping) unawaited(_shutDown());
+    if (_stopping) _shutDownQuietly();
   }
 
   /// Stops the app and completes once the process has exited.
   Future<void> stop() {
     _stopping = true;
-    if (_connection != null) unawaited(_shutDown());
+    if (_connection != null) _shutDownQuietly();
     return _finished.future;
   }
 
@@ -613,11 +621,21 @@ final class _Launch {
     _setRunning(running.withReload(took));
   }
 
-  /// Asks the app to stop (unless it already has), gives it [stopTimeout] to exit, then ends the
-  /// process group.
+  /// [_shutDown] in the background: a group that cannot be signalled is logged, never thrown into
+  /// the zone. Should the process then never report its exit, the launch ends all the same.
+  void _shutDownQuietly() {
+    _shutDown().catchError((Object error, StackTrace stackTrace) {
+      l.w('AppRunRepository | cannot stop the flutter run process group: $error', stackTrace);
+      if (!_finished.isCompleted) _onExit(-1);
+    }).ignore();
+  }
+
+  /// Asks the app to stop (unless it already has or the process is gone), gives it [stopTimeout]
+  /// to exit, then ends the process group. Once the process has exited this only ends the group:
+  /// what it left behind (the app binary, `iproxy`, log readers) is still a member.
   Future<void> _shutDown() => _shuttingDown ??= () async {
     final connection = _connection!;
-    final askApp = _appId != null && !_appStopped;
+    final askApp = _appId != null && !_appStopped && !_exited;
     if (askApp) {
       connection.request('app.stop', <String, Object?>{'appId': _appId}).ignore();
     }
@@ -666,7 +684,7 @@ final class _Launch {
       case 'app.stop':
         _appStopped = true;
         if (params['error'] case final Object error) _stopError = '$error';
-        if (_connection != null) unawaited(_shutDown());
+        if (_connection != null) _shutDownQuietly();
     }
   }
 
@@ -702,6 +720,8 @@ final class _Launch {
   }
 
   void _onExit(int code) {
+    if (_exited) return;
+    _exited = true;
     parser.flush().forEach(_emit);
     final RunState state;
     if (_stopping) {
@@ -720,6 +740,9 @@ final class _Launch {
       );
     }
     _finish(state);
+    // An exit nobody asked for (a crash, an exit before `app.start`, a kill from outside) still
+    // ends the group, so its leftovers do not outlive the run.
+    if (_connection != null) _shutDownQuietly();
   }
 
   String _lastErrors(int code) =>
