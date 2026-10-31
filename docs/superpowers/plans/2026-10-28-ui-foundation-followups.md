@@ -204,4 +204,35 @@ Deferred from the reviews of the M2 plan (docs/superpowers/plans/2026-10-31-m2-a
   - Separate iOS simulators in "Available" (an unbooted simulator is listed as an emulator only)
 - **Rulings recorded during the stage** (revisit if they cost too much):
   - The chat's `/` menu text for a command that cannot work now is the reason (`Choose a device`, `App is not running`), not a milestone; `SlashCommand.hint` is a ready string, so building the rows needs the localization
-  - `WorkspaceRunLink.mentions` is `null` only when the run state is not about the selected project; it always carries what the `/` commands can do (`canStart`, `canReload`, `canScreenshot`), and `isEmpty` still means nothing to offer the `@` menu
+  - `WorkspaceRunLink.mentions` is `null` only when the run state is not about the selected project; it always carries what the `/` commands can do (`canStart`, `isRunning`, `canReload`, `canScreenshot`), and `isEmpty` still means nothing to offer the `@` menu
+- **Deferred minors from the task reviews** (still open after the final review):
+  - T1: `DaemonConnection.close` skips closing its streams when `stop()` throws (`common/flutter_daemon/daemon_connection.dart`)
+  - T1: the error path of `DaemonConnection._done` (an `exitCode` that fails) is not handled
+  - T1: `DaemonRequestException.toString` includes the raw error payload, which can be large
+  - T1: `ScriptedDaemonProcess.exit(closePipes: false)` followed by `stop()` never closes the pipes (`test/support/scripted_daemon_process.dart`)
+  - T2: `DevicesController.launch` bypasses `handle` (`feature/app_run/controller/devices_controller.dart`)
+  - T2: weak `isA<Object>()` assertions in `devices_repository_test`
+  - T2: `launch` is ignored while the devices are `inProgress`
+  - T2: `Device.toString` omits `emulatorId`
+  - T2: the `openView(settings, section: 'flutter')` wiring is untested at window level
+  - T2: the Run header has 2 px vertical padding, off the 4 px grid
+  - T2: every `device.added` asks for `emulator.getEmulators` again
+  - T3: relative `../` paths in errors are not normalised (`feature/app_run/data/run_output_parser.dart`)
+  - T3: `%20` is kept in `location`
+  - T4: protocol events and plain output are separate streams and can reorder (`common/flutter_daemon/daemon_connection.dart`)
+  - T4: `RunRunning.mode` defaults to debug instead of being required (`feature/app_run/models/run_state.dart`)
+  - T4: races are untested: a stop during the `await`s of `start`, a reload while the process exits mid-request
+  - T4: `app_run_repository.dart` is large; `_Launch` could move to its own file
+  - T5: the run double inside `ScriptedAppRunRepository` is still named `_FakeRun`
+  - T6: a start in the milliseconds after a project switch uses the default arguments
+  - T6: 6 px padding in the run arguments dialog, off the 4 px grid
+  - T6: the rejection of `-d…` / `-t…` in the extra arguments is conservative
+  - T7: the DevTools tooltip stays "DevTools is starting…" in a release run, which never reports DevTools
+  - T7: the screenshots offered to the `@` menu are not kept between sessions
+  - T7: service extension calls time out after 30 s
+  - T7: Windows `cmd /c start` breaks on `&` in the DevTools URL (`common/utils/url_opener.dart`)
+  - T7: a disabled `SegmentedControl` segment is still announced as a button
+  - T7: the screenshot send test calls `resourcesFor` directly
+  - T8: the `appCommandsFor` tests live in `slash_command_test.dart`
+  - T8: `onAppCommand` is read at build time in `chat_screen`
+  - The Run tab duplicates the window's device / arguments / start logic (`feature/app_run/widgets/run_tab.dart`)
