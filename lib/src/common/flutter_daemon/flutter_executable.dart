@@ -13,3 +13,9 @@ String? flutterExecutableFor(String? projectPath, {required String? Function(Str
   }
   return which('flutter');
 }
+
+/// Why there is no `flutter` for [projectPath], in English: it goes into the `Flutter SDK not
+/// found` error of a run, next to the output of `flutter`.
+String flutterNotFoundMessage(String? projectPath) =>
+    'There is no `flutter` on the PATH of the login shell. Install Flutter or add its bin folder '
+    'to the PATH.';

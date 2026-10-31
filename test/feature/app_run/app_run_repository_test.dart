@@ -529,8 +529,44 @@ void main() {
       expect(process.stopped, isTrue, reason: 'an exit before app.started ends the group too');
     });
 
-    test('a build that dies without a compile error fails with the last error lines', () async {
+    test('a build that fails without a compile error logs the stop error and the last error lines '
+        'as one line to send', () async {
       final seen = states(1);
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await emit(process, 'app.start', <String, Object?>{'appId': 'app-1'});
+
+      process
+        ..emitError('** BUILD FAILED **')
+        ..emitError('Command PhaseScriptExecution failed with a nonzero exit code');
+      await pumpEventQueue();
+      // What flutter run --machine sends when `flutter build` throws a ToolExit.
+      await emit(process, 'app.stop', <String, Object?>{
+        'appId': 'app-1',
+        'error': 'Build process failed',
+      });
+      process.exit(1);
+      await pumpEventQueue();
+
+      final failed = seen.last as RunFailed;
+      expect(failed.error.title, 'Build failed');
+      expect(
+        failed.error.message,
+        'Build process failed\n'
+        '** BUILD FAILED **\n'
+        'Command PhaseScriptExecution failed with a nonzero exit code',
+      );
+      final sendable = log.where((entry) => entry.error != null).toList();
+      expect(sendable, hasLength(1));
+      expect(sendable.single.level, LogLevel.error);
+      expect(sendable.single.error, failed.error);
+      expect(process.stopped, isTrue);
+    });
+
+    test('a build that dies without app.stop fails with the last error lines', () async {
+      final seen = states(1);
+      final log = logs(1);
       await startRun(1);
 
       started.single
@@ -544,6 +580,35 @@ void main() {
       expect(failed.error.title, 'Build failed');
       expect(failed.error.message, contains('** BUILD FAILED **'));
       expect(failed.error.message, contains('PhaseScriptExecution'));
+      expect(log.last.error, failed.error);
+    });
+
+    test('a failure keeps only the last error lines', () async {
+      final seen = states(1);
+      await startRun(1);
+
+      for (var i = 0; i < 30; i++) {
+        started.single.emitError('error line $i');
+      }
+      await pumpEventQueue();
+      started.single.exit(1);
+      await pumpEventQueue();
+
+      final lines = (seen.last as RunFailed).error.message.split('\n');
+      expect(lines, hasLength(20));
+      expect(lines.first, 'error line 10');
+      expect(lines.last, 'error line 29');
+    });
+
+    test('a compile error is not logged a second time when the build fails', () async {
+      final log = logs(1);
+      await startRun(1);
+      started.single.emitError("lib/main.dart:3:1: Error: Expected ';' after this.");
+      await pumpEventQueue();
+      started.single.exit(1);
+      await pumpEventQueue();
+
+      expect(log.where((entry) => entry.error != null), hasLength(1));
     });
 
     test('app.stop with an error before app.started fails with that error', () async {
@@ -611,6 +676,7 @@ void main() {
 
     test('a crash after app.started fails as "App exited"', () async {
       final seen = states(1);
+      final log = logs(1);
       await startRun(1);
       final process = started.single;
       await launch(process);
@@ -624,6 +690,7 @@ void main() {
       expect(failed.error.title, 'App exited');
       expect(failed.error.message, contains('Lost connection to device.'));
       expect(process.stopped, isTrue, reason: 'the leftovers of the group are ended too');
+      expect(log.last.error, failed.error, reason: 'the failure can be sent to the agent');
     });
 
     test('an unhandled exception still being collected is flushed on exit', () async {
@@ -656,12 +723,9 @@ void main() {
       await pumpEventQueue();
 
       expect(started, isEmpty);
-      expect(
-        seen.last,
-        const RunFailed(
-          error: RunError(title: 'Project folder not found', message: ''),
-        ),
-      );
+      final error = (seen.last as RunFailed).error;
+      expect(error.title, 'Project folder not found');
+      expect(error.message, 'The folder of this project is unknown.');
     });
 
     test('a folder that is gone fails with "Project folder not found"', () async {
@@ -671,7 +735,9 @@ void main() {
       await pumpEventQueue();
 
       expect(started, isEmpty);
-      expect((seen.last as RunFailed).error.title, 'Project folder not found');
+      final error = (seen.last as RunFailed).error;
+      expect(error.title, 'Project folder not found');
+      expect(error.message, '${paths[3]} does not exist.');
     });
 
     test('no Flutter SDK fails with "Flutter SDK not found"', () async {
@@ -680,12 +746,9 @@ void main() {
       await startRun(1);
 
       expect(started, isEmpty);
-      expect(
-        seen.last,
-        const RunFailed(
-          error: RunError(title: 'Flutter SDK not found', message: ''),
-        ),
-      );
+      final error = (seen.last as RunFailed).error;
+      expect(error.title, 'Flutter SDK not found');
+      expect(error.message, contains('PATH'));
     });
 
     test('the package name comes from pubspec.yaml, else from the folder name', () async {

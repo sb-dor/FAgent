@@ -7,6 +7,7 @@ import 'dart:math' as math;
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
+import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
@@ -194,8 +195,13 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     if (!current()) return;
     if (path == null || !io.Directory(path).existsSync()) {
       run.setState(
-        const RunFailed(
-          error: RunError(title: 'Project folder not found', message: ''),
+        RunFailed(
+          error: RunError(
+            title: 'Project folder not found',
+            message: path == null
+                ? 'The folder of this project is unknown.'
+                : '$path does not exist.',
+          ),
         ),
       );
       return;
@@ -203,8 +209,8 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     final flutter = _flutter(path);
     if (flutter == null) {
       run.setState(
-        const RunFailed(
-          error: RunError(title: 'Flutter SDK not found', message: ''),
+        RunFailed(
+          error: RunError(title: 'Flutter SDK not found', message: flutterNotFoundMessage(path)),
         ),
       );
       return;
@@ -519,13 +525,11 @@ final class _Launch {
       process = await spawn();
     } on Object catch (error, stackTrace) {
       l.w('AppRunRepository | cannot start flutter run: $error', stackTrace);
-      _finish(
-        _stopping
-            ? const RunStopped()
-            : RunFailed(
-                error: RunError(title: 'Build failed', message: '$error'),
-              ),
-      );
+      if (_stopping) {
+        _finish(const RunStopped());
+      } else {
+        _fail(RunError(title: 'Build failed', message: '$error'));
+      }
       return;
     }
     final connection = _connection = DaemonConnection(process);
@@ -723,30 +727,39 @@ final class _Launch {
     if (_exited) return;
     _exited = true;
     parser.flush().forEach(_emit);
-    final RunState state;
-    if (_stopping) {
-      state = const RunStopped();
-    } else if (_running == null) {
-      state = RunFailed(
-        error:
-            parser.firstBuildError ??
-            RunError(title: 'Build failed', message: _stopError ?? _lastErrors(code)),
-      );
-    } else if (code == 0 && _stopError == null) {
-      state = const RunStopped();
+    if (_stopping || (_running != null && code == 0 && _stopError == null)) {
+      _finish(const RunStopped());
+    } else if (_running == null && parser.firstBuildError != null) {
+      // Already in the log, where it can be sent to the agent.
+      _finish(RunFailed(error: parser.firstBuildError!));
     } else {
-      state = RunFailed(
-        error: RunError(title: 'App exited', message: _stopError ?? _lastErrors(code)),
+      _fail(
+        RunError(title: _running == null ? 'Build failed' : 'App exited', message: _failure(code)),
       );
     }
-    _finish(state);
     // An exit nobody asked for (a crash, an exit before `app.start`, a kill from outside) still
     // ends the group, so its leftovers do not outlive the run.
     if (_connection != null) _shutDownQuietly();
   }
 
-  String _lastErrors(int code) =>
-      _errorLines.isEmpty ? 'flutter run exited with code $code.' : _errorLines.join('\n');
+  /// What went wrong, for a failure that is not a compile error: the `error` of `app.stop` (for a
+  /// failed build only "Build process failed") and the last error lines, which say why.
+  String _failure(int code) {
+    final stopError = _stopError;
+    final lines = <String>[
+      ?stopError,
+      for (final line in _errorLines)
+        if (line != stopError) line,
+    ];
+    return lines.isEmpty ? 'flutter run exited with code $code.' : lines.join('\n');
+  }
+
+  /// Ends the launch as failed with [error], and logs it as an error line that carries it, so it
+  /// can be sent to the agent (and `@error` offers it) like a compile error.
+  void _fail(RunError error) {
+    onLog(LogLevel.error, '${error.title}: ${error.message}', error);
+    _finish(RunFailed(error: error));
+  }
 
   void _finish(RunState state) {
     if (_finished.isCompleted) return;
