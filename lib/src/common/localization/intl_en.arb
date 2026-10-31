@@ -455,6 +455,7 @@
   "newProjectPickFolder": "Choose",
   "newProjectFolderExists": "The folder already exists",
   "newProjectParentMissing": "The folder does not exist",
+  "newProjectFolderUnreadable": "Cannot check this folder",
   "newProjectPlatforms": "Platforms",
   "newProjectNoPlatform": "Choose at least one platform",
   "newProjectTemplate": "Template",

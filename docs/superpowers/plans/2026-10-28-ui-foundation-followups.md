@@ -165,18 +165,20 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage6-setting
 Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage7-new-project.md. Paths are under `lib/src/feature/project_creation/`.
 
 - **Bugs and risks:**
-  - SnackBars shown from inside the dialog ("Из git-шаблона…", "Открыть чат агента") render in the window's `Scaffold`, under the modal barrier, so they may be dimmed or hidden behind the dialog; check in the running app and, if so, show them through a `Scaffold` inside the dialog or keep the message inline (`widgets/new_project_form.dart`, `widgets/creation_progress.dart`)
-  - The form swallows errors from `defaultParent`/`checkTarget` (`.ignore()`): Create stays disabled with no message (`widgets/new_project_form.dart`)
+  - ~~SnackBars shown from inside the dialog render under the modal barrier~~ — fixed in this stage: the git template shows an inline "Появится в M4" line, "Открыть чат агента" closes the dialog first
+  - ~~The form swallows errors from `defaultParent`/`checkTarget`~~ — fixed in this stage: a failed check shows "Не удалось проверить папку" and keeps Create off; `defaultParent` falls back to the home folder
   - `defaultParent` looks only at the most recently opened project; if its folder is gone it falls straight to `~/StudioProjects` instead of trying the next project (`data/fake_project_creation_repository.dart`)
   - A tap on the sidebar chip during the 150 ms fade-out after "Done" reopens the dialog, and the delayed `reset` then flips it back to the form (`widgets/new_project_dialog.dart`, `widgets/creation_chip.dart`)
-  - A failed step shows no text about what failed, only the failed mark and the title; the real creation (M4) needs the step's output or error there (`widgets/creation_progress.dart`)
+  - A failed step shows no error text, only the step's output; the real creation (M4) needs the step's output or error there (`widgets/creation_progress.dart`)
   - Enter in the org field also creates the project (`widgets/new_project_form.dart`)
 - **M4 hand-over (the fake is replaced):**
-  - "Открыть чат агента" shows the "Появится в M4" SnackBar without asking `isPreview`; M4 must replace it with the real chat and stop the SnackBar for a real repository (`widgets/creation_progress.dart`)
+  - "Открыть чат агента" shows the "Появится в M4" SnackBar only for a preview repository (the button is disabled otherwise); M4 must replace it with the real chat (`widgets/creation_progress.dart`)
   - `FakeProjectCreationRepositoryImpl` keeps the real `checkTarget`/`defaultParent`; the real implementation reuses them and drops the fake's step timings and output (`data/fake_project_creation_repository.dart`)
+  - The real `create` must re-check `<parent>/<name>` right before `flutter create`: the form's check can go stale while the dialog is open (`data/project_creation_repository.dart`)
+  - A real creation still running when the window quits is cancelled silently by `dispose`; M4 must ask before quitting (an app close guard) or let it finish (`controller/project_creation_controller.dart`)
   - `NewProjectRequest.openChat` has no consumer until M4: the fake ignores it, and the agent step of the architecture template is only played (`models/new_project_request.dart`)
 - **Test gaps:**
-  - `TargetProblem.parentMissing` is never asserted in the form tests; the `defaultParent` test titled "skips a parent that is gone" proves only the one-project case
+  - `TargetProblem.parentMissing` is never asserted in the form tests; the `defaultParent` tests prove only the one-project case (the most recent project's parent is gone), not trying the next project
   - The Pattern 1 scaffolding of a creation stream is duplicated between the fake and the test double `MemoryProjectCreationRepository`; the double builds the pending snapshot twice
 - **Polish:**
   - The form, the progress view and the platform chips use radius arithmetic (`AppRadius.medium - 2`, `AppRadius.small + 2`) instead of a token; `_checkTarget` repeats the reset of the check state; `CreationChip` computes placeholders it discards while idle

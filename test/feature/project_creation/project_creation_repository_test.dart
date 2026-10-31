@@ -75,9 +75,14 @@ void main() {
       expect(await repository.defaultParent(), newer.path);
     });
 
-    test('skips a parent that is gone, falling back to the home folder', () async {
+    test('falls back to home when the last project\'s parent is gone', () async {
       await addProject(p.join(root.path, 'gone', 'a'), DateTime(2026, 1, 1));
       Directory(p.join(root.path, 'home')).createSync();
+      expect(await repository.defaultParent(), p.join(root.path, 'home'));
+    });
+
+    test('falls back to home when the projects cannot be read', () async {
+      await database.customStatement('DROP TABLE ${database.projectsTable.actualTableName}');
       expect(await repository.defaultParent(), p.join(root.path, 'home'));
     });
 

@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
+import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
 /// How long each made-up step "took".
@@ -52,18 +53,23 @@ final class FakeProjectCreationRepositoryImpl implements IProjectCreationReposit
 
   @override
   Future<String> defaultParent() async {
-    final last =
-        await (_database.select(_database.projectsTable)
-              ..where((t) => t.lastOpenedAt.isNotNull())
-              ..orderBy([(t) => OrderingTerm.desc(t.lastOpenedAt)])
-              ..limit(1))
-            .getSingleOrNull();
-    if (last != null) {
-      final parent = p.dirname(last.path);
-      if (Directory(parent).existsSync()) return parent;
+    try {
+      final last =
+          await (_database.select(_database.projectsTable)
+                ..where((t) => t.lastOpenedAt.isNotNull())
+                ..orderBy([(t) => OrderingTerm.desc(t.lastOpenedAt)])
+                ..limit(1))
+              .getSingleOrNull();
+      if (last != null) {
+        final parent = p.dirname(last.path);
+        if (Directory(parent).existsSync()) return parent;
+      }
+      final studio = p.join(_home, 'StudioProjects');
+      return Directory(studio).existsSync() ? studio : _home;
+    } on Object catch (error, stackTrace) {
+      l.w('Project creation | default folder | falling back to home: $error', stackTrace);
+      return _home;
     }
-    final studio = p.join(_home, 'StudioProjects');
-    return Directory(studio).existsSync() ? studio : _home;
   }
 
   @override

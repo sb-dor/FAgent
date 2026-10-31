@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/models/package_n
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/platform_chips.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:l/l.dart';
 
 /// {@template new_project_form}
 /// What the New project dialog asks: the package name, the organization, the folder, the
@@ -58,6 +59,12 @@ class _NewProjectFormState extends State<NewProjectForm> {
   bool _targetChecked = false;
   TargetProblem? _targetProblem;
 
+  /// Whether the folder could not be checked (or no default folder could be found).
+  bool _folderFailed = false;
+
+  /// Whether the git template was tapped: it is a preview, so the form says so inline.
+  bool _gitHint = false;
+
   @override
   void initState() {
     super.initState();
@@ -71,11 +78,18 @@ class _NewProjectFormState extends State<NewProjectForm> {
     _sdk = FlutterSdkController(repository: Dependencies.of(context).flutterSdkRepository)
       ..addListener(_onSdk)
       ..load(null);
-    _scope.projectCreation.defaultParent().then<void>((parent) {
-      if (!mounted || _parent != null) return;
-      setState(() => _parent = parent);
-      _checkTarget();
-    }).ignore();
+    _scope.projectCreation.defaultParent().then<void>(
+      (parent) {
+        if (!mounted || _parent != null) return;
+        setState(() => _parent = parent);
+        _checkTarget();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        l.w('New project | default folder | $error', stackTrace);
+        if (!mounted || _parent != null) return;
+        setState(() => _folderFailed = true);
+      },
+    );
   }
 
   @override
@@ -107,6 +121,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
       _parent != null &&
       _targetChecked &&
       _targetProblem == null &&
+      !_folderFailed &&
       _platforms.isNotEmpty &&
       _sdkInfo?.path != null;
 
@@ -115,24 +130,31 @@ class _NewProjectFormState extends State<NewProjectForm> {
     final number = ++_checkNumber;
     final parent = _parent;
     final name = _name.text;
-    if (parent == null || checkPackageName(name) != null) {
-      setState(() {
-        _targetChecked = false;
-        _targetProblem = null;
-      });
-      return;
-    }
     setState(() {
       _targetChecked = false;
       _targetProblem = null;
+      _folderFailed = false;
     });
-    _scope.projectCreation.checkTarget(parent, name).then<void>((problem) {
-      if (!mounted || number != _checkNumber) return;
-      setState(() {
-        _targetChecked = true;
-        _targetProblem = problem;
-      });
-    }).ignore();
+    if (parent == null || checkPackageName(name) != null) return;
+    _scope.projectCreation
+        .checkTarget(parent, name)
+        .then<void>(
+          (problem) {
+            if (!mounted || number != _checkNumber) return;
+            setState(() {
+              _targetChecked = true;
+              _targetProblem = problem;
+            });
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            l.w('New project | check folder | $error', stackTrace);
+            if (!mounted || number != _checkNumber) return;
+            setState(() {
+              _targetChecked = true;
+              _folderFailed = true;
+            });
+          },
+        );
   }
 
   Future<void> _pickFolder() async {
@@ -149,12 +171,11 @@ class _NewProjectFormState extends State<NewProjectForm> {
   });
 
   void _chooseTemplate(NewProjectTemplate template) {
-    if (template == NewProjectTemplate.git) {
-      ScaffoldMessenger.maybeOf(context)
-          ?.showSnackBar(SnackBar(content: Text(Localization.of(context).comingInMilestone('M4'))));
-      return;
-    }
-    setState(() => _template = template);
+    // A SnackBar would show under the dialog's barrier, so the preview note is inline.
+    setState(() {
+      _gitHint = template == NewProjectTemplate.git;
+      if (!_gitHint) _template = template;
+    });
   }
 
   void _create() {
@@ -234,6 +255,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         gap,
         _Field(
           label: localization.newProjectTemplate,
+          messages: <Widget>[if (_gitHint) _Message.hint(localization.comingInMilestone('M4'))],
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
@@ -346,13 +368,17 @@ class _NewProjectFormState extends State<NewProjectForm> {
   Widget _folderField(BuildContext context) {
     final localization = Localization.of(context);
     final colors = context.colors;
-    final parent = _parent ?? '';
-    final path = parent.endsWith('/') ? parent : '$parent/';
-    final full = '$path${_name.text}';
+    final parent = _parent;
+    // Until the default folder has arrived there is nothing to show but a placeholder.
+    final full = parent == null
+        ? '…'
+        : '${parent.endsWith('/') ? parent : '$parent/'}${_name.text}';
     final problem = _targetChecked ? _targetProblem : null;
+    final failed = _folderFailed;
     return _Field(
       label: localization.newProjectFolder,
       messages: <Widget>[
+        if (failed) _Message.error(localization.newProjectFolderUnreadable),
         if (problem != null)
           _Message.error(switch (problem) {
             TargetProblem.exists => localization.newProjectFolderExists,
@@ -361,7 +387,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
       ],
       child: DecoratedBox(
         decoration: BoxDecoration(
-          border: Border.all(color: problem == null ? colors.border : colors.danger),
+          border: Border.all(color: problem == null && !failed ? colors.border : colors.danger),
           borderRadius: BorderRadius.circular(AppRadius.medium - 2),
         ),
         child: Padding(

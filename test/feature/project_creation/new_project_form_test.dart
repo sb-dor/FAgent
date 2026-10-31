@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show FileSystemException;
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
@@ -44,6 +45,49 @@ final class _SlowTargets implements IProjectCreationRepository {
   @override
   Future<TargetProblem?> checkTarget(String parent, String name) =>
       (answers[name] = Completer<TargetProblem?>()).future;
+
+  @override
+  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+}
+
+/// A repository whose default folder arrives when the test says so.
+final class _SlowParent implements IProjectCreationRepository {
+  final Completer<String> parent = Completer<String>();
+
+  @override
+  bool get isPreview => true;
+
+  @override
+  Future<String> defaultParent() => parent.future;
+
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async => null;
+
+  @override
+  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+}
+
+/// A repository whose folder questions fail like an unreadable (protected) parent does:
+/// [checkTarget] throws for every name but `fine`.
+final class _FailingFolders implements IProjectCreationRepository {
+  _FailingFolders({this.failDefaultParent = false});
+
+  final bool failDefaultParent;
+
+  @override
+  bool get isPreview => true;
+
+  @override
+  Future<String> defaultParent() async {
+    if (failDefaultParent) throw const FileSystemException('Permission denied');
+    return '/Users/test/StudioProjects';
+  }
+
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async {
+    if (name != 'fine') throw const FileSystemException('Permission denied');
+    return null;
+  }
 
   @override
   Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
@@ -258,7 +302,7 @@ void main() {
     await typeName(tester, 'taken');
     expect(canCreate(tester), isFalse);
 
-    // The name moves away from the taken one and back: the check follows each change.
+    // The name moves away from the taken one: the check follows the change.
     await typeName(tester, 'free');
     expect(find.text('The folder already exists'), findsNothing);
     expect(canCreate(tester), isTrue);
@@ -283,6 +327,62 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('The folder already exists'), findsNothing);
     expect(canCreate(tester), isTrue);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a folder that cannot be checked blocks creation with a message', (tester) async {
+    await openDialog(tester, repository: _FailingFolders());
+
+    await typeName(tester, 'avera_booking');
+    expect(find.text('Cannot check this folder'), findsOneWidget);
+    expect(canCreate(tester), isFalse);
+    expect(tester.takeException(), isNull);
+
+    // A later successful check clears it.
+    await typeName(tester, 'fine');
+    expect(find.text('Cannot check this folder'), findsNothing);
+    expect(canCreate(tester), isTrue);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a stale failure of the folder check is dropped', (tester) async {
+    final slow = _SlowTargets();
+    await openDialog(tester, repository: slow);
+
+    await typeName(tester, 'first');
+    await typeName(tester, 'second');
+    slow.answers['second']!.complete(null);
+    await tester.pumpAndSettle();
+    slow.answers['first']!.completeError(const FileSystemException('Permission denied'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cannot check this folder'), findsNothing);
+    expect(canCreate(tester), isTrue);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('without a default folder: a placeholder, then the folder error', (tester) async {
+    await openDialog(tester, repository: _FailingFolders(failDefaultParent: true));
+
+    expect(find.text('…'), findsOneWidget);
+    expect(find.text('/'), findsNothing);
+    expect(find.text('Cannot check this folder'), findsOneWidget);
+    await typeName(tester, 'fine');
+    expect(canCreate(tester), isFalse);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('the folder shows a placeholder until the default folder arrives', (tester) async {
+    final slow = _SlowParent();
+    await openDialog(tester, repository: slow);
+
+    expect(find.text('…'), findsOneWidget);
+    expect(find.text('/'), findsNothing);
+
+    slow.parent.complete('/Users/test/StudioProjects');
+    await tester.pumpAndSettle();
+    expect(find.text('…'), findsNothing);
+    expect(find.text('/Users/test/StudioProjects/'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 
@@ -325,9 +425,20 @@ void main() {
   testWidgets('git template is a preview', (tester) async {
     await openDialog(tester);
 
+    expect(find.text('Coming in M4'), findsNothing);
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
 
+    // Shown inline: a SnackBar would sit under the dialog's barrier.
+    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.byType(SnackBar), findsNothing);
+
+    await tester.tap(find.text('My architecture'));
+    await tester.pump();
+    expect(find.text('Coming in M4'), findsNothing);
+
+    await tester.tap(find.text('From a git template…'));
+    await tester.pump();
     expect(find.text('Coming in M4'), findsOneWidget);
     await typeName(tester, 'avera_booking');
     await tester.tap(createButton());

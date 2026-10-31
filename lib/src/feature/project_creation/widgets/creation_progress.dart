@@ -112,10 +112,17 @@ class CreationProgress extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppRadius.medium - 2),
               ),
             ),
-            // The agent's chat exists only with the real creation (milestone M4).
-            onPressed: () =>
-                ScaffoldMessenger.maybeOf(context)
-                    ?.showSnackBar(SnackBar(content: Text(localization.comingInMilestone('M4')))),
+            // The agent's chat exists only with the real creation (milestone M4). The note is
+            // shown once the dialog is gone: a SnackBar under its barrier would be dimmed.
+            onPressed: controller.isPreview
+                ? () {
+                    final messenger = ScaffoldMessenger.maybeOf(context);
+                    Navigator.of(context).pop();
+                    messenger?.showSnackBar(
+                      SnackBar(content: Text(localization.comingInMilestone('M4'))),
+                    );
+                  }
+                : null,
             child: Text(
               localization.newProjectOpenAgentChat,
               maxLines: 1,

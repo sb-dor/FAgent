@@ -414,6 +414,7 @@
   "newProjectPickFolder": "Выбрать",
   "newProjectFolderExists": "Папка уже существует",
   "newProjectParentMissing": "Папки нет",
+  "newProjectFolderUnreadable": "Не удалось проверить папку",
   "newProjectPlatforms": "Платформы",
   "newProjectNoPlatform": "Выберите хотя бы одну платформу",
   "newProjectTemplate": "Шаблон",

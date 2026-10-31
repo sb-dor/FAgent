@@ -326,8 +326,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    // The dialog closes first, so the note is not under its barrier; the creation goes on.
+    expect(find.byType(NewProjectDialog), findsNothing);
+    expect(chip(), findsOneWidget);
     expect(find.text('Coming in M4'), findsOneWidget);
-    expect(find.byType(NewProjectDialog), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
+    await _elapse(tester, const Duration(seconds: 5));
     await disposeTestApp(tester, dependencies);
   });
 
