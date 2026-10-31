@@ -219,6 +219,28 @@ px**, отступы 32; карточки только в одну колонк�
 - **Внешний вид** — тема (системная/светлая/тёмная), плотность ленты;
 - **Горячие клавиши** — список.
 
+Решения этапа 6:
+- Каталог настроек агента (модель, усилие, режим) хранится в `app_settings` под ключом `agentOptions`
+  (агент → `configOptions`); его пополняет `AgentHub(onConfigOptions:)` при каждой сессии, из него
+  строятся меню модели/усилия/режима по умолчанию. Пустой каталог — подсказка «откройте чат с
+  агентом», выдуманных списков нет.
+- Статус Claude — `--cli auth status --json` через закреплённый адаптер, выход — `--cli auth logout`.
+  Проверка идёт в своей группе процессов и убивается целиком по таймауту (иначе `npx` умирает, а его
+  дочерние `node` остаются).
+- Codex, Gemini и свой ACP-агент — Preview до M5: кнопки сообщают «Появится в M5», агентом по умолчанию
+  они стать не могут.
+- У `mcp_servers` нет столбца `projectId`: переключатель по проекту — таблица `mcp_server_states`
+  (`serverKey`, `projectId`, `enabled`; строка есть, только когда сервер выключен в проекте).
+  Встроенные серверы выключаются только по проекту, свои — глобально и по проекту. Серверы не уходят
+  агенту до M3 (доставка через `session/new` → `mcpServers`).
+- Разрешения читают и правят только `permissions.allow` в `.claude/settings.local.json` каждого
+  проекта: туда адаптер Claude пишет «Всегда в этом проекте». Общий `.claude/settings.json` не
+  читается и не меняется.
+- Новые поля `AppSettings`: `askBeforeQuit`, `feedDensity`, `projectOrg` (проверяется `orgPattern`),
+  `projectTemplate`, `devToolsTarget`; нечитаемое значение становится значением по умолчанию.
+- Flutter: путь к SDK и версия fvm проекта настоящие; версия Flutter и сводка `flutter doctor` —
+  Preview до M4, шаблон «git» — M4, DevTools внутри приложения — M2.
+
 ### 3.9 Новый проект (диалог 560 px)
 Поля: имя пакета (проверка как у `flutter create`), org (из настроек), папка, платформы (чипы),
 шаблон (Моя архитектура · Чистый flutter create · Из git-шаблона), «git init + первый коммит»,
@@ -237,15 +259,15 @@ px**, отступы 32; карточки только в одну колонк�
 
 | Фича | Репозиторий (главное) | Реализация сейчас |
 |---|---|---|
-| `app_settings` | `IAppSettingsRepository`: `watch()`, `update(AppSettings)` — агент по умолчанию, модель/усилие/режим по агенту, тема, язык, org, шаблон, «hot reload после хода», ширина панелей | Real: drift-таблица `app_settings` (ключ → JSON), схема v4 |
-| `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `install(id)`, `login(id, method)`, `logout(id)` | Claude — Real (`AgentHub`, `AgentAuth`); Codex, Gemini, свой агент — Fake до M5 |
+| `app_settings` | `IAppSettingsRepository`: `watch()`, `update(AppSettings)` — агент по умолчанию, модель/усилие/режим по агенту, тема, язык, org, шаблон, «hot reload после хода», ширина панелей, плотность ленты, вопрос при выходе, DevTools (поля этапа 6 — в §3.8) | Real: drift-таблица `app_settings` (ключ → JSON; там же каталог `agentOptions`) |
+| `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `refresh(id)`, `install(id)`, `login(id, method)`, `logout(id)`, `openSettings(id)` | Claude — Real (`AgentHub`, `AgentAuth`, `auth status`); Codex, Gemini, свой агент — Preview (`isPreview`, действия бросают `AgentPreviewException`) до M5 |
 | `session_config` (есть) | меню модели/режима/усилия поверх текущего | Real |
 | `chat_search` | `IChatSearchRepository.search(query)` | Real: drift читает чаты, совпадение по `sessions.title` считается в Dart (без учёта регистра, в том числе кириллицы; `%` и `_` ищутся буквально), т.к. SQLite `LIKE` не сворачивает регистр кириллицы |
 | `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка до M3, без данных; доставка агенту — M3 (MCP) |
-| `mcp_servers` | `IMcpServersRepository`: `watchServers(projectId)`, `add`, `remove`, `setEnabled` | Хранение — Real (drift); статус/инструменты — Fake до M3 |
+| `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус/инструменты и доставка агенту — до M3 |
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Fake до M2 (сценарий: сборка → работа → ошибка RenderFlex) |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
-| `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Fake до M4 (путь — Real через `ShellEnvironment.which('flutter')`) |
+| `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`) и версия fvm проекта — Real; версия Flutter и `doctor()` — Fake до M4 |
 | `project_creation` | `IProjectCreationRepository.create(NewProjectRequest) → Stream<CreationStep>` | Fake до M4 |
 | `changes_pane`, `plan_pane` | читают `ChatTranscript` (`TurnFilesItem`, `ToolCallItem` с diff, `PlanItem`) | Real |
 
@@ -270,9 +292,10 @@ org, folder, platforms, template, gitInit, openChat}`, `CreationStep{label, stat
 
 ### База данных (v3 → v4)
 v4 добавляет только таблицу `app_settings` (`key` PK, `value` JSON, `updatedAt`). Таблицы `skill_states`
-(`skillId`, `projectId` nullable, `enabled`; уникальный ключ `(skillId, projectId)`) и `mcp_servers`
-(`id`, `name`, `transport`, `config` JSON, `projectId` nullable, `enabled`) добавят планы этапов 5 и 6
-своими миграциями. Миграция step-by-step + тест `SchemaVerifier`, как v3.
+(`skillId`, `projectId` nullable, `enabled`; уникальный ключ `(skillId, projectId)`), `mcp_servers`
+(`id`, `name`, `transport`, `config` JSON, `enabled`, `createdAt`) и `mcp_server_states` (`serverKey`,
+`projectId`, `enabled`; почему без `projectId` в `mcp_servers` — в решениях этапа 6, §3.8) добавили этапы 5 и 6
+своими миграциями (схема теперь v6). Миграция step-by-step + тест `SchemaVerifier`, как v3.
 
 ## 5. Локализация и доступность
 Все строки — `intl_en.arb` / `intl_ru.arb`. Все кнопки-иконки с `tooltip`, у меню — навигация

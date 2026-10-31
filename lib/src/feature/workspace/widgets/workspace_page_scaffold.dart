@@ -3,8 +3,6 @@ import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/app_title_bar.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 
@@ -259,29 +257,4 @@ class _NavItem extends StatelessWidget {
     );
     return rail ? Tooltip(message: badge == null ? label : '$label $badge', child: item) : item;
   }
-}
-
-/// Body of a section whose real content arrives in a later milestone.
-class SectionPlaceholder extends StatelessWidget {
-  /// Creates a placeholder for the section named [title].
-  const SectionPlaceholder({required this.icon, required this.title, this.milestone, super.key});
-
-  /// Glyph of the section.
-  final IconData icon;
-
-  /// Name of the section.
-  final String title;
-
-  /// When the section is delivered, e.g. `M3`; `null` when there is no milestone yet.
-  final String? milestone;
-
-  @override
-  Widget build(BuildContext context) => EmptyState(
-    icon: icon,
-    title: title,
-    message: milestone == null
-        ? Localization.of(context).comingSoon
-        : Localization.of(context).comingInMilestone(milestone!),
-    badge: const PreviewBadge(),
-  );
 }

@@ -38,22 +38,22 @@ class WorkspaceSettingsPage extends StatelessWidget {
     return ListenableBuilder(
       listenable: data,
       builder: (context, _) {
-        final selected = sections.firstWhere(
-          (section) => section.$1 == data.section,
-          orElse: () => sections.first,
-        );
+        final current = data.section;
+        final selected = sections.any((section) => section.$1 == current)
+            ? current!
+            : sections.first.$1;
         return WorkspacePageScaffold(
           title: localization.settings,
           sections: sections,
-          selected: selected.$1,
+          selected: selected,
           onSelect: (id) => data.openView(WorkspaceView.settings, section: id),
-          subtitle: switch (selected.$1) {
+          subtitle: switch (selected) {
             'agents' => localization.settingsAgentsSubtitle,
             'mcp' => localization.settingsMcpSubtitle,
             'permissions' => localization.settingsPermissionsSubtitle,
             _ => null,
           },
-          child: switch (selected.$1) {
+          child: switch (selected) {
             'agents' => const AgentsConfigWidget(child: AgentsSettingsSection()),
             'mcp' => const McpServersConfigWidget(child: McpSettingsSection()),
             'permissions' => const PermissionRulesConfigWidget(child: PermissionsSettingsSection()),
