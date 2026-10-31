@@ -17,6 +17,7 @@ import 'package:flutter_code_agent/src/feature/initialization/data/platform_init
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
@@ -99,4 +100,7 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
   'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
       FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
+  // The target checks are real; the creation itself is made up (M4).
+  'Create project creation repository': (dependencies) => dependencies.projectCreationRepository =
+      FakeProjectCreationRepositoryImpl(database: dependencies.database),
 };
