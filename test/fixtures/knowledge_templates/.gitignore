@@ -1,0 +1,4 @@
+# The test copies the templates into lib/ and generates code there.
+/lib/
+/.dart_tool/
+/pubspec.lock
