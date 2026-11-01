@@ -6,6 +6,10 @@ import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart
 /// The most bytes (UTF-8) of a user rule, a project rule or `AGENTS.md` that go into the prompt.
 const int ruleFileLimit = 32 * 1024;
 
+/// The most characters of a skill description that go into the prompt; a longer one is cut and
+/// ends with `…`.
+const int skillDescriptionLimit = 300;
+
 /// The text of an enabled rule file, with its frontmatter still in place.
 typedef RuleText = ({SkillSource source, String name, String text});
 
@@ -21,8 +25,9 @@ const String _skillsHeading = 'Skills from flutter_code_agent';
 ///
 /// The text starts with a line that says later rules win. Then come the [rules], built-in first,
 /// then the user's and the project's (the order of [SkillSource], and the order of [rules] within
-/// one source), then the project's [agentsMd] and a list of the [skills]. A rule becomes a
-/// `## <name>` section without its frontmatter.
+/// one source), then the project's [agentsMd] and a list of the [skills], each description on one
+/// line and cut at [skillDescriptionLimit] characters. A rule becomes a `## <name>` section without
+/// its frontmatter.
 ///
 /// Built-in rules go in whole; any other rule and [agentsMd] are cut at [ruleFileLimit] bytes, and
 /// the cut is marked with a line `[truncated]`. [agentsMd] is left out when it is blank or when
@@ -49,7 +54,7 @@ String buildRulesPrompt({
       [
         '## $_skillsHeading',
         for (final skill in skills)
-          '- ${skill.name} — ${skill.description.trim().replaceAll(RegExp(r'\s+'), ' ')}',
+          '- ${skill.name} — ${_shorten(skill.description.trim().replaceAll(RegExp(r'\s+'), ' '))}',
       ].join('\n'),
     );
   }
@@ -58,6 +63,13 @@ String buildRulesPrompt({
 
 String _section(String heading, String body, {required bool limited}) =>
     '## $heading\n${limited ? _limit(body) : body}';
+
+/// [description] cut at [skillDescriptionLimit] characters (whole code points), then `…`.
+String _shorten(String description) {
+  final runes = description.runes;
+  if (runes.length <= skillDescriptionLimit) return description;
+  return '${String.fromCharCodes(runes.take(skillDescriptionLimit))}…';
+}
 
 /// [text] without its frontmatter; a text with no or a broken header is kept as it is.
 String _body(String text) {

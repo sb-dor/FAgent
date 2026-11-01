@@ -134,4 +134,20 @@ void main() {
     );
     expect(buildRulesPrompt(rules: [], skills: []), isNot(contains('Skills from')));
   });
+
+  test('cuts a long skill description at the limit, on a character boundary', () {
+    // Characters outside the BMP take two UTF-16 units; the cut must not split one.
+    final long = '${'a' * (skillDescriptionLimit - 1)}😀😀 tail';
+    final prompt = buildRulesPrompt(
+      rules: [],
+      skills: [
+        (name: 'long', description: long),
+        (name: 'exact', description: 'b' * skillDescriptionLimit),
+      ],
+    );
+
+    expect(prompt, contains('- long — ${'a' * (skillDescriptionLimit - 1)}😀…\n'));
+    expect(prompt, contains('- exact — ${'b' * skillDescriptionLimit}\n'));
+    expect(prompt, isNot(contains('tail')));
+  });
 }
