@@ -81,7 +81,7 @@ Economy» не переносятся.
   «Flutter tools are unavailable» (en/ru через arb).
 - Выход (⌘Q): `AppCloseRepositoryImpl.shutdown` закрывает сервер после агентов, до базы.
 - Имена `flutter_code_agent` и `dart` зарезервированы: свой сервер с таким именем не добавляется
-  (`McpServerProblem.reservedName`).
+  (уже есть: `McpServerProblem.invalidName`).
 
 ### Инструменты
 
