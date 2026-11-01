@@ -109,6 +109,59 @@ void main() {
     expect(library.byId('skill:user:b')!.description, 'does b');
   });
 
+  group('AGENTS.md of the project', () {
+    test('is a read-only project rule that the skill_states rows do not switch off', () async {
+      await put(File('${project.path}/AGENTS.md'), '# Rules\n');
+      await put(File('${project.path}/.claude/rules/p.md'), _doc('p'));
+      await repository.setEnabled(agentsRuleId, enabled: false, projectId: 1);
+
+      final library = await first(projectId: 1, projectRoot: project.path);
+
+      expect(library.rules.map((r) => r.id), [
+        'rule:builtin:r',
+        'rule:project:AGENTS',
+        'rule:project:p',
+      ]);
+      final item = library.byId(agentsRuleId)!;
+      expect(item.readOnly, isTrue);
+      expect(item.enabled, isTrue);
+      expect(await repository.read(agentsRuleId, projectRoot: project.path), '# Rules\n');
+    });
+
+    test('is missing without the file', () async {
+      final library = await first(projectRoot: project.path);
+
+      expect(library.byId(agentsRuleId), isNull);
+    });
+
+    test('cannot be written', () async {
+      await put(File('${project.path}/AGENTS.md'), '# Rules\n');
+
+      await expectLater(
+        repository.write(agentsRuleId, 'x', projectRoot: project.path),
+        throwsA(isA<ReadOnlyKnowledgeException>()),
+      );
+      expect(File('${project.path}/AGENTS.md').readAsStringSync(), '# Rules\n');
+    });
+
+    test('appears and disappears with the file', () async {
+      final listener = _Listener(repository.watch(projectRoot: project.path));
+      addTearDown(listener.cancel);
+      await listener.until((library) => library.byId(agentsRuleId) == null);
+
+      await put(File('${project.path}/AGENTS.md'), '# Rules\n');
+      await listener.until((library) => library.byId(agentsRuleId) != null);
+
+      File('${project.path}/AGENTS.md').deleteSync();
+      final deadline = DateTime.now().add(const Duration(seconds: 1));
+      while (listener.libraries.last.byId(agentsRuleId) != null &&
+          DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(listener.libraries.last.byId(agentsRuleId), isNull);
+    });
+  });
+
   test('lists skill files with SKILL.md first, sorted, without hidden ones', () async {
     await put(userFile('skills/b/SKILL.md'), _doc('b'));
     await put(userFile('skills/b/z.md'), 'z');

@@ -129,6 +129,8 @@
   "skillDuplicate": "Дублировать в «Мои»",
   "skillTryInChat": "Попробовать в чате",
   "skillReadOnlyNote": "Встроенные только для чтения — чтобы изменить, продублируйте.",
+  "skillAlwaysOn": "Всегда включено",
+  "skillAgentsNote": "Это AGENTS.md проекта. Чтобы изменить его, правьте сам файл; чтобы отключить — удалите файл.",
   "skillDescription": "Описание",
   "skillWhenToUse": "Когда применять",
   "skillEnabled": "Включён",

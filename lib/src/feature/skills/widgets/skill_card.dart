@@ -183,7 +183,7 @@ class _Header extends StatelessWidget {
         if (item.readOnly) ...<Widget>[
           const SizedBox(height: 8),
           Text(
-            localization.skillReadOnlyNote,
+            item.alwaysOn ? localization.skillAgentsNote : localization.skillReadOnlyNote,
             style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
           ),
         ],

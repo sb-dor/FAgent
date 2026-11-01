@@ -44,6 +44,9 @@ enum KnowledgeProblem {
   notUtf8,
 }
 
+/// The id of the project rule that is the `AGENTS.md` in the project root.
+const String agentsRuleId = 'rule:project:AGENTS';
+
 /// A skill or a rule shown on the Skills and rules screen.
 @freezed
 abstract class KnowledgeItem with _$KnowledgeItem {
@@ -97,6 +100,10 @@ abstract class KnowledgeItem with _$KnowledgeItem {
   }) = _KnowledgeItem;
 
   const KnowledgeItem._();
+
+  /// Whether the item is the project's `AGENTS.md`, which is always on: it has no switch and is
+  /// turned off by editing or deleting the file.
+  bool get alwaysOn => id == agentsRuleId && readOnly;
 
   /// Whether the user can run the item as a `/<name>` command in a chat.
   bool get invocable => kind == KnowledgeKind.skill && source == SkillSource.project;

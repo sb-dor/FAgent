@@ -12,7 +12,8 @@ import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widg
 /// Where [item] is on: a switch for all projects, a chip for every project that differs from it
 /// (its ✕ makes the project follow the switch again) and a menu to add such a project.
 ///
-/// An item of a project has no global switch, only one for the project of the screen.
+/// An item of a project has no global switch, only one for the project of the screen; an
+/// always-on item has none at all.
 /// {@endtemplate}
 class SkillScope extends StatelessWidget {
   /// {@macro skill_scope}
@@ -28,6 +29,7 @@ class SkillScope extends StatelessWidget {
     return ListenableBuilder(
       listenable: scope.projectsListenable,
       builder: (context, _) {
+        if (item.alwaysOn) return Text(localization.skillAlwaysOn);
         if (item.source == SkillSource.project) {
           final name = scope.project?.name;
           return _SwitchLabel(

@@ -36,7 +36,10 @@ SkillLibrary applySkillStates(
     );
   }
 
-  final applied = items.map(apply).toList();
+  final applied = [
+    for (final item in items)
+      if (item.alwaysOn) item else apply(item),
+  ];
   return SkillLibrary(
     skills: applied.where((item) => item.kind == KnowledgeKind.skill).toList(),
     rules: applied.where((item) => item.kind == KnowledgeKind.rule).toList(),

@@ -30,7 +30,8 @@ abstract interface class ISkillsRepository {
   /// [duplicate].
   Future<String> read(String id, {String? projectRoot});
 
-  /// Replaces the text of [id]; throws [ReadOnlyKnowledgeException] for a built-in item.
+  /// Replaces the text of [id]; throws [ReadOnlyKnowledgeException] for a built-in item and for
+  /// the project's `AGENTS.md`.
   ///
   /// The file is replaced in one step, so a reader never sees half of the text. When [expected] is
   /// given (the text the caller last read) and the file holds something else now, nothing is
@@ -111,18 +112,22 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
           rescanForced = false;
           final user = await snapshotRoot(_userRoot);
           final project = root == null ? <String, String>{} : await snapshotRoot(root);
+          final agents = projectRoot == null ? <String, String>{} : snapshotAgents(projectRoot);
           if (closed) return;
-          final snapshot = {...user, ...project};
+          final snapshot = {...user, ...project, ...agents};
           if (forced || !mapEquals(lastSnapshot, snapshot)) {
             lastSnapshot = snapshot;
             items = [
               ...builtinItems(await _builtin.load()),
               ...await itemsFromSnapshot(root: _userRoot, source: SkillSource.user, snapshot: user),
-              if (root != null)
-                ...await itemsFromSnapshot(
-                  root: root,
-                  source: SkillSource.project,
-                  snapshot: project,
+              if (root != null && projectRoot != null)
+                ..._withAgents(
+                  await itemsFromSnapshot(
+                    root: root,
+                    source: SkillSource.project,
+                    snapshot: project,
+                  ),
+                  agentsItem(projectRoot: projectRoot, snapshot: agents),
                 ),
             ];
             statesChanged = true;
@@ -173,6 +178,16 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
     return controller.stream;
   }
 
+  /// [items] and the [agents] rule, which wins over a `.claude/rules/AGENTS.md` of the same id.
+  List<KnowledgeItem> _withAgents(List<KnowledgeItem> items, KnowledgeItem? agents) =>
+      agents == null
+      ? items
+      : [
+          for (final item in items)
+            if (item.id != agents.id) item,
+          agents,
+        ];
+
   void _filesChanged() {
     for (final refresh in _watchers.toList()) {
       unawaited(refresh(force: true));
@@ -206,10 +221,18 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
   /// [projectRoot] of its project.
   String _pathOf(String id, {String? projectRoot}) {
     final (:kind, :source, :name) = _parse(id);
+    if (_agentsFile(id, projectRoot) case final agents?) return agents;
     final root = _rootOf(source, id, projectRoot);
     return kind == KnowledgeKind.skill
         ? p.join(root, 'skills', name)
         : p.join(root, 'rules', '$name.md');
+  }
+
+  /// The `AGENTS.md` of the project when [id] is its rule and the file exists.
+  String? _agentsFile(String id, String? projectRoot) {
+    if (id != agentsRuleId || projectRoot == null) return null;
+    final path = p.join(projectRoot, agentsFileName);
+    return FileSystemEntity.typeSync(path) == FileSystemEntityType.file ? path : null;
   }
 
   String _mainFile(KnowledgeKind kind, String path) =>
@@ -232,7 +255,9 @@ final class SkillsRepositoryImpl implements ISkillsRepository {
   @override
   Future<void> write(String id, String text, {String? projectRoot, String? expected}) async {
     final (:kind, :source, name: _) = _parse(id);
-    if (source == SkillSource.builtin) throw ReadOnlyKnowledgeException(id);
+    if (source == SkillSource.builtin || _agentsFile(id, projectRoot) != null) {
+      throw ReadOnlyKnowledgeException(id);
+    }
     final path = _mainFile(kind, _pathOf(id, projectRoot: projectRoot));
     // A link is followed, so the file it points to is the one that gets replaced.
     final String target;

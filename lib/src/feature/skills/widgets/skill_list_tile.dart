@@ -6,7 +6,7 @@ import 'package:flutter_code_agent/src/feature/skills/widgets/source_tag.dart';
 
 /// {@template skill_list_tile}
 /// A row of the skills list: the name in monospace, where the item comes from, its description
-/// (two lines at most) and a switch that turns it on or off.
+/// (two lines at most) and a switch that turns it on or off (none for an always-on item).
 /// {@endtemplate}
 class SkillListTile extends StatelessWidget {
   /// {@macro skill_list_tile}
@@ -79,15 +79,17 @@ class SkillListTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Semantics(
-                  label: item.title,
-                  child: Switch(
-                    value: item.enabled,
-                    onChanged: onToggle,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                if (!item.alwaysOn) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Semantics(
+                    label: item.title,
+                    child: Switch(
+                      value: item.enabled,
+                      onChanged: onToggle,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),
