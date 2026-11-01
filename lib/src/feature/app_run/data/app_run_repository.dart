@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/flutter_error_listener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
@@ -100,6 +101,11 @@ const int kScreenshotLimit = 20;
 /// Runs `flutter run --machine` per project and follows it over the daemon protocol: the events
 /// become the [RunState], the output goes through a [RunOutputParser] into the log.
 ///
+/// A debug run's Flutter errors come from its VM service (`Flutter.Error`, through an
+/// [IFlutterErrorListener]) once that is connected: with structured errors on, the framework no
+/// longer prints them. Without the connection (profile, release, a failed connect) the error
+/// blocks of the output are parsed instead.
+///
 /// One run per project; a project's run never touches another's. Every process runs in its own
 /// process group, and [stop] and [dispose] end the whole group.
 /// {@endtemplate}
@@ -110,7 +116,8 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   /// `flutter` executable for a project folder (`null` when there is no SDK). [stopTimeout] is how
   /// long a stopped app may take to exit before its process group is killed, [restartTimeout] how
   /// long a hot reload or restart may take before it counts as failed. [openUrl] opens DevTools in
-  /// the browser, [now] names the screenshots.
+  /// the browser, [now] names the screenshots. [connectErrors] connects to the VM service of a
+  /// debug run for its runtime errors.
   AppRunRepositoryImpl({
     required this._projectPath,
     required this._flutter,
@@ -120,6 +127,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     this._restartTimeout = const Duration(seconds: 30),
     this._openUrl = openUrl,
     this._now = DateTime.now,
+    this._connectErrors = FlutterErrorListener.connect,
   });
 
   final Future<String?> Function(int projectId) _projectPath;
@@ -130,6 +138,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   final Duration _restartTimeout;
   final UrlOpener _openUrl;
   final DateTime Function() _now;
+  final FlutterErrorListenerConnect _connectErrors;
 
   final Map<int, _ProjectRun> _runs = <int, _ProjectRun>{};
   bool _disposed = false;
@@ -257,7 +266,12 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     launch = _Launch(
       device: device,
       mode: mode,
-      parser: RunOutputParser(projectRoot: path, packageName: packageName),
+      parser: RunOutputParser(
+        projectRoot: path,
+        resolvedProjectRoot: _resolved(path),
+        packageName: packageName,
+      ),
+      connectErrors: _connectErrors,
       stopTimeout: _stopTimeout,
       onState: (state) {
         if (run.launch == launch) run.setState(state);
@@ -429,6 +443,16 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     }
   }
 
+  /// [path] with its symbolic links resolved; `null` when that fails.
+  static String? _resolved(String path) {
+    try {
+      return io.Directory(path).resolveSymbolicLinksSync();
+    } on io.FileSystemException catch (error) {
+      l.v('AppRunRepository | cannot resolve $path: $error');
+      return null;
+    }
+  }
+
   /// The `name:` of the project's `pubspec.yaml`, else the name of its folder.
   static String _packageName(String path) {
     try {
@@ -505,6 +529,7 @@ final class _Launch {
     required this.device,
     required this.mode,
     required this.parser,
+    required this.connectErrors,
     required this.stopTimeout,
     required this.onState,
     required this.onLog,
@@ -517,6 +542,7 @@ final class _Launch {
   final Device device;
   final BuildMode mode;
   final RunOutputParser parser;
+  final FlutterErrorListenerConnect connectErrors;
   final Duration stopTimeout;
   final void Function(RunState state) onState;
   final void Function(LogLevel level, String text, RunError? error) onLog;
@@ -527,6 +553,12 @@ final class _Launch {
   final Completer<void> _finished = Completer<void>();
   DaemonConnection? _connection;
   Future<void>? _shuttingDown;
+
+  /// The Flutter errors of the app from its VM service, once connected.
+  IFlutterErrorListener? _errorListener;
+
+  /// Whether the launch has tried to connect [_errorListener]: it tries once.
+  bool _errorListenerTried = false;
 
   String? _appId;
   Uri? _vmServiceUri;
@@ -691,6 +723,7 @@ final class _Launch {
       case 'app.debugPort':
         _vmServiceUri = _uri(params['wsUri']) ?? _vmServiceUri;
         _addressesChanged();
+        _listenForErrors();
       case 'app.dtd':
         _dtdUri = _uri(params['uri']) ?? _dtdUri;
         _addressesChanged();
@@ -719,6 +752,48 @@ final class _Launch {
         _appStopped = true;
         if (params['error'] case final Object error) _stopError = '$error';
         if (_connection != null) _shutDownQuietly();
+    }
+  }
+
+  /// Connects to the VM service of a debug app for its Flutter errors; the inspector that reports
+  /// them exists only in debug. A connect that fails is logged, and the output text is parsed as
+  /// before.
+  void _listenForErrors() {
+    final uri = _vmServiceUri;
+    if (mode != BuildMode.debug || uri == null || _errorListenerTried || _stopping) return;
+    _errorListenerTried = true;
+    connectErrors(uri)
+        .then(
+          (listener) {
+            if (_stopping || _finished.isCompleted) {
+              _closeErrorListener(listener).ignore();
+              return;
+            }
+            _errorListener = listener;
+            parser.structuredErrors = true;
+            _subscriptions.add(
+              listener.errors().listen(
+                (error) => _emit(parser.flutterError(error)),
+                onDone: () => parser.structuredErrors = false,
+              ),
+            );
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            l.w(
+              'AppRunRepository | runtime errors come from the output: no VM service at $uri: $error',
+              stackTrace,
+            );
+          },
+        )
+        .ignore();
+  }
+
+  /// Closes [listener]; a failure is logged, never thrown.
+  static Future<void> _closeErrorListener(IFlutterErrorListener listener) async {
+    try {
+      await listener.close();
+    } on Object catch (error, stackTrace) {
+      l.w('AppRunRepository | cannot close the VM service connection: $error', stackTrace);
     }
   }
 
@@ -803,8 +878,11 @@ final class _Launch {
       unawaited(subscription.cancel());
     }
     _subscriptions.clear();
+    final listener = _errorListener;
+    _errorListener = null;
     onState(state);
     onDone();
-    _finished.complete();
+    // A stop, a restart of the launch and dispose wait until the VM service connection is closed.
+    _finished.complete(listener == null ? null : _closeErrorListener(listener));
   }
 }

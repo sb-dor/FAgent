@@ -17,9 +17,17 @@ final class RunOutputParser {
   /// {@macro run_output_parser}
   ///
   /// [projectRoot] is the absolute path of the project, [packageName] its Dart package name: they
-  /// turn the paths in the output into project-relative ones.
-  RunOutputParser({required String projectRoot, required this.packageName})
-    : _root = projectRoot.endsWith('/') ? projectRoot : '$projectRoot/';
+  /// turn the paths in the output into project-relative ones. [resolvedProjectRoot] is the project
+  /// path with its symbolic links resolved, as the app names its files (on macOS `/var` is a link
+  /// to `/private/var`).
+  RunOutputParser({
+    required String projectRoot,
+    required this.packageName,
+    String? resolvedProjectRoot,
+  }) : _roots = <String>{
+         for (final root in <String>[projectRoot, ?resolvedProjectRoot])
+           if (root.endsWith('/')) root else '$root/',
+       };
 
   /// The most lines of one Flutter error block (header included) the parser collects.
   static const int maxBlockLines = 400;
@@ -27,7 +35,7 @@ final class RunOutputParser {
   /// The Dart package name of the project.
   final String packageName;
 
-  final String _root;
+  final Set<String> _roots;
 
   static final RegExp _blockStart = RegExp('^═*╡ EXCEPTION CAUGHT BY (.+?) ╞');
   static final RegExp _blockEnd = RegExp(r'^═+$');
@@ -42,6 +50,12 @@ final class RunOutputParser {
   // `dart:async/x.dart`, `org-dartlang-sdk:///…`: not a file of the project.
   static final RegExp _scheme = RegExp(r'^[a-zA-Z][\w+.-]*:');
   static final RegExp _warning = RegExp('^[Ww]arning:');
+
+  /// Whether the run takes its Flutter errors from the VM service (`Flutter.Error`, see
+  /// [flutterError]): then a Flutter error block in the output is logged as plain lines without a
+  /// [RunError], so one error is not reported twice. Compile errors, `Another exception was
+  /// thrown` and unhandled exceptions are recognised either way.
+  bool structuredErrors = false;
 
   RunError? _firstBuildError;
 
@@ -92,7 +106,7 @@ final class RunOutputParser {
     }
 
     final trimmed = line.trimRight();
-    if (_blockStart.hasMatch(trimmed)) {
+    if (!structuredErrors && _blockStart.hasMatch(trimmed)) {
       _block = <String>[trimmed];
       return out;
     }
@@ -114,6 +128,39 @@ final class RunOutputParser {
     if (_block != null) out.add(_finishBlock());
     if (_unhandledMessage != null) out.add(_finishUnhandled());
     return out;
+  }
+
+  /// The log line of [error], a Flutter error the app reported over the VM service: its file made
+  /// project-relative — or, when that file is not the project's, the first project frame of its
+  /// stack — and its title as the text.
+  ParsedLine flutterError(RunError error) {
+    var file = error.file == null ? null : _projectFile(error.file!);
+    var lineNumber = file == null ? null : error.line;
+    var location = error.location;
+    if (file == null) {
+      for (final frame in (error.stack ?? '').split('\n')) {
+        final place = _place.firstMatch(frame);
+        final projectFile = place == null ? null : _projectFile(place.group(1)!);
+        if (place != null && projectFile != null) {
+          file = projectFile;
+          lineNumber = int.parse(place.group(2)!);
+          location = '${_basename(place.group(1)!)}:$lineNumber:${place.group(3)}';
+          break;
+        }
+      }
+    }
+    return (
+      level: LogLevel.error,
+      text: error.title,
+      error: RunError(
+        title: error.title,
+        message: error.message,
+        file: file,
+        line: lineNumber,
+        location: location,
+        stack: error.stack,
+      ),
+    );
   }
 
   ParsedLine _plain(String line, {required bool isError}) {
@@ -274,7 +321,10 @@ final class RunOutputParser {
       }
     }
     if (absolute.startsWith('/')) {
-      return absolute.startsWith(_root) ? absolute.substring(_root.length) : null;
+      for (final root in _roots) {
+        if (absolute.startsWith(root)) return absolute.substring(root.length);
+      }
+      return null;
     }
     return absolute;
   }

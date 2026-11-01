@@ -14,14 +14,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 /// Runs the real `flutter run --machine` on macOS against an app it creates in a temp folder:
-/// build, a hot reload that fails to compile, the fix, a hot reload that works, and the stop.
+/// build, a hot reload that fails to compile, the fix, a hot reload that works, a layout overflow
+/// that the VM service reports, and the stop.
 ///
 /// Opt-in: `FLUTTER_RUN_TEST=1 flutter test test/integration/flutter_run_test.dart`.
 void main() {
   final enabled = io.Platform.environment['FLUTTER_RUN_TEST'] == '1';
 
   test(
-    'flutter run on macOS: run, a failing reload, a fixed reload, stop',
+    'flutter run on macOS: run, a failing reload, a fixed reload, a runtime error, stop',
     () async {
       final environment = ShellEnvironment(Map<String, String>.of(io.Platform.environment));
       final root = io.Directory.systemTemp.createTempSync('flutter_run_test');
@@ -118,6 +119,23 @@ void main() {
         'the reload time in the state',
       );
 
+      // A Row 100 px wide with a 142 px child: the framework reports the overflow as Flutter.Error.
+      main.writeAsStringSync(_overflowingApp);
+      expect(await repository.hotReload(1), greaterThan(Duration.zero), reason: output());
+      bool isOverflow(LogEntry entry) =>
+          entry.error?.title == 'A RenderFlex overflowed by 42 pixels on the right.';
+      await until(() => logs.any(isOverflow), const Duration(seconds: 30), 'the overflow error');
+      await Future<void>.delayed(const Duration(seconds: 1));
+      final overflow = logs.where(isOverflow).toList();
+      expect(overflow, hasLength(1), reason: output());
+      expect(overflow.single.error!.file, 'lib/main.dart');
+      expect(overflow.single.error!.line, 14);
+      expect(
+        logs.where((entry) => entry.error?.title == 'Layout overflow'),
+        isEmpty,
+        reason: 'the output text gave the same error again',
+      );
+
       await repository.stop(1);
       await until(
         () => states.last == const RunStopped(),
@@ -136,6 +154,29 @@ void main() {
     timeout: const Timeout(Duration(minutes: 10)),
   );
 }
+
+/// An app whose only screen overflows: a `Row` (line 14) 100 px wide with a 142 px child.
+const String _overflowingApp = '''
+import 'package:flutter/material.dart';
+
+void main() => runApp(const MyApp());
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) => const MaterialApp(
+    home: Scaffold(
+      body: Center(
+        child: SizedBox(
+          width: 100,
+          child: Row(children: <Widget>[SizedBox(width: 142, height: 20)]),
+        ),
+      ),
+    ),
+  );
+}
+''';
 
 /// The process group of the running app: the process whose command lies under [buildDir].
 Future<int?> _groupOf(String buildDir) async {
