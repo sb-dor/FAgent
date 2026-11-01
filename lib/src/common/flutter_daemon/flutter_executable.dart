@@ -55,3 +55,19 @@ String flutterNotFoundMessage(String? projectPath) {
   return 'There is no `flutter` on the PATH of the login shell. Install Flutter or add its bin '
       'folder to the PATH.';
 }
+
+/// The Flutter SDK folder that [flutterExecutable] (`<SDK>/bin/flutter`, found by
+/// [flutterExecutableFor]) belongs to, with symlinks resolved. `null` when the file does not
+/// exist or has no `bin/dart` next to it (a wrapper script rather than the SDK's own `flutter`).
+String? flutterSdkRootOf(String flutterExecutable) {
+  final String resolved;
+  try {
+    resolved = io.File(flutterExecutable).resolveSymbolicLinksSync();
+  } on io.FileSystemException {
+    return null;
+  }
+  final bin = p.dirname(resolved);
+  if (p.basename(bin) != 'bin') return null;
+  final root = p.dirname(bin);
+  return io.File(p.join(root, 'bin', 'dart')).existsSync() ? root : null;
+}

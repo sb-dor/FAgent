@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/initialization/widget/dependencie
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
@@ -84,6 +85,9 @@ class Dependencies {
 
   /// The app's own MCP server for the agents (`flutter_code_agent`).
   late final IAppMcpServer appMcpServer;
+
+  /// The MCP servers, rules and skills every agent session of a chat starts with.
+  late final ISessionContextRepository sessionContextRepository;
 
   @override
   String toString() => 'Dependencies{}';

@@ -25,6 +25,7 @@ import 'package:flutter_code_agent/src/feature/initialization/models/dependencie
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
@@ -89,6 +90,9 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
     observers: <TurnObserver>[GitTurnFilesObserver(environment: dependencies.shellEnvironment)],
+    // Read when a chat starts its agent session, after initialization has finished.
+    sessionContext: (sessionId, agent) =>
+        dependencies.sessionContextRepository.forSession(sessionId: sessionId, agent: agent),
     sessionDefaults: (agentId) async =>
         (await AppSettingsRepositoryImpl(
           database: dependencies.database,
@@ -154,6 +158,16 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ..appMcpTokens = tokens
       ..appMcpServer = server;
   },
+  'Create session context repository': (dependencies) =>
+      dependencies.sessionContextRepository = SessionContextRepositoryImpl(
+        database: dependencies.database,
+        appServer: dependencies.appMcpServer,
+        tokens: dependencies.appMcpTokens,
+        skills: dependencies.skillsRepository,
+        chatSkills: dependencies.chatSkillsRepository,
+        mcpServers: dependencies.mcpServersRepository,
+        environment: dependencies.shellEnvironment,
+      ),
   'Create permission rules repository': (dependencies) =>
       dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
   // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).

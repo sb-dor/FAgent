@@ -14,6 +14,7 @@ final class AgentDefinition {
     this.loginArguments = const <String, List<String>>{},
     this.minimumNodeMajor,
     this.environment = const <String, String>{},
+    this.acceptsClaudeMeta = false,
   });
 
   /// Pinned adapter version; bumped together with app releases so the
@@ -31,6 +32,7 @@ final class AgentDefinition {
       'console-login': <String>['--cli', 'auth', 'login', '--console'],
     },
     minimumNodeMajor: 22,
+    acceptsClaudeMeta: true,
   );
 
   /// Stable id stored with sessions.
@@ -56,6 +58,10 @@ final class AgentDefinition {
 
   /// Extra environment variables for the agent process.
   final Map<String, String> environment;
+
+  /// Whether the agent reads the Claude adapter's `_meta` of `session/new` and `session/load`
+  /// (`systemPrompt`, `claudeCode.options`).
+  final bool acceptsClaudeMeta;
 
   @override
   String toString() => 'AgentDefinition($id)';

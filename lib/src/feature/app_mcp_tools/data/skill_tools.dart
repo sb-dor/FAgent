@@ -14,11 +14,6 @@ import 'package:path/path.dart' as p;
 /// How many bytes of a skill file `read_skill_file` returns; a bigger file is refused.
 const int skillFileLimit = 256 * 1024;
 
-/// The skills the app serves to the agent: the built-in and the user's. The project's own skills
-/// (`.claude/skills`) are the agent's to read, so they are not served.
-bool _served(KnowledgeItem skill) =>
-    skill.source == SkillSource.builtin || skill.source == SkillSource.user;
-
 /// What the skill tools share: which skills a chat sees and how a name is looked up.
 final class ChatSkillCatalog {
   /// Creates the catalog over the [skills] library and the chats' choices in [chatSkills].
@@ -31,10 +26,8 @@ final class ChatSkillCatalog {
       _skills.watch(projectId: caller.projectId).first;
 
   /// The served skills that are on for the chat of [caller].
-  Future<List<KnowledgeItem>> forChat(AppMcpCaller caller) async => skillsForChat(
-    await _library(caller),
-    await _chatSkills.current(caller.sessionId),
-  ).where(_served).toList();
+  Future<List<KnowledgeItem>> forChat(AppMcpCaller caller) async =>
+      appSkillsForChat(await _library(caller), await _chatSkills.current(caller.sessionId));
 
   /// The skill [name] when it is on for the chat of [caller], else the error to give the agent.
   Future<({KnowledgeItem? skill, AppMcpError? error})> find(
@@ -46,7 +39,7 @@ final class ChatSkillCatalog {
     }
     final wanted = name.trim();
     final library = await _library(caller);
-    final skill = library.skills.where(_served).where((it) => it.name == wanted).firstOrNull;
+    final skill = library.skills.where(servedByApp).where((it) => it.name == wanted).firstOrNull;
     if (skill == null) return (skill: null, error: AppMcpError('Skill not found: $wanted'));
     final chatStates = await _chatSkills.current(caller.sessionId);
     if (!skillsForChat(library, chatStates).any((on) => on.id == skill.id)) {
