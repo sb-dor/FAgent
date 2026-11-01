@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
@@ -67,6 +68,9 @@ class Dependencies {
 
   /// Which skills a single chat turns on or off against its project.
   late final IChatSkillsRepository chatSkillsRepository;
+
+  /// Connects to MCP servers to show their status; stopped when the app closes.
+  late final IMcpProbe mcpProbe;
 
   /// The MCP servers handed to agents: the built-in ones and the user's own.
   late final IMcpServersRepository mcpServersRepository;

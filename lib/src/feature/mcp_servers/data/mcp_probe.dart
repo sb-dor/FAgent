@@ -72,6 +72,11 @@ abstract interface class IMcpProbe {
   /// (a `stdio` server's whole process group is killed). Never throws: every problem, a [timeout]
   /// included (`Timed out`), is a [McpProbeFailed].
   Future<McpProbeResult> probe(McpServer server, {Duration timeout = const Duration(seconds: 10)});
+
+  /// Kills the process group of every `stdio` probe in flight (each of those probes completes with
+  /// a [McpProbeFailed]) and makes later probes fail at once with `Stopped`, without starting
+  /// anything. Call it when the app quits, so no server outlives it.
+  Future<void> dispose();
 }
 
 /// {@template mcp_probe}
@@ -86,6 +91,10 @@ final class McpProbeImpl implements IMcpProbe {
 
   final ShellEnvironment _environment;
 
+  /// The process groups of the `stdio` probes in flight.
+  final Set<GroupedProcess> _running = <GroupedProcess>{};
+  bool _disposed = false;
+
   static const McpClientOptions _clientOptions = McpClientOptions(protocol: McpProtocol.legacy);
 
   /// The longest message kept of a failure.
@@ -96,6 +105,7 @@ final class McpProbeImpl implements IMcpProbe {
     McpServer server, {
     Duration timeout = const Duration(seconds: 10),
   }) async {
+    if (_disposed) return const McpProbeFailed('Stopped');
     final deadline = Stopwatch()..start();
     try {
       return switch (server.transport) {
@@ -125,6 +135,12 @@ final class McpProbeImpl implements IMcpProbe {
     } on Object catch (error) {
       return McpProbeFailed(_oneLine('Cannot start $command: $error'));
     }
+    _running.add(process);
+    if (_disposed) {
+      // Disposed while the process was starting.
+      await _stop(process);
+      return const McpProbeFailed('Stopped');
+    }
     final stderrTail = <String>[];
     final stderrSubscription = process.stderrLines.listen((line) {
       if (line.trim().isEmpty) return;
@@ -140,13 +156,22 @@ final class McpProbeImpl implements IMcpProbe {
       return result;
     } finally {
       // The group is killed whether the probe ended, failed or ran out of time.
-      await process.stop(
-        exitAfterEof: const Duration(milliseconds: 200),
-        gracePeriod: const Duration(seconds: 2),
-      );
+      await _stop(process);
+      _running.remove(process);
       await stderrSubscription.cancel();
     }
   }
+
+  @override
+  Future<void> dispose() async {
+    _disposed = true;
+    await Future.wait(<Future<void>>[for (final process in _running.toList()) _stop(process)]);
+  }
+
+  static Future<void> _stop(GroupedProcess process) => process.stop(
+    exitAfterEof: const Duration(milliseconds: 200),
+    gracePeriod: const Duration(seconds: 2),
+  );
 
   Future<McpProbeResult> _probeHttp(McpServer server, Duration timeout) async {
     final url = Uri.tryParse(server.url?.trim() ?? '');

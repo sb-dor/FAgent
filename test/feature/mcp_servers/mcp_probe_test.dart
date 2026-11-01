@@ -92,8 +92,66 @@ void main() {
     });
 
     test('the group is gone after a successful probe too', () async {
-      // `tools` exits when stdin closes; nothing is left behind either way.
-      expect(await probe.probe(stdio(['tools', '1'])), const McpProbeConnected(1));
+      // The server exits on EOF, but the `sleep` it started would outlive it without the kill.
+      final pidFile = p.join(temp.path, 'tools.pid');
+
+      final result = await probe.probe(stdio(['tools', '1', pidFile]));
+
+      expect(result, const McpProbeConnected(1));
+      final pid = int.parse(File(pidFile).readAsStringSync());
+      final child = int.parse(File('$pidFile.child').readAsStringSync());
+      expect(_groupAlive(pid), isFalse, reason: 'the process group $pid is gone');
+      expect(_alive(child), isFalse, reason: 'the sleep started by the server is gone');
+    });
+
+    test('dispose kills the group of a probe that is in flight and fails it', () async {
+      final pidFile = p.join(temp.path, 'disposed.pid');
+      final running = probe.probe(stdio(['silent', pidFile]), timeout: const Duration(seconds: 60));
+      while (!File(pidFile).existsSync() || File(pidFile).readAsStringSync().isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+      final pid = int.parse(File(pidFile).readAsStringSync());
+      final child = int.parse(File('$pidFile.child').readAsStringSync());
+      expect(_groupAlive(pid), isTrue);
+
+      await probe.dispose();
+
+      expect(_groupAlive(pid), isFalse, reason: 'the process group $pid is gone');
+      expect(_alive(child), isFalse, reason: 'the sleep started by the server is gone');
+      expect(await running.timeout(const Duration(seconds: 5)), isA<McpProbeFailed>());
+    });
+
+    test('dispose waits for several probes and kills them all', () async {
+      final files = [for (var i = 0; i < 2; i++) p.join(temp.path, 'many$i.pid')];
+      final running = [
+        for (final file in files)
+          probe.probe(stdio(['silent', file]), timeout: const Duration(seconds: 60)),
+      ];
+      for (final file in files) {
+        while (!File(file).existsSync() || File(file).readAsStringSync().isEmpty) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      }
+
+      await probe.dispose();
+
+      for (final file in files) {
+        expect(_groupAlive(int.parse(File(file).readAsStringSync())), isFalse);
+      }
+      for (final result in await Future.wait(running)) {
+        expect(result, isA<McpProbeFailed>());
+      }
+    });
+
+    test('a probe after dispose fails at once without starting anything', () async {
+      final pidFile = p.join(temp.path, 'late.pid');
+      await probe.dispose();
+
+      final result = await probe.probe(stdio(['silent', pidFile]));
+
+      expect(result, const McpProbeFailed('Stopped'));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(File(pidFile).existsSync(), isFalse);
     });
 
     test('a command that does not exist fails with a message', () async {

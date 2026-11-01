@@ -5,6 +5,8 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
@@ -70,6 +72,26 @@ final class _RecordingAppMcpServer implements IAppMcpServer {
   }
 }
 
+/// Records when it is disposed, and needs the database still open at that moment.
+final class _RecordingProbe implements IMcpProbe {
+  _RecordingProbe(this.events, this.database);
+
+  final List<String> events;
+  final AppDatabase database;
+
+  @override
+  Future<McpProbeResult> probe(
+    McpServer server, {
+    Duration timeout = const Duration(seconds: 10),
+  }) => throw UnimplementedError();
+
+  @override
+  Future<void> dispose() async {
+    await database.select(database.projectsTable).get();
+    events.add('probe:dispose');
+  }
+}
+
 void main() {
   late AppDatabase database;
   late List<String> events;
@@ -94,6 +116,7 @@ void main() {
       appRun: run,
       devices: devices,
       appMcpServer: _RecordingAppMcpServer(events, database),
+      mcpProbe: _RecordingProbe(events, database),
     );
   });
 
@@ -101,9 +124,23 @@ void main() {
     test('stops the runs and the devices daemon together, before the database closes', () async {
       await repository.shutdown();
 
-      expect(events, <String>['run:start', 'devices:start', 'run:end', 'devices:end', 'mcp:close']);
+      expect(events, <String>[
+        'run:start',
+        'devices:start',
+        'run:end',
+        'devices:end',
+        'mcp:close',
+        'probe:dispose',
+      ]);
       // The database is closed once everything else is stopped.
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
+    });
+
+    test('stops the MCP probes before the database closes', () async {
+      await repository.shutdown();
+
+      // It reads the database when it is disposed, so the event means the database was open.
+      expect(events, contains('probe:dispose'));
     });
 
     test('closes the app MCP server after the agents, before the database', () async {
@@ -111,7 +148,11 @@ void main() {
 
       await repository.shutdown();
 
-      expect(events.sublist(events.length - 2), <String>['hub:disposed', 'mcp:close']);
+      expect(events.sublist(events.length - 3), <String>[
+        'hub:disposed',
+        'mcp:close',
+        'probe:dispose',
+      ]);
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
     });
 
@@ -129,6 +170,7 @@ void main() {
           appRun: failing,
           devices: devices,
           appMcpServer: _RecordingAppMcpServer(events, database),
+          mcpProbe: _RecordingProbe(events, database),
         );
 
         await repository.shutdown();

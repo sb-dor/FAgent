@@ -31,6 +31,12 @@ final class ScriptedMcpProbe implements IMcpProbe {
 
   final Map<String, Completer<void>> _gates = <String, Completer<void>>{};
 
+  /// How often [dispose] was called.
+  int disposed = 0;
+
+  @override
+  Future<void> dispose() async => disposed++;
+
   /// Lets a held probe of [id] answer.
   void release(String id) => _gates[id]?.complete();
 

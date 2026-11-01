@@ -1,7 +1,9 @@
 // A scripted stdio MCP server for tests, run as a real child process.
 //
 // The first argument selects the behaviour:
-//   tools <n>        answer `initialize` and `tools/list` (n tools named tool1, tool2, …)
+//   tools <n> [file] answer `initialize` and `tools/list` (n tools named tool1, tool2, …). With
+//                    <file> it also writes its pid there and starts a `sleep` child in its process
+//                    group (pid in <file>.child), so a test can tell whether the group was killed.
 //   silent <file>    never answer. Writes its pid to <file> and the pid of a `sleep` child it
 //                    started in the same process group to <file>.child.
 //   stderr <text>    write <text> to stderr and exit with code 2
@@ -14,10 +16,7 @@ Future<void> main(List<String> arguments) async {
   final mode = arguments.isEmpty ? 'tools' : arguments.first;
   switch (mode) {
     case 'silent':
-      final file = arguments[1];
-      final child = await Process.start('sleep', const <String>['300']);
-      File(file).writeAsStringSync('$pid');
-      File('$file.child').writeAsStringSync('${child.pid}');
+      await _writePids(arguments[1]);
       await stdin.drain<void>();
     case 'stderr':
       stderr.writeln(arguments[1]);
@@ -29,6 +28,7 @@ Future<void> main(List<String> arguments) async {
       exit(2);
     default:
       final count = arguments.length > 1 ? int.parse(arguments[1]) : 0;
+      if (arguments.length > 2) await _writePids(arguments[2]);
       await stdin.transform(utf8.decoder).transform(const LineSplitter()).forEach((line) {
         final message = jsonDecode(line) as Map<String, Object?>;
         final id = message['id'];
@@ -66,4 +66,12 @@ Future<void> main(List<String> arguments) async {
         );
       });
   }
+}
+
+/// Writes the pid of this process to [file] and starts a `sleep` child whose pid goes to
+/// `<file>.child`.
+Future<void> _writePids(String file) async {
+  final child = await Process.start('sleep', const <String>['300']);
+  File('$file.child').writeAsStringSync('${child.pid}');
+  File(file).writeAsStringSync('$pid');
 }

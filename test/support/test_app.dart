@@ -83,6 +83,7 @@ Dependencies testDependencies({
         tools: const <AppMcpTool>[],
         instructions: appMcpInstructions,
       );
+  final probe = mcpProbe ?? ScriptedMcpProbe();
   final sdkRepository =
       flutterSdkRepository ??
       FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero);
@@ -102,12 +103,13 @@ Dependencies testDependencies({
     ..appMcpTokens = appMcpTokens
     ..appMcpServer = appServer
     ..flutterSdkRepository = sdkRepository
+    ..mcpProbe = probe
     ..mcpServersRepository =
         mcpServersRepository ??
         McpServersRepositoryImpl(
           database: database,
           appServer: appServer,
-          probe: mcpProbe ?? ScriptedMcpProbe(),
+          probe: probe,
           flutterSdk: sdkRepository,
         )
     ..skillsRepository =

@@ -42,6 +42,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             appRun: dependencies.appRunRepository,
             devices: dependencies.devicesRepository,
             appMcpServer: dependencies.appMcpServer,
+            mcpProbe: dependencies.mcpProbe,
           ),
     )..watch();
   }

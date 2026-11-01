@@ -161,13 +161,17 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ..appMcpServer = server;
   },
   // The status of the servers in Settings: the app's server is read, the others are probed.
-  'Create MCP servers repository': (dependencies) =>
-      dependencies.mcpServersRepository = McpServersRepositoryImpl(
+  'Create MCP servers repository': (dependencies) {
+    final probe = McpProbeImpl(environment: dependencies.shellEnvironment);
+    dependencies
+      ..mcpProbe = probe
+      ..mcpServersRepository = McpServersRepositoryImpl(
         database: dependencies.database,
         appServer: dependencies.appMcpServer,
-        probe: McpProbeImpl(environment: dependencies.shellEnvironment),
+        probe: probe,
         flutterSdk: dependencies.flutterSdkRepository,
-      ),
+      );
+  },
   'Create session context repository': (dependencies) =>
       dependencies.sessionContextRepository = SessionContextRepositoryImpl(
         database: dependencies.database,
