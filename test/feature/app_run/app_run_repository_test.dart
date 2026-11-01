@@ -318,6 +318,35 @@ void main() {
       expect(added.single.error!.title, 'Layout overflow');
     });
 
+    test(
+      'currentRun and recentLogs give the state and the newest lines without a stream',
+      () async {
+        expect(repository.currentRun(1), const RunIdle());
+        expect(repository.recentLogs(1), isEmpty);
+
+        await startRun(1);
+        final process = started.single;
+        await launch(process);
+        process
+          ..emitLine('first')
+          ..emitLine('second')
+          ..emitLine('third');
+        await pumpEventQueue();
+
+        expect(repository.currentRun(1), isA<RunRunning>());
+        expect(repository.currentRun(2), const RunIdle());
+        final all = repository.recentLogs(1);
+        expect(all.map((entry) => entry.text).toList().sublist(all.length - 3), [
+          'first',
+          'second',
+          'third',
+        ]);
+        expect(repository.recentLogs(1, limit: 2).map((entry) => entry.text), ['second', 'third']);
+        expect(repository.recentLogs(1, limit: 0), isEmpty);
+        expect(repository.recentLogs(2), isEmpty);
+      },
+    );
+
     test('daemon.logMessage and output outside the protocol go to the log', () async {
       final log = logs(1);
       await startRun(1);

@@ -12,6 +12,8 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/run_tools.dart';
+import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/skill_tools.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
@@ -119,10 +121,32 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
   // A server that cannot start leaves the app working without its tools (a hub notice says so).
   'App MCP server': (dependencies) async {
-    final tokens = AppMcpTokens(database: dependencies.database);
+    final database = dependencies.database;
+    final runs = dependencies.appRunRepository;
+    final builtin = AssetBuiltinKnowledge(bundle: rootBundle);
+    final catalog = ChatSkillCatalog(
+      skills: dependencies.skillsRepository,
+      chatSkills: dependencies.chatSkillsRepository,
+    );
+    final tokens = AppMcpTokens(database: database);
     final server = AppMcpServerImpl(
       tokens: tokens,
-      tools: <AppMcpTool>[],
+      tools: <AppMcpTool>[
+        ListSkillsTool(catalog: catalog),
+        LoadSkillTool(catalog: catalog, skills: dependencies.skillsRepository),
+        ReadSkillFileTool(catalog: catalog, builtin: builtin),
+        AppStatusTool(runs: runs),
+        AppLogsTool(runs: runs),
+        RuntimeErrorsTool(runs: runs),
+        HotReloadTool(runs: runs),
+        HotRestartTool(runs: runs),
+        ScreenshotTool(
+          runs: runs,
+          projectRoot: (projectId) async => (await (database.select(
+            database.projectsTable,
+          )..where((project) => project.id.equals(projectId))).getSingleOrNull())?.path,
+        ),
+      ],
       instructions: appMcpInstructions,
     );
     await server.start();

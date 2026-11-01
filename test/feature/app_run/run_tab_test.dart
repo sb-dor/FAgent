@@ -34,6 +34,12 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   RunState state = const RunIdle();
 
   @override
+  RunState currentRun(int projectId) => state;
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) => List.of(buffer);
+
+  @override
   bool get isPreview => false;
 
   void push(LogEntry entry) {

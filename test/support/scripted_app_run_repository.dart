@@ -135,6 +135,22 @@ class ScriptedAppRunRepository implements IAppRunRepository {
   );
 
   @override
+  RunState currentRun(int projectId) => _runs[projectId]?.state ?? const RunIdle();
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) {
+    final buffer = _runs[projectId]?.buffer ?? const <LogEntry>[];
+    return buffer.sublist(buffer.length - limit.clamp(0, buffer.length));
+  }
+
+  /// Puts the project's run into [state] without a scenario, for tests of what reads it.
+  void setRunState(int projectId, RunState state) => _run(projectId).setState(state);
+
+  /// Adds a line to the project's output, for tests of what reads it.
+  void addLog(int projectId, LogLevel level, String text, {RunError? error}) =>
+      _run(projectId).log(level, text, error: error);
+
+  @override
   Future<void> markSent(int projectId, int seq) async {
     final buffer = _runs[projectId]?.buffer;
     final index = buffer?.indexWhere((log) => log.seq == seq) ?? -1;

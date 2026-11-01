@@ -38,6 +38,12 @@ abstract interface class IAppRunRepository {
   /// cancelled or the repository is disposed.
   Stream<RunState> watchRun(int projectId);
 
+  /// The project's [RunState] right now; [RunIdle] for a project that never ran.
+  RunState currentRun(int projectId);
+
+  /// The project's newest [limit] buffered output lines right now, oldest first.
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit});
+
   /// The project's buffered output (at most [kRunLogLimit] newest lines, with their `sentToAgent`
   /// flags), then every new line, the same way [watchRun] replays the state. Ends when the
   /// subscription is cancelled or the repository is disposed.
@@ -143,6 +149,15 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     source: (run) => run.logs.stream,
     initial: (run) => List<LogEntry>.of(run.buffer),
   );
+
+  @override
+  RunState currentRun(int projectId) => _runs[projectId]?.state ?? const RunIdle();
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) {
+    final buffer = _runs[projectId]?.buffer ?? const <LogEntry>[];
+    return buffer.sublist(math.max(0, buffer.length - math.max(0, limit)));
+  }
 
   @override
   Future<void> markSent(int projectId, int seq) async {

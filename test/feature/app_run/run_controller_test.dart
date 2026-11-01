@@ -35,6 +35,12 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   final List<(int, int)> marked = <(int, int)>[];
 
   @override
+  RunState currentRun(int projectId) => const RunIdle();
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) => const <LogEntry>[];
+
+  @override
   bool get isPreview => true;
 
   StreamController<LogEntry> _logsOf(int project) =>

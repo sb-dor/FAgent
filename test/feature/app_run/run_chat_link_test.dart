@@ -47,6 +47,13 @@ final class _SpyRunRepository implements IAppRunRepository {
   ScriptedAppRunRepository get scripted => _inner;
 
   @override
+  RunState currentRun(int projectId) => _inner.currentRun(projectId);
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) =>
+      _inner.recentLogs(projectId, limit: limit);
+
+  @override
   bool get isPreview => true;
 
   @override
