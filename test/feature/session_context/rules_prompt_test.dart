@@ -86,15 +86,20 @@ void main() {
   });
 
   test('cuts on a character boundary', () {
-    // Each "я" takes two bytes; an odd limit would fall in the middle of one.
+    // Each "я" takes two bytes; the leading "a" shifts them, so the limit falls between the two
+    // bytes of one "я" and the cut has to step back.
     final prompt = buildRulesPrompt(
-      rules: [_rule(SkillSource.project, 'big', 'я' * ruleFileLimit)],
+      rules: [_rule(SkillSource.project, 'big', 'a${'я' * ruleFileLimit}')],
       skills: [],
     );
 
     final body = prompt.split('## big\n').last.replaceFirst('\n[truncated]\n', '');
-    expect(utf8.encode(body), hasLength(lessThanOrEqualTo(ruleFileLimit)));
-    expect(body, 'я' * (ruleFileLimit ~/ 2));
+    // Throws a FormatException unless the bytes are valid UTF-8.
+    final bytes = utf8.encode(body);
+    expect(utf8.decode(bytes), body);
+    expect(bytes, hasLength(ruleFileLimit - 1));
+    expect(body, 'a${'я' * (ruleFileLimit ~/ 2 - 1)}');
+    expect(body.endsWith('я'), isTrue);
     expect(prompt, endsWith('[truncated]\n'));
   });
 
