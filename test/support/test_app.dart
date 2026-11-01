@@ -19,6 +19,7 @@ import 'package:flutter_code_agent/src/feature/initialization/models/dependencie
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,7 +43,8 @@ import 'scripted_app_run_repository.dart';
 /// its own [skillsRepository]; it never touches the file system. The agents are an in-memory
 /// [MemoryAgentsRepository] (a signed-in Claude and the two preview agents) unless the test passes
 /// its own [agentsRepository]. The MCP servers repository runs on the in-memory database unless the
-/// test passes its own [mcpServersRepository]. The permission rules are an in-memory
+/// test passes its own [mcpServersRepository]. The chat skills repository runs on the in-memory
+/// database unless the test passes its own [chatSkillsRepository]. The permission rules are an in-memory
 /// [MemoryPermissionRulesRepository] without any rule unless the test passes its own
 /// [permissionRulesRepository]. The Flutter SDK repository is the fake one with a `flutter` on
 /// `PATH` and no delay unless the test passes its own [flutterSdkRepository]. The project creation
@@ -55,6 +57,7 @@ Dependencies testDependencies({
   IWidgetPickerRepository? widgetPickerRepository,
   IRunConfigRepository? runConfigRepository,
   ISkillsRepository? skillsRepository,
+  IChatSkillsRepository? chatSkillsRepository,
   IAgentsRepository? agentsRepository,
   IMcpServersRepository? mcpServersRepository,
   IPermissionRulesRepository? permissionRulesRepository,
@@ -73,6 +76,7 @@ Dependencies testDependencies({
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)
     ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
+    ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..mcpServersRepository = mcpServersRepository ?? McpServersRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()

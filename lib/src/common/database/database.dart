@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_code_agent/src/common/database/database.steps.dart';
 import 'package:flutter_code_agent/src/common/database/tables/app_settings_table.dart';
+import 'package:flutter_code_agent/src/common/database/tables/chat_skill_states_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/mcp_servers_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/projects_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/run_configs_table.dart';
@@ -25,6 +26,7 @@ part 'database.g.dart';
     McpServersTable,
     McpServerStatesTable,
     RunConfigsTable,
+    ChatSkillStatesTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -46,7 +48,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -73,6 +75,9 @@ class AppDatabase extends _$AppDatabase {
       },
       from6To7: (m, schema) async {
         await m.createTable(schema.runConfigs);
+      },
+      from7To8: (m, schema) async {
+        await m.createTable(schema.chatSkillStates);
       },
     ),
     // SQLite ignores foreign keys (and ON DELETE CASCADE) unless enabled per connection.

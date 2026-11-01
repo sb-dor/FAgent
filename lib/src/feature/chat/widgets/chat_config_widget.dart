@@ -24,6 +24,8 @@ import 'package:flutter_code_agent/src/feature/session_config/controller/session
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/chat_skill_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/chat_skills_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:path/path.dart' as p;
 
@@ -111,6 +113,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final PermissionAnswerController permissionController;
   late final SessionConfigController configController;
   late final FileMentionController fileMentionController;
+  late final ChatSkillsController chatSkillsController;
+  late final ChatSkillActionsController chatSkillActionsController;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
 
@@ -149,6 +153,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     fileMentionController = FileMentionController(
       repository: ProjectFilesRepositoryImpl(environment: dependencies.shellEnvironment),
     );
+    chatSkillsController = ChatSkillsController(repository: dependencies.chatSkillsRepository);
+    // Only the 🧩 chip shows the choices, so a chat without the chip does not watch them.
+    if (canOpenSkills) chatSkillsController.watch(sessionId);
+    chatSkillActionsController = ChatSkillActionsController(
+      repository: dependencies.chatSkillsRepository,
+    );
   }
 
   @override
@@ -161,6 +171,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     permissionController.dispose();
     configController.dispose();
     fileMentionController.dispose();
+    chatSkillsController.dispose();
+    chatSkillActionsController.dispose();
     textController.dispose();
     composerFocus.dispose();
     runContext.dispose();
@@ -173,6 +185,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.didUpdateWidget(oldWidget);
     runContext.value = widget.runContext;
     chatSkills.value = widget.chatSkills;
+    if (canOpenSkills) chatSkillsController.watch(sessionId);
   }
 
   /// Whether the skill library can be shown from the chat.
@@ -181,6 +194,14 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Shows the skill library for the chat's project, on the skill [itemId] when given.
   void openSkills({String? itemId}) =>
       widget.onOpenSkills?.call(itemId: itemId, projectId: widget.project.id);
+
+  /// Turns [skill] on or off for this chat only.
+  void setChatSkill(ChatSkill skill, {required bool enabled}) => chatSkillActionsController.set(
+    sessionId,
+    skill.id,
+    enabled: enabled,
+    projectEnabled: skill.enabled,
+  );
 
   /// Hands the latest view to [ChatConfigWidget.onHandle] once the frame is done; several views
   /// in one frame publish only the last.

@@ -100,7 +100,13 @@ class _SkillsListState extends State<SkillsList> {
                 icon: Icons.error_outline,
                 title: localization.somethingWentWrong,
               ),
-              SkillLibrary$LoadedState() => _items(context),
+              SkillLibrary$LoadedState() => Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Expanded(child: _items(context)),
+                  _RulesNote(text: localization.skillsRulesNote),
+                ],
+              ),
             },
           ),
         ),
@@ -131,6 +137,30 @@ class _SkillsListState extends State<SkillsList> {
               _scope.actions.setEnabled(item.id, enabled: enabled, projectId: view.projectId),
         );
       },
+    );
+  }
+}
+
+/// Under the list: when a changed rule reaches the chats.
+class _RulesNote extends StatelessWidget {
+  const _RulesNote({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: colors.border)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Text(
+          text,
+          style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
+        ),
+      ),
     );
   }
 }

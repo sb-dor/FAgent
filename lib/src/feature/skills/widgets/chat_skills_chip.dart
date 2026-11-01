@@ -3,57 +3,80 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 
 /// {@template chat_skills_chip}
-/// The 🧩 chip of the composer: how many skills are on for the chat's project. Its menu lists the
-/// skills that are on, then the ones that are off (dimmed), and leads to the skill library.
+/// The 🧩 chip of the composer: how many skills are on for this chat. Its menu lists the skills
+/// that are on for the chat's project, each with a checkbox that turns the skill off (or on again)
+/// for this chat only, and leads to the skill library.
 ///
-/// The rows do not switch anything: choosing skills for a single chat and handing them to the agent
-/// arrive with milestone M3, and the menu says so. Nothing is shown while the project's skills are
-/// not known.
+/// A project's own skill is read by the agent when the chat starts, so its row says the change
+/// applies when the chat is reopened. Nothing is shown while the project's skills are not known.
 /// {@endtemplate}
 class ChatSkillsChip extends StatelessWidget {
   /// {@macro chat_skills_chip}
-  const ChatSkillsChip({required this.skills, required this.onOpenLibrary, super.key});
+  const ChatSkillsChip({
+    required this.skills,
+    required this.onOpenLibrary,
+    this.chatStates = const <String, bool>{},
+    this.onToggle,
+    super.key,
+  });
 
   /// The skills of the chat's project.
   final ChatSkills skills;
 
+  /// What this chat changed against its project, by skill id (see `IChatSkillsRepository`).
+  final Map<String, bool> chatStates;
+
+  /// A checkbox was ticked or cleared: the [skill] is to be [enabled] for this chat. `null` leaves
+  /// the rows without effect.
+  final void Function(ChatSkill skill, {required bool enabled})? onToggle;
+
   /// "Open the skill library →" was chosen.
   final VoidCallback onOpenLibrary;
+
+  bool _isOn(ChatSkill skill) => chatStates[skill.id] ?? skill.enabled;
 
   @override
   Widget build(BuildContext context) {
     final project = skills.projectName;
     if (project == null) return const SizedBox.shrink();
     final localization = Localization.of(context);
-    final all = skills.skills;
-    final ordered = <ChatSkill>[
-      ...all.where((skill) => skill.enabled),
-      ...all.where((skill) => !skill.enabled),
+    // The choice is among the skills the project has on.
+    final offered = <ChatSkill>[
+      for (final skill in skills.skills)
+        if (skill.enabled) skill,
     ];
     return SelectorChip<String>(
-      label: '${skills.enabledCount}',
+      label: '${offered.where(_isOn).length}',
       icon: Icons.extension_outlined,
       tooltip: localization.chatSkillsTooltip,
       menuWidth: 360,
+      onSelected: (id) {
+        for (final skill in offered) {
+          if (skill.id == id) onToggle?.call(skill, enabled: !_isOn(skill));
+        }
+      },
       sections: <AppMenuSection<String>>[
         AppMenuSection<String>(
           title: localization.chatSkillsEnabledFor(project),
           items: <AppMenuItem<String>>[
-            for (final skill in ordered)
+            for (final skill in offered)
               AppMenuItem<String>(
                 value: skill.id,
                 title: skill.name,
-                subtitle: skill.description.isEmpty ? null : skill.description,
-                icon: Icons.extension_outlined,
+                subtitle: skill.source == SkillSource.project
+                    ? localization.chatSkillsAppliesOnReopen
+                    : skill.description.isEmpty
+                    ? null
+                    : skill.description,
+                icon: _isOn(skill) ? Icons.check_box : Icons.check_box_outline_blank,
                 mono: true,
-                enabled: skill.enabled,
               ),
-            if (ordered.isEmpty)
+            if (offered.isEmpty)
               AppMenuItem<String>(value: '', title: localization.chatSkillsNone, enabled: false),
           ],
         ),
@@ -95,18 +118,9 @@ class _Footer extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              const PreviewBadge(),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  localization.chatSkillsNote,
-                  style: theme.bodySmall!.copyWith(color: colors.muted),
-                ),
-              ),
-            ],
+          child: Text(
+            localization.chatSkillsNote,
+            style: theme.bodySmall!.copyWith(color: colors.muted),
           ),
         ),
       ],

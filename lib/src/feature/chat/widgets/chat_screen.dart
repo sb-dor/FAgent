@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_com
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/bypass_gate_banner.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/composer_toolbar.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/chat_skills_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_footer.dart';
 
@@ -116,16 +117,21 @@ class _ChatScreenState extends State<ChatScreen> {
                       ? _scope.cycleMode
                       : null,
                   toolbar: <Widget>[
-                    ComposerToolbar(
-                      agentName: agentDisplayName(view.agentId),
-                      agentLocked: view.agentLocked,
-                      options: view.configOptions,
-                      enabled: view.canChangeConfig,
-                      onChanged: _scope.setConfig,
-                      onAttach: _scope.attachFile,
-                      onMakeDefault: _scope.makeDefault,
-                      chatSkills: chatSkills,
-                      onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                    StateConsumer<ChatSkillsController, ChatSkillsState>(
+                      controller: _scope.chatSkillsController,
+                      builder: (context, chatSkillsState, _) => ComposerToolbar(
+                        agentName: agentDisplayName(view.agentId),
+                        agentLocked: view.agentLocked,
+                        options: view.configOptions,
+                        enabled: view.canChangeConfig,
+                        onChanged: _scope.setConfig,
+                        onAttach: _scope.attachFile,
+                        onMakeDefault: _scope.makeDefault,
+                        chatSkills: chatSkills,
+                        chatSkillStates: _scope.chatSkillsController.states,
+                        onToggleChatSkill: _scope.setChatSkill,
+                        onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                      ),
                     ),
                   ],
                 ),

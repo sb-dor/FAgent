@@ -2,7 +2,6 @@ import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
@@ -117,7 +116,19 @@ void main() {
   });
 
   group('menu F', () {
-    testWidgets('lists enabled skills first and opens the library', (tester) async {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(chip());
+      await tester.pumpAndSettle();
+    }
+
+    Finder box(String name, IconData icon) => find.descendant(
+      of: find.ancestor(of: find.text(name), matching: find.byType(GestureDetector)).first,
+      matching: find.byIcon(icon),
+    );
+
+    testWidgets('lists the skills of the project, not the ones it has off, and opens the library', (
+      tester,
+    ) async {
       await pumpChat(tester);
       await tester.runAsync(
         () => repository.setEnabled(
@@ -128,18 +139,15 @@ void main() {
       );
       await settle(tester);
 
-      final badges = find.byType(PreviewBadge).evaluate().length;
-      await tester.tap(chip());
-      await tester.pumpAndSettle();
+      await openMenu(tester);
 
       expect(find.text('Enabled for avera-hotel'), findsOneWidget);
-      final names = ['checklist', 'drift-migration', 'feature-architecture'];
-      final ys = [for (final name in names) tester.getTopLeft(find.text(name)).dy];
-      expect(ys, orderedEquals([...ys]..sort()), reason: 'enabled first, disabled last');
-      expect(find.text('Before a release'), findsOneWidget);
-      // The note says the rows do not switch yet, and carries the Preview badge.
-      expect(find.textContaining('come in M3'), findsOneWidget);
-      expect(find.byType(PreviewBadge), findsNWidgets(badges + 1));
+      expect(find.text('checklist'), findsOneWidget);
+      expect(find.text('drift-migration'), findsOneWidget);
+      expect(find.text('feature-architecture'), findsNothing);
+      // A project skill carries the note instead of its description.
+      expect(find.text('Applies when the chat is reopened'), findsNWidgets(2));
+      expect(find.text('Before a release'), findsNothing);
 
       await tester.tap(find.text('Open the skill library →'));
       await tester.pumpAndSettle();
@@ -150,6 +158,38 @@ void main() {
         SkillsConfigInhWidget.of(tester.element(find.byType(SkillsList))).view.projectId,
         projectId,
       );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a checkbox turns a skill off for this chat only and back on', (tester) async {
+      await pumpChat(tester);
+      expect(chipCount('3'), findsOneWidget);
+
+      await openMenu(tester);
+      expect(box('feature-architecture', Icons.check_box), findsOneWidget);
+      await tester.tap(find.text('feature-architecture'));
+      await tester.pumpAndSettle();
+      await settle(tester);
+
+      final saved = await tester.runAsync(
+        () => dependencies.chatSkillsRepository.current(sessionId),
+      );
+      expect(saved, {'skill:builtin:feature-architecture': false});
+      expect(chipCount('2'), findsOneWidget);
+      // The project itself is untouched.
+      expect(repository.calls.where((call) => call.contains('setEnabled')), isEmpty);
+
+      await openMenu(tester);
+      expect(box('feature-architecture', Icons.check_box_outline_blank), findsOneWidget);
+      await tester.tap(find.text('feature-architecture'));
+      await tester.pumpAndSettle();
+      await settle(tester);
+
+      expect(
+        await tester.runAsync(() => dependencies.chatSkillsRepository.current(sessionId)),
+        isEmpty,
+      );
+      expect(chipCount('3'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
   });

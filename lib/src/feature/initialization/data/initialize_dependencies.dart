@@ -21,6 +21,7 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repo
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
 import 'package:l/l.dart';
@@ -107,6 +108,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create chat skills repository': (dependencies) =>
+      dependencies.chatSkillsRepository = ChatSkillsRepositoryImpl(database: dependencies.database),
   'Create run config repository': (dependencies) =>
       dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
   'Create MCP servers repository': (dependencies) =>

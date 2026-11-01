@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/initialization/widget/dependencie
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
 /// {@template dependencies}
@@ -60,6 +61,9 @@ class Dependencies {
 
   /// Skills and rules: the built-in ones, the user's and the projects', and where they are on.
   late final ISkillsRepository skillsRepository;
+
+  /// Which skills a single chat turns on or off against its project.
+  late final IChatSkillsRepository chatSkillsRepository;
 
   /// The MCP servers handed to agents: the built-in ones and the user's own.
   late final IMcpServersRepository mcpServersRepository;

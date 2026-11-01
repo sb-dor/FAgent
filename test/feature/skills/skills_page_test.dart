@@ -181,6 +181,22 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    testWidgets('says under the list when rules reach the chats', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester);
+
+      expect(find.text('Rules apply to new and reopened chats'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('says the same in Russian', (tester) async {
+      useDesktopView(tester);
+      await pumpScreen(tester, locale: const Locale('ru'));
+
+      expect(find.text('Правила применятся к новым и заново открытым чатам'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
     testWidgets('source filter and search', (tester) async {
       useDesktopView(tester);
       await pumpScreen(tester);
