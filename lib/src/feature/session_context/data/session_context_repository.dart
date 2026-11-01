@@ -62,7 +62,7 @@ abstract interface class ISessionContextRepository {
 /// Only for an agent with [AgentDefinition.acceptsClaudeMeta], the `_meta`:
 /// * `systemPrompt.append` — [buildRulesPrompt] of [promptRules] (the project's rules are left
 ///   out: Claude Code reads `.claude/rules` itself), the project's `AGENTS.md` and the app's skills
-///   that are on for the chat (none without the app's server);
+///   that are on for the chat, one per name (none without the app's server);
 /// * `claudeCode.options.allowedTools` — the app's server, whose tools then never ask;
 /// * `claudeCode.options.skills` — only while a project skill (`.claude/skills`) is off for the
 ///   project or the chat: the project's skills that are on. The key is an allowlist, so while it
@@ -140,7 +140,7 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
       ),
       skills: [
         if (withApp)
-          for (final skill in appSkillsForChat(library, chatStates))
+          for (final skill in appSkillsByName(library, chatStates))
             (name: skill.name, description: skill.description),
       ],
       agentsMd: await _readOrNull(p.join(projectRoot, 'AGENTS.md')),

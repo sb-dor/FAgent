@@ -428,6 +428,21 @@ void main() {
       expect(append, contains('Style rule text'));
     });
 
+    test('a user copy of a built-in skill is listed once, as the user copy', () async {
+      skills = MemorySkillsRepository(
+        items: [
+          memorySkill('arch', description: 'Architecture'),
+          memorySkill('arch', source: SkillSource.user, description: 'My architecture'),
+        ],
+        texts: {'skill:builtin:arch': '', 'skill:user:arch': ''},
+      );
+
+      final append = appendOf(await context());
+
+      expect(append, contains('- arch — My architecture'));
+      expect('- arch '.allMatches(append), hasLength(1));
+    });
+
     test('AGENTS.md is left out when CLAUDE.md imports it', () async {
       File(p.join(projectDir.path, 'CLAUDE.md')).writeAsStringSync('@AGENTS.md\n');
 

@@ -25,11 +25,12 @@ final class ChatSkillCatalog {
   Future<SkillLibrary> _library(AppMcpCaller caller) =>
       _skills.watch(projectId: caller.projectId).first;
 
-  /// The served skills that are on for the chat of [caller].
+  /// The served skills that are on for the chat of [caller], one per name ([appSkillsByName]).
   Future<List<KnowledgeItem>> forChat(AppMcpCaller caller) async =>
-      appSkillsForChat(await _library(caller), await _chatSkills.current(caller.sessionId));
+      appSkillsByName(await _library(caller), await _chatSkills.current(caller.sessionId));
 
-  /// The skill [name] when it is on for the chat of [caller], else the error to give the agent.
+  /// The skill [name] of [forChat], else the error to give the agent: off for this chat when the
+  /// app serves a skill of that name but none is on, not found otherwise.
   Future<({KnowledgeItem? skill, AppMcpError? error})> find(
     AppMcpCaller caller,
     Object? name,
@@ -39,13 +40,13 @@ final class ChatSkillCatalog {
     }
     final wanted = name.trim();
     final library = await _library(caller);
-    final skill = library.skills.where(servedByApp).where((it) => it.name == wanted).firstOrNull;
-    if (skill == null) return (skill: null, error: AppMcpError('Skill not found: $wanted'));
     final chatStates = await _chatSkills.current(caller.sessionId);
-    if (!skillsForChat(library, chatStates).any((on) => on.id == skill.id)) {
+    final skill = appSkillsByName(library, chatStates).where((it) => it.name == wanted).firstOrNull;
+    if (skill != null) return (skill: skill, error: null);
+    if (library.skills.where(servedByApp).any((it) => it.name == wanted)) {
       return (skill: null, error: AppMcpError('Skill $wanted is off for this chat'));
     }
-    return (skill: skill, error: null);
+    return (skill: null, error: AppMcpError('Skill not found: $wanted'));
   }
 }
 

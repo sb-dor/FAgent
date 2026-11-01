@@ -256,4 +256,63 @@ void main() {
       expect(await readFile('mine', ''), startsWith('ERROR:'));
     });
   });
+
+  group('a user copy of a built-in skill (Duplicate keeps the name)', () {
+    setUp(() {
+      final copy = Directory(p.join(temp.path, 'arch'))..createSync();
+      File(p.join(copy.path, 'SKILL.md')).writeAsStringSync('My arch text');
+      File(p.join(copy.path, 'notes.txt')).writeAsStringSync('my notes');
+      skills = MemorySkillsRepository(
+        items: [
+          memorySkill(
+            'arch',
+            description: 'Architecture',
+          ).copyWith(path: 'skills/arch', files: const ['SKILL.md', 'templates/a.dart']),
+          userItem('arch', copy.path),
+        ],
+        texts: {'skill:builtin:arch': 'Arch text', 'skill:user:arch': 'My arch text'},
+      );
+      final catalog = ChatSkillCatalog(skills: skills, chatSkills: chat);
+      list = ListSkillsTool(catalog: catalog);
+      load = LoadSkillTool(catalog: catalog, skills: skills);
+      read = ReadSkillFileTool(
+        catalog: catalog,
+        builtin: const _Builtin({'skills/arch/SKILL.md': 'Arch text'}),
+      );
+    });
+
+    test('load_skill and read_skill_file serve the user copy', () async {
+      expect(_text(await load.call(_caller, {'name': 'arch'})), startsWith('My arch text'));
+      expect(await readFile('arch', 'notes.txt'), 'my notes');
+    });
+
+    test('with the built-in one off, the user copy still loads', () async {
+      await skills.setEnabled('skill:builtin:arch', enabled: false, projectId: 1);
+
+      expect(_text(await load.call(_caller, {'name': 'arch'})), startsWith('My arch text'));
+      expect(_text(await list.call(_caller, {})), '- arch (user): The arch skill');
+    });
+
+    test('with the user copy off in the chat, the built-in one loads', () async {
+      chat.states['skill:user:arch'] = false;
+
+      expect(_text(await load.call(_caller, {'name': 'arch'})), startsWith('Arch text'));
+      expect(_text(await list.call(_caller, {})), '- arch (builtin): Architecture');
+    });
+
+    test('with both off, the skill is off for this chat', () async {
+      chat.states
+        ..['skill:user:arch'] = false
+        ..['skill:builtin:arch'] = false;
+
+      expect(
+        _text(await load.call(_caller, {'name': 'arch'})),
+        'ERROR: Skill arch is off for this chat',
+      );
+    });
+
+    test('list_skills lists the name once, as the user copy', () async {
+      expect(_text(await list.call(_caller, {})), '- arch (user): The arch skill');
+    });
+  });
 }
