@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
@@ -76,6 +78,12 @@ class Dependencies {
 
   /// Creates new Flutter projects.
   late final IProjectCreationRepository projectCreationRepository;
+
+  /// The bearer tokens that tie agents' requests to the app's MCP server to their chats.
+  late final AppMcpTokens appMcpTokens;
+
+  /// The app's own MCP server for the agents (`flutter_code_agent`).
+  late final IAppMcpServer appMcpServer;
 
   @override
   String toString() => 'Dependencies{}';

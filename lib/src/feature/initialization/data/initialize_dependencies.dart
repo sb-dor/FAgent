@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
@@ -114,6 +117,19 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
   'Create MCP servers repository': (dependencies) =>
       dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
+  // A server that cannot start leaves the app working without its tools (a hub notice says so).
+  'App MCP server': (dependencies) async {
+    final tokens = AppMcpTokens(database: dependencies.database);
+    final server = AppMcpServerImpl(
+      tokens: tokens,
+      tools: <AppMcpTool>[],
+      instructions: appMcpInstructions,
+    );
+    await server.start();
+    dependencies
+      ..appMcpTokens = tokens
+      ..appMcpServer = server;
+  },
   'Create permission rules repository': (dependencies) =>
       dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
   // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).

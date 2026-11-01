@@ -47,6 +47,7 @@ dependencies:
   freezed_annotation: ^3.1.0
   intl: any
   l: ^5.0.1
+  mcp_dart: ^2.4.3
   meta: ^1.19.0
   path: ^1.9.1
   path_provider: ^2.1.6

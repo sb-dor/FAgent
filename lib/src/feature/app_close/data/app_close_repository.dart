@@ -3,6 +3,7 @@ import 'dart:io' as io;
 
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
@@ -23,7 +24,8 @@ abstract interface class IAppCloseRepository {
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
-  /// Stops the runs, the devices daemon and the agents, then closes the database.
+  /// Stops the runs, the devices daemon, the agents and the app's MCP server, then closes the
+  /// database.
   Future<void> shutdown();
 
   /// Quits the app (answering a pending ⌘Q or logout on macOS).
@@ -42,6 +44,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._settings,
     required this._appRun,
     required this._devices,
+    required this._appMcpServer,
   });
 
   final AgentHub _hub;
@@ -49,6 +52,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IAppSettingsRepository _settings;
   final IAppRunRepository _appRun;
   final IDevicesRepository _devices;
+  final IAppMcpServer _appMcpServer;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -89,6 +93,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
       _stopQuietly('devices', _devices.dispose),
     ]);
     await _hub.dispose();
+    // After the agents, so none of them is cut off mid-call; before the database its tools read.
+    await _stopQuietly('app MCP server', _appMcpServer.close);
     await _database.close();
   }
 

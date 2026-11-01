@@ -1,6 +1,9 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
@@ -49,7 +52,8 @@ import 'scripted_app_run_repository.dart';
 /// [permissionRulesRepository]. The Flutter SDK repository is the fake one with a `flutter` on
 /// `PATH` and no delay unless the test passes its own [flutterSdkRepository]. The project creation
 /// repository is a [MemoryProjectCreationRepository] unless the test passes its own
-/// [projectCreationRepository].
+/// [projectCreationRepository]. The app's MCP server is a real one that is never started unless the
+/// test passes its own [appMcpServer].
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
@@ -63,9 +67,11 @@ Dependencies testDependencies({
   IPermissionRulesRepository? permissionRulesRepository,
   IFlutterSdkRepository? flutterSdkRepository,
   IProjectCreationRepository? projectCreationRepository,
+  IAppMcpServer? appMcpServer,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
+  final appMcpTokens = AppMcpTokens(database: database);
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment
@@ -80,6 +86,14 @@ Dependencies testDependencies({
     ..mcpServersRepository = mcpServersRepository ?? McpServersRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()
+    ..appMcpTokens = appMcpTokens
+    ..appMcpServer =
+        appMcpServer ??
+        AppMcpServerImpl(
+          tokens: appMcpTokens,
+          tools: const <AppMcpTool>[],
+          instructions: appMcpInstructions,
+        )
     ..flutterSdkRepository =
         flutterSdkRepository ??
         FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero)
