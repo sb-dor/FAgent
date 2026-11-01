@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
+import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
@@ -10,7 +11,6 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repo
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/rules_prompt.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
-import 'package:flutter_code_agent/src/feature/session_context/models/session_context.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 import 'package:flutter_test/flutter_test.dart';

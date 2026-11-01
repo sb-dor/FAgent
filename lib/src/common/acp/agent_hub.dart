@@ -10,12 +10,12 @@ import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/permission_broker.dart';
 import 'package:flutter_code_agent/src/common/acp/raw_acp_message.dart';
+import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/feature/session_context/models/session_context.dart';
 import 'package:l/l.dart';
 
 /// Starts an agent; replaced in tests.
