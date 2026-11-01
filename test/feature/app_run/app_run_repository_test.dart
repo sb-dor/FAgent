@@ -347,6 +347,36 @@ void main() {
       },
     );
 
+    test(
+      'recentLogs holds only the lines of the current run, the last run once it ended',
+      () async {
+        await startRun(1);
+        final first = started.single;
+        await launch(first);
+        first.emitLine('from the first run');
+        await pumpEventQueue();
+        expect(repository.recentLogs(1).map((entry) => entry.text), contains('from the first run'));
+
+        await startRun(1);
+        final second = started.last;
+        expect(second, isNot(same(first)));
+        second.emitLine('from the second run');
+        await pumpEventQueue();
+
+        final texts = repository.recentLogs(1).map((entry) => entry.text).toList();
+        expect(texts, contains('from the second run'));
+        expect(texts.any((text) => text.contains('first run')), isFalse);
+        expect(texts.first, startsWith('/opt/flutter/bin/flutter run'));
+
+        await repository.stop(1);
+        await pumpEventQueue();
+        expect(
+          repository.recentLogs(1).map((entry) => entry.text),
+          contains('from the second run'),
+        );
+      },
+    );
+
     test('daemon.logMessage and output outside the protocol go to the log', () async {
       final log = logs(1);
       await startRun(1);
@@ -430,9 +460,11 @@ void main() {
         }
       };
 
-      await repository.hotRestart(1);
+      final took = await repository.hotRestart(1);
       await pumpEventQueue();
 
+      expect(took, greaterThan(Duration.zero));
+      expect(took, (seen.last as RunRunning).lastReload);
       final request = process.sent.lastWhere((request) => request['method'] == 'app.restart');
       expect((request['params']! as Map<String, Object?>)['fullRestart'], isTrue);
       expect((seen.last as RunRunning).lastReload, isNotNull);
@@ -478,9 +510,10 @@ void main() {
           }
         };
 
-        await repository.hotRestart(1);
+        final took = await repository.hotRestart(1);
         await pumpEventQueue();
 
+        expect(took, Duration.zero);
         expect(log.last.error?.title, 'Hot restart failed');
       },
     );
@@ -502,10 +535,11 @@ void main() {
       expect(log.last.text, 'Hot reload failed: timed out');
     });
 
-    test('hotReload does nothing unless the app is running', () async {
+    test('hotReload and hotRestart do nothing unless the app is running', () async {
       await startRun(1);
 
       expect(await repository.hotReload(1), Duration.zero);
+      expect(await repository.hotRestart(1), Duration.zero);
       expect(started.single.sent, isEmpty);
       expect(await repository.hotReload(2), Duration.zero);
     });

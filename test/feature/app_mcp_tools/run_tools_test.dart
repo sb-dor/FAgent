@@ -30,21 +30,30 @@ RunRunning _running({BuildMode mode = BuildMode.debug}) => RunRunning(
   devToolsUri: Uri.parse('http://127.0.0.1:9100/'),
 );
 
-/// A repository whose reload fails, as a real one does without telling more than the log.
-final class _FailingRuns extends ScriptedAppRunRepository {
-  _FailingRuns() : super(step: const Duration(milliseconds: 1));
+/// A repository that answers hot reload and restart as a test says, and logs [noise] meanwhile.
+final class _AnsweringRuns extends ScriptedAppRunRepository {
+  _AnsweringRuns({this.reloadTook = Duration.zero, this.restartTook = Duration.zero, this.noise})
+    : super(step: const Duration(milliseconds: 1));
 
-  @override
-  Future<Duration> hotReload(int projectId) async {
-    reloadCalls.add(projectId);
-    return Duration.zero;
-  }
+  final Duration reloadTook;
+  final Duration restartTook;
+
+  /// An error line the app prints while the call runs.
+  final String? noise;
 
   final List<int> reloadCalls = <int>[];
 
   @override
-  Future<void> hotRestart(int projectId) async {
-    addLog(projectId, LogLevel.error, 'Hot restart failed: boom');
+  Future<Duration> hotReload(int projectId) async {
+    reloadCalls.add(projectId);
+    if (noise != null) addLog(projectId, LogLevel.error, noise!);
+    return reloadTook;
+  }
+
+  @override
+  Future<Duration> hotRestart(int projectId) async {
+    if (noise != null) addLog(projectId, LogLevel.error, noise!);
+    return restartTook;
   }
 }
 
@@ -214,8 +223,8 @@ void main() {
       expect(runs.recentLogs(1).map((log) => log.text), ['Reloaded 3 of 812 libraries in 180ms.']);
     });
 
-    test('reload that failed says to look at the log', () async {
-      final failing = _FailingRuns()..setRunState(1, _running());
+    test('reload that the repository reports as failed says to look at the log', () async {
+      final failing = _AnsweringRuns()..setRunState(1, _running());
       addTearDown(failing.dispose);
 
       expect(
@@ -225,20 +234,37 @@ void main() {
       expect(failing.reloadCalls, [1]);
     });
 
-    test('restart succeeds when the repository logs no error', () async {
-      runs.setRunState(1, _running());
+    test('an error line the app prints during a successful reload does not fail it', () async {
+      final noisy = _AnsweringRuns(reloadTook: const Duration(milliseconds: 90), noise: 'boom')
+        ..setRunState(1, _running());
+      addTearDown(noisy.dispose);
 
-      expect(_text(await call('hot_restart')), 'Restarted');
+      expect(_text(await call('hot_reload', {}, _chat1, noisy)), 'Reloaded in 90 ms');
     });
 
-    test('restart that logged an error fails', () async {
-      final failing = _FailingRuns()..setRunState(1, _running());
+    test('restart reports how long it took', () async {
+      runs.setRunState(1, _running());
+
+      expect(_text(await call('hot_restart')), 'Restarted in 640 ms');
+    });
+
+    test('an error line the app prints during a successful restart does not fail it', () async {
+      final noisy = _AnsweringRuns(restartTook: const Duration(milliseconds: 500), noise: 'boom')
+        ..setRunState(1, _running());
+      addTearDown(noisy.dispose);
+
+      expect(_text(await call('hot_restart', {}, _chat1, noisy)), 'Restarted in 500 ms');
+    });
+
+    test('a restart the repository reports as failed fails, though nothing was logged', () async {
+      final failing = _AnsweringRuns()..setRunState(1, _running());
       addTearDown(failing.dispose);
 
       expect(
         _text(await call('hot_restart', {}, _chat1, failing)),
         'ERROR: Hot restart failed; call app_logs to see why',
       );
+      expect(failing.recentLogs(1), isEmpty);
     });
   });
 
@@ -297,6 +323,65 @@ void main() {
         _text(await call('app_logs', {'errorsOnly': true}, (sessionId: 1, projectId: 4))),
         'No error lines in the log',
       );
+    });
+  });
+
+  group('the previous run', () {
+    Future<void> startAgain() async {
+      await runs.start(1, device: _device, mode: BuildMode.debug, target: 'lib/main.dart');
+    }
+
+    setUp(() {
+      runs
+        ..addLog(
+          1,
+          LogLevel.error,
+          'old overflow',
+          error: const RunError(title: 'Old error', message: 'fixed since'),
+        )
+        ..setRunState(1, _running());
+    });
+
+    test('is not in app_logs or runtime_errors once a new run starts', () async {
+      expect(_text(await call('runtime_errors')), contains('Old error'));
+
+      await startAgain();
+      runs.addLog(1, LogLevel.info, 'fresh line');
+
+      final logs = _text(await call('app_logs'));
+      expect(logs, contains('fresh line'));
+      expect(logs, isNot(contains('old overflow')));
+      expect(_text(await call('app_logs', {'errorsOnly': true})), 'No error lines in the log');
+      expect(_text(await call('runtime_errors')), 'No errors');
+    });
+
+    test('the errors of the new run are returned', () async {
+      await startAgain();
+      runs.addLog(
+        1,
+        LogLevel.error,
+        'new overflow',
+        error: const RunError(title: 'New error', message: 'still broken'),
+      );
+
+      final text = _text(await call('runtime_errors'));
+
+      expect(text, contains('New error'));
+      expect(text, isNot(contains('Old error')));
+    });
+
+    test('stays readable after the run ended', () async {
+      await startAgain();
+      runs.addLog(
+        1,
+        LogLevel.error,
+        'late',
+        error: const RunError(title: 'Late', message: 'm'),
+      );
+      await runs.stop(1);
+
+      expect(_text(await call('runtime_errors')), contains('Late'));
+      expect(_text(await call('runtime_errors')), isNot(contains('Old error')));
     });
   });
 

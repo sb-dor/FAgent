@@ -59,7 +59,7 @@ final class _ScriptedRun implements IAppRunRepository {
   Future<Duration> hotReload(int projectId) async => Duration.zero;
 
   @override
-  Future<void> hotRestart(int projectId) async {}
+  Future<Duration> hotRestart(int projectId) async => Duration.zero;
 
   @override
   Future<void> openDevTools(int projectId) async {}
@@ -85,7 +85,7 @@ final class _CountingRun extends ScriptedAppRunRepository {
   }
 
   @override
-  Future<void> hotRestart(int projectId) {
+  Future<Duration> hotRestart(int projectId) {
     restartCalls++;
     return super.hotRestart(projectId);
   }

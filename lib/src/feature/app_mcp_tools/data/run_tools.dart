@@ -241,15 +241,10 @@ final class HotRestartTool implements AppMcpTool {
     if (running.mode != BuildMode.debug) {
       return const AppMcpError('Hot restart works only in debug mode');
     }
-    // The repository reports a failure only in the log: look for an error line it adds.
-    final before = _runs.recentLogs(caller.projectId, limit: 1).lastOrNull?.seq ?? -1;
-    await _runs.hotRestart(caller.projectId);
-    final failed = _runs
-        .recentLogs(caller.projectId)
-        .any((entry) => entry.seq > before && entry.level == LogLevel.error);
-    return failed
+    final took = await _runs.hotRestart(caller.projectId);
+    return took == Duration.zero
         ? const AppMcpError('Hot restart failed; call app_logs to see why')
-        : const AppMcpText('Restarted');
+        : AppMcpText('Restarted in ${took.inMilliseconds} ms');
   }
 }
 

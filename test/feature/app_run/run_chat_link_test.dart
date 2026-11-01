@@ -93,7 +93,7 @@ final class _SpyRunRepository implements IAppRunRepository {
   }
 
   @override
-  Future<void> hotRestart(int projectId) {
+  Future<Duration> hotRestart(int projectId) {
     restarts++;
     return _inner.hotRestart(projectId);
   }

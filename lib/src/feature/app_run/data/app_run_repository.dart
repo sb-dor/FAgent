@@ -41,7 +41,9 @@ abstract interface class IAppRunRepository {
   /// The project's [RunState] right now; [RunIdle] for a project that never ran.
   RunState currentRun(int projectId);
 
-  /// The project's newest [limit] buffered output lines right now, oldest first.
+  /// The newest [limit] output lines of the project's current run right now, oldest first: the
+  /// lines from its last start on (the last run's, while none is active), not those of runs
+  /// before. [logs] still replays the whole buffer.
   List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit});
 
   /// The project's buffered output (at most [kRunLogLimit] newest lines, with their `sentToAgent`
@@ -70,8 +72,9 @@ abstract interface class IAppRunRepository {
   /// the reload failed (the log says why).
   Future<Duration> hotReload(int projectId);
 
-  /// Hot-restarts the app. Does nothing when it is not running; a failure is logged.
-  Future<void> hotRestart(int projectId);
+  /// Hot-restarts the app and returns how long that took; [Duration.zero] when it is not running
+  /// or the restart failed (the log says why).
+  Future<Duration> hotRestart(int projectId);
 
   /// Opens DevTools of the running app in the browser. Does nothing until `flutter run` has
   /// reported the DevTools address (see [RunRunning.devToolsUri]); a failure is logged.
@@ -155,8 +158,10 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
 
   @override
   List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) {
-    final buffer = _runs[projectId]?.buffer ?? const <LogEntry>[];
-    return buffer.sublist(math.max(0, buffer.length - math.max(0, limit)));
+    final run = _runs[projectId];
+    if (run == null) return const <LogEntry>[];
+    final ofRun = run.buffer.where((entry) => entry.seq >= run.runStartSeq).toList();
+    return ofRun.sublist(math.max(0, ofRun.length - math.max(0, limit)));
   }
 
   @override
@@ -210,6 +215,8 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     if (run.launch case final previous?) await previous.stop();
     if (!current()) return;
 
+    // The lines the previous launch logged while it stopped belong to it.
+    run.runStartSeq = run.nextSeq;
     final path = await _projectPath(projectId);
     if (!current()) return;
     if (path == null || !io.Directory(path).existsSync()) {
@@ -284,7 +291,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
   Future<Duration> hotReload(int projectId) => _restart(projectId, full: false);
 
   @override
-  Future<void> hotRestart(int projectId) => _restart(projectId, full: true);
+  Future<Duration> hotRestart(int projectId) => _restart(projectId, full: true);
 
   Future<Duration> _restart(int projectId, {required bool full}) async {
     final run = _runs[projectId];
@@ -450,6 +457,10 @@ final class _ProjectRun {
 
   RunState state = const RunIdle();
   int nextSeq = 0;
+
+  /// The [LogEntry.seq] of the first line of the current run: the lines before it belong to
+  /// earlier runs.
+  int runStartSeq = 0;
 
   /// Changes with every start and stop, so a start that was overtaken gives up.
   int generation = 0;

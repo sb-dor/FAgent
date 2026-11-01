@@ -93,7 +93,7 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   Future<Duration> hotReload(int projectId) async => Duration.zero;
 
   @override
-  Future<void> hotRestart(int projectId) async {}
+  Future<Duration> hotRestart(int projectId) async => Duration.zero;
 
   @override
   Future<void> openDevTools(int projectId) async {}
