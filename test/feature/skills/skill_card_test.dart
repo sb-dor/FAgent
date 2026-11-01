@@ -376,27 +376,33 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('try in chat is only for project skills', (tester) async {
+    testWidgets('try in chat works for built-in, mine and project skills, in the current chat', (
+      tester,
+    ) async {
       useDesktopView(tester);
       await pumpScreen(tester, withChat: true);
-      await select(tester, 'feature-architecture');
+      for (final (name, draft) in [
+        ('feature-architecture', '/feature-architecture '),
+        ('avera-api-client', '/avera-api-client '),
+        ('c', '/c '),
+      ]) {
+        await select(tester, name);
+        expect(_enabled(tester, 'Try in chat'), isTrue, reason: name);
+        await tester.tap(_button('Try in chat'));
+        await tester.pump();
+        await tester.pump();
 
-      expect(_enabled(tester, 'Try in chat'), isFalse);
-      await tester.longPress(_button('Try in chat'));
-      await tester.pump(const Duration(seconds: 1));
-      expect(find.text('Coming in M3'), findsOneWidget);
-
-      await select(tester, 'c');
-      expect(_enabled(tester, 'Try in chat'), isTrue);
-      await tester.tap(_button('Try in chat'));
-      await tester.pump();
-      await tester.pump();
-
-      expect(_data(tester).view, WorkspaceView.chat);
-      expect(
-        tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text,
-        '/c ',
-      );
+        expect(_data(tester).view, WorkspaceView.chat, reason: name);
+        expect(_data(tester).sessionId, chatId, reason: 'no new chat is opened');
+        expect(
+          tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text,
+          draft,
+          reason: name,
+        );
+        tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.clear();
+        _data(tester).openView(WorkspaceView.skills);
+        await tester.pumpAndSettle();
+      }
       await disposeTestApp(tester, dependencies);
     });
 

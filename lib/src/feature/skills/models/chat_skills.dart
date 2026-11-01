@@ -97,6 +97,28 @@ final class ChatSkills {
     return best;
   }
 
+  /// The skills this chat works with: the ones the chat turned off ([chatStates], by skill id; see
+  /// `IChatSkillsRepository`) are dropped. A chat's `true` does not bring in a skill its project
+  /// has off ([ChatSkill.enabled] stays `false`), the same as `skillsForChat`.
+  ChatSkills forChat(Map<String, bool> chatStates) {
+    if (chatStates.isEmpty) return this;
+    return ChatSkills(
+      projectName: projectName,
+      skills: List<ChatSkill>.unmodifiable([
+        for (final skill in skills)
+          if (chatStates[skill.id] ?? true) skill,
+      ]),
+    );
+  }
+
+  /// The skill that `/[name]` runs: of several, the first one that is on for the project (the
+  /// project's, else mine, else a built-in one), the one the `/` menu lists. `null` when there is
+  /// none or it cannot be run ([ChatSkill.invocable]).
+  ChatSkill? runnable(String name) {
+    final skill = skills.where((skill) => skill.enabled && skill.name == name).firstOrNull;
+    return skill != null && skill.invocable ? skill : null;
+  }
+
   static int _rank(SkillSource source) => switch (source) {
     SkillSource.project => 0,
     SkillSource.user => 1,

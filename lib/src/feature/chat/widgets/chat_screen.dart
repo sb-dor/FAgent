@@ -91,50 +91,55 @@ class _ChatScreenState extends State<ChatScreen> {
               valueListenable: _scope.runContext,
               builder: (context, runContext, _) => ValueListenableBuilder<ChatSkills>(
                 valueListenable: _scope.chatSkills,
-                builder: (context, chatSkills, _) => PromptComposer(
-                  runContext: runContext,
-                  onAppCommand: _scope.widget.onAppCommand,
-                  chatSkills: chatSkills,
-                  controller: _scope.textController,
-                  focusNode: _scope.composerFocus,
-                  canSend:
-                      !view.bypassBlocked &&
-                      switch (view.status) {
-                        SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
-                        _ => false,
-                      },
-                  canStop:
-                      view.status == SessionStatus.running ||
-                      view.status == SessionStatus.awaitingPermission,
-                  onSend: _scope.send,
-                  onStop: _scope.stop,
-                  mentionFiles: _scope.fileMentionController.files,
-                  onMentionStart: _scope.refreshFiles,
-                  commands: view.commands,
-                  onAcceptPending: _answerPending(view.pendingPermission, accept: true),
-                  onRejectPending: _answerPending(view.pendingPermission, accept: false),
-                  onCycleMode: view.canChangeConfig && permissionModeOf(view.configOptions) != null
-                      ? _scope.cycleMode
-                      : null,
-                  toolbar: <Widget>[
+                builder: (context, chatSkills, _) =>
                     StateConsumer<ChatSkillsController, ChatSkillsState>(
                       controller: _scope.chatSkillsController,
-                      builder: (context, chatSkillsState, _) => ComposerToolbar(
-                        agentName: agentDisplayName(view.agentId),
-                        agentLocked: view.agentLocked,
-                        options: view.configOptions,
-                        enabled: view.canChangeConfig,
-                        onChanged: _scope.setConfig,
-                        onAttach: _scope.attachFile,
-                        onMakeDefault: _scope.makeDefault,
-                        chatSkills: chatSkills,
-                        chatSkillStates: _scope.chatSkillsController.states,
-                        onToggleChatSkill: _scope.setChatSkill,
-                        onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                      builder: (context, chatSkillsState, _) => PromptComposer(
+                        runContext: runContext,
+                        onAppCommand: _scope.widget.onAppCommand,
+                        // The `/` menu offers the skills this chat has on.
+                        chatSkills: chatSkills.forChat(_scope.chatSkillsController.states),
+                        controller: _scope.textController,
+                        focusNode: _scope.composerFocus,
+                        canSend:
+                            !view.bypassBlocked &&
+                            switch (view.status) {
+                              SessionStatus.cold ||
+                              SessionStatus.idle ||
+                              SessionStatus.error => true,
+                              _ => false,
+                            },
+                        canStop:
+                            view.status == SessionStatus.running ||
+                            view.status == SessionStatus.awaitingPermission,
+                        onSend: _scope.send,
+                        onStop: _scope.stop,
+                        mentionFiles: _scope.fileMentionController.files,
+                        onMentionStart: _scope.refreshFiles,
+                        commands: view.commands,
+                        onAcceptPending: _answerPending(view.pendingPermission, accept: true),
+                        onRejectPending: _answerPending(view.pendingPermission, accept: false),
+                        onCycleMode:
+                            view.canChangeConfig && permissionModeOf(view.configOptions) != null
+                            ? _scope.cycleMode
+                            : null,
+                        toolbar: <Widget>[
+                          ComposerToolbar(
+                            agentName: agentDisplayName(view.agentId),
+                            agentLocked: view.agentLocked,
+                            options: view.configOptions,
+                            enabled: view.canChangeConfig,
+                            onChanged: _scope.setConfig,
+                            onAttach: _scope.attachFile,
+                            onMakeDefault: _scope.makeDefault,
+                            chatSkills: chatSkills,
+                            chatSkillStates: _scope.chatSkillsController.states,
+                            onToggleChatSkill: _scope.setChatSkill,
+                            onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
               ),
             ),
           ),

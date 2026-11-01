@@ -152,7 +152,7 @@ class _Header extends StatelessWidget {
             icon: Icons.copy_outlined,
             onPressed: () => scope.duplicate(item),
           ),
-        // Running a skill from a chat is for project skills for now; the rest arrives with M3.
+        // Skills from git cannot be run from a chat yet.
         _Tooltip(
           message: item.invocable ? null : localization.comingInMilestone('M3'),
           child: CompactButton(

@@ -151,6 +151,29 @@ void main() {
     expect(live.store.events.last.payload, containsPair('stopReason', 'end_turn'));
   });
 
+  test('an embedded resource block reaches the agent intact and is journaled', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    const skill = <String, Object?>{
+      'type': 'resource',
+      'resource': <String, Object?>{
+        'uri': 'skill://feature-architecture/SKILL.md',
+        'mimeType': 'text/markdown',
+        'text': '# Feature architecture\n',
+      },
+    };
+
+    await hub.prompt(chat, 'echo hello', resources: <Map<String, Object?>>[skill]);
+
+    final prompt = live.store.events.firstWhere((e) => e.kind == SessionEventKind.prompt);
+    expect(prompt.payload['prompt'], <Object?>[
+      <String, Object?>{'type': 'text', 'text': 'echo hello'},
+      skill,
+    ]);
+    expect(_agentText(live).join(), 'hello');
+  });
+
   test('config options reach onConfigOptions', () async {
     final reported = <(String, List<Map<String, Object?>>)>[];
     final hub = newHub(onConfigOptions: (agentId, options) => reported.add((agentId, options)));

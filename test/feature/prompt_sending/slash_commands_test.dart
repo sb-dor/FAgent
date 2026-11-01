@@ -12,13 +12,13 @@ ChatSkill _skill(String name, SkillSource source, {bool enabled = true, String d
       description: description,
       source: source,
       enabled: enabled,
-      invocable: source == SkillSource.project,
+      invocable: source != SkillSource.git,
     );
 
 void main() {
   final localization = GeneratedLocalizationEn();
   group('skillCommands', () {
-    test('lists the skills that are on; only a project skill can be run now', () {
+    test('lists the skills that are on, of every source; a git skill cannot be run yet', () {
       final commands = skillCommands(
         ChatSkills(
           projectName: 'p',
@@ -26,6 +26,7 @@ void main() {
             _skill('release', SkillSource.project, description: 'Before a release'),
             _skill('feature-architecture', SkillSource.builtin),
             _skill('off', SkillSource.project, enabled: false),
+            _skill('from-git', SkillSource.git),
           ],
         ),
         localization,
@@ -33,8 +34,9 @@ void main() {
 
       expect(commands, const <SlashCommand>[
         SlashCommand(name: 'release', source: SlashSource.skill, description: 'Before a release'),
+        SlashCommand(name: 'feature-architecture', source: SlashSource.skill),
         SlashCommand(
-          name: 'feature-architecture',
+          name: 'from-git',
           source: SlashSource.skill,
           enabled: false,
           hint: 'Coming in M3',

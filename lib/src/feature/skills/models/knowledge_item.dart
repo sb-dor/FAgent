@@ -105,6 +105,7 @@ abstract class KnowledgeItem with _$KnowledgeItem {
   /// turned off by editing or deleting the file.
   bool get alwaysOn => id == agentsRuleId && readOnly;
 
-  /// Whether the user can run the item as a `/<name>` command in a chat.
-  bool get invocable => kind == KnowledgeKind.skill && source == SkillSource.project;
+  /// Whether the user can run the item as a `/<name>` command in a chat: a skill of the project,
+  /// of the user or a built-in one. A skill installed from git is not served yet.
+  bool get invocable => kind == KnowledgeKind.skill && source != SkillSource.git;
 }
