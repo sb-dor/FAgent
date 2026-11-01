@@ -167,6 +167,7 @@
   "skillTryInChat": "Try in chat",
   "skillReadOnlyNote": "Built-in items are read-only. To change one, duplicate it.",
   "skillAlwaysOn": "Always on",
+  "skillClaudeReadsRule": "Claude reads this rule from .claude/rules",
   "skillAgentsNote": "This is the AGENTS.md of the project. To change it, edit the file; to turn it off, delete it.",
   "skillDescription": "Description",
   "skillWhenToUse": "When to use",

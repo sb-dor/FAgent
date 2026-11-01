@@ -105,6 +105,10 @@ abstract class KnowledgeItem with _$KnowledgeItem {
   /// turned off by editing or deleting the file.
   bool get alwaysOn => id == agentsRuleId && readOnly;
 
+  /// Whether Claude Code reads the item from the project itself: a rule of `.claude/rules`. The app
+  /// leaves it out of the rules it sends and has no switch for it.
+  bool get readByClaude => kind == KnowledgeKind.rule && source == SkillSource.project && !alwaysOn;
+
   /// Whether the user can run the item as a `/<name>` command in a chat: a skill of the project,
   /// of the user or a built-in one. A skill installed from git is not served yet.
   bool get invocable => kind == KnowledgeKind.skill && source != SkillSource.git;

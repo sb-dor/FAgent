@@ -13,7 +13,8 @@ import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widg
 /// (its ✕ makes the project follow the switch again) and a menu to add such a project.
 ///
 /// An item of a project has no global switch, only one for the project of the screen; an
-/// always-on item has none at all.
+/// always-on item has none at all, and a rule Claude reads itself ([KnowledgeItem.readByClaude])
+/// has a note instead.
 /// {@endtemplate}
 class SkillScope extends StatelessWidget {
   /// {@macro skill_scope}
@@ -24,8 +25,10 @@ class SkillScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scope = SkillsConfigInhWidget.of(context);
     final localization = Localization.of(context);
+    // Claude Code loads `.claude/rules` itself, so a switch here would change nothing.
+    if (item.readByClaude) return Text(localization.skillClaudeReadsRule);
+    final scope = SkillsConfigInhWidget.of(context);
     return ListenableBuilder(
       listenable: scope.projectsListenable,
       builder: (context, _) {

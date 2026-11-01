@@ -30,6 +30,16 @@ const String _dartServerId = 'builtin:dart';
 /// The name Dart MCP goes by in the agent (its tools are `mcp__dart__*`).
 const String _dartServerName = 'dart';
 
+/// The rules of [library] whose text goes into the rules prompt, in library order: the enabled
+/// ones, without the project's `AGENTS.md` ([KnowledgeItem.alwaysOn]; the file goes in as
+/// `agentsMd`). With [agentReadsProjectRules] the project's rules are left out too
+/// ([KnowledgeItem.readByClaude]): the agent loads `.claude/rules` itself, so their text would
+/// reach it twice.
+List<KnowledgeItem> promptRules(SkillLibrary library, {required bool agentReadsProjectRules}) => [
+  for (final rule in library.rules)
+    if (rule.enabled && !rule.alwaysOn && !(agentReadsProjectRules && rule.readByClaude)) rule,
+];
+
 /// Builds the [SessionContext] of a chat.
 abstract interface class ISessionContextRepository {
   /// The servers and the `_meta` for a new or loaded agent session of the chat [sessionId], which
@@ -50,10 +60,14 @@ abstract interface class ISessionContextRepository {
 /// ones with the login shell's `PATH` added to their `env`.
 ///
 /// Only for an agent with [AgentDefinition.acceptsClaudeMeta], the `_meta`:
-/// * `systemPrompt.append` — [buildRulesPrompt] of the enabled rules, the project's `AGENTS.md` and
-///   the app's skills that are on for the chat (none without the app's server);
+/// * `systemPrompt.append` — [buildRulesPrompt] of [promptRules] (the project's rules are left
+///   out: Claude Code reads `.claude/rules` itself), the project's `AGENTS.md` and the app's skills
+///   that are on for the chat (none without the app's server);
 /// * `claudeCode.options.allowedTools` — the app's server, whose tools then never ask;
-/// * `claudeCode.options.skills` — the project's skills that are on for the project and the chat.
+/// * `claudeCode.options.skills` — only while a project skill (`.claude/skills`) is off for the
+///   project or the chat: the project's skills that are on. The key is an allowlist, so while it
+///   is sent the user's own Claude Code skills (`~/.claude/skills`) and plugin skills are hidden
+///   too; without it Claude Code shows all of its skills.
 /// {@endtemplate}
 final class SessionContextRepositoryImpl implements ISessionContextRepository {
   /// {@macro session_context_repository}
@@ -118,7 +132,12 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
     final library = await _skills.watch(projectId: projectId, projectRoot: projectRoot).first;
     final chatStates = await _chatSkills.current(sessionId);
     final prompt = buildRulesPrompt(
-      rules: await _enabledRules(library, projectRoot),
+      // Claude Code loads `.claude/rules` itself (the adapter passes the project setting source).
+      rules: await _enabledRules(
+        library,
+        projectRoot,
+        agentReadsProjectRules: agent.acceptsClaudeMeta,
+      ),
       skills: [
         if (withApp)
           for (final skill in appSkillsForChat(library, chatStates))
@@ -127,6 +146,11 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
       agentsMd: await _readOrNull(p.join(projectRoot, 'AGENTS.md')),
       claudeMd: await _readOrNull(p.join(projectRoot, 'CLAUDE.md')),
     );
+    final projectSkills = [
+      for (final skill in library.skills)
+        if (skill.source == SkillSource.project) skill,
+    ];
+    final onForChat = {for (final skill in skillsForChat(library, chatStates)) skill.id};
     return SessionContext(
       servers: entries,
       meta: <String, Object?>{
@@ -134,10 +158,12 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
         'claudeCode': <String, Object?>{
           'options': <String, Object?>{
             if (withApp) 'allowedTools': <String>['mcp__$appMcpServerName'],
-            'skills': <String>[
-              for (final skill in skillsForChat(library, chatStates))
-                if (skill.source == SkillSource.project) skill.name,
-            ],
+            // An allowlist: while it is sent, every skill not on it is hidden from Claude.
+            if (projectSkills.any((skill) => !onForChat.contains(skill.id)))
+              'skills': <String>[
+                for (final skill in projectSkills)
+                  if (onForChat.contains(skill.id)) skill.name,
+              ],
           },
         },
       },
@@ -206,12 +232,15 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
     ];
   }
 
-  /// The texts of the enabled rules in library order. The project's `AGENTS.md` item is left out:
-  /// the file goes in as `agentsMd`. A rule that cannot be read is logged and skipped.
-  Future<List<RuleText>> _enabledRules(SkillLibrary library, String projectRoot) async {
+  /// The texts of [promptRules] in library order. A rule that cannot be read is logged and
+  /// skipped.
+  Future<List<RuleText>> _enabledRules(
+    SkillLibrary library,
+    String projectRoot, {
+    required bool agentReadsProjectRules,
+  }) async {
     final rules = <RuleText>[];
-    for (final rule in library.rules) {
-      if (!rule.enabled || rule.id == agentsRuleId) continue;
+    for (final rule in promptRules(library, agentReadsProjectRules: agentReadsProjectRules)) {
       try {
         final text = await _skills.read(rule.id, projectRoot: projectRoot);
         rules.add((source: rule.source, name: rule.name, text: text));

@@ -14,6 +14,7 @@ import 'package:flutter_code_agent/src/feature/session_context/data/rules_prompt
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/skill_library.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -406,7 +407,6 @@ void main() {
               name: 'style',
               text: '---\nname: style\ndescription: Style\n---\nStyle rule text',
             ),
-            (source: SkillSource.project, name: 'team', text: 'Team rule text'),
           ],
           skills: [
             (name: 'arch', description: 'Architecture'),
@@ -418,6 +418,14 @@ void main() {
       );
       expect(appendOf(result), isNot(contains('AGENTS rule item text')));
       expect('Agents file text'.allMatches(appendOf(result)), hasLength(1));
+    });
+
+    test('project rules are left to Claude, which reads .claude/rules itself', () async {
+      final append = appendOf(await context());
+
+      expect(append, isNot(contains('Team rule text')));
+      expect(append, isNot(contains('## team')));
+      expect(append, contains('Style rule text'));
     });
 
     test('AGENTS.md is left out when CLAUDE.md imports it', () async {
@@ -432,14 +440,17 @@ void main() {
 
       final append = appendOf(await context());
 
-      expect(append, contains('Team rule text'));
+      expect(append, contains('Style rule text'));
       expect(append, isNot(contains('## AGENTS.md')));
     });
 
     test('a rule that cannot be read is skipped', () async {
       skills = MemorySkillsRepository(
         // `unreadable` has no text, so reading it fails.
-        items: [memoryRule('base'), memoryRule('unreadable', source: SkillSource.user)],
+        items: [
+          memoryRule('base'),
+          memoryRule('unreadable', source: SkillSource.user),
+        ],
         texts: {'rule:builtin:base': 'Base rule text'},
       );
 
@@ -453,8 +464,79 @@ void main() {
       expect(optionsOf(await context())['allowedTools'], ['mcp__flutter_code_agent']);
     });
 
-    test('skills are the project skills on for the project and the chat', () async {
+    test('skills is left out while no project skill is off', () async {
+      await skills.setEnabled('skill:project:proj-off', enabled: true, projectId: projectId);
+      chatSkills.states.remove('skill:project:proj-chat-off');
+
+      expect(optionsOf(await context()).containsKey('skills'), isFalse);
+    });
+
+    test('a project skill off in the project sends the ones that are on', () async {
+      chatSkills.states.remove('skill:project:proj-chat-off');
+
+      expect(optionsOf(await context())['skills'], ['proj', 'proj-chat-off']);
+    });
+
+    test('a project skill off in the chat sends the ones that are on', () async {
+      await skills.setEnabled('skill:project:proj-off', enabled: true, projectId: projectId);
+
+      expect(optionsOf(await context())['skills'], ['proj', 'proj-off']);
+    });
+
+    test('skills off in the project and in the chat leave only the rest', () async {
       expect(optionsOf(await context())['skills'], ['proj']);
+    });
+
+    test('a built-in or user skill off does not send skills', () async {
+      await skills.setEnabled('skill:project:proj-off', enabled: true, projectId: projectId);
+      chatSkills.states.remove('skill:project:proj-chat-off');
+      // `chat-off` (built-in) stays off in the chat.
+
+      expect(optionsOf(await context()).containsKey('skills'), isFalse);
+    });
+  });
+
+  group('promptRules', () {
+    KnowledgeItem rule(String name, {SkillSource source = SkillSource.project}) =>
+        memoryRule(name, source: source);
+
+    test('leaves out the root AGENTS.md but keeps .claude/rules/AGENTS.md', () {
+      final rootAgents = SkillLibrary(rules: [rule('AGENTS').copyWith(readOnly: true)]);
+      final rulesAgents = SkillLibrary(rules: [rule('AGENTS')]);
+
+      expect(promptRules(rootAgents, agentReadsProjectRules: false), isEmpty);
+      expect(
+        [for (final it in promptRules(rulesAgents, agentReadsProjectRules: false)) it.id],
+        ['rule:project:AGENTS'],
+      );
+    });
+
+    test('leaves out the project rules for an agent that reads them itself', () {
+      final library = SkillLibrary(
+        rules: [
+          rule('base', source: SkillSource.builtin),
+          rule('style', source: SkillSource.user),
+          rule('team'),
+          rule('AGENTS'),
+        ],
+      );
+
+      expect(
+        [for (final it in promptRules(library, agentReadsProjectRules: true)) it.name],
+        ['base', 'style'],
+      );
+      expect(
+        [for (final it in promptRules(library, agentReadsProjectRules: false)) it.name],
+        ['base', 'style', 'team', 'AGENTS'],
+      );
+    });
+
+    test('leaves out a rule that is off', () {
+      final library = SkillLibrary(
+        rules: [rule('style', source: SkillSource.user).copyWith(enabled: false)],
+      );
+
+      expect(promptRules(library, agentReadsProjectRules: false), isEmpty);
     });
   });
 }
