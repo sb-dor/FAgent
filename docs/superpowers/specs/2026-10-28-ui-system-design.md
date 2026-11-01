@@ -233,10 +233,12 @@ Preview до M6.
 - Проектные скиллы и правила включаются только по проекту, общего переключателя у них нет (id не
   содержит проекта, глобальная строка протекла бы в другие проекты с тем же именем).
 - Git-источники: только «＋ Добавить источник…» с меткой Preview, без выдуманных скиллов.
-- Меню F («Скиллы» в поле ввода) без выбора на чат до M3: он появится вместе с доставкой агенту.
+- Меню F («Скиллы» в поле ввода) выбирает скиллы на чат (M3): выбор хранится в drift
+  `chat_skill_states`, агенту уходят только скиллы, включённые в проекте и в чате.
 - Папки скиллов опрашиваются раз в 2 с (watcher файловой системы пока не нужен).
-- «Попробовать в чате» и `/имя` работают только для проектных скиллов до M3: до доставки через MCP
-  (M3) приложение не передаёт агенту остальные скиллы.
+- «Попробовать в чате» и `/имя` работают для скиллов всех источников (M3): текст `SKILL.md` уходит
+  агенту ресурсом в промпте, остальные файлы скилла агент читает через MCP-сервер приложения.
+  «Попробовать в чате» возвращает в текущий чат с `/имя ` в поле ввода.
 
 ### 3.8 Настройки (экран)
 Навигация 220 px (уже 1100 px окна — иконки 56 px); контент — одна колонка по центру, **max 640
@@ -264,8 +266,10 @@ px**, отступы 32; карточки только в одну колонк�
   они стать не могут.
 - У `mcp_servers` нет столбца `projectId`: переключатель по проекту — таблица `mcp_server_states`
   (`serverKey`, `projectId`, `enabled`; строка есть, только когда сервер выключен в проекте).
-  Встроенные серверы выключаются только по проекту, свои — глобально и по проекту. Серверы не уходят
-  агенту до M3 (доставка через `session/new` → `mcpServers`).
+  Встроенные серверы выключаются только по проекту, свои — глобально и по проекту. С M3 включённые
+  серверы уходят агенту в `session/new` и `session/load` (`mcpServers`): сервер приложения (HTTP на
+  `127.0.0.1`, свой токен у каждого чата), Dart MCP и свои; статус и число инструментов в карточке —
+  настоящие (проба `IMcpProbe`: подключение, `tools/list`, таймаут).
 - Разрешения читают и правят только `permissions.allow` в `.claude/settings.local.json` каждого
   проекта: туда адаптер Claude пишет «Всегда в этом проекте». Общий `.claude/settings.json` не
   читается и не меняется.
@@ -327,9 +331,9 @@ px**, отступы 32; карточки только в одну колонк�
 | `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `refresh(id)`, `install(id)`, `login(id, method)`, `logout(id)`, `openSettings(id)` | Claude — Real (`AgentHub`, `AgentAuth`, `auth status`); Codex, Gemini, свой агент — Preview (`isPreview`, действия бросают `AgentPreviewException`) до M5 |
 | `session_config` (есть) | меню модели/режима/усилия поверх текущего | Real |
 | `chat_search` | `IChatSearchRepository.search(query)` | Real: drift читает чаты, совпадение по `sessions.title` считается в Dart (без учёта регистра, в том числе кириллицы; `%` и `_` ищутся буквально), т.к. SQLite `LIKE` не сворачивает регистр кириллицы |
-| `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка до M3, без данных; доставка агенту — M3 (MCP) |
-| `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус/инструменты и доставка агенту — до M3 |
-| `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Real: `DevicesRepositoryImpl` (`flutter daemon`) и `AppRunRepositoryImpl` (`flutter run --machine`), разбор вывода `RunOutputParser`, аргументы запуска — drift `run_configs`; адреса VM service / DTD / DevTools запуска сохраняются для M3 и M6 |
+| `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка, без данных (вне рамок M3); доставка агенту — Real (M3): правила в системном промпте сессии, скиллы через MCP-сервер приложения (`list_skills`, `load_skill`, `read_skill_file`), выбор на чат — drift `chat_skill_states` |
+| `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус и число инструментов — Real (`IMcpProbe`), доставка агенту — Real (M3: `session/new` и `session/load` → `mcpServers`) |
+| `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Real: `DevicesRepositoryImpl` (`flutter daemon`) и `AppRunRepositoryImpl` (`flutter run --machine`), разбор вывода `RunOutputParser`, аргументы запуска — drift `run_configs`; адреса VM service / DTD / DevTools запуска сохраняются для M3 и M6; Flutter-ошибки debug-запуска — из VM service (`Flutter.Error`, `FlutterErrorListener`, M3), в profile, release и без подключения — разбор текста |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
 | `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`) и версия fvm проекта — Real; версия Flutter и `doctor()` — Fake до M4 |
 | `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<List<CreationStep>>`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?`, `isPreview` (решения этапа 7 — в §3.9) | `create` — Fake до M4 (`FakeProjectCreationRepositoryImpl`); `defaultParent`, `checkTarget` — Real |
