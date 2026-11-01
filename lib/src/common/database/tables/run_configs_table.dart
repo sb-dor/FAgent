@@ -1,0 +1,24 @@
+import 'package:drift/drift.dart';
+import 'package:flutter_code_agent/src/common/database/tables/projects_table.dart';
+
+/// What a project adds to every `flutter run`. There is no row for a project without arguments.
+@DataClassName('RunConfigRow')
+class RunConfigsTable extends Table {
+  @override
+  String? get tableName => 'run_configs';
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{projectId};
+
+  IntColumn get projectId =>
+      integer().references(ProjectsTable, #id, onDelete: KeyAction.cascade)();
+
+  /// The `--flavor`; `null` for none.
+  TextColumn get flavor => text().nullable()();
+
+  /// JSON list of the `--dart-define`s, each `KEY=VALUE`.
+  TextColumn get dartDefines => text().withDefault(const Constant('[]'))();
+
+  /// More arguments as the user typed them.
+  TextColumn get extraArgs => text().withDefault(const Constant(''))();
+}

@@ -27,7 +27,7 @@ class RunStatus extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Text(label, style: style),
+            Text(label ?? localization.runBuilding, style: style),
             const SizedBox(height: 4),
             LinearProgressIndicator(
               value: progress,

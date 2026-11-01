@@ -1,19 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 
 /// {@template run_device_chip}
 /// The chip of the device the app runs on, with the menu of the devices (running ones first, then
-/// the ones that can be launched). The Run tab and the title bar both show it.
+/// the ones that can be launched), and below it the item that opens the run arguments of the project
+/// with a summary of them. The Run tab and the title bar both show it.
 /// {@endtemplate}
 class RunDeviceChip extends StatelessWidget {
   /// {@macro run_device_chip}
   const RunDeviceChip({
     required this.devices,
     required this.selectedDeviceId,
+    required this.arguments,
     required this.onSelected,
+    required this.onEditArguments,
     super.key,
   });
 
@@ -23,8 +28,14 @@ class RunDeviceChip extends StatelessWidget {
   /// The chosen device; `null` while none is chosen.
   final String? selectedDeviceId;
 
+  /// The run arguments of the project, summed up under the item that edits them.
+  final RunArguments arguments;
+
   /// Called with the id of the device the user chose.
   final ValueChanged<String> onSelected;
+
+  /// Called when the user chooses to edit the run arguments.
+  final VoidCallback onEditArguments;
 
   static const String _argumentsValue = '';
 
@@ -35,6 +46,17 @@ class RunDeviceChip extends StatelessWidget {
     DevicePlatform.web => Icons.public,
     DevicePlatform.windows || DevicePlatform.linux => Icons.desktop_windows_outlined,
   };
+
+  /// `--flavor dev · 2 defines · own flags`, or "None".
+  static String _summary(GeneratedLocalization localization, RunArguments arguments) {
+    final parts = <String>[
+      if (arguments.flavor case final flavor?) '--flavor $flavor',
+      if (arguments.dartDefines.isNotEmpty)
+        localization.runArgumentsDefines(arguments.dartDefines.length),
+      if (arguments.extraArgs.trim().isNotEmpty) localization.runArgumentsFlags,
+    ];
+    return parts.isEmpty ? localization.runArgumentsNone : parts.join(' · ');
+  }
 
   AppMenuItem<String> _item(Device device) => AppMenuItem<String>(
     value: device.id,
@@ -71,14 +93,13 @@ class RunDeviceChip extends StatelessWidget {
               AppMenuItem<String>(
                 value: _argumentsValue,
                 title: localization.runArguments,
-                subtitle: localization.comingInMilestone('M2'),
+                subtitle: _summary(localization, arguments),
                 icon: Icons.tune,
-                enabled: false,
               ),
             ],
           ),
       ],
-      onSelected: onSelected,
+      onSelected: (value) => value == _argumentsValue ? onEditArguments() : onSelected(value),
     );
   }
 }

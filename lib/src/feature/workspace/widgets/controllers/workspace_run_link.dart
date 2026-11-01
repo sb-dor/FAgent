@@ -1,6 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
@@ -11,20 +14,23 @@ import 'package:path/path.dart' as p;
 
 /// {@template workspace_run_link}
 /// Ties the run of the selected project to the selected chat, and gives the window's run controls
-/// (title bar, shortcuts) one place to act: start and stop, hot reload and restart, an error or
-/// the picked widget into the composer, the offer for the `@` menu, and the hot reload after an
-/// agent turn.
+/// (title bar, shortcuts) one place to act: start and stop, hot reload and restart, an error, the
+/// picked widget or a screenshot into the composer, the offer for the `@` menu, and the hot reload
+/// after an agent turn.
 ///
-/// It never sends a message: everything it puts into the chat is a draft the user sends.
+/// It never sends a message: everything it puts into the chat is a draft the user sends. It
+/// notifies when the offer for the `@` menu changes without the run changing (a new screenshot).
 /// {@endtemplate}
-class WorkspaceRunLink {
+class WorkspaceRunLink extends ChangeNotifier {
   /// {@macro workspace_run_link}
   WorkspaceRunLink({
     required this._data,
     required this._run,
     required this._actions,
     required this._reloadAfterTurn,
+    this._selectedDevice = _noDevice,
     this.isPreview = false,
+    this._now = DateTime.now,
   }) {
     _data.chatHandle.addListener(_onChatHandle);
   }
@@ -33,6 +39,18 @@ class WorkspaceRunLink {
   final RunController _run;
   final RunActionsController _actions;
   final bool Function() _reloadAfterTurn;
+
+  /// The chosen device as the device list has it; `null` when none is chosen or it is not listed.
+  final Device? Function() _selectedDevice;
+
+  static Device? _noDevice() => null;
+
+  /// Gives the time a screenshot is taken at.
+  final DateTime Function() _now;
+
+  /// Every screenshot taken in this session, per project, oldest first.
+  final Map<int, List<({String path, DateTime time})>> _screenshots =
+      <int, List<({String path, DateTime time})>>{};
 
   /// Whether the run data is made up; the `@` menu says so.
   final bool isPreview;
@@ -44,7 +62,11 @@ class WorkspaceRunLink {
   SessionStatus? _lastStatus;
 
   /// Stops following the chat.
-  void dispose() => _data.chatHandle.removeListener(_onChatHandle);
+  @override
+  void dispose() {
+    _data.chatHandle.removeListener(_onChatHandle);
+    super.dispose();
+  }
 
   /// The selected project when the run state is about it.
   int? get _projectId => _run.state.projectId == _data.projectId ? _data.projectId : null;
@@ -55,16 +77,64 @@ class WorkspaceRunLink {
   /// Whether the app of the selected project is building or running.
   bool get isActive => _projectId != null && (isRunning || _run.state.run is RunBuilding);
 
-  /// Whether there is a device to start the app on.
-  bool get canStart => _projectId != null && _run.state.selectedDeviceId != null;
+  /// Whether the chosen device is an emulator that is still booting; the app cannot start on it yet.
+  bool get isLaunching => _projectId != null && _selectedDevice()?.kind == DeviceKind.available;
+
+  /// Whether there is a device to start the app on: one is chosen, listed and running.
+  bool get canStart => _projectId != null && _selectedDevice()?.kind == DeviceKind.running;
 
   /// Starts the app of the selected project on the chosen device.
   void start() {
     final projectId = _projectId;
     final state = _run.state;
-    final deviceId = state.selectedDeviceId;
-    if (projectId == null || deviceId == null) return;
-    _actions.start(projectId, deviceId: deviceId, mode: state.mode, target: state.target);
+    final device = _selectedDevice();
+    if (projectId == null || device == null || device.kind != DeviceKind.running) return;
+    _actions.start(
+      projectId,
+      device: device,
+      mode: state.mode,
+      target: state.target,
+      arguments: state.arguments,
+    );
+  }
+
+  /// Whether the app can be started from the composer: a running device is chosen and the app of
+  /// the selected project is neither building nor running (the Run button is then not a Stop button).
+  bool get _canStartNow => canStart && !isActive;
+
+  /// Whether the app runs in debug: hot reload and restart need the JIT, and the inspector
+  /// (screenshots) exists in debug only.
+  bool get _runsInDebug => switch (_run.state.run) {
+    RunRunning(:final mode) => _projectId != null && mode == BuildMode.debug,
+    _ => false,
+  };
+
+  /// Whether the app can be hot reloaded or restarted: it runs in debug.
+  bool get canReload => _runsInDebug;
+
+  /// Whether a screenshot can be taken: the app runs in debug (the inspector exists in debug only).
+  bool get canScreenshot => _runsInDebug;
+
+  /// Does the app command [name] (`run`, `reload`, `restart` or `screenshot`) the `/` menu of the
+  /// composer chose; an unknown name or a command that cannot work now does nothing.
+  void runCommand(String name) {
+    switch (name) {
+      case 'run':
+        if (_canStartNow) start();
+      case 'reload':
+        reload();
+      case 'restart':
+        restart();
+      case 'screenshot':
+        screenshot();
+    }
+  }
+
+  /// Takes a screenshot of the running app of the selected project; does nothing unless it runs in
+  /// debug. The path goes into the draft when the shot is ready (the window hands it to
+  /// [addScreenshot]).
+  void screenshot() {
+    if (canScreenshot) _actions.screenshot(_projectId!);
   }
 
   /// Stops the app of the selected project.
@@ -72,14 +142,14 @@ class WorkspaceRunLink {
     if (_projectId case final projectId?) _actions.stop(projectId);
   }
 
-  /// Hot reloads the app; does nothing unless it is running.
+  /// Hot reloads the app; does nothing unless it runs in debug.
   void reload() {
-    if (isRunning) _actions.hotReload(_projectId!);
+    if (canReload) _actions.hotReload(_projectId!);
   }
 
-  /// Hot restarts the app; does nothing unless it is running.
+  /// Hot restarts the app; does nothing unless it runs in debug.
   void restart() {
-    if (isRunning) _actions.hotRestart(_projectId!);
+    if (canReload) _actions.hotRestart(_projectId!);
   }
 
   /// Puts the error of [entry] into the draft of the selected chat and marks the line as sent;
@@ -102,16 +172,41 @@ class WorkspaceRunLink {
     return true;
   }
 
-  /// What the app offers the `@` menu of the selected project's chats: the picked widget and the
-  /// last error; `null` when it has neither.
+  /// Remembers the screenshot [path] (relative to the project) that was taken for [projectId] and
+  /// puts `@path` into the draft of the selected chat. `false` when the screenshot is for the
+  /// selected project and no chat is selected (the path is remembered all the same, so the `@`
+  /// menu offers it).
+  bool addScreenshot(int projectId, String path) {
+    _screenshots.putIfAbsent(projectId, () => <({String path, DateTime time})>[])
+      ..removeWhere((shot) => shot.path == path)
+      ..add((path: path, time: _now()));
+    notifyListeners();
+    if (projectId != _data.projectId) return true;
+    final handle = _data.chatHandle.value;
+    if (handle == null) return false;
+    handle.insertDraft(_screenshotText(path));
+    return true;
+  }
+
+  /// What the app offers the selected project's chats: the picked widget, the last error and the
+  /// last screenshot for the `@` menu, and what the `/` app commands can do now; `null` only when
+  /// the run is not about the selected project.
   RunMentions? get mentions {
     final state = _run.state;
     if (state.projectId == null || state.projectId != _data.projectId) return null;
     final picked = state.picked;
     final error = state.logs.reversed.where((log) => log.error != null).firstOrNull?.error;
-    if (picked == null && error == null) return null;
+    final shots = _screenshots[state.projectId] ?? const <({String path, DateTime time})>[];
     return RunMentions(
       isPreview: isPreview,
+      canStart: _canStartNow,
+      isRunning: isRunning,
+      canReload: canReload,
+      canScreenshot: canScreenshot,
+      screenshot: shots.isEmpty
+          ? null
+          : RunMention(detail: _clock(shots.last.time), text: _screenshotText(shots.last.path)),
+      attachable: <String>{for (final shot in shots) shot.path},
       widget: picked == null
           ? null
           : RunMention(
@@ -120,6 +215,14 @@ class WorkspaceRunLink {
             ),
       error: error == null ? null : RunMention(detail: error.title, text: _errorText(error)),
     );
+  }
+
+  static String _screenshotText(String path) => '@$path';
+
+  /// `HH:mm:ss`.
+  static String _clock(DateTime time) {
+    String two(int value) => value.toString().padLeft(2, '0');
+    return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
   }
 
   static String _widgetText(PickedWidget picked) =>
@@ -131,7 +234,8 @@ class WorkspaceRunLink {
   }
 
   /// A turn of the open chat ended (busy to idle): hot reload once, when the user wants that and
-  /// the app runs. A status published again, or a chat that was never busy, reloads nothing.
+  /// the app runs in debug. A status published again, or a chat that was never busy, reloads
+  /// nothing.
   void _onChatHandle() {
     final handle = _data.chatHandle.value;
     if (handle == null) {

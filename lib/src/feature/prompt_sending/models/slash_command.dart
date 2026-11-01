@@ -40,7 +40,7 @@ final class SlashCommand {
   /// The command can be inserted now.
   final bool enabled;
 
-  /// Why a disabled command cannot be used: the milestone it comes in (`M2`).
+  /// Why a disabled command cannot be used, as it is shown (`Choose a device`).
   final String? hint;
 
   @override
@@ -57,14 +57,6 @@ final class SlashCommand {
 }
 
 final RegExp _whitespace = RegExp(r'\s');
-
-/// Commands of the app. All wait for the run/debug milestone.
-const List<SlashCommand> appCommands = <SlashCommand>[
-  SlashCommand(name: 'run', source: SlashSource.app, enabled: false, hint: 'M2'),
-  SlashCommand(name: 'reload', source: SlashSource.app, enabled: false, hint: 'M2'),
-  SlashCommand(name: 'restart', source: SlashSource.app, enabled: false, hint: 'M2'),
-  SlashCommand(name: 'screenshot', source: SlashSource.app, enabled: false, hint: 'M2'),
-];
 
 /// Commands of the agent from the raw ACP `availableCommands` ([raw] entries are
 /// `{name, description?, input?}`). Entries without a usable name are skipped and

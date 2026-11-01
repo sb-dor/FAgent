@@ -1,15 +1,23 @@
 import 'dart:async';
 
+import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_run_config_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
 
 /// Replays the lines a test preloads.
 final class _ScriptedRun implements IAppRunRepository {
@@ -32,9 +40,10 @@ final class _ScriptedRun implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) async {}
 
   @override
@@ -47,7 +56,33 @@ final class _ScriptedRun implements IAppRunRepository {
   Future<void> hotRestart(int projectId) async {}
 
   @override
+  Future<void> openDevTools(int projectId) async {}
+
+  @override
+  Future<String?> screenshot(int projectId) async => null;
+
+  @override
   Future<void> dispose() async {}
+}
+
+/// The fake run, counting the reloads and restarts it is asked for.
+final class _CountingRun extends ScriptedAppRunRepository {
+  _CountingRun({super.step});
+
+  int reloadCalls = 0;
+  int restartCalls = 0;
+
+  @override
+  Future<Duration> hotReload(int projectId) {
+    reloadCalls++;
+    return super.hotReload(projectId);
+  }
+
+  @override
+  Future<void> hotRestart(int projectId) {
+    restartCalls++;
+    return super.hotRestart(projectId);
+  }
 }
 
 void main() {
@@ -63,7 +98,8 @@ void main() {
       ),
     ]);
     final data = WorkspaceDataController()..selectProject(1);
-    final run = RunController(repository: repository)..watch(1);
+    final run = RunController(repository: repository, configRepository: MemoryRunConfigRepository())
+      ..watch(1);
     final actions = RunActionsController(
       runRepository: repository,
       pickerRepository: FakeWidgetPickerRepositoryImpl(),
@@ -83,6 +119,112 @@ void main() {
     data.dispose();
     return text;
   }
+
+  test('start passes the saved run arguments of the project', () async {
+    final repository = ScriptedAppRunRepository(step: const Duration(milliseconds: 1));
+    final config = MemoryRunConfigRepository(
+      initial: <int, RunArguments>{1: const RunArguments(flavor: 'dev')},
+    );
+    const macos = Device(
+      id: 'macos',
+      name: 'macOS',
+      platform: DevicePlatform.macos,
+      kind: DeviceKind.running,
+    );
+    final data = WorkspaceDataController()..selectProject(1);
+    final run = RunController(repository: repository, configRepository: config)..watch(1);
+    final actions = RunActionsController(
+      runRepository: repository,
+      pickerRepository: FakeWidgetPickerRepositoryImpl(),
+    );
+    final link = WorkspaceRunLink(
+      data: data,
+      run: run,
+      actions: actions,
+      reloadAfterTurn: () => false,
+      selectedDevice: () => macos,
+    );
+    addTearDown(() async {
+      link.dispose();
+      actions.dispose();
+      run.dispose();
+      data.dispose();
+      await repository.dispose();
+    });
+    await pumpEventQueue();
+
+    link.start();
+    await pumpEventQueue();
+
+    expect(repository.starts.single.arguments, const RunArguments(flavor: 'dev'));
+  });
+
+  group('hot reload outside debug', () {
+    const macos = Device(
+      id: 'macos',
+      name: 'macOS',
+      platform: DevicePlatform.macos,
+      kind: DeviceKind.running,
+    );
+
+    for (final mode in <BuildMode>[BuildMode.profile, BuildMode.release]) {
+      test('a ${mode.name} run is never reloaded or restarted, not even after a turn', () async {
+        final repository = _CountingRun(step: const Duration(milliseconds: 1));
+        final data = WorkspaceDataController()..selectProject(1);
+        final run = RunController(
+          repository: repository,
+          configRepository: MemoryRunConfigRepository(),
+        )..watch(1);
+        final actions = RunActionsController(
+          runRepository: repository,
+          pickerRepository: FakeWidgetPickerRepositoryImpl(),
+        );
+        final link = WorkspaceRunLink(
+          data: data,
+          run: run,
+          actions: actions,
+          reloadAfterTurn: () => true,
+          selectedDevice: () => macos,
+        );
+        addTearDown(() async {
+          link.dispose();
+          actions.dispose();
+          run.dispose();
+          data.dispose();
+          await repository.dispose();
+        });
+        await pumpEventQueue();
+        run.choose(mode: mode);
+        await pumpEventQueue();
+        link.start();
+        for (var i = 0; i < 50 && !link.isRunning; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+        }
+        expect(link.isRunning, isTrue);
+
+        link
+          ..reload()
+          ..restart()
+          ..runCommand('reload')
+          ..runCommand('restart');
+        for (final status in <SessionStatus>[SessionStatus.running, SessionStatus.idle]) {
+          data.publishChatHandle(
+            ChatHandle(
+              sessionId: 7,
+              view: ChatView(sessionId: 7, agentId: 'claude', items: const [], status: status),
+              insertDraft: (_) {},
+            ),
+          );
+        }
+        await pumpEventQueue();
+
+        expect(link.canReload, isFalse);
+        expect(link.mentions!.canReload, isFalse);
+        expect(link.mentions!.isRunning, isTrue);
+        expect((repository.reloadCalls, repository.restartCalls), (0, 0));
+      });
+    }
+  });
 
   group('the @error offer', () {
     test('names the file and the line', () async {
@@ -146,7 +288,10 @@ void main() {
           ),
         ]);
         final data = WorkspaceDataController()..selectProject(1);
-        final run = RunController(repository: repository)..watch(1);
+        final run = RunController(
+          repository: repository,
+          configRepository: MemoryRunConfigRepository(),
+        )..watch(1);
         final actions = RunActionsController(
           runRepository: repository,
           pickerRepository: FakeWidgetPickerRepositoryImpl(),

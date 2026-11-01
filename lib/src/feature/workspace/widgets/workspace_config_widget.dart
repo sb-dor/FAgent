@@ -6,10 +6,12 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -80,6 +82,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final RunController runController;
   late final RunActionsController runActionsController;
 
+  /// Saves the run arguments the user edits in the dialog of the device menu.
+  late final RunConfigController runConfigController;
+
   /// The skills of the selected project, for the chats (the 🧩 chip, the `/` menu, the skill lines).
   /// The Skills screen has a library of its own.
   late final SkillLibraryController skillLibraryController;
@@ -91,9 +96,13 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// The text for the chat that is being created (see [createChat]).
   late final PendingChatDraft _draft = PendingChatDraft(data: dataController);
 
-  /// Whether any of the run data (the run, the devices, the widget picker) is made up. Everything
-  /// that shows it (the Run tab, the title bar, the `@` menu) says so.
+  /// Whether the run or the devices are made up. Everything that shows it (the Run tab, the title
+  /// bar, the `@` menu) says so. The widget picker is separate: see [pickerIsPreview].
   late final bool runIsPreview;
+
+  /// Whether the widget picker is made up. Next to a real run its widget (a `BookingCard` that is
+  /// not in the app) would be a lie, so the Run tab says "Coming in M6" instead of picking.
+  late final bool pickerIsPreview;
 
   /// Asks the user for a folder; the argument is the text of the confirm button. Tests replace it,
   /// because the native picker cannot be driven from a widget test.
@@ -138,11 +147,14 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     )..addListener(_onSessionCreated);
     sessionsController.watchAll();
     runIsPreview =
-        dependencies.appRunRepository.isPreview ||
-        dependencies.devicesRepository.isPreview ||
-        dependencies.widgetPickerRepository.isPreview;
+        dependencies.appRunRepository.isPreview || dependencies.devicesRepository.isPreview;
+    pickerIsPreview = dependencies.widgetPickerRepository.isPreview;
     devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
-    runController = RunController(repository: dependencies.appRunRepository);
+    runController = RunController(
+      repository: dependencies.appRunRepository,
+      configRepository: dependencies.runConfigRepository,
+    );
+    runConfigController = RunConfigController(repository: dependencies.runConfigRepository);
     runActionsController = RunActionsController(
       runRepository: dependencies.appRunRepository,
       pickerRepository: dependencies.widgetPickerRepository,
@@ -152,6 +164,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       run: runController,
       actions: runActionsController,
       reloadAfterTurn: () => settingsController.settings.reloadAfterTurn,
+      selectedDevice: () => selectedDevice,
       isPreview: runIsPreview,
     );
     skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
@@ -183,6 +196,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..removeListener(_onRunAction)
       ..dispose();
     runController.dispose();
+    runConfigController.dispose();
     skillLibraryController.dispose();
     devicesController.dispose();
     projectCreation.dispose();
@@ -216,27 +230,101 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     }
   }
 
-  /// Picks the first running device for the selected project while none is chosen and the devices
-  /// are known, so every way to start the app (the Run tab, the title bar) sees a device whether or
-  /// not the Run tab was ever opened. A device the user chose is never replaced.
+  /// The devices known right now; empty while they load or when they cannot be listed.
+  List<Device> get _devices => switch (devicesController.state) {
+    Devices$CompletedState(:final devices) => devices,
+    _ => const <Device>[],
+  };
+
+  /// The device chosen for the selected project, if it is in the list.
+  Device? get selectedDevice {
+    final id = runController.state.selectedDeviceId;
+    return id == null ? null : _devices.where((device) => device.id == id).firstOrNull;
+  }
+
+  /// The chosen device as it was the last time it was in the list: when it leaves the list it may
+  /// be because the emulator behind it has booted, and that is told by its `emulatorId`.
+  Device? _lastSelected;
+
+  /// Chooses [deviceId] for the next start; an emulator that is not running yet is booted.
+  void chooseDevice(String deviceId) {
+    runController.choose(deviceId: deviceId);
+    devicesController.launch(deviceId);
+  }
+
+  /// Opens the run arguments (flavor, defines, own flags) of the selected project; nothing happens
+  /// without one.
+  void editRunArguments() {
+    final projectId = dataController.projectId;
+    if (projectId == null) return;
+    RunArgumentsDialog.show(
+      context,
+      projectId: projectId,
+      arguments: runController.state.arguments,
+      controller: runConfigController,
+    );
+  }
+
+  /// Opens Settings → Flutter (the Run tab links there when there is no Flutter SDK).
+  void openFlutterSettings() => dataController.openView(WorkspaceView.settings, section: 'flutter');
+
+  /// Keeps the chosen device in step with the devices that exist, for the selected project:
+  ///
+  /// - none chosen: the first running device, so every way to start the app (the Run tab, the title
+  ///   bar) sees a device whether or not the Run tab was ever opened;
+  /// - the chosen device is gone: if it was an emulator that has booted, the running device of the
+  ///   same emulator; otherwise the first running device, or none.
+  ///
+  /// A device the user chose that is still in the list is never replaced. Nothing changes while the
+  /// devices are not known (loading, or an error).
   void _chooseDefaultDevice() {
     final run = runController.state;
-    if (run.projectId == null || run.selectedDeviceId != null) return;
-    if (devicesController.state case Devices$CompletedState(:final devices)) {
-      final first = devices.where((device) => device.kind == DeviceKind.running).firstOrNull;
-      if (first != null) runController.choose(deviceId: first.id);
+    if (run.projectId == null) return;
+    if (devicesController.state is! Devices$CompletedState) return;
+    final devices = _devices;
+    final chosenId = run.selectedDeviceId;
+    final chosen = chosenId == null ? null : devices.where((d) => d.id == chosenId).firstOrNull;
+    if (chosen != null) {
+      _lastSelected = chosen;
+      return;
+    }
+    final booted = chosenId == null || _lastSelected == null || _lastSelected!.id != chosenId
+        ? null
+        : _runningOf(devices, _lastSelected!.emulatorId);
+    final next = booted ?? devices.where((d) => d.kind == DeviceKind.running).firstOrNull;
+    _lastSelected = null;
+    if (next != null) {
+      runController.choose(deviceId: next.id);
+    } else if (chosenId != null) {
+      runController.clearDevice();
     }
   }
+
+  static Device? _runningOf(List<Device> devices, String? emulatorId) => emulatorId == null
+      ? null
+      : devices
+            .where((d) => d.kind == DeviceKind.running && d.emulatorId == emulatorId)
+            .firstOrNull;
 
   /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.
   /// The pick may finish after the window moved to another project: the widget belongs to the
   /// project it was picked in, so it is dropped unless that project is still the followed one.
   void _onRunAction() {
-    if (runActionsController.state case RunActions$CompletedState(:final picked?, :final projectId)
-        when projectId == runController.state.projectId) {
+    final state = runActionsController.state;
+    if (state is! RunActions$CompletedState || identical(state, _handledAction)) return;
+    _handledAction = state;
+    if (state.picked case final picked? when state.projectId == runController.state.projectId) {
       runController.setPicked(picked);
     }
+    if (state case RunActions$CompletedState(:final screenshot?, :final projectId?)) {
+      if (!runLink.addScreenshot(projectId, screenshot) && mounted) {
+        _showMessage(Localization.of(context).noChatForScreenshot);
+      }
+    }
   }
+
+  /// The last finished action that was dealt with, so one result is not taken twice.
+  RunActions$CompletedState? _handledAction;
 
   /// The selected project with its latest data (trust changes, renames).
   Project? get selectedProject {

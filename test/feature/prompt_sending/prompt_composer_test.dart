@@ -39,6 +39,7 @@ void main() {
     VoidCallback? onAcceptPending,
     VoidCallback? onRejectPending,
     RunMentions? runContext,
+    ValueChanged<String>? onAppCommand,
   }) => testApp(
     PromptComposer(
       controller: text,
@@ -55,6 +56,7 @@ void main() {
       onAcceptPending: onAcceptPending,
       onRejectPending: onRejectPending,
       runContext: runContext,
+      onAppCommand: onAppCommand,
     ),
   );
 
@@ -451,6 +453,21 @@ void main() {
       ),
     );
 
+    const withShot = RunMentions(
+      widget: RunMention(
+        detail: 'BookingCard · booking_card.dart:42',
+        text: '@widget BookingCard (lib/booking_card.dart:42)',
+      ),
+      error: RunMention(
+        detail: 'Layout overflow',
+        text: '@error Layout overflow (booking_card.dart:42:12)',
+      ),
+      screenshot: RunMention(
+        detail: '09:05:07',
+        text: '@.dart_tool/flutter_code_agent/screenshots/screenshot-1.png',
+      ),
+    );
+
     Widget withRun({RunMentions? context = run}) =>
         composer(canSend: true, canStop: false, mentionFiles: files, runContext: context);
 
@@ -490,11 +507,13 @@ void main() {
       expect(text.text, '@error Layout overflow (booking_card.dart:42:12) ');
     });
 
-    testWidgets('the screenshot says M2, cannot be chosen and arrows skip it', (tester) async {
+    testWidgets('without a shot the Screenshot row says how to take one and cannot be chosen', (
+      tester,
+    ) async {
       await tester.pumpWidget(withRun());
       await tester.enterText(find.byType(TextField), '@');
       await tester.pump();
-      expect(find.text('Coming in M2'), findsOneWidget);
+      expect(find.text('Take one in the Run tab'), findsOneWidget);
 
       await tester.tap(find.text('Screenshot'), kind: PointerDeviceKind.mouse);
       await tester.pump();
@@ -505,6 +524,40 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       expect(text.text, '@lib/main.dart ');
+    });
+
+    testWidgets('with a shot the Screenshot row shows its time and inserts the path', (
+      tester,
+    ) async {
+      await tester.pumpWidget(withRun(context: withShot));
+      await tester.enterText(find.byType(TextField), '@');
+      await tester.pump();
+
+      expect(find.text('09:05:07'), findsOneWidget);
+      expect(find.text('Take one in the Run tab'), findsNothing);
+
+      await tester.tap(find.text('Screenshot'), kind: PointerDeviceKind.mouse);
+      await tester.pump();
+      expect(text.text, '@.dart_tool/flutter_code_agent/screenshots/screenshot-1.png ');
+    });
+
+    testWidgets('a shot alone is enough to open the run section', (tester) async {
+      await tester.pumpWidget(
+        withRun(
+          context: const RunMentions(
+            screenshot: RunMention(
+              detail: '09:05:07',
+              text: '@.dart_tool/flutter_code_agent/screenshots/screenshot-1.png',
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '@shot');
+      await tester.pump();
+
+      expect(find.text('From the run'), findsOneWidget);
+      expect(find.text('Screenshot'), findsOneWidget);
+      expect(find.text('Selected widget'), findsNothing);
     });
 
     testWidgets('typing narrows the run rows like the files', (tester) async {
@@ -560,8 +613,18 @@ void main() {
       SlashCommand(name: 'review', source: SlashSource.agent),
     ];
 
-    Widget withCommands({VoidCallback? onSend}) =>
-        composer(canSend: true, canStop: false, onSend: onSend, commands: commands);
+    Widget withCommands({
+      VoidCallback? onSend,
+      RunMentions? runContext,
+      ValueChanged<String>? onAppCommand,
+    }) => composer(
+      canSend: true,
+      canStop: false,
+      onSend: onSend,
+      commands: commands,
+      runContext: runContext,
+      onAppCommand: onAppCommand,
+    );
 
     testWidgets('typing / at the start suggests commands and Enter inserts one', (tester) async {
       var sent = 0;
@@ -632,16 +695,27 @@ void main() {
       expect(find.text('/compact'), findsNothing);
     });
 
-    testWidgets('app commands are shown but not inserted', (tester) async {
+    testWidgets('app commands that cannot run now are shown with why, and not inserted', (
+      tester,
+    ) async {
       var sent = 0;
+      final called = <String>[];
       // The field itself also shows the typed `/run`.
       final row = find.descendant(of: find.byType(CommandSuggestions), matching: find.text('/run'));
-      await tester.pumpWidget(withCommands(onSend: () => sent++));
+      await tester.pumpWidget(
+        composer(
+          canSend: true,
+          canStop: false,
+          onSend: () => sent++,
+          commands: commands,
+          onAppCommand: called.add,
+        ),
+      );
       await tester.enterText(find.byType(TextField), '/run');
       await tester.pump();
 
       expect(row, findsOneWidget);
-      expect(find.text('Coming in M2'), findsOneWidget);
+      expect(find.text('Choose a device'), findsOneWidget);
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.tap(row, kind: PointerDeviceKind.mouse);
@@ -649,7 +723,77 @@ void main() {
 
       expect(text.text, '/run');
       expect(sent, 0);
+      expect(called, isEmpty);
       expect(row, findsOneWidget);
+    });
+
+    testWidgets('without a running app reload, restart and screenshot say the app is not running', (
+      tester,
+    ) async {
+      await tester.pumpWidget(withCommands(runContext: const RunMentions(canStart: true)));
+      await tester.enterText(find.byType(TextField), '/re');
+      await tester.pump();
+
+      expect(find.text('App is not running'), findsNWidgets(3));
+      expect(find.text('Choose a device'), findsNothing);
+    });
+
+    testWidgets('/run is enabled when the app can start; choosing it calls onAppCommand', (
+      tester,
+    ) async {
+      final called = <String>[];
+      await tester.pumpWidget(
+        withCommands(runContext: const RunMentions(canStart: true), onAppCommand: called.add),
+      );
+      await tester.enterText(find.byType(TextField), '/run');
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(called, <String>['run']);
+      expect(text.text, isEmpty);
+    });
+
+    testWidgets('with a running app /reload calls onAppCommand and empties the field', (
+      tester,
+    ) async {
+      final called = <String>[];
+      await tester.pumpWidget(
+        withCommands(
+          runContext: const RunMentions(canReload: true, canScreenshot: true),
+          onAppCommand: called.add,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '/reload');
+      await tester.pump();
+      expect(find.text('App is not running'), findsNothing);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+
+      expect(called, <String>['reload']);
+      expect(text.text, isEmpty);
+      expect(find.byType(CommandSuggestions), findsNothing);
+    });
+
+    testWidgets('clicking /screenshot calls onAppCommand', (tester) async {
+      final called = <String>[];
+      await tester.pumpWidget(
+        withCommands(
+          runContext: const RunMentions(canReload: true, canScreenshot: true),
+          onAppCommand: called.add,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '/screen');
+      await tester.pump();
+      await tester.tap(
+        find.descendant(of: find.byType(CommandSuggestions), matching: find.text('/screenshot')),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+
+      expect(called, <String>['screenshot']);
+      expect(text.text, isEmpty);
     });
 
     testWidgets('Escape closes the list for this /, a new one reopens it', (tester) async {

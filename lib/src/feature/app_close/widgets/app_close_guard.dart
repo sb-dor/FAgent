@@ -39,6 +39,8 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             hub: dependencies.agentHub,
             database: dependencies.database,
             settings: AppSettingsRepositoryImpl(database: dependencies.database),
+            appRun: dependencies.appRunRepository,
+            devices: dependencies.devicesRepository,
           ),
     )..watch();
   }

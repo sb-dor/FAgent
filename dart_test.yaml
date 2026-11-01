@@ -4,3 +4,6 @@ tags:
       Talks to the real Claude ACP adapter: needs network, Node.js 22+ and a
       logged-in Claude Code. Run with: flutter test --tags adapter --run-skipped
     timeout: 5m
+  flutter:
+    # Runs the real `flutter run` on macOS; the test skips itself unless FLUTTER_RUN_TEST=1.
+    timeout: 10m

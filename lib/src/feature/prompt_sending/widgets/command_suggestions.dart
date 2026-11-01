@@ -124,7 +124,7 @@ class _CommandRowState extends State<_CommandRow> {
               : Text(description, maxLines: 1, overflow: TextOverflow.ellipsis),
           trailing: !command.enabled && hint != null
               ? Text(
-                  localization.comingInMilestone(hint),
+                  hint,
                   style: Theme.of(context).textTheme.labelSmall
                       ?.copyWith(color: context.colors.muted),
                 )

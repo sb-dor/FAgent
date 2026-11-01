@@ -3,11 +3,13 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_card.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_logs.dart';
 
@@ -24,12 +26,15 @@ class RunTab extends StatefulWidget {
   const RunTab({
     required this.projectId,
     required this.isPreview,
+    required this.pickerIsPreview,
     required this.devices,
     required this.run,
     required this.actions,
+    required this.runConfig,
     required this.onSendError,
     required this.onAddWidget,
     required this.onOpenFile,
+    required this.onOpenFlutterSettings,
     super.key,
   });
 
@@ -38,6 +43,10 @@ class RunTab extends StatefulWidget {
 
   /// Whether the run data is made up.
   final bool isPreview;
+
+  /// Whether the widget picker is made up. Next to a real run it is not offered: the button says
+  /// the picker comes in M6, because a made-up widget would not be in the app.
+  final bool pickerIsPreview;
 
   /// The devices that can run the app.
   final DevicesController devices;
@@ -48,6 +57,9 @@ class RunTab extends StatefulWidget {
   /// The actions (start, stop, reload, pick a widget).
   final RunActionsController actions;
 
+  /// Saves the run arguments the user edits in the dialog the device menu opens.
+  final RunConfigController runConfig;
+
   /// Called with the log line when the user sends its error to the agent.
   final ValueChanged<LogEntry> onSendError;
 
@@ -56,6 +68,9 @@ class RunTab extends StatefulWidget {
 
   /// Called with a file (as the run reports it) and a line when the user opens a file.
   final void Function(String path, int? line) onOpenFile;
+
+  /// Called when the user follows the link to the Flutter settings (shown when there is no SDK).
+  final VoidCallback onOpenFlutterSettings;
 
   @override
   State<RunTab> createState() => _RunTabState();
@@ -77,11 +92,6 @@ class _RunTabState extends State<RunTab> {
     super.dispose();
   }
 
-  List<Device> get _devices => switch (widget.devices.state) {
-    Devices$CompletedState(:final devices) => devices,
-    _ => const <Device>[],
-  };
-
   void _onAction() {
     final state = widget.actions.state;
     if (_picking && (state is RunActions$CompletedState || state is RunActions$ErrorState)) {
@@ -89,8 +99,25 @@ class _RunTabState extends State<RunTab> {
     }
   }
 
-  void _comingInM2() {
-    final message = Localization.of(context).comingInMilestone('M2');
+  /// Chooses the device; an emulator that is not running yet is booted.
+  void _chooseDevice(String id) {
+    widget.run.choose(deviceId: id);
+    widget.devices.launch(id);
+  }
+
+  void _editArguments() {
+    final projectId = widget.projectId;
+    if (projectId == null) return;
+    RunArgumentsDialog.show(
+      context,
+      projectId: projectId,
+      arguments: widget.run.state.arguments,
+      controller: widget.runConfig,
+    );
+  }
+
+  void _comingIn(String milestone) {
+    final message = Localization.of(context).comingInMilestone(milestone);
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
   }
 
@@ -100,13 +127,18 @@ class _RunTabState extends State<RunTab> {
     if (projectId == null) return;
     switch (action) {
       case RunAction.start:
-        final deviceId = state.selectedDeviceId;
-        if (deviceId != null) {
+        final devices = switch (widget.devices.state) {
+          Devices$CompletedState(:final devices) => devices,
+          _ => const <Device>[],
+        };
+        final device = devices.where((device) => device.id == state.selectedDeviceId).firstOrNull;
+        if (device != null && device.kind == DeviceKind.running) {
           widget.actions.start(
             projectId,
-            deviceId: deviceId,
+            device: device,
             mode: state.mode,
             target: state.target,
+            arguments: state.arguments,
           );
         }
       case RunAction.stop:
@@ -116,10 +148,16 @@ class _RunTabState extends State<RunTab> {
       case RunAction.restart:
         widget.actions.hotRestart(projectId);
       case RunAction.pick:
+        if (widget.pickerIsPreview && !widget.isPreview) {
+          _comingIn('M6');
+          return;
+        }
         setState(() => _picking = true);
         widget.actions.pickWidget(projectId);
-      case RunAction.screenshot || RunAction.devTools:
-        _comingInM2();
+      case RunAction.screenshot:
+        widget.actions.screenshot(projectId);
+      case RunAction.devTools:
+        widget.actions.openDevTools(projectId);
     }
   }
 
@@ -143,9 +181,15 @@ class _RunTabState extends State<RunTab> {
           children: <Widget>[
             RunHeader(
               state: state,
-              devices: _devices,
+              devices: widget.devices.state,
               isPreview: widget.isPreview,
-              onDevice: (id) => widget.run.choose(deviceId: id),
+              onDevice: _chooseDevice,
+              onEditArguments: _editArguments,
+              onRetryDevices: widget.devices.watch,
+              onOpenFlutterSettings: widget.onOpenFlutterSettings,
+              launchFailed:
+                  state.selectedDeviceId != null &&
+                  widget.devices.launchFailed(state.selectedDeviceId!),
               onMode: (mode) => widget.run.choose(mode: mode),
               onAction: _onRunAction,
             ),

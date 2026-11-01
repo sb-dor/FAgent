@@ -2,15 +2,27 @@ import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/memory_devices_repository.dart';
+import '../../support/memory_run_config_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
+
+const Device _macos = Device(
+  id: 'macos',
+  name: 'macOS',
+  platform: DevicePlatform.macos,
+  kind: DeviceKind.running,
+);
 
 const _step = Duration(milliseconds: 1);
 
@@ -56,22 +68,35 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) async {}
 
   @override
   Future<void> markSent(int projectId, int seq) async => marked.add((projectId, seq));
 
+  /// The projects `stop` was called for.
+  final List<int> stops = <int>[];
+
   @override
-  Future<void> stop(int projectId) async {}
+  Future<void> stop(int projectId) async => stops.add(projectId);
 
   @override
   Future<Duration> hotReload(int projectId) async => Duration.zero;
 
   @override
   Future<void> hotRestart(int projectId) async {}
+
+  @override
+  Future<void> openDevTools(int projectId) async {}
+
+  /// When set, `screenshot` waits for it (a shot that hangs).
+  Completer<String?>? screenshotGate;
+
+  @override
+  Future<String?> screenshot(int projectId) async => screenshotGate?.future;
 
   @override
   Future<void> dispose() async {
@@ -91,7 +116,10 @@ void main() {
 
     setUp(() {
       scripted = _ScriptedRunRepository();
-      controller = RunController(repository: scripted);
+      controller = RunController(
+        repository: scripted,
+        configRepository: MemoryRunConfigRepository(),
+      );
     });
 
     tearDown(() async {
@@ -134,12 +162,15 @@ void main() {
     });
 
     test('switching projects drops the old run and logs', () async {
-      final fake = FakeAppRunRepositoryImpl(step: _step);
+      final fake = ScriptedAppRunRepository(step: _step);
       addTearDown(fake.dispose);
-      final fakeController = RunController(repository: fake)..watch(1);
+      final fakeController = RunController(
+        repository: fake,
+        configRepository: MemoryRunConfigRepository(),
+      )..watch(1);
       addTearDown(fakeController.dispose);
       await pumpEventQueue();
-      await fake.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await fake.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await Future<void>.delayed(_step * 50);
       expect(fakeController.state.run, isA<RunRunning>());
       expect(fakeController.state.logs, isNotEmpty);
@@ -221,6 +252,16 @@ void main() {
       expect(controller.state.target, 'lib/main_dev.dart');
     });
 
+    test('clearDevice forgets the chosen device', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller
+        ..choose(deviceId: 'macos')
+        ..clearDevice();
+
+      expect(controller.state.selectedDeviceId, isNull);
+    });
+
     test('markSent flags one log entry as sent to the agent', () async {
       controller.watch(1);
       await pumpEventQueue();
@@ -285,12 +326,15 @@ void main() {
     );
 
     test('coming back to a running project restores its logs, error and sent flags', () async {
-      final fake = FakeAppRunRepositoryImpl(step: _step);
+      final fake = ScriptedAppRunRepository(step: _step);
       addTearDown(fake.dispose);
-      final fakeController = RunController(repository: fake)..watch(1);
+      final fakeController = RunController(
+        repository: fake,
+        configRepository: MemoryRunConfigRepository(),
+      )..watch(1);
       addTearDown(fakeController.dispose);
       await pumpEventQueue();
-      await fake.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      await fake.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await Future<void>.delayed(_step * 50);
       await fake.hotReload(1);
       await Future<void>.delayed(_step * 50);
@@ -316,9 +360,120 @@ void main() {
     });
   });
 
+  group('RunController arguments', () {
+    late _ScriptedRunRepository scripted;
+    late MemoryRunConfigRepository config;
+    late RunController controller;
+
+    setUp(() {
+      scripted = _ScriptedRunRepository();
+      config = MemoryRunConfigRepository(
+        initial: <int, RunArguments>{
+          1: const RunArguments(flavor: 'dev'),
+          2: const RunArguments(dartDefines: <String>['A=1']),
+        },
+      );
+      controller = RunController(repository: scripted, configRepository: config);
+    });
+
+    tearDown(() async {
+      controller.dispose();
+      await scripted.dispose();
+    });
+
+    test('follow the saved arguments of the project and change with them', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      expect(controller.state.arguments, const RunArguments(flavor: 'dev'));
+
+      await config.save(1, const RunArguments(flavor: 'prod'));
+      await pumpEventQueue();
+      expect(controller.state.arguments, const RunArguments(flavor: 'prod'));
+    });
+
+    test('belong to the project: a switch brings the other project\'s arguments', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.watch(2);
+      await pumpEventQueue();
+      expect(controller.state.arguments, const RunArguments(dartDefines: <String>['A=1']));
+
+      await config.save(1, const RunArguments(flavor: 'late'));
+      await pumpEventQueue();
+      expect(
+        controller.state.arguments,
+        const RunArguments(dartDefines: <String>['A=1']),
+        reason: 'a save for the project that was left changes nothing',
+      );
+    });
+
+    test('a start after a save carries the saved flavor', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final run = RunController(repository: repository, configRepository: config)..watch(1);
+      addTearDown(run.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+      );
+      addTearDown(actions.dispose);
+      await pumpEventQueue();
+
+      actions.start(
+        1,
+        device: _macos,
+        mode: run.state.mode,
+        target: run.state.target,
+        arguments: run.state.arguments,
+      );
+      await Future<void>.delayed(_step * 50);
+
+      expect(repository.starts.single.arguments.toFlutterArgs(), <String>['--flavor', 'dev']);
+    });
+  });
+
+  group('RunConfigController', () {
+    test('save stores the arguments and completes', () async {
+      final repository = MemoryRunConfigRepository();
+      final controller = RunConfigController(repository: repository);
+      addTearDown(controller.dispose);
+
+      controller.save(1, const RunArguments(flavor: 'dev'));
+      expect(controller.state, isA<RunConfig$InProgressState>());
+      await pumpEventQueue();
+
+      expect(controller.state, isA<RunConfig$CompletedState>());
+      expect(repository.saved.single, (1, const RunArguments(flavor: 'dev')));
+    });
+
+    test('a failed save is an error state', () async {
+      final repository = MemoryRunConfigRepository()..saveError = Exception('no');
+      final controller = RunConfigController(repository: repository);
+      addTearDown(controller.dispose);
+
+      controller.save(1, const RunArguments());
+      await pumpEventQueue();
+
+      expect(controller.state, isA<RunConfig$ErrorState>());
+    });
+
+    test('drops a save made while another is in progress', () async {
+      final repository = MemoryRunConfigRepository();
+      final controller = RunConfigController(repository: repository);
+      addTearDown(controller.dispose);
+
+      controller
+        ..save(1, const RunArguments(flavor: 'a'))
+        ..save(1, const RunArguments(flavor: 'b'));
+      await pumpEventQueue();
+
+      expect(repository.saved.map((e) => e.$2.flavor), <String?>['a']);
+    });
+  });
+
   group('RunActionsController', () {
     test('start, reload and stop go to the repository and complete', () async {
-      final repository = FakeAppRunRepositoryImpl(step: _step);
+      final repository = ScriptedAppRunRepository(step: _step);
       addTearDown(repository.dispose);
       final states = <RunState>[];
       final subscription = repository.watchRun(1).listen(states.add);
@@ -329,7 +484,7 @@ void main() {
       );
       addTearDown(actions.dispose);
 
-      actions.start(1, deviceId: 'macos', mode: BuildMode.debug, target: 'lib/main.dart');
+      actions.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
       await Future<void>.delayed(_step * 50);
       expect(states.last, isA<RunRunning>());
       expect(actions.state, isA<RunActions$CompletedState>());
@@ -344,7 +499,7 @@ void main() {
     });
 
     test('pickWidget completes with the picked widget', () async {
-      final repository = FakeAppRunRepositoryImpl(step: _step);
+      final repository = ScriptedAppRunRepository(step: _step);
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
@@ -360,8 +515,29 @@ void main() {
       expect(state.picked!.name, 'BookingCard');
     });
 
+    test('stop is not dropped while another action hangs', () async {
+      final repository = _ScriptedRunRepository()..screenshotGate = Completer<String?>();
+      addTearDown(repository.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+      );
+      addTearDown(actions.dispose);
+
+      actions.screenshot(1);
+      await pumpEventQueue();
+      expect(actions.isProcessing, isTrue);
+      actions.stop(1);
+      await pumpEventQueue();
+
+      expect(repository.stops, <int>[1]);
+      repository.screenshotGate!.complete(null);
+      await pumpEventQueue();
+      expect(actions.state, isA<RunActions$CompletedState>());
+    });
+
     test('drops a second action while one is in progress', () async {
-      final repository = FakeAppRunRepositoryImpl(step: _step * 20);
+      final repository = ScriptedAppRunRepository(step: _step * 20);
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
@@ -380,7 +556,7 @@ void main() {
 
   group('DevicesController', () {
     test('completes with the devices', () async {
-      final controller = DevicesController(repository: FakeDevicesRepositoryImpl(step: _step))
+      final controller = DevicesController(repository: MemoryDevicesRepository(step: _step))
         ..watch();
       addTearDown(controller.dispose);
       expect(controller.state, isA<Devices$InProgressState>());

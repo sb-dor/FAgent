@@ -4,11 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
@@ -16,21 +18,33 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_run_controls.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_devices_repository.dart';
+import '../../support/scripted_app_run_repository.dart';
 import '../../support/test_app.dart';
 
 /// The fake run that counts what the window asks it to do.
 final class _SpyRunRepository implements IAppRunRepository {
-  _SpyRunRepository() : _inner = FakeAppRunRepositoryImpl(step: const Duration(milliseconds: 1));
+  _SpyRunRepository() : _inner = ScriptedAppRunRepository(step: const Duration(milliseconds: 1));
 
-  final FakeAppRunRepositoryImpl _inner;
+  final ScriptedAppRunRepository _inner;
   final List<String> started = <String>[];
+
+  /// The arguments each start was given.
+  List<RunArguments> get startedArguments =>
+      _inner.starts.map((start) => start.arguments).toList(growable: false);
   int reloads = 0;
   int restarts = 0;
+
+  /// The fake run behind the spy, for what a test sets up on it.
+  ScriptedAppRunRepository get scripted => _inner;
 
   @override
   bool get isPreview => true;
@@ -47,12 +61,19 @@ final class _SpyRunRepository implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) {
-    started.add(deviceId);
-    return _inner.start(projectId, deviceId: deviceId, mode: mode, target: target);
+    started.add(device.id);
+    return _inner.start(
+      projectId,
+      device: device,
+      mode: mode,
+      target: target,
+      arguments: arguments,
+    );
   }
 
   @override
@@ -71,6 +92,12 @@ final class _SpyRunRepository implements IAppRunRepository {
   }
 
   @override
+  Future<void> openDevTools(int projectId) => _inner.openDevTools(projectId);
+
+  @override
+  Future<String?> screenshot(int projectId) => _inner.screenshot(projectId);
+
+  @override
   Future<void> dispose() => _inner.dispose();
 }
 
@@ -78,13 +105,15 @@ void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late Dependencies dependencies;
   late _SpyRunRepository spy;
+  late MemoryDevicesRepository devices;
   late int projectId;
   late int sessionId;
   late int otherSessionId;
 
   setUp(() {
     spy = _SpyRunRepository();
-    dependencies = testDependencies(appRunRepository: spy);
+    devices = MemoryDevicesRepository(step: const Duration(milliseconds: 1), isPreview: true);
+    dependencies = testDependencies(appRunRepository: spy, devicesRepository: devices);
   });
 
   Future<void> settle(WidgetTester tester) async {
@@ -155,10 +184,10 @@ void main() {
 
   Future<void> startRun(WidgetTester tester) async {
     final workspace = workspaceOf(tester);
-    await until(tester, () => workspace.runController.state.selectedDeviceId != null);
+    await until(tester, () => workspace.selectedDevice != null);
     workspace.runActionsController.start(
       projectId,
-      deviceId: workspace.runController.state.selectedDeviceId!,
+      device: workspace.selectedDevice!,
       mode: BuildMode.debug,
       target: 'lib/main.dart',
     );
@@ -287,6 +316,229 @@ void main() {
     });
   });
 
+  group('screenshot', () {
+    const path = ScriptedAppRunRepository.defaultScreenshotPath;
+
+    testWidgets('puts @path into the draft and offers it to the @ menu and to the send', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      final workspace = workspaceOf(tester);
+      expect(workspace.runLink.mentions?.screenshot, isNull);
+
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => chat.textController.text.isNotEmpty);
+
+      expect(chat.textController.text, '@$path');
+      final mentions = workspace.runLink.mentions!;
+      expect(mentions.screenshot!.text, '@$path');
+      expect(mentions.screenshot!.detail, matches(RegExp(r'^\d\d:\d\d:\d\d$')));
+      expect(mentions.attachable, <String>{path});
+      expect(find.byType(SnackBar), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('without a chat the path is remembered and the user is told to open one', (
+      tester,
+    ) async {
+      await pumpShell(tester, openChat: false);
+      workspaceOf(tester).dataController.selectProject(projectId);
+      await settle(tester);
+      expect(workspaceOf(tester).dataController.chatHandle.value, isNull);
+      await startRun(tester);
+
+      workspaceOf(tester).runActionsController.screenshot(projectId);
+      await until(tester, () => workspaceOf(tester).runLink.mentions?.screenshot != null);
+      await tester.pump();
+
+      expect(find.text('Open a chat to add the screenshot to the message'), findsOneWidget);
+      expect(workspaceOf(tester).runLink.mentions!.screenshot!.text, '@$path');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the @ menu keeps every shot of the session, the last one is the offer', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      final workspace = workspaceOf(tester);
+
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => chat.textController.text.isNotEmpty);
+      spy.scripted.screenshotPath = '.dart_tool/flutter_code_agent/screenshots/second.png';
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => workspace.runLink.mentions!.attachable.length == 2);
+
+      final mentions = workspace.runLink.mentions!;
+      expect(mentions.screenshot!.text, '@.dart_tool/flutter_code_agent/screenshots/second.png');
+      expect(mentions.attachable, <String>{
+        path,
+        '.dart_tool/flutter_code_agent/screenshots/second.png',
+      });
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a shot that failed puts nothing into the draft', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      spy.scripted.screenshotPath = null;
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      workspaceOf(tester).runActionsController.screenshot(projectId);
+      await until(tester, () => spy.scripted.screenshotCalls.isNotEmpty);
+      await settle(tester);
+
+      expect(chat.textController.text, isEmpty);
+      expect(workspaceOf(tester).runLink.mentions?.screenshot, isNull);
+      expect(find.byType(SnackBar), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('DevTools opens through the repository', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+
+      workspaceOf(tester).runActionsController.openDevTools(projectId);
+      await until(tester, () => spy.scripted.devToolsOpened.isNotEmpty);
+
+      expect(spy.scripted.devToolsOpened, <int>[projectId]);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  group('app commands', () {
+    Finder row(String name) =>
+        find.descendant(of: find.byType(CommandSuggestions), matching: find.text(name));
+
+    /// Types [text] into the composer and presses Enter on the highlighted row.
+    Future<void> choose(WidgetTester tester, String text) async {
+      await tester.enterText(find.byType(TextField), text);
+      await tester.pump();
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+    }
+
+    testWidgets('the offer tells what can be done: start with a device, the rest once running', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.selectedDevice != null);
+
+      var mentions = workspace.runLink.mentions!;
+      expect((mentions.canStart, mentions.canReload, mentions.canScreenshot), (true, false, false));
+
+      await startRun(tester);
+      mentions = workspace.runLink.mentions!;
+      expect((mentions.canStart, mentions.canReload, mentions.canScreenshot), (false, true, true));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/run starts the app on the chosen device and leaves the field empty', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.runController.state.selectedDeviceId != null);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      await choose(tester, '/run');
+
+      expect(spy.started, <String?>[workspace.runController.state.selectedDeviceId]);
+      expect(chat.textController.text, isEmpty);
+      await until(tester, () => running(tester));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/run comes up once the chosen emulator has booted, with nothing else changing', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.selectedDevice != null);
+      workspace.chooseDevice('android-pixel-9');
+      await settle(tester);
+      RunMentions? offer() =>
+          tester.widget<ChatConfigWidget>(find.byType(ChatConfigWidget)).runContext;
+      expect(offer()!.canStart, isFalse, reason: 'the emulator is still booting');
+
+      devices.set(<Device>[
+        for (final device in kTestDevices)
+          if (device.id == 'android-pixel-9')
+            Device(
+              id: device.id,
+              name: device.name,
+              platform: device.platform,
+              kind: DeviceKind.running,
+            )
+          else
+            device,
+      ]);
+      await settle(tester);
+
+      expect(offer()!.canStart, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/reload and /restart act on the running app', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      await choose(tester, '/reload');
+      expect((spy.reloads, spy.restarts), (1, 0));
+      await choose(tester, '/restart');
+      expect((spy.reloads, spy.restarts), (1, 1));
+      expect(chat.textController.text, isEmpty);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('/screenshot puts @path into the draft of the chat', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+
+      await choose(tester, '/screenshot');
+      await until(tester, () => chat.textController.text.isNotEmpty);
+
+      expect(chat.textController.text, '@${ScriptedAppRunRepository.defaultScreenshotPath}');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('while the app is not running /reload and /screenshot are not available', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      await tester.enterText(find.byType(TextField), '/re');
+      await tester.pump();
+
+      expect(find.text('App is not running'), findsNWidgets(3));
+      expect(row('/reload'), findsOneWidget);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.pump();
+      expect(spy.reloads, 0);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a running app is not started again by /run', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final started = spy.started.length;
+
+      await tester.enterText(find.byType(TextField), '/run');
+      await tester.pump();
+      expect(workspaceOf(tester).runLink.mentions!.canStart, isFalse);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+
+      expect(spy.started, hasLength(started));
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
   group('reload after a turn', () {
     testWidgets('fires once per finished turn', (tester) async {
       await pumpShell(tester, reloadAfterTurn: true);
@@ -398,6 +650,37 @@ void main() {
       expect(spy.started, <String?>[workspace.runController.state.selectedDeviceId]);
       await until(tester, () => running(tester));
       expect(find.byTooltip('Stop the app'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the device chip edits the run arguments and the run button starts with them', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final workspace = workspaceOf(tester);
+      await until(tester, () => workspace.runController.state.selectedDeviceId != null);
+
+      final chip = find.descendant(
+        of: find.byType(WorkspaceRunControls),
+        matching: find.byType(RunDeviceChip),
+      );
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Run arguments…'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const ValueKey<String>('run-arguments-flavor')), 'dev');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await settle(tester);
+      await until(
+        tester,
+        () => workspace.runController.state.arguments == const RunArguments(flavor: 'dev'),
+      );
+
+      await tester.tap(find.byTooltip('Run'));
+      await settle(tester);
+
+      expect(spy.startedArguments, <RunArguments>[const RunArguments(flavor: 'dev')]);
       await disposeTestApp(tester, dependencies);
     });
 

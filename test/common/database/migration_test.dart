@@ -9,6 +9,7 @@ import '../../generated_migrations/schema_v2.dart' as v2;
 import '../../generated_migrations/schema_v3.dart' as v3;
 import '../../generated_migrations/schema_v4.dart' as v4;
 import '../../generated_migrations/schema_v5.dart' as v5;
+import '../../generated_migrations/schema_v6.dart' as v6;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -108,5 +109,26 @@ void main() {
     expect(state.skillId, 'skill:user:a');
     expect(await database.select(database.mcpServersTable).get(), isEmpty);
     expect(await database.select(database.mcpServerStatesTable).get(), isEmpty);
+  });
+
+  test('v6 → v7 adds run_configs and keeps projects and mcp servers', () async {
+    final schema = await verifier.schemaAt(6);
+    final old = v6.DatabaseAtV6(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO mcp_servers (name, transport, config) VALUES ('figma', 'stdio', '{}')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 7);
+
+    final project = await database.select(database.projectsTable).getSingle();
+    expect(project.path, '/work/app');
+    expect((await database.select(database.mcpServersTable).getSingle()).name, 'figma');
+    expect(await database.select(database.runConfigsTable).get(), isEmpty);
   });
 }

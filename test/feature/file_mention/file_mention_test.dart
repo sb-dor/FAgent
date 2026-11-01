@@ -69,6 +69,31 @@ void main() {
     ]);
   });
 
+  test('an image link names its type, other files do not', () {
+    expect(
+      resourceLinks('/work', <String>['shot.png', 'photo.JPG', 'lib/main.dart']),
+      <Map<String, Object?>>[
+        <String, Object?>{
+          'type': 'resource_link',
+          'uri': 'file:///work/shot.png',
+          'name': 'shot.png',
+          'mimeType': 'image/png',
+        },
+        <String, Object?>{
+          'type': 'resource_link',
+          'uri': 'file:///work/photo.JPG',
+          'name': 'photo.JPG',
+          'mimeType': 'image/jpeg',
+        },
+        <String, Object?>{
+          'type': 'resource_link',
+          'uri': 'file:///work/lib/main.dart',
+          'name': 'main.dart',
+        },
+      ],
+    );
+  });
+
   group('ProjectFilesRepositoryImpl', () {
     late Directory root;
 

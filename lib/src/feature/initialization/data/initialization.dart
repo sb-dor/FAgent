@@ -40,6 +40,7 @@ Future<Dependencies> $initializeApp({
 @visibleForTesting
 Future<void> $disposeApp(Dependencies dependencies) async {
   await dependencies.appRunRepository.dispose();
+  await dependencies.devicesRepository.dispose();
   await dependencies.agentHub.dispose();
   await dependencies.database.close();
 }

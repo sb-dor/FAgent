@@ -43,7 +43,9 @@ class WorkspaceRunControls extends StatelessWidget {
               child: RunDeviceChip(
                 devices: devices,
                 selectedDeviceId: scope.runController.state.selectedDeviceId,
-                onSelected: (id) => scope.runController.choose(deviceId: id),
+                arguments: scope.runController.state.arguments,
+                onSelected: scope.chooseDevice,
+                onEditArguments: scope.editRunArguments,
               ),
             ),
             const SizedBox(width: 6),
@@ -56,7 +58,11 @@ class WorkspaceRunControls extends StatelessWidget {
               )
             else
               Tooltip(
-                message: link.canStart ? localization.runStart : localization.runChooseDeviceFirst,
+                message: link.canStart
+                    ? localization.runStart
+                    : link.isLaunching
+                    ? localization.runLaunchingEmulator
+                    : localization.runChooseDeviceFirst,
                 child: CompactButton(
                   primary: true,
                   icon: Icons.play_arrow,
@@ -67,8 +73,10 @@ class WorkspaceRunControls extends StatelessWidget {
             const SizedBox(width: 2),
             TitleBarButton(
               icon: Icons.bolt,
-              tooltip: localization.hotReload,
-              onPressed: link.isRunning ? link.reload : null,
+              tooltip: link.isRunning && !link.canReload
+                  ? localization.hotReloadDebugOnly
+                  : localization.hotReload,
+              onPressed: link.canReload ? link.reload : null,
             ),
             if (scope.runIsPreview) ...<Widget>[const SizedBox(width: 6), const PreviewBadge()],
           ],

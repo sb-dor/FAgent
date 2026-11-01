@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 
@@ -70,21 +70,53 @@ final class _FakeRun {
   }
 }
 
-/// A made-up run: build, run, a layout overflow after the first hot reload.
+/// One call of [ScriptedAppRunRepository.start].
+typedef RunStart = ({
+  int projectId,
+  Device device,
+  BuildMode mode,
+  String target,
+  RunArguments arguments,
+});
+
+/// A scripted run for tests: build, run, a layout overflow after the first hot reload.
 ///
-/// Every delay is [step], so a test passes a tiny one. State is kept per project.
-final class FakeAppRunRepositoryImpl implements IAppRunRepository {
+/// Every delay is [step], so a test passes a tiny one. State is kept per project. It is a stand-in
+/// only when [isPreview] says so.
+class ScriptedAppRunRepository implements IAppRunRepository {
   /// Creates the repository.
-  FakeAppRunRepositoryImpl({this.step = const Duration(milliseconds: 600)});
+  ScriptedAppRunRepository({this.step = const Duration(milliseconds: 600), this.isPreview = false});
 
   /// The time one phase of the scenario takes.
   final Duration step;
+
+  /// The calls of [start], in order.
+  final List<RunStart> starts = <RunStart>[];
+
+  /// The projects [openDevTools] was called for, in order.
+  final List<int> devToolsOpened = <int>[];
+
+  /// The projects [screenshot] was called for, in order (including those that gave nothing).
+  final List<int> screenshotCalls = <int>[];
+
+  /// What [screenshot] returns for a debug app that is running: the path of the PNG, relative to
+  /// the project. `null` makes the shot fail.
+  String? screenshotPath = defaultScreenshotPath;
+
+  /// The path a shot has unless a test sets [screenshotPath].
+  static const String defaultScreenshotPath =
+      '.dart_tool/flutter_code_agent/screenshots/screenshot-20261031-090507.png';
+
+  /// The DevTools address the fake app reports.
+  static final Uri devToolsUri = Uri.parse(
+    'http://127.0.0.1:9100/?uri=ws://127.0.0.1:1234/abc=/ws',
+  );
 
   final Map<int, _FakeRun> _runs = <int, _FakeRun>{};
   bool _disposed = false;
 
   @override
-  bool get isPreview => true;
+  final bool isPreview;
 
   _FakeRun _run(int projectId) => _runs.putIfAbsent(projectId, _FakeRun.new);
 
@@ -139,38 +171,44 @@ final class FakeAppRunRepositoryImpl implements IAppRunRepository {
   @override
   Future<void> start(
     int projectId, {
-    required String deviceId,
+    required Device device,
     required BuildMode mode,
     required String target,
+    RunArguments arguments = const RunArguments(),
   }) async {
     if (_disposed) return;
+    starts.add((
+      projectId: projectId,
+      device: device,
+      mode: mode,
+      target: target,
+      arguments: arguments,
+    ));
     final run = _run(projectId);
     if (run.state is RunBuilding || run.state is RunRunning) await stop(projectId);
     run.reloads = 0;
     final generation = ++run.generation;
-    final device = kFakeDevices.firstWhere(
-      (device) => device.id == deviceId,
-      orElse: () => Device(
-        id: deviceId,
-        name: deviceId,
-        platform: DevicePlatform.macos,
-        kind: DeviceKind.running,
-      ),
-    );
     run
       ..setState(const RunBuilding(progress: 0.2, label: 'Resolving dependencies'))
       ..log(LogLevel.info, 'Launching $target on ${device.name} in ${mode.name} mode...');
-    unawaited(_build(run, generation, device));
+    unawaited(_build(run, generation, device, mode));
   }
 
-  Future<void> _build(_FakeRun run, int generation, Device device) async {
+  Future<void> _build(_FakeRun run, int generation, Device device, BuildMode mode) async {
     if (!await run.wait(step) || run.generation != generation) return;
     run.setState(const RunBuilding(progress: 0.6, label: 'Xcode build'));
     if (!await run.wait(step) || run.generation != generation) return;
     run.setState(const RunBuilding(progress: 1, label: 'Starting the app'));
     if (!await run.wait(step) || run.generation != generation) return;
     run
-      ..setState(RunRunning(device: device, startedAt: DateTime.now()))
+      ..setState(
+        RunRunning(
+          device: device,
+          startedAt: DateTime.now(),
+          mode: mode,
+          devToolsUri: ScriptedAppRunRepository.devToolsUri,
+        ),
+      )
       ..log(LogLevel.info, 'flutter: Booking loaded 12 rooms');
   }
 
@@ -231,6 +269,20 @@ final class FakeAppRunRepositoryImpl implements IAppRunRepository {
     const took = Duration(milliseconds: 640);
     run.log(LogLevel.info, 'Restarted application in 640ms.');
     if (run.state case final RunRunning running) run.setState(running.withReload(took));
+  }
+
+  @override
+  Future<void> openDevTools(int projectId) async {
+    final state = _runs[projectId]?.state;
+    if (state is RunRunning && state.devToolsUri != null) devToolsOpened.add(projectId);
+  }
+
+  @override
+  Future<String?> screenshot(int projectId) async {
+    screenshotCalls.add(projectId);
+    final state = _runs[projectId]?.state;
+    if (state is! RunRunning || state.mode != BuildMode.debug) return null;
+    return screenshotPath;
   }
 
   @override

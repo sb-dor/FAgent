@@ -61,6 +61,7 @@ class ChatConfigWidget extends StatefulWidget {
     this.onHandle,
     this.onOpenChange,
     this.runContext,
+    this.onAppCommand,
     this.chatSkills = ChatSkills.empty,
     this.onOpenSkills,
     super.key,
@@ -86,6 +87,10 @@ class ChatConfigWidget extends StatefulWidget {
   /// What the running app offers the `@` menu of the composer; `null` offers nothing. May change
   /// while the chat is open.
   final RunMentions? runContext;
+
+  /// An app command (`run`, `reload`, `restart`, `screenshot`) was chosen in the `/` menu of the
+  /// composer; `null` leaves the commands as text.
+  final ValueChanged<String>? onAppCommand;
 
   /// The skills of the chat's project for the 🧩 chip, the `/` menu and the skill lines of the
   /// feed. May change while the chat is open.
@@ -211,6 +216,18 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Refreshes the file list (the agent may have added files).
   void refreshFiles() => fileMentionController.load(widget.project.path);
 
+  /// The `resource_link`s for the files [text] mentions: project files, and the screenshots the
+  /// run offers (they live in `.dart_tool`, outside the file list). Only files that are still
+  /// inside the project count.
+  Future<List<Map<String, Object?>>> resourcesFor(String text) async {
+    final known = <String>{...fileMentionController.files, ...?runContext.value?.attachable};
+    final mentioned = await fileMentionController.insideProject(
+      widget.project.path,
+      mentionedFiles(text, known),
+    );
+    return resourceLinks(widget.project.path, mentioned);
+  }
+
   /// Sends the composer text with the mentioned files as `resource_link`s;
   /// the first prompt in a folder asks for trust.
   Future<void> send() async {
@@ -220,17 +237,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
     }
-    final mentioned = await fileMentionController.insideProject(
-      widget.project.path,
-      mentionedFiles(text, fileMentionController.files.toSet()),
-    );
+    final resources = await resourcesFor(text);
     if (!mounted) return;
     textController.clear();
-    promptController.send(
-      sessionId,
-      text,
-      resources: resourceLinks(widget.project.path, mentioned),
-    );
+    promptController.send(sessionId, text, resources: resources);
   }
 
   void stop() => promptController.stop(sessionId).ignore();

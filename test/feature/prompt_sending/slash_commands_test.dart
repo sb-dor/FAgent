@@ -1,3 +1,4 @@
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization_en.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_commands.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
@@ -15,6 +16,7 @@ ChatSkill _skill(String name, SkillSource source, {bool enabled = true, String d
     );
 
 void main() {
+  final localization = GeneratedLocalizationEn();
   group('skillCommands', () {
     test('lists the skills that are on; only a project skill can be run now', () {
       final commands = skillCommands(
@@ -26,6 +28,7 @@ void main() {
             _skill('off', SkillSource.project, enabled: false),
           ],
         ),
+        localization,
       );
 
       expect(commands, const <SlashCommand>[
@@ -34,7 +37,7 @@ void main() {
           name: 'feature-architecture',
           source: SlashSource.skill,
           enabled: false,
-          hint: 'M3',
+          hint: 'Coming in M3',
         ),
       ]);
     });
@@ -49,6 +52,7 @@ void main() {
             _skill('two words', SkillSource.project),
           ],
         ),
+        localization,
       );
 
       expect([for (final c in commands) c.name], <String>['same']);
@@ -64,7 +68,12 @@ void main() {
     const agent = <SlashCommand>[SlashCommand(name: 'compact', source: SlashSource.agent)];
 
     test('skills come before the app and the agent', () {
-      final rows = slashMenuRows(skills: skills, agent: agent, query: '');
+      final rows = slashMenuRows(
+        localization: localization,
+        skills: skills,
+        agent: agent,
+        query: '',
+      );
 
       expect({for (final r in rows) r.source}, SlashSource.values.toSet());
       expect(rows.first.name, 'run-tests');
@@ -73,7 +82,12 @@ void main() {
     });
 
     test('the query narrows the skills too', () {
-      final rows = slashMenuRows(skills: skills, agent: agent, query: 'tests');
+      final rows = slashMenuRows(
+        localization: localization,
+        skills: skills,
+        agent: agent,
+        query: 'tests',
+      );
 
       expect([for (final r in rows) r.name], <String>['run-tests']);
     });
@@ -84,7 +98,12 @@ void main() {
         SlashCommand(name: 'compact', source: SlashSource.agent),
       ];
 
-      final rows = slashMenuRows(skills: skills, agent: duplicated, query: '');
+      final rows = slashMenuRows(
+        localization: localization,
+        skills: skills,
+        agent: duplicated,
+        query: '',
+      );
 
       expect([for (final r in rows) r.name].where((name) => name == 'run-tests'), hasLength(1));
       expect(rows.where((r) => r.name == 'run-tests').single.source, SlashSource.skill);
@@ -92,9 +111,14 @@ void main() {
     });
 
     test('without skills nothing changes for the app and the agent', () {
-      final rows = slashMenuRows(skills: ChatSkills.empty, agent: agent, query: '');
+      final rows = slashMenuRows(
+        localization: localization,
+        skills: ChatSkills.empty,
+        agent: agent,
+        query: '',
+      );
 
-      expect(rows, slashSuggestions(appCommands, agent, ''));
+      expect(rows, slashSuggestions(appCommandsFor(null, localization), agent, ''));
     });
   });
 }

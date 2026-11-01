@@ -176,8 +176,41 @@ diff; кнопки по `options` агента: основная — перва�
 Запуск принадлежит проекту: все чаты проекта видят один запуск.
 
 «Агенту» в логах и в блоке ошибки не отправляет сообщение: ошибки попадают в черновик поля ввода
-(чат не запускается сам) и помечаются отправленными. DevTools, скриншот и аргументы запуска ждут M2
-— в заглушках запуска они помечены Preview.
+(чат не запускается сам) и помечаются отправленными. Выбор виджета остаётся заглушкой с меткой
+Preview до M6.
+
+Решения M2:
+- Запуск настоящий: устройства из `flutter daemon` (один на приложение), `flutter run --machine`
+  (один на проект), оба в своей группе процессов, которая убивается при выходе. Фейки переехали в
+  `test/support/` как двойники.
+- Группа `flutter run` убивается при любом его завершении, а не только по «Стоп»: после падения или
+  выхода до `app.start` от неё не остаётся процессов (программа, `iproxy`, чтение логов).
+- Эмуляторы запускаются отдельным отсоединённым `flutter emulators --launch <id>`, а не через
+  daemon: запущенный daemon эмулятор попал бы в его группу. Поэтому выход из приложения (и падение
+  daemon) оставляет загруженные эмуляторы работать.
+- `flutter` проекта: если проект закрепляет версию через fvm (`.fvmrc` или `.fvm/fvm_config.json`),
+  а `.fvm/flutter_sdk/bin/flutter` нет, — «Flutter SDK not found» с версией и советом выполнить
+  `fvm install`; `flutter` из `PATH` в этом случае не берётся. Без закрепления — `flutter` из `PATH`.
+- Сборка, упавшая не на ошибке компиляции, и упавшее приложение дают строку-ошибку в логе с
+  «→ Отправить агенту» (её видит и `@error`): ошибка `app.stop` и последние 20 строк ошибок.
+- Hot reload и restart (кнопки, `/reload`, `/restart`, перезагрузка после хода агента) — только в
+  debug, как и снимок экрана.
+- DevTools открывается в системном браузере (`open`); вариант настроек «Окно приложения» до
+  появления webview недоступен («Пока недоступно»), сохранённое `app` работает как `browser`.
+- Снимок экрана — расширение инспектора `ext.flutter.inspector.screenshot` через
+  `app.callServiceExtension`; PNG лежит в `<проект>/.dart_tool/flutter_code_agent/screenshots/`, в
+  черновик идёт `@<путь>`, при отправке он становится `resource_link`. Только debug: расширений
+  инспектора нет в profile и release.
+- Аргументы запуска (flavor, `--dart-define`, свои флаги) хранятся по проекту в `run_configs` и
+  уходят в каждый `flutter run`.
+- Ошибки разбираются по тексту вывода (блоки `Flutter.Error`, ошибки компиляции, необработанные
+  исключения) чистым классом `RunOutputParser`; заголовки и сообщения ошибок английские, они уходят
+  агенту. Разбор через событие `Flutter.Error` VM service — в списке доработок.
+- `RunBuilding` без процента: `flutter run` его не сообщает, показывается только метка этапа.
+- Выбор виджета честно остаётся «M6»: он ждёт инспектор виджетов.
+- Команды `/run`, `/reload`, `/restart`, `/screenshot` в поле ввода работают через те же
+  контроллеры, что кнопки вкладки Run; неактивная команда объясняет почему («Выберите устройство»,
+  «Приложение не запущено»). Выбор команды не вставляет текст, а вызывает действие окна.
 
 ### 3.7 Скиллы и правила (экран)
 Навигация 220 px: «Скиллы», «Правила», источники (Встроенные, Мои, Проект, git-источники, «＋
@@ -239,7 +272,8 @@ px**, отступы 32; карточки только в одну колонк�
 - Новые поля `AppSettings`: `askBeforeQuit`, `feedDensity`, `projectOrg` (проверяется `orgPattern`),
   `projectTemplate`, `devToolsTarget`; нечитаемое значение становится значением по умолчанию.
 - Flutter: путь к SDK и версия fvm проекта настоящие; версия Flutter и сводка `flutter doctor` —
-  Preview до M4, шаблон «git» — M4, DevTools внутри приложения — M2.
+  Preview до M4, шаблон «git» — M4, DevTools внутри приложения — пока недоступно (нужен
+  webview, решения M2 в §3.6).
 
 ### 3.9 Новый проект (диалог 560 px)
 Поля: имя пакета (проверка как у `flutter create`), org (из настроек), папка, платформы (чипы),
@@ -295,7 +329,7 @@ px**, отступы 32; карточки только в одну колонк�
 | `chat_search` | `IChatSearchRepository.search(query)` | Real: drift читает чаты, совпадение по `sessions.title` считается в Dart (без учёта регистра, в том числе кириллицы; `%` и `_` ищутся буквально), т.к. SQLite `LIKE` не сворачивает регистр кириллицы |
 | `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка до M3, без данных; доставка агенту — M3 (MCP) |
 | `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус/инструменты и доставка агенту — до M3 |
-| `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Fake до M2 (сценарий: сборка → работа → ошибка RenderFlex) |
+| `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Real: `DevicesRepositoryImpl` (`flutter daemon`) и `AppRunRepositoryImpl` (`flutter run --machine`), разбор вывода `RunOutputParser`, аргументы запуска — drift `run_configs`; адреса VM service / DTD / DevTools запуска сохраняются для M3 и M6 |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
 | `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`) и версия fvm проекта — Real; версия Flutter и `doctor()` — Fake до M4 |
 | `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<List<CreationStep>>`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?`, `isPreview` (решения этапа 7 — в §3.9) | `create` — Fake до M4 (`FakeProjectCreationRepositoryImpl`); `defaultParent`, `checkTarget` — Real |
@@ -321,12 +355,13 @@ status: pending|running|done|failed, output, took}`.
   ничего не делают, честно говорят «Появится в M2» (снекбар), а не притворяются.
 - Замена на настоящую реализацию — одна строка в инициализации и удаление фейка.
 
-### База данных (v3 → v4)
+### База данных (v3 → v7)
 v4 добавляет только таблицу `app_settings` (`key` PK, `value` JSON, `updatedAt`). Таблицы `skill_states`
 (`skillId`, `projectId` nullable, `enabled`; уникальный ключ `(skillId, projectId)`), `mcp_servers`
 (`id`, `name`, `transport`, `config` JSON, `enabled`, `createdAt`) и `mcp_server_states` (`serverKey`,
 `projectId`, `enabled`; почему без `projectId` в `mcp_servers` — в решениях этапа 6, §3.8) добавили этапы 5 и 6
-своими миграциями (схема теперь v6). Миграция step-by-step + тест `SchemaVerifier`, как v3.
+своими миграциями, а M2 — таблицу `run_configs` (`projectId` PK, `flavor`, `dartDefines` JSON, свои
+флаги; схема теперь v7). Миграция step-by-step + тест `SchemaVerifier`, как v3.
 
 ## 5. Локализация и доступность
 Все строки — `intl_en.arb` / `intl_ru.arb`. Все кнопки-иконки с `tooltip`, у меню — навигация

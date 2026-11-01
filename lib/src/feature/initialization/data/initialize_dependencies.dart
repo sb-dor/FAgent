@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
@@ -55,11 +57,23 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.database = AppDatabase.defaults(name: 'app_database'),
   'Resolve shell environment': (dependencies) async =>
       dependencies.shellEnvironment = await ShellEnvironment.resolve(),
-  // Stand-ins until the Flutter tooling is wired in; the real ones replace these lines.
+  // The devices and the runs are real (`flutter daemon`, `flutter run --machine`); the widget
+  // picker is made up until the inspector is wired in (M6).
   'Create app run repositories': (dependencies) {
+    final database = dependencies.database;
+    final environment = dependencies.shellEnvironment;
     dependencies
-      ..devicesRepository = FakeDevicesRepositoryImpl()
-      ..appRunRepository = FakeAppRunRepositoryImpl()
+      ..devicesRepository = DevicesRepositoryImpl(
+        flutter: () => flutterExecutableFor(null, which: environment.which),
+        environment: environment.variables,
+      )
+      ..appRunRepository = AppRunRepositoryImpl(
+        projectPath: (projectId) async => (await (database.select(
+          database.projectsTable,
+        )..where((project) => project.id.equals(projectId))).getSingleOrNull())?.path,
+        flutter: (path) => flutterExecutableFor(path, which: environment.which),
+        environment: environment.variables,
+      )
       ..widgetPickerRepository = FakeWidgetPickerRepositoryImpl();
   },
   // Remembers the settings every agent reports, for the Settings screen.
@@ -93,6 +107,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create run config repository': (dependencies) =>
+      dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
   'Create MCP servers repository': (dependencies) =>
       dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
   'Create permission rules repository': (dependencies) =>

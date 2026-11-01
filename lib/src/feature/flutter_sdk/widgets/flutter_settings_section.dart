@@ -435,7 +435,6 @@ class _DevToolsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final localization = Localization.of(context);
-    final scope = FlutterSdkConfigInhWidget.of(context);
     final settings = AppSettingsConfigInhWidget.of(context).controller;
     return _Group(
       title: localization.flutterDevToolsTitle,
@@ -445,19 +444,17 @@ class _DevToolsGroup extends StatelessWidget {
           children: <Widget>[
             SettingsRow(
               label: localization.flutterDevToolsOpen,
+              hint: '${localization.flutterDevToolsApp} — ${localization.notAvailableYet}',
               control: SegmentedControl<DevToolsTarget>(
                 segments: <(DevToolsTarget, String)>[
                   (DevToolsTarget.browser, localization.flutterDevToolsBrowser),
                   (DevToolsTarget.app, localization.flutterDevToolsApp),
                 ],
-                selected: settings.settings.devToolsTarget,
-                onChanged: (target) {
-                  if (target == DevToolsTarget.app) {
-                    scope.showComingSoon('M2');
-                    return;
-                  }
-                  settings.update((s) => s.copyWith(devToolsTarget: target));
-                },
+                // DevTools in a window of the app waits for a webview: a saved `app` (from a
+                // newer version, or an old preview) opens the browser, and the control says so.
+                selected: DevToolsTarget.browser,
+                disabled: const <DevToolsTarget>{DevToolsTarget.app},
+                onChanged: (target) => settings.update((s) => s.copyWith(devToolsTarget: target)),
               ),
             ),
           ],

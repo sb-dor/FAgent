@@ -129,7 +129,11 @@ void main() {
     expect(state.runController.state.picked, isNull);
     expect(find.text('WidgetOfA'), findsNothing);
     expect(find.text('Add to message'), findsNothing);
-    expect(state.runLink.mentions, isNull, reason: 'the @ menu offers nothing from project A');
+    expect(
+      state.runLink.mentions?.isEmpty ?? true,
+      isTrue,
+      reason: 'the @ menu offers nothing from project A',
+    );
     await disposeTestApp(tester, dependencies);
   });
 

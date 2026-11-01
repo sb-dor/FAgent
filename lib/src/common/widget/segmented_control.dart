@@ -11,6 +11,7 @@ class SegmentedControl<T> extends StatelessWidget {
     required this.segments,
     required this.selected,
     required this.onChanged,
+    this.disabled = const <Never>{},
     super.key,
   });
 
@@ -22,6 +23,9 @@ class SegmentedControl<T> extends StatelessWidget {
 
   /// Called with the value of the option the user tapped.
   final ValueChanged<T> onChanged;
+
+  /// The options that cannot be chosen: shown muted, and a tap does nothing.
+  final Set<T> disabled;
 
   @override
   Widget build(BuildContext context) {
@@ -44,7 +48,7 @@ class SegmentedControl<T> extends StatelessWidget {
                 label: label,
                 selected: value == selected,
                 style: theme,
-                onTap: () => onChanged(value),
+                onTap: disabled.contains(value) ? null : () => onChanged(value),
               ),
           ],
         ),
@@ -64,7 +68,9 @@ class _Segment extends StatelessWidget {
   final String label;
   final bool selected;
   final TextStyle style;
-  final VoidCallback onTap;
+
+  /// `null` for an option that cannot be chosen.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +95,11 @@ class _Segment extends StatelessWidget {
               child: Text(
                 label,
                 style: style.copyWith(
-                  color: selected ? colors.text : colors.muted,
+                  color: onTap == null
+                      ? colors.muted.withValues(alpha: 0.5)
+                      : selected
+                      ? colors.text
+                      : colors.muted,
                   fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 ),
               ),

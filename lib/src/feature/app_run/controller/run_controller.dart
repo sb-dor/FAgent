@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -36,18 +38,28 @@ abstract class RunViewState with _$RunViewState {
 
     /// The widget the user last picked in the running app; cleared when the project changes.
     PickedWidget? picked,
+
+    /// What the project adds to every `flutter run`: its saved flavor, defines and flags.
+    @Default(RunArguments()) RunArguments arguments,
   }) = _RunViewState;
 }
 
-/// Follows the run and the output of one project at a time (the one open in the window).
+/// Follows the run, the output and the run arguments of one project at a time (the one open in the
+/// window).
 ///
 /// The buffer here is cleared on a project switch; the repository keeps the project's history and
 /// replays it when the project is watched again.
 final class RunController extends StateController<RunViewState> with SequentialControllerHandler {
-  RunController({required this._repository, super.initialState = const RunViewState()});
+  RunController({
+    required this._repository,
+    required this._configRepository,
+    super.initialState = const RunViewState(),
+  });
 
   final IAppRunRepository _repository;
+  final IRunConfigRepository _configRepository;
   StreamSubscription<RunState>? _runSubscription;
+  StreamSubscription<RunArguments>? _argumentsSubscription;
   StreamSubscription<LogEntry>? _logsSubscription;
 
   /// Per project: the newest line the user cleared; a replay never brings those back.
@@ -66,6 +78,9 @@ final class RunController extends StateController<RunViewState> with SequentialC
     setState(RunViewState(projectId: projectId, selectedDeviceId: state.selectedDeviceId));
     _runSubscription = _repository.watchRun(projectId).listen((run) {
       if (state.projectId == projectId) setState(state.copyWith(run: run));
+    });
+    _argumentsSubscription = _configRepository.watch(projectId).listen((arguments) {
+      if (state.projectId == projectId) setState(state.copyWith(arguments: arguments));
     });
     _logsSubscription = _repository.logs(projectId).listen((entry) {
       if (state.projectId != projectId || entry.seq <= (_clearedThrough[projectId] ?? -1)) return;
@@ -89,6 +104,9 @@ final class RunController extends StateController<RunViewState> with SequentialC
       target: target ?? state.target,
     ),
   );
+
+  /// Forgets the chosen device, for when it is gone and there is none to take its place.
+  void clearDevice() => setState(state.copyWith(selectedDeviceId: null));
 
   /// Remembers the widget picked in the app, so later actions do not lose it; `null` forgets it.
   void setPicked(PickedWidget? picked) => setState(state.copyWith(picked: picked));
@@ -118,14 +136,17 @@ final class RunController extends StateController<RunViewState> with SequentialC
   Future<void> _cancel() async {
     await _runSubscription?.cancel();
     await _logsSubscription?.cancel();
+    await _argumentsSubscription?.cancel();
     _runSubscription = null;
     _logsSubscription = null;
+    _argumentsSubscription = null;
   }
 
   @override
   void dispose() {
     _runSubscription?.cancel().ignore();
     _logsSubscription?.cancel().ignore();
+    _argumentsSubscription?.cancel().ignore();
     super.dispose();
   }
 }

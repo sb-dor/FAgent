@@ -20,13 +20,24 @@ final class RunMention {
   int get hashCode => Object.hash(detail, text);
 }
 
-/// What the running app offers the `@` menu: the picked widget and the last error. Plain data, so
-/// the chat does not depend on the run. Equal offers are equal, so a log line that changes neither
-/// part does not rebuild the composer.
+/// What the running app offers the `@` menu: the picked widget, the last error and the last
+/// screenshot; and what the `/` app commands can do now. Plain data, so the chat does not depend
+/// on the run. Equal offers are equal, so a log line that changes no part does not rebuild the
+/// composer.
 @immutable
 final class RunMentions {
   /// Creates the offer; an absent part is not shown.
-  const RunMentions({this.widget, this.error, this.isPreview = false});
+  const RunMentions({
+    this.widget,
+    this.error,
+    this.screenshot,
+    this.attachable = const <String>{},
+    this.isPreview = false,
+    this.canStart = false,
+    this.isRunning = false,
+    this.canReload = false,
+    this.canScreenshot = false,
+  });
 
   /// The widget picked in the app.
   final RunMention? widget;
@@ -34,11 +45,32 @@ final class RunMentions {
   /// The last error of the app.
   final RunMention? error;
 
+  /// The last screenshot of the app: [RunMention.detail] is its time, [RunMention.text] the
+  /// `@path` that mentions it.
+  final RunMention? screenshot;
+
+  /// The paths (relative to the project) of every screenshot of the project taken in this
+  /// session. They are not in the project's file list, so sending a message that mentions one
+  /// takes them from here and attaches the file.
+  final Set<String> attachable;
+
   /// Whether the run is made up (the menu says so next to the offer).
   final bool isPreview;
 
-  /// Nothing to offer.
-  bool get isEmpty => widget == null && error == null;
+  /// Whether `/run` works now: a running device is chosen and the app is not up or building.
+  final bool canStart;
+
+  /// Whether the app runs (in any mode).
+  final bool isRunning;
+
+  /// Whether `/reload` and `/restart` work now: the app runs in debug (hot reload needs the JIT).
+  final bool canReload;
+
+  /// Whether `/screenshot` works now: the app runs in debug.
+  final bool canScreenshot;
+
+  /// Nothing to offer the `@` menu (what the `/` commands can do is not an offer).
+  bool get isEmpty => widget == null && error == null && screenshot == null;
 
   @override
   bool operator ==(Object other) =>
@@ -46,8 +78,24 @@ final class RunMentions {
       other is RunMentions &&
           other.widget == widget &&
           other.error == error &&
-          other.isPreview == isPreview;
+          other.screenshot == screenshot &&
+          setEquals(other.attachable, attachable) &&
+          other.isPreview == isPreview &&
+          other.canStart == canStart &&
+          other.isRunning == isRunning &&
+          other.canReload == canReload &&
+          other.canScreenshot == canScreenshot;
 
   @override
-  int get hashCode => Object.hash(widget, error, isPreview);
+  int get hashCode => Object.hash(
+    widget,
+    error,
+    screenshot,
+    Object.hashAllUnordered(attachable),
+    isPreview,
+    canStart,
+    isRunning,
+    canReload,
+    canScreenshot,
+  );
 }

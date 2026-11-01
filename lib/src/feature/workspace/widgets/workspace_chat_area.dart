@@ -63,8 +63,12 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                 );
               }
               return ListenableBuilder(
+                // The devices too: what `/run` can do changes when the chosen emulator has booted
+                // without the run changing.
                 listenable: Listenable.merge(<Listenable>[
                   _scope.runController,
+                  _scope.devicesController,
+                  _scope.runLink,
                   _scope.skillLibraryController,
                 ]),
                 builder: (context, _) => ChatConfigWidget(
@@ -74,6 +78,7 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                   onHandle: _scope.dataController.publishChatHandle,
                   onOpenChange: _scope.openChange,
                   runContext: _scope.runLink.mentions,
+                  onAppCommand: _scope.runLink.runCommand,
                   chatSkills: _chatSkills(project),
                   onOpenSkills: _scope.dataController.openSkills,
                 ),

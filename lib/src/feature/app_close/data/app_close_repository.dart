@@ -4,6 +4,8 @@ import 'dart:io' as io;
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:l/l.dart';
 import 'package:window_manager/window_manager.dart';
@@ -21,7 +23,7 @@ abstract interface class IAppCloseRepository {
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
-  /// Stops the agents and closes the database.
+  /// Stops the runs, the devices daemon and the agents, then closes the database.
   Future<void> shutdown();
 
   /// Quits the app (answering a pending ⌘Q or logout on macOS).
@@ -34,11 +36,19 @@ abstract interface class IAppCloseRepository {
 /// window_manager-backed [IAppCloseRepository].
 final class AppCloseRepositoryImpl implements IAppCloseRepository {
   /// Creates the repository.
-  AppCloseRepositoryImpl({required this._hub, required this._database, required this._settings});
+  AppCloseRepositoryImpl({
+    required this._hub,
+    required this._database,
+    required this._settings,
+    required this._appRun,
+    required this._devices,
+  });
 
   final AgentHub _hub;
   final AppDatabase _database;
   final IAppSettingsRepository _settings;
+  final IAppRunRepository _appRun;
+  final IDevicesRepository _devices;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -71,8 +81,23 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
 
   @override
   Future<void> shutdown() async {
+    // `flutter run` and `flutter daemon` live in their own process groups, so they outlive the app
+    // unless they are killed here (the app on the device closes with them). One that refuses to
+    // stop must not keep the agents running or the database open.
+    await Future.wait<void>(<Future<void>>[
+      _stopQuietly('runs', _appRun.dispose),
+      _stopQuietly('devices', _devices.dispose),
+    ]);
     await _hub.dispose();
     await _database.close();
+  }
+
+  Future<void> _stopQuietly(String what, Future<void> Function() dispose) async {
+    try {
+      await dispose();
+    } on Object catch (error, stackTrace) {
+      l.w('App close | stopping the $what failed: $error', stackTrace);
+    }
   }
 
   @override
