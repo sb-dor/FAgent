@@ -79,6 +79,14 @@ abstract interface class IMcpProbe {
   Future<void> dispose();
 }
 
+/// Starts [executable] in its own process group: [GroupedProcess.start].
+typedef GroupedProcessStart = Future<GroupedProcess> Function(
+  String executable,
+  List<String> arguments, {
+  Map<String, String>? environment,
+  Duration startTimeout,
+});
+
 /// {@template mcp_probe}
 /// [IMcpProbe] over the `mcp_dart` client with the `initialize` / `tools/list` flow of Claude Code.
 ///
@@ -87,12 +95,19 @@ abstract interface class IMcpProbe {
 /// {@endtemplate}
 final class McpProbeImpl implements IMcpProbe {
   /// {@macro mcp_probe}
-  McpProbeImpl({required this._environment});
+  ///
+  /// `start` starts a `stdio` server; [GroupedProcess.start] by default.
+  McpProbeImpl({required this._environment, this._start = GroupedProcess.start});
 
   final ShellEnvironment _environment;
+  final GroupedProcessStart _start;
 
   /// The process groups of the `stdio` probes in flight.
   final Set<GroupedProcess> _running = <GroupedProcess>{};
+
+  /// The `stdio` probes whose process is still starting; each completes once its process runs, or
+  /// is stopped when [dispose] came during the start.
+  final Set<Future<void>> _starting = <Future<void>>{};
   bool _disposed = false;
 
   static const McpClientOptions _clientOptions = McpClientOptions(protocol: McpProtocol.legacy);
@@ -124,22 +139,30 @@ final class McpProbeImpl implements IMcpProbe {
   Future<McpProbeResult> _probeStdio(McpServer server, Duration timeout) async {
     final command = server.command?.trim() ?? '';
     if (command.isEmpty) return const McpProbeFailed('No command');
+    final starting = Completer<void>();
+    _starting.add(starting.future);
     final GroupedProcess process;
     try {
-      process = await GroupedProcess.start(
-        command,
-        server.args,
-        environment: <String, String>{..._environment.variables, ...server.env},
-        startTimeout: timeout,
-      );
-    } on Object catch (error) {
-      return McpProbeFailed(_oneLine('Cannot start $command: $error'));
-    }
-    _running.add(process);
-    if (_disposed) {
-      // Disposed while the process was starting.
-      await _stop(process);
-      return const McpProbeFailed('Stopped');
+      try {
+        process = await _start(
+          command,
+          server.args,
+          environment: <String, String>{..._environment.variables, ...server.env},
+          startTimeout: timeout,
+        );
+      } on Object catch (error) {
+        return McpProbeFailed(_oneLine('Cannot start $command: $error'));
+      }
+      _running.add(process);
+      if (_disposed) {
+        // Disposed while the process was starting; dispose waits for this.
+        await _stop(process);
+        _running.remove(process);
+        return const McpProbeFailed('Stopped');
+      }
+    } finally {
+      _starting.remove(starting.future);
+      starting.complete();
     }
     final stderrTail = <String>[];
     final stderrSubscription = process.stderrLines.listen((line) {
@@ -165,7 +188,11 @@ final class McpProbeImpl implements IMcpProbe {
   @override
   Future<void> dispose() async {
     _disposed = true;
-    await Future.wait(<Future<void>>[for (final process in _running.toList()) _stop(process)]);
+    await Future.wait(<Future<void>>[
+      // A probe still starting stops its own process once it runs: it sees [_disposed].
+      ..._starting,
+      for (final process in _running.toList()) _stop(process),
+    ]);
   }
 
   static Future<void> _stop(GroupedProcess process) => process.stop(

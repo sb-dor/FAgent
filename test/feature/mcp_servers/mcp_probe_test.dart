@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/process/grouped_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
@@ -119,6 +121,34 @@ void main() {
       expect(_groupAlive(pid), isFalse, reason: 'the process group $pid is gone');
       expect(_alive(child), isFalse, reason: 'the sleep started by the server is gone');
       expect(await running.timeout(const Duration(seconds: 5)), isA<McpProbeFailed>());
+    });
+
+    test('dispose during the start stops the group before it completes', () async {
+      final pidFile = p.join(temp.path, 'starting.pid');
+      final gate = Completer<void>();
+      GroupedProcess? started;
+      probe = McpProbeImpl(
+        environment: const ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'}),
+        start: (executable, arguments, {environment, startTimeout = Duration.zero}) async {
+          await gate.future;
+          return started = await GroupedProcess.start(
+            executable,
+            arguments,
+            environment: environment,
+            startTimeout: startTimeout,
+          );
+        },
+      );
+      final running = probe.probe(stdio(['silent', pidFile]), timeout: const Duration(seconds: 60));
+      await Future<void>.delayed(Duration.zero);
+
+      final disposing = probe.dispose();
+      gate.complete();
+      await disposing;
+
+      expect(started, isNotNull, reason: 'dispose waited for the start');
+      expect(started!.isGroupAlive, isFalse, reason: 'the process group is gone');
+      expect(await running.timeout(const Duration(seconds: 5)), const McpProbeFailed('Stopped'));
     });
 
     test('dispose waits for several probes and kills them all', () async {
