@@ -7,6 +7,10 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 /// The bearer tokens of the app's MCP server: one per chat, kept in memory only.
 ///
 /// A token is 32 random bytes from [Random.secure], base64url-encoded. Tokens are never logged.
+///
+/// The token is not a boundary against the user's own processes: the Claude Agent SDK passes the
+/// MCP config, token included, on the `claude` command line, where any process of the same user
+/// can read it (`ps`). It keeps chats apart and keeps other local users and web pages out.
 final class AppMcpTokens {
   /// Creates the registry.
   AppMcpTokens({required this._database});
