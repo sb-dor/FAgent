@@ -2,6 +2,7 @@ import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:l/l.dart';
 
 part 'mcp_server_actions_controller.freezed.dart';
 
@@ -29,7 +30,8 @@ sealed class McpServerActionsState with _$McpServerActionsState {
 /// The buttons of the MCP servers section: add, remove, switch on or off and import.
 ///
 /// One action at a time: a tap during another one is dropped. The result shows up in the list
-/// observed through `McpServersController`.
+/// observed through `McpServersController`. A server that was added or switched on everywhere is
+/// checked in the background, so its status follows without holding the buttons.
 final class McpServerActionsController extends StateController<McpServerActionsState>
     with DroppableControllerHandler {
   McpServerActionsController({
@@ -41,7 +43,8 @@ final class McpServerActionsController extends StateController<McpServerActionsS
 
   /// Adds the server of [draft]; fails with an `InvalidMcpServerException` when it is not valid.
   void add(McpServerDraft draft) => _run(() async {
-    await _repository.add(draft);
+    final server = await _repository.add(draft);
+    _check(server.id);
     return null;
   });
 
@@ -55,11 +58,20 @@ final class McpServerActionsController extends StateController<McpServerActionsS
   /// one project.
   void setEnabled(String id, {required bool enabled, int? projectId}) => _run(() async {
     await _repository.setEnabled(id, enabled: enabled, projectId: projectId);
+    if (enabled && projectId == null) _check(id);
     return null;
   });
 
   /// Adds the servers of the `.mcp.json` at [path].
   void importMcpJson(String path) => _run(() => _repository.importMcpJson(path));
+
+  void _check(String id) => _repository
+      .check(id: id)
+      .catchError(
+        (Object error, StackTrace stackTrace) =>
+            l.w('MCP servers | the status check of $id failed: $error', stackTrace),
+      )
+      .ignore();
 
   void _run(Future<McpImportSummary?> Function() action) => handle(() async {
     setState(const McpServerActionsState.processing());

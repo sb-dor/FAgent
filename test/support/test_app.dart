@@ -19,6 +19,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
@@ -34,6 +35,7 @@ import 'memory_project_creation_repository.dart';
 import 'memory_run_config_repository.dart';
 import 'memory_skills_repository.dart';
 import 'scripted_app_run_repository.dart';
+import 'scripted_mcp_probe.dart';
 
 /// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
 /// [appRunRepository], [devicesRepository], [widgetPickerRepository] or [runConfigRepository] (a
@@ -53,7 +55,8 @@ import 'scripted_app_run_repository.dart';
 /// `PATH` and no delay unless the test passes its own [flutterSdkRepository]. The project creation
 /// repository is a [MemoryProjectCreationRepository] unless the test passes its own
 /// [projectCreationRepository]. The app's MCP server is a real one that is never started unless the
-/// test passes its own [appMcpServer].
+/// test passes its own [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
+/// that fails every server unless the test passes its own [mcpProbe].
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
@@ -68,10 +71,21 @@ Dependencies testDependencies({
   IFlutterSdkRepository? flutterSdkRepository,
   IProjectCreationRepository? projectCreationRepository,
   IAppMcpServer? appMcpServer,
+  IMcpProbe? mcpProbe,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
   final appMcpTokens = AppMcpTokens(database: database);
+  final appServer =
+      appMcpServer ??
+      AppMcpServerImpl(
+        tokens: appMcpTokens,
+        tools: const <AppMcpTool>[],
+        instructions: appMcpInstructions,
+      );
+  final sdkRepository =
+      flutterSdkRepository ??
+      FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero);
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment
@@ -83,20 +97,19 @@ Dependencies testDependencies({
     ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
-    ..mcpServersRepository = mcpServersRepository ?? McpServersRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()
     ..appMcpTokens = appMcpTokens
-    ..appMcpServer =
-        appMcpServer ??
-        AppMcpServerImpl(
-          tokens: appMcpTokens,
-          tools: const <AppMcpTool>[],
-          instructions: appMcpInstructions,
+    ..appMcpServer = appServer
+    ..flutterSdkRepository = sdkRepository
+    ..mcpServersRepository =
+        mcpServersRepository ??
+        McpServersRepositoryImpl(
+          database: database,
+          appServer: appServer,
+          probe: mcpProbe ?? ScriptedMcpProbe(),
+          flutterSdk: sdkRepository,
         )
-    ..flutterSdkRepository =
-        flutterSdkRepository ??
-        FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero)
     ..skillsRepository =
         skillsRepository ??
         MemorySkillsRepository(

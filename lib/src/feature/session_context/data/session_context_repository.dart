@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/dart_mcp_command.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/rules_prompt.dart';
@@ -161,13 +162,9 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
     final flutter = _flutterExecutable(projectRoot);
     final sdk = flutter == null ? null : flutterSdkRootOf(flutter);
     if (sdk == null) return null;
+    final (:command, :args) = dartMcpCommand(sdk);
     return acp.McpServerStdioVariant(
-      acp.McpServerStdio(
-        name: _dartServerName,
-        command: p.join(sdk, 'bin', 'dart'),
-        args: ['mcp-server', '--flutter-sdk', sdk, '--disable', 'launch_app,stop_app'],
-        env: _env(const {}),
-      ),
+      acp.McpServerStdio(name: _dartServerName, command: command, args: args, env: _env(const {})),
     );
   }
 

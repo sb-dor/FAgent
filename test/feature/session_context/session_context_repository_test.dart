@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/rules_prompt.dart';
@@ -17,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/memory_skills_repository.dart';
+import '../../support/scripted_mcp_probe.dart';
 
 final class _ChatSkills implements IChatSkillsRepository {
   final Map<String, bool> states = <String, bool>{};
@@ -107,7 +109,12 @@ void main() {
     tokens = AppMcpTokens(database: database);
     appServer = _AppServer(Uri.parse('http://127.0.0.1:4321/mcp'));
     chatSkills = _ChatSkills();
-    mcpServers = McpServersRepositoryImpl(database: database);
+    mcpServers = McpServersRepositoryImpl(
+      database: database,
+      appServer: appServer,
+      probe: ScriptedMcpProbe(),
+      flutterSdk: FakeFlutterSdkRepositoryImpl(which: (_) => flutter, step: Duration.zero),
+    );
     skills = MemorySkillsRepository(
       items: [
         memoryRule('base'),

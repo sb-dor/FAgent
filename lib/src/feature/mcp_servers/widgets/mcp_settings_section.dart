@@ -52,6 +52,11 @@ class McpSettingsSection extends StatelessWidget {
                     McpServerRow(key: ValueKey<String>('mcp-row-${server.id}'), server: server),
                 ],
               ),
+              const SizedBox(height: 8),
+              Text(
+                localization.mcpChangesNote,
+                style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
+              ),
               const SizedBox(height: 16),
             ],
             Align(

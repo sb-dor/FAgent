@@ -4,16 +4,33 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/dart_mcp_command.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_json.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 
 /// The MCP servers handed to agents: the app's built-in ones and the user's own.
 abstract interface class IMcpServersRepository {
-  /// The built-in servers, then the user's by creation time; again whenever any of them or the
-  /// per-project switches change. Cancel the subscription to stop watching.
+  /// The built-in servers, then the user's by creation time; again whenever any of them, the
+  /// per-project switches or what [check] found change. Cancel the subscription to stop watching.
+  ///
+  /// The app's server shows the address it listens on and its tool count, or why it did not start.
+  /// Dart MCP and the user's servers show `unknown` until [check] has probed them.
   Stream<List<McpServer>> watchServers();
+
+  /// Connects to Dart MCP and the user's servers that are switched on everywhere, or only to [id]
+  /// when it is one of them, and keeps what it found in memory for [watchServers].
+  ///
+  /// Dart MCP runs on the Flutter SDK of Settings; without one it is `failed` with
+  /// [mcpSdkNotFoundError]. A server that is already being checked is not checked again; the call
+  /// waits for that check. The app's own server is never probed. A server that does not work is
+  /// its status, not an error.
+  Future<void> check({String? id});
 
   /// Adds the server of [draft] and returns it.
   ///
@@ -52,42 +69,41 @@ final RegExp _validName = RegExp(r'^[A-Za-z0-9_.-]{1,64}$');
 /// `Dart MCP` needs no entry: its space already fails [_validName].
 const Set<String> _reservedNames = {'flutter_code_agent', 'dart'};
 
-McpServer _builtinApp(Set<int> disabledIn) => McpServer(
-  id: _appKey,
-  name: 'flutter_code_agent',
-  transport: McpTransport.stdio,
-  builtin: true,
-  disabledIn: disabledIn,
-  status: McpStatus.ready,
-  toolCount: 9,
-  summary: 'skills, rules, run, screenshot',
-);
-
-McpServer _builtinDart(Set<int> disabledIn) => McpServer(
-  id: _dartKey,
-  name: 'Dart MCP',
-  transport: McpTransport.stdio,
-  command: 'dart',
-  args: const ['mcp-server'],
-  builtin: true,
-  disabledIn: disabledIn,
-  status: McpStatus.ready,
-  toolCount: 18,
-  summary: 'hot reload, analysis, pub.dev',
-);
-
 /// [IMcpServersRepository] over the `mcp_servers` and `mcp_server_states` tables.
 final class McpServersRepositoryImpl implements IMcpServersRepository {
-  /// Creates the repository.
-  McpServersRepositoryImpl({required this._database});
+  /// Creates the repository. [flutterSdk] tells which Flutter SDK Dart MCP runs on (the one the
+  /// Flutter section of Settings shows); [probe] connects to the servers.
+  McpServersRepositoryImpl({
+    required this._database,
+    required this._appServer,
+    required this._probe,
+    required this._flutterSdk,
+  });
 
   final AppDatabase _database;
+  final IAppMcpServer _appServer;
+  final IMcpProbe _probe;
+  final IFlutterSdkRepository _flutterSdk;
+
+  /// What the probes found, by server id; lost when the app closes.
+  final Map<String, McpProbeResult> _results = <String, McpProbeResult>{};
+
+  /// The probes that are running, by server id.
+  final Map<String, Future<void>> _probing = <String, Future<void>>{};
+
+  /// Tells [watchServers] that [_results] or the Dart MCP SDK changed.
+  final StreamController<void> _changed = StreamController<void>.broadcast(sync: true);
+
+  /// Whether the Flutter SDK was looked up, and the folder it was found in.
+  bool _sdkLookedUp = false;
+  String? _dartSdkRoot;
 
   @override
   Stream<List<McpServer>> watchServers() {
     final controller = StreamController<List<McpServer>>();
     StreamSubscription<List<McpServerRow>>? rowsSubscription;
     StreamSubscription<List<McpServerStateRow>>? statesSubscription;
+    StreamSubscription<void>? changesSubscription;
     List<McpServerRow>? rows;
     List<McpServerStateRow>? states;
     List<McpServer>? emitted;
@@ -121,10 +137,12 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
           states = value;
           emit();
         }, onError: fail);
+        changesSubscription = _changed.stream.listen((_) => emit());
       }
       ..onCancel = () async {
         await rowsSubscription?.cancel();
         await statesSubscription?.cancel();
+        await changesSubscription?.cancel();
         await controller.close();
       };
     return controller.stream;
@@ -138,9 +156,112 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
     return [
       _builtinApp(disabled[_appKey] ?? const {}),
       _builtinDart(disabled[_dartKey] ?? const {}),
-      for (final row in rows) _fromRow(row, disabled['user:${row.id}'] ?? const {}),
+      for (final row in rows)
+        _applyResult(
+          _fromRow(row, disabled['user:${row.id}'] ?? const {}),
+          // A server that is off is not connected to, so an older result says nothing.
+          row.enabled ? _results['user:${row.id}'] : null,
+        ),
     ];
   }
+
+  McpServer _builtinApp(Set<int> disabledIn) {
+    final url = _appServer.url;
+    final startError = _appServer.startError;
+    return McpServer(
+      id: _appKey,
+      name: 'flutter_code_agent',
+      transport: McpTransport.http,
+      url: url?.toString(),
+      builtin: true,
+      disabledIn: disabledIn,
+      status: url != null
+          ? McpStatus.ready
+          : startError != null
+          ? McpStatus.failed
+          : McpStatus.unknown,
+      toolCount: url != null ? _appServer.toolCount : null,
+      error: url == null && startError != null ? '$startError' : null,
+    );
+  }
+
+  McpServer _builtinDart(Set<int> disabledIn) {
+    final server = McpServer(
+      id: _dartKey,
+      name: 'Dart MCP',
+      transport: McpTransport.stdio,
+      builtin: true,
+      disabledIn: disabledIn,
+    );
+    if (!_sdkLookedUp) return server;
+    final sdk = _dartSdkRoot;
+    if (sdk == null) return server.copyWith(status: McpStatus.failed, error: mcpSdkNotFoundError);
+    final (:command, :args) = dartMcpCommand(sdk);
+    return _applyResult(server.copyWith(command: command, args: args), _results[_dartKey]);
+  }
+
+  McpServer _applyResult(McpServer server, McpProbeResult? result) => switch (result) {
+    null => server,
+    McpProbeConnected(:final toolCount) => server.copyWith(
+      status: McpStatus.ready,
+      toolCount: toolCount,
+    ),
+    McpProbeFailed(:final message) => server.copyWith(status: McpStatus.failed, error: message),
+    McpProbeNeedsAuth() => server.copyWith(status: McpStatus.needsAuth),
+  };
+
+  // --- Checking ---
+
+  @override
+  Future<void> check({String? id}) async {
+    final checks = <Future<void>>[];
+    if (id == null || id == _dartKey) checks.add(_checkDart());
+    if (id == null || id.startsWith('user:')) {
+      final rows = await _database.select(_database.mcpServersTable).get();
+      for (final row in rows) {
+        final serverId = 'user:${row.id}';
+        if (row.enabled && (id == null || id == serverId)) {
+          checks.add(_probeOnce(_fromRow(row, const {})));
+        }
+      }
+    }
+    await Future.wait(checks);
+  }
+
+  /// Looks up the SDK of Settings, then probes Dart MCP on it.
+  Future<void> _checkDart() async {
+    final flutter = (await _flutterSdk.sdkFor(null)).path;
+    final root = flutter == null ? null : flutterSdkRootOf(flutter);
+    if (!_sdkLookedUp || root != _dartSdkRoot) {
+      _sdkLookedUp = true;
+      _dartSdkRoot = root;
+      if (root == null) _results.remove(_dartKey);
+      _changed.add(null);
+    }
+    if (root == null) return;
+    final (:command, :args) = dartMcpCommand(root);
+    await _probeOnce(
+      McpServer(
+        id: _dartKey,
+        name: 'Dart MCP',
+        transport: McpTransport.stdio,
+        command: command,
+        args: args,
+        builtin: true,
+      ),
+    );
+  }
+
+  Future<void> _probeOnce(McpServer server) => _probing[server.id] ??= (() async {
+    try {
+      _results[server.id] = await _probe.probe(server);
+    } on Object catch (error) {
+      _results[server.id] = McpProbeFailed('$error');
+    } finally {
+      _probing.remove(server.id);
+    }
+    _changed.add(null);
+  })();
 
   McpServer _fromRow(McpServerRow row, Set<int> disabledIn) {
     final transport = McpTransport.values.asNameMap()[row.transport] ?? McpTransport.stdio;
@@ -240,6 +361,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
         _database.mcpServerStatesTable,
       )..where((t) => t.serverKey.equals(id))).go();
     });
+    _results.remove(id);
   }
 
   /// The `mcp_servers.id` of the user's server [id]; a built-in or unknown id is an [ArgumentError].

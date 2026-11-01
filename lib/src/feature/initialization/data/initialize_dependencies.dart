@@ -22,6 +22,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_re
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart';
@@ -121,8 +122,9 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.chatSkillsRepository = ChatSkillsRepositoryImpl(database: dependencies.database),
   'Create run config repository': (dependencies) =>
       dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
-  'Create MCP servers repository': (dependencies) =>
-      dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
+  // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
+  'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
+      FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
   // A server that cannot start leaves the app working without its tools (a hub notice says so).
   'App MCP server': (dependencies) async {
     final database = dependencies.database;
@@ -158,6 +160,14 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ..appMcpTokens = tokens
       ..appMcpServer = server;
   },
+  // The status of the servers in Settings: the app's server is read, the others are probed.
+  'Create MCP servers repository': (dependencies) =>
+      dependencies.mcpServersRepository = McpServersRepositoryImpl(
+        database: dependencies.database,
+        appServer: dependencies.appMcpServer,
+        probe: McpProbeImpl(environment: dependencies.shellEnvironment),
+        flutterSdk: dependencies.flutterSdkRepository,
+      ),
   'Create session context repository': (dependencies) =>
       dependencies.sessionContextRepository = SessionContextRepositoryImpl(
         database: dependencies.database,
@@ -170,9 +180,6 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ),
   'Create permission rules repository': (dependencies) =>
       dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
-  // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
-  'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
-      FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
   // The target checks are real; the creation itself is made up (M4).
   'Create project creation repository': (dependencies) => dependencies.projectCreationRepository =
       FakeProjectCreationRepositoryImpl(database: dependencies.database),
