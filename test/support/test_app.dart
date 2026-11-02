@@ -16,8 +16,8 @@ import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_r
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
@@ -28,6 +28,7 @@ import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dar
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'flutter_version_runner.dart';
 import 'memory_agents_repository.dart';
 import 'memory_devices_repository.dart';
 import 'memory_permission_rules_repository.dart';
@@ -86,7 +87,11 @@ Dependencies testDependencies({
   final probe = mcpProbe ?? ScriptedMcpProbe();
   final sdkRepository =
       flutterSdkRepository ??
-      FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero);
+      FlutterSdkRepositoryImpl(
+        which: (_) => '/opt/flutter/bin/flutter',
+        runProcess: flutterVersionRunner,
+        step: Duration.zero,
+      );
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment

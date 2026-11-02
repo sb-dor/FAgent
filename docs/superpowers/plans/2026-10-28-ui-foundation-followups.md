@@ -284,3 +284,23 @@ Deferred from the reviews of the M3 plan (docs/superpowers/plans/2026-11-01-m3-a
   - Skills in the composer: `send()` wiring is tested only through `promptFor`; a full `SkillTextController` is created just to read; re-nesting `PromptComposer` rebuilds the composer on skill-choice changes (`feature/prompt_sending/widgets/prompt_composer.dart`, `feature/skills/controller/skill_text_controller.dart`)
   - Test support: doc lines of `test/support/test_app.dart` exceed 100 characters
   - Runtime errors: a multi-line `if` without braces in `flutter_error_listener.dart`; a sync `_resolved` call in an async path; `app_run_repository.dart` is ~900 lines — move `_Launch` out (`feature/app_run/data/`)
+
+## M4 follow-ups
+
+Deferred from the reviews of the M4 plan (docs/superpowers/plans/2026-11-02-m4-new-project.md). Paths are under `lib/src/` unless they start with `assets/`, `test/` or name a root file.
+
+- **Bugs and risks:**
+  - Skeleton: `$disposeApp` is an empty stub (`assets/project_template/architecture/`)
+  - Skeleton: `late final binding` used in `finally` masks an `ensureInitialized` error, in the template and in the app's own initialization (`assets/project_template/architecture/`, `feature/initialization/data/initialization.dart`)
+  - Skeleton: `appTitle` is the raw snake_case package name (`assets/project_template/architecture/`)
+  - Skeleton: the template's widget test fake throws on any preferences read (`assets/project_template/architecture/`, `test/feature/project_creation/project_template_test.dart`)
+  - Creation repository: cancel or dispose during `open()` can leave the project added but untrusted (`feature/project_creation/data/project_creation_repository_impl.dart`)
+  - Creation repository: `dispose()` does not await a process that is still starting (`feature/project_creation/data/project_creation_repository_impl.dart`)
+  - Creation repository: output-stream errors are swallowed without a log line (`feature/project_creation/data/project_creation_repository_impl.dart`)
+  - Creation repository: a multi-line exception message lands as one output entry; one snapshot per output line; blank output lines are kept (`feature/project_creation/data/project_creation_repository_impl.dart`)
+  - Wizard: the Stop button is not latched after a tap (`feature/project_creation/widgets/creation_progress.dart`)
+  - Flutter SDK: `flutter doctor` stays made up, as the command has no machine output (`feature/flutter_sdk/data/flutter_sdk_repository_impl.dart`)
+- **Next steps:**
+  - Skeleton: the asset test does not catch a template file missing from `projectTemplateFiles` (`test/feature/project_creation/project_template_test.dart`)
+  - Creation repository: no tests for stop or cancel between commands, between steps, or while a process starts; the opt-in test prints the whole step report on success (`test/feature/project_creation/`, `test/integration/new_project_test.dart`)
+  - Wizard: the open-created-project test does not assert an empty composer; the memory stub's `failAt` silently ignores a kind that is not in the run; hand-rolled test stubs repeat no-op `stop` / `dispose` (`test/feature/project_creation/`, `test/support/memory_project_creation_repository.dart`)

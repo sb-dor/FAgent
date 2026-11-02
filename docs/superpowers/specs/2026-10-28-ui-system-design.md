@@ -275,15 +275,16 @@ px**, отступы 32; карточки только в одну колонк�
   читается и не меняется.
 - Новые поля `AppSettings`: `askBeforeQuit`, `feedDensity`, `projectOrg` (проверяется `orgPattern`),
   `projectTemplate`, `devToolsTarget`; нечитаемое значение становится значением по умолчанию.
-- Flutter: путь к SDK и версия fvm проекта настоящие; версия Flutter и сводка `flutter doctor` —
-  Preview до M4, шаблон «git» — M4, DevTools внутри приложения — пока недоступно (нужен
+- Flutter: путь к SDK, версия fvm проекта и (с M4) версия Flutter настоящие; сводка `flutter doctor` —
+  Preview, шаблон «git» — «Появится позже», DevTools внутри приложения — пока недоступно (нужен
   webview, решения M2 в §3.6).
 
 ### 3.9 Новый проект (диалог 560 px)
 Поля: имя пакета (проверка как у `flutter create`), org (из настроек), папка, платформы (чипы),
 шаблон (Моя архитектура · Чистый flutter create · Из git-шаблона), «git init + первый коммит»,
-«Открыть чат после создания». Затем прогресс: `flutter create` → `git init` → шаг агента (обычный чат
-«Новый проект» со своими разрешениями) → `flutter analyze` → коммит. Диалог можно свернуть.
+«Открыть чат после создания». Затем прогресс: `flutter create` → `git init` → скелет архитектуры
+(приложение копирует шаблон само, без агента) → `flutter analyze` → коммит. Диалог можно свернуть;
+пока создание идёт, есть «Остановить», по окончании — «Открыть проект» и «Закрыть».
 
 Решения этапа 7:
 - Правила имени взяты из `flutter_tools` (`create_base.dart`): строчные латинские буквы, цифры и `_`,
@@ -299,21 +300,35 @@ px**, отступы 32; карточки только в одну колонк�
   шаблон «git» в форме заменяется на «Мою архитектуру».
 - Создание — поток снимков `Stream<List<CreationStep>>` (весь список шагов при каждом изменении, поток
   закрывается после последнего шага). Шаги зависят от запроса: `git init` и коммит — при «git init +
-  первый коммит», шаг агента — только у шаблона «Моя архитектура». Поток, закончившийся шагом
-  `failed`, — это `failed`, а не `completed`.
+  первый коммит», шаг скелета — только у шаблона «Моя архитектура». Поток, закончившийся шагом
+  `failed`, — это `failed`, а не `completed`. С M4 это `Stream<CreationRun>` (шаги и `projectId`).
 - `ProjectCreationController` живёт на уровне окна (`WorkspaceConfigWidget`), создание одно за раз;
   закрытие диалога (Свернуть, Esc) его не останавливает, диалог не закрывается кликом по фону. Пока
   создание идёт или ждёт «Готово», диалог открывается сразу на прогрессе; «Готово» закрывает диалог и
   после его исчезновения сбрасывает контроллер.
 - Чип прогресса («Создаю имя · N/M» / «имя: готово» / «имя: ошибка», у завершённого есть ✕) стоит
   в сайдбаре сразу под кнопкой «＋ Проект», к которой относится; нажатие открывает диалог на прогрессе.
-- Репозиторий — `FakeProjectCreationRepositoryImpl` (правило фейков, §4); `checkTarget` и
-  `defaultParent` настоящие (читают диск и таблицу проектов), `create` ничего не пишет и не создаёт
-  чат: проигрывает шаги с задержкой и выводом. `isPreview` → заголовок диалога «имя: готово (Preview)» (у чипа
-  пометки «(Preview)» нет) и пометка в диалоге. «Открыть чат агента» и настоящий шаг агента — M4.
-- «Из git-шаблона…» в форме показывает строку «Появится в M4» под карточками (SnackBar оказался бы
-  под шторкой диалога), «Открыть чат агента» сначала закрывает диалог, потом показывает SnackBar;
-  «Клонировать из git…» в меню «＋ Проект» остаётся SnackBar «Появится в M4», без выдуманной формы.
+- На этапе 7 репозиторий был `FakeProjectCreationRepositoryImpl` (правило фейков, §4): `create`
+  ничего не писал и проигрывал шаги с задержкой, `isPreview` давал «(Preview)» в заголовке и пометку
+  в диалоге. С M4 фейка и `isPreview` нет, репозиторий настоящий (решения M4 ниже).
+- «Из git-шаблона…» в форме показывает строку «Появится позже» под карточками (SnackBar оказался бы
+  под шторкой диалога); «Клонировать из git…» в меню «＋ Проект» остаётся SnackBar «Появится позже»,
+  без выдуманной формы.
+
+Решения M4 (спека `2026-11-02-m4-new-project-design.md`):
+- `ProjectCreationRepositoryImpl` запускает `flutter create`, `git init`, пишет скелет из
+  `assets/project_template/architecture/` (подстановка `{{package}}`, `generate: true`,
+  `flutter pub add`), затем `flutter analyze` и первый коммит. Каждая команда — своей группой
+  процессов, строки stdout и stderr идут в вывод шага. Агент в создании не участвует; кнопки «Открыть
+  чат агента» и заметки о чате «Новый проект» нет.
+- Поток — `Stream<CreationRun>` (`steps`, `projectId`). Проект добавляется (`IProjectOpeningRepository`)
+  и становится доверенным, когда `flutter create` прошёл — и при успехе, и при неудаче позже. Он не
+  выбирается: открывает его «Открыть проект» (вместе с пустым чатом, если включено «Открыть чат после
+  создания»). Если упал сам `flutter create`, ничего не добавляется, остаётся «Закрыть».
+- «Остановить» убивает процесс, шаг получает `failed` со строкой «Stopped», проект добавляется по тем
+  же правилам; закрытие окна и `dispose` — жёсткий путь без добавления. Таймаутов нет.
+- Настоящая версия Flutter: `flutter --version --machine` (`frameworkVersion`, `channel`), `isPreview`
+  в SDK — `false`; `flutter doctor` остаётся made-up (Preview у отчёта).
 
 ### 3.10 Пустые и ошибочные состояния
 Нет проектов (приглашение открыть или создать) · проект без чатов · агент не установлен / нужен вход
@@ -335,8 +350,8 @@ px**, отступы 32; карточки только в одну колонк�
 | `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус и число инструментов — Real (`IMcpProbe`), доставка агенту — Real (M3: `session/new` и `session/load` → `mcpServers`) |
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Real: `DevicesRepositoryImpl` (`flutter daemon`) и `AppRunRepositoryImpl` (`flutter run --machine`), разбор вывода `RunOutputParser`, аргументы запуска — drift `run_configs`; адреса VM service / DTD / DevTools запуска сохраняются для M3 и M6; Flutter-ошибки debug-запуска — из VM service (`Flutter.Error`, `FlutterErrorListener`, M3), в profile, release и без подключения — разбор текста |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
-| `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`) и версия fvm проекта — Real; версия Flutter и `doctor()` — Fake до M4 |
-| `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<List<CreationStep>>`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?`, `isPreview` (решения этапа 7 — в §3.9) | `create` — Fake до M4 (`FakeProjectCreationRepositoryImpl`); `defaultParent`, `checkTarget` — Real |
+| `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`), версия fvm проекта и версия Flutter (`flutter --version --machine`, M4) — Real; `doctor()` — Fake |
+| `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<CreationRun>`, `stop()`, `dispose()`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?` (решения этапа 7 и M4 — в §3.9) | Real (M4): `ProjectCreationRepositoryImpl` — `flutter create`, `git init`, скелет архитектуры, `flutter analyze`, первый коммит; проект добавляется и становится доверенным |
 | `changes_pane`, `plan_pane` | читают `ChatTranscript` (`TurnFilesItem`, `ToolCallItem` с diff, `PlanItem`) | Real |
 
 Модели (freezed, кратко): `AgentInfo{id, name, version, status: ready|needsLogin|notInstalled|

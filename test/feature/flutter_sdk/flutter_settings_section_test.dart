@@ -6,8 +6,8 @@ import 'package:flutter_code_agent/src/common/widget/segmented_control.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
@@ -15,13 +15,14 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/flutter_version_runner.dart';
 import '../../support/test_app.dart';
 
 /// The fake repository with a project that pins an fvm version; it reads no file.
 final class _FvmRepository implements IFlutterSdkRepository {
   _FvmRepository(this._fake);
 
-  final FakeFlutterSdkRepositoryImpl _fake;
+  final FlutterSdkRepositoryImpl _fake;
 
   @override
   Future<FlutterSdk> sdkFor(String? projectPath) async =>
@@ -47,8 +48,12 @@ Future<void> _settle(WidgetTester tester) async {
 String _composerText(WidgetTester tester) =>
     tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text;
 
-FakeFlutterSdkRepositoryImpl _fake({String? path = '/opt/flutter/bin/flutter'}) =>
-    FakeFlutterSdkRepositoryImpl(which: (_) => path, step: Duration.zero);
+FlutterSdkRepositoryImpl _fake({String? path = '/opt/flutter/bin/flutter'}) =>
+    FlutterSdkRepositoryImpl(
+      which: (_) => path,
+      runProcess: flutterVersionRunner,
+      step: Duration.zero,
+    );
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;

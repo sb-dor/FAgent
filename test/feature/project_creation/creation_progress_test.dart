@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
@@ -17,6 +17,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_proj
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/flutter_version_runner.dart';
 import '../../support/memory_project_creation_repository.dart';
 import '../../support/test_app.dart';
 
@@ -95,8 +96,9 @@ void main() {
     memory = MemoryProjectCreationRepository(step: _step);
     dependencies = testDependencies(
       projectCreationRepository: repository ?? memory,
-      flutterSdkRepository: FakeFlutterSdkRepositoryImpl(
+      flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => '/opt/flutter/bin/flutter',
+        runProcess: flutterVersionRunner,
         step: Duration.zero,
       ),
     );

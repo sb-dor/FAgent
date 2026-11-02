@@ -6,7 +6,7 @@ import 'dart:io' as io;
 import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
@@ -32,7 +32,10 @@ void main() {
       addTearDown(() => root.deleteSync(recursive: true));
       final database = AppDatabase(NativeDatabase.memory());
       addTearDown(database.close);
-      final sdk = FakeFlutterSdkRepositoryImpl(which: environment.which);
+      final sdk = FlutterSdkRepositoryImpl(
+        which: environment.which,
+        environment: environment.variables,
+      );
       final flutter = (await sdk.sdkFor(null)).path;
       expect(flutter, isNotNull, reason: 'flutter is not on the PATH');
 

@@ -19,7 +19,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
@@ -124,9 +124,12 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.chatSkillsRepository = ChatSkillsRepositoryImpl(database: dependencies.database),
   'Create run config repository': (dependencies) =>
       dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
-  // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
-  'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
-      FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
+  // The SDK path, the Flutter version and the fvm version are real; the doctor report is made up.
+  'Create Flutter SDK repository': (dependencies) =>
+      dependencies.flutterSdkRepository = FlutterSdkRepositoryImpl(
+        which: dependencies.shellEnvironment.which,
+        environment: dependencies.shellEnvironment.variables,
+      ),
   // A server that cannot start leaves the app working without its tools (a hub notice says so).
   'App MCP server': (dependencies) async {
     final database = dependencies.database;

@@ -8,7 +8,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/settings_row.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
@@ -21,6 +21,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/flutter_version_runner.dart';
 import '../../support/scripted_mcp_probe.dart';
 import '../../support/stub_app_mcp_server.dart';
 import '../../support/test_app.dart';
@@ -122,8 +123,9 @@ void main() {
     final base = testDependencies(
       appMcpServer: appServer,
       mcpProbe: probe,
-      flutterSdkRepository: FakeFlutterSdkRepositoryImpl(
+      flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => flutter,
+        runProcess: flutterVersionRunner,
         step: Duration.zero,
       ),
     );
