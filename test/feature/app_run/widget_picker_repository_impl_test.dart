@@ -252,6 +252,25 @@ void main() {
       },
     );
 
+    test('a project folder reached through a symlink still gets project-relative files', () async {
+      // The app reports the real path (macOS: /private/var/… for /var/…).
+      final real = io.Directory(roots[1]!).resolveSymbolicLinksSync();
+      roots[1] = real;
+      final link = p.join(temp.path, 'link');
+      io.Link(link).createSync(real);
+      await picker.dispose();
+      picker = newPicker(projectRoot: (_) async => link);
+
+      final widget = picked(await pickAndTap());
+
+      expect(widget.file, 'lib/booking_card.dart');
+      expect(widget.ancestors.map((a) => a.file), <String>[
+        'lib/booking_list.dart',
+        'lib/booking_screen.dart',
+        'lib/main.dart',
+      ]);
+    });
+
     test('screenshot saved as widget-<Name>.png under the screenshots folder', () async {
       final widget = picked(await pickAndTap());
 

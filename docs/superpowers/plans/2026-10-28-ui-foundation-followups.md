@@ -56,15 +56,13 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-30-ui-stage4-right-p
   - Changes: "Open file" is also shown for directory entries (check `FileSystemEntityType.file`); symlink resolution and other FS calls are synchronous on every refold
   - Changes: file order is lost after each turn (alphabetical within a turn); a rename plus an edit shows two entries; refold and rebuild on every chunk (`ChangedFile` has no equality)
   - Changes: the diff handle stays stale if a chat leaves Completed; multi-diff edits open `diffs.first`
-  - Run: `choose` can't clear the device; a chosen device leaving the list keeps ▶ enabled with a stale id; `pickWidget` works with nothing running
+  - Run: `choose` can't clear the device; a chosen device leaving the list keeps ▶ enabled with a stale id
   - Run: subscriptions may leak if disposed mid-watch (check `isDisposed` after await); run streams have no `onError`; failed run actions are not surfaced; `RunFailed` is never emitted by the fake
   - Run: restart doesn't clear the log buffer (`errorCount` accumulates); `clearLogs` assumes increasing `seq` (document it in the interface) and leaves `_atBottom` false while scrolled up
   - Run: replaying the log is 2000 separate events, O(n²) copies and a `setState` per line (batch it); every log line also costs a full-list copy, filter and badge rebuild; mentions scan the whole log per line
   - Run: the badge shows a stale project's errors when `projectId` becomes null; brief idle flash on a project switch
-  - Run: `RunTab` is keyed by project, so returning to a project whose pick is still pending loses the "Tap a widget…" hint (the widget still arrives) — revisit with the real inspector (M6)
   - Title bar: `PreviewBadge` adds ~60 px to the run controls; the chat title shrinks with an ellipsis, but no narrow-window test covers it
   - Run: one publish per frame could miss a fast running-to-idle change (document it); search skips `error.message`
-  - Run: `RunActionsController` is a single Droppable: Stop pressed within a reload/start is dropped silently, and a pending real pick would block Stop/reload/Start everywhere — split pick into its own controller and never drop stop (matters once the real runner lands, M2) (`app_run/controller/run_actions_controller.dart:25-28`)
   - Run: `RunTab` re-implements start/stop/reload/restart and active/canStart beside `WorkspaceRunLink` and trusts `widget.projectId` over `run.state.projectId` — pass the runLink callbacks/flags in (`app_run/widgets/run_tab.dart:96-124`, `run_header.dart:79-80`)
   - Run: removing a project leaves its run running with no way to stop it — stop the run on removal or treat building/running as `ProjectBusyException` (M2) (`workspace/widgets/workspace_config_widget.dart:340-344`)
   - Changes: `ChangesTab` reads `WorkspaceConfigInhWidget` directly (changes_pane depends on workspace) — pass selectedPath/onSelect/onOpenFile/projectRoot from `WorkspaceRightPane` like `RunTab` (`changes_pane/widgets/changes_tab.dart:19`)
@@ -336,3 +334,21 @@ Deferred from the reviews of the M5 plan (docs/superpowers/plans/2026-11-02-m5-a
   - Probe tests: weak account-drop assertion; the early-capture rationale is untested; the `_authStatusOf` closure (`test/feature/agents/agent_probe_test.dart`, `common/acp/agent_connection.dart`)
   - Agents repository: `hasBusyChats` returns a Future from the controller; 545 lines — split the Claude CLI check out; the sign-out Cancel path is untested; the custom hint is a getter instead of a field (`feature/agents/data/agents_repository.dart`, `feature/agents/controller/`)
   - Agent chip: the revert-path comment overstates consistency and is untested (`feature/chat/widgets/chat_config_widget.dart`)
+
+## M6 follow-ups
+
+Deferred from the reviews of the M6 plan (docs/superpowers/plans/2026-11-02-m6-widget-picker.md). Paths are under `lib/src/feature/app_run/` unless they start with `test/`.
+
+- **Bugs and risks:**
+  - Inspector client: `_listening` caches a failed `streamListen` forever, so the connection never listens again; `InspectorNode.fromJson` fills `''` for a missing `valueId`; a second `close()` returns before the first one finished disposing (`data/widget_inspector_client.dart`, `models/inspector_node.dart`)
+  - Picker: a select racing a new pick can merge stale ids into the chain (harmless, answers `PickGone`); cancel while a new pick waits for the previous one to finish cancels only the old one (`data/widget_picker_repository_impl.dart`)
+  - Picker: the 2 s wait after a dropped connection ignores a user cancel or `dispose` arriving in it (bounded); a `WebSocketException` may not be an `IOException` — `vm_service` reports drops as `RPCError` (`data/widget_picker_repository_impl.dart`)
+  - Picker: `AppCloseRepositoryImpl` has no timeout of its own around the picker; the bound lives inside the picker (`feature/app_close/data/app_close_repository.dart`, `data/widget_picker_repository_impl.dart`)
+  - Picker: file paths are made relative to the project folder and to its real path, but not when the project is the real folder and the app reports a path through a symlink (`data/widget_picker_repository_impl.dart`)
+  - Card: the picker state is a side `ValueNotifier` on `RunActionsController` (justified: stop and reload must cancel synchronously); one slot only, so another project's pick discards the previous project's card; `gaplessPlayback` shows the previous thumbnail for a moment on a new pick (`controller/run_actions_controller.dart`, `widgets/picked_widget_card.dart`)
+- **Next steps:**
+  - Client tests: the `FormatException` of a string-of-JSON result, a `close()` in flight, and a missing isolate during a drop are untested; two tests leak a client (`test/feature/app_run/widget_inspector_client_test.dart`)
+  - Picker tests: nothing separates pruning by modification time from pruning by name (an old `widget-*.png` pruned before a newer `screenshot-*.png`); the new error branches of `select` are untested; another project's pick discarding the card is untested (`test/feature/app_run/widget_picker_repository_impl_test.dart`)
+  - Card tests: the layout at 340 px with a thumbnail is untested; the thumbnail test waits 10 x 10 ms of real time for the file read (`test/feature/app_run/picked_widget_card_test.dart`)
+  - Opt-in test: it selects the widget through `setSelectionById`, not a real tap, and does not hot restart during a pick (`test/integration/widget_picker_test.dart`)
+  - Wiring: `initialize_dependencies.dart` got unrelated formatter churn in the `sessionContext` block with Task 2 (`feature/initialization/data/initialize_dependencies.dart`)

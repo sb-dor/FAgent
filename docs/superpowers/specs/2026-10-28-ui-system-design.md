@@ -178,8 +178,10 @@ diff; кнопки по `options` агента: основная — перва�
 Запуск принадлежит проекту: все чаты проекта видят один запуск.
 
 «Агенту» в логах и в блоке ошибки не отправляет сообщение: ошибки попадают в черновик поля ввода
-(чат не запускается сам) и помечаются отправленными. Выбор виджета остаётся заглушкой с меткой
-Preview до M6.
+(чат не запускается сам) и помечаются отправленными. Выбор виджета настоящий с M6: карточка с
+именем, `файл:строка:столбец`, цепочкой предков проекта и снимком виджета, «＋ В сообщение» кладёт в
+черновик `@widget …`, `in: …` и `@путь` (спека M6:
+`docs/superpowers/specs/2026-11-02-m6-widget-picker-design.md`).
 
 Решения M2:
 - Запуск настоящий: устройства из `flutter daemon` (один на приложение), `flutter run --machine`
@@ -209,7 +211,7 @@ Preview до M6.
   исключения) чистым классом `RunOutputParser`; заголовки и сообщения ошибок английские, они уходят
   агенту. Разбор через событие `Flutter.Error` VM service — в списке доработок.
 - `RunBuilding` без процента: `flutter run` его не сообщает, показывается только метка этапа.
-- Выбор виджета честно остаётся «M6»: он ждёт инспектор виджетов.
+- Выбор виджета в M2 оставался заглушкой, ждал инспектор виджетов; с M6 он настоящий (см. §3.6).
 - Команды `/run`, `/reload`, `/restart`, `/screenshot` в поле ввода работают через те же
   контроллеры, что кнопки вкладки Run; неактивная команда объясняет почему («Выберите устройство»,
   «Приложение не запущено»). Выбор команды не вставляет текст, а вызывает действие окна.
@@ -356,7 +358,7 @@ px**, отступы 32; карточки только в одну колонк�
 | `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка, без данных (вне рамок M3); доставка агенту — Real (M3): правила в системном промпте сессии, скиллы через MCP-сервер приложения (`list_skills`, `load_skill`, `read_skill_file`), выбор на чат — drift `chat_skill_states` |
 | `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус и число инструментов — Real (`IMcpProbe`), доставка агенту — Real (M3: `session/new` и `session/load` → `mcpServers`) |
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Real: `DevicesRepositoryImpl` (`flutter daemon`) и `AppRunRepositoryImpl` (`flutter run --machine`), разбор вывода `RunOutputParser`, аргументы запуска — drift `run_configs`; адреса VM service / DTD / DevTools запуска сохраняются для M3 и M6; Flutter-ошибки debug-запуска — из VM service (`Flutter.Error`, `FlutterErrorListener`, M3), в profile, release и без подключения — разбор текста |
-| `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
+| `widget_picker` | `IWidgetPickerRepository`: `pick(projectId) → PickResult`, `cancel(projectId)`, `select(projectId, id)`, `dispose()` | Real (M6): `WidgetPickerRepositoryImpl` поверх инспектора виджетов запущенного debug-приложения (`WidgetInspectorClient`, своё соединение VM service, `ext.flutter.inspector.*`); снимки виджетов — в `.dart_tool/flutter_code_agent/screenshots` |
 | `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `pathFor(projectPath)` (путь без запуска процесса), `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`), версия fvm проекта и версия Flutter (`flutter --version --machine`, M4) — Real; `doctor()` — Fake |
 | `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<CreationRun>`, `stop()`, `dispose()`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?` (решения этапа 7 и M4 — в §3.9) | Real (M4): `ProjectCreationRepositoryImpl` — `flutter create`, `git init`, скелет архитектуры, `flutter analyze`, первый коммит; проект добавляется и становится доверенным |
 | `changes_pane`, `plan_pane` | читают `ChatTranscript` (`TurnFilesItem`, `ToolCallItem` с diff, `PlanItem`) | Real |

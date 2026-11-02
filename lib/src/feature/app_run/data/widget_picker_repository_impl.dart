@@ -194,13 +194,14 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     List<InspectorNode>? chain,
   }) async {
     final root = await _projectRoot(project.projectId);
+    final roots = await _rootsOf(root);
     final nodes = chain ?? await client.parentChain(isolateId, node.id);
     final ancestors = <PickedAncestor>[
       for (final ancestor in nodes.reversed)
         if (ancestor.local && ancestor.fileUri != null && ancestor.id != node.id)
           PickedAncestor(
             name: ancestor.name,
-            file: _file(root, ancestor.fileUri!),
+            file: _file(roots, ancestor.fileUri!),
             line: ancestor.line ?? 0,
             column: ancestor.column ?? 0,
             id: ancestor.id,
@@ -233,7 +234,7 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     }
     return PickedWidget(
       name: node.name,
-      file: _file(root, node.fileUri!),
+      file: _file(roots, node.fileUri!),
       line: node.line ?? 0,
       column: node.column ?? 0,
       ancestors: ancestors,
@@ -390,14 +391,28 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     _projects.clear();
   }
 
-  /// [fileUri] as a path relative to [root] when it is a file in it; the path itself (or the URI,
+  /// [root] and, when it differs, the folder it really is: the app reports real paths, and the
+  /// project may be reached through a symlink (macOS: `/var` for `/private/var`).
+  static Future<List<String>> _rootsOf(String? root) async {
+    if (root == null) return const <String>[];
+    try {
+      final real = await io.Directory(root).resolveSymbolicLinks();
+      return real == root ? <String>[root] : <String>[root, real];
+    } on io.FileSystemException {
+      return <String>[root];
+    }
+  }
+
+  /// [fileUri] as a path relative to the first of [roots] it is in; the path itself (or the URI,
   /// when it is not a file) otherwise.
-  static String _file(String? root, String fileUri) {
+  static String _file(List<String> roots, String fileUri) {
     final uri = Uri.tryParse(fileUri);
     if (uri == null || !uri.isScheme('file')) return fileUri;
     final path = uri.toFilePath();
-    if (root == null || !p.isWithin(root, path)) return path;
-    return p.posix.joinAll(p.split(p.relative(path, from: root)));
+    for (final root in roots) {
+      if (p.isWithin(root, path)) return p.posix.joinAll(p.split(p.relative(path, from: root)));
+    }
+    return path;
   }
 
   /// [name] with only `[A-Za-z0-9_]` left (`Foo<Bar>` → `FooBar`); `widget` when nothing is.
