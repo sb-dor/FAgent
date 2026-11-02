@@ -647,8 +647,7 @@ void main() {
       );
       await pumpShell(tester, reloadAfterTurn: true);
       await startRun(tester);
-      final actions = workspaceOf(tester).runActionsController;
-      actions.pickWidget(projectId);
+      final actions = workspaceOf(tester).runActionsController..pickWidget(projectId);
       await settle(tester);
       expect(actions.pick.value.picking, isTrue);
 
