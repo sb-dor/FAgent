@@ -1,10 +1,16 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart' show ProjectsTableCompanion;
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/settings_row.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
@@ -15,6 +21,8 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/scripted_mcp_probe.dart';
+import '../../support/stub_app_mcp_server.dart';
 import '../../support/test_app.dart';
 
 WorkspaceConfigWidgetState _workspace(WidgetTester tester) =>
@@ -58,6 +66,9 @@ final class _StubServers implements IMcpServersRepository {
       servers != null ? Stream<List<McpServer>>.value(servers!) : _inner.watchServers();
 
   @override
+  Future<void> check({String? id}) => _inner.check(id: id);
+
+  @override
   Future<McpServer> add(McpServerDraft draft) => _inner.add(draft);
 
   @override
@@ -78,6 +89,7 @@ final class _StubServers implements IMcpServersRepository {
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late Dependencies dependencies;
+  late ScriptedMcpProbe probe;
 
   Future<List<McpServer>> servers(WidgetTester tester) => tester
       .runAsync(() => dependencies.mcpServersRepository.watchServers().first)
@@ -99,16 +111,28 @@ void main() {
     List<String> projects = const <String>[],
     List<McpServerDraft> own = const <McpServerDraft>[],
     IMcpServersRepository Function(IMcpServersRepository real)? wrap,
+    IAppMcpServer? appServer,
+    String? flutter = '/opt/flutter/bin/flutter',
   }) async {
     tester.view
       ..physicalSize = size
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final base = testDependencies();
+    probe = ScriptedMcpProbe();
+    final base = testDependencies(
+      appMcpServer: appServer,
+      mcpProbe: probe,
+      flutterSdkRepository: FakeFlutterSdkRepositoryImpl(
+        which: (_) => flutter,
+        step: Duration.zero,
+      ),
+    );
     dependencies = wrap == null
         ? base
         : testDependencies(
-            mcpServersRepository: wrap(McpServersRepositoryImpl(database: base.database)),
+            appMcpServer: appServer,
+            mcpProbe: probe,
+            mcpServersRepository: wrap(base.mcpServersRepository),
           );
     for (final name in projects) {
       await addProject(tester, name);
@@ -156,25 +180,202 @@ void main() {
 
   const stdio = McpServerDraft(name: 'figma-local', transport: McpTransport.stdio, command: 'npx');
 
-  testWidgets('shows built-ins with tool counts', (tester) async {
-    await openSettings(tester);
+  group('the status of the servers', () {
+    final running = StubAppMcpServer(url: Uri.parse('http://127.0.0.1:4321/mcp'));
 
-    expect(find.text('flutter_code_agent'), findsOneWidget);
-    expect(find.text('Dart MCP'), findsOneWidget);
-    expect(find.text('9 tools'), findsOneWidget);
-    expect(find.text('18 tools'), findsOneWidget);
-    expect(find.text('built-in'), findsNWidgets(2));
-    expect(
-      find.descendant(of: _row('builtin:app'), matching: find.byType(PreviewBadge)),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: _row('builtin:dart'), matching: find.byType(PreviewBadge)),
-      findsOneWidget,
-    );
-    expect(find.textContaining('dart mcp-server'), findsOneWidget);
-    expect(find.textContaining('Status and tools appear in M3'), findsOneWidget);
-    await disposeTestApp(tester, dependencies);
+    Finder inRow(String id, Finder matching) => find.descendant(of: _row(id), matching: matching);
+
+    testWidgets('the app server row says where it runs and how many tools it has', (tester) async {
+      await openSettings(tester, appServer: running);
+
+      expect(find.text('flutter_code_agent'), findsOneWidget);
+      expect(find.text('Dart MCP'), findsOneWidget);
+      expect(find.text('built-in'), findsNWidgets(2));
+      expect(
+        inRow('builtin:app', find.text('Running on 127.0.0.1:4321 · 9 tools')),
+        findsOneWidget,
+      );
+      expect(find.byType(PreviewBadge), findsNothing);
+      expect(find.textContaining('Status and tools appear in M3'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the app server row says why the server did not start', (tester) async {
+      await openSettings(
+        tester,
+        appServer: StubAppMcpServer(startError: StateError('Address already in use')),
+      );
+
+      expect(
+        inRow(
+          'builtin:app',
+          find.textContaining('Could not start: Bad state: Address already in use'),
+        ),
+        findsOneWidget,
+      );
+      expect(inRow('builtin:app', find.textContaining('Running on')), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the Dart MCP row without an SDK says so', (tester) async {
+      await openSettings(tester, appServer: running);
+
+      expect(inRow('builtin:dart', find.text('Flutter SDK not found')), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the Dart MCP row shows the command and the tools the probe found', (tester) async {
+      final sdk = Directory.systemTemp.createTempSync('mcp_row_sdk');
+      addTearDown(() => sdk.deleteSync(recursive: true));
+      File('${sdk.path}/bin/flutter').createSync(recursive: true);
+      File('${sdk.path}/bin/dart').createSync(recursive: true);
+      await openSettings(tester, appServer: running, flutter: '${sdk.path}/bin/flutter');
+      probe.results['builtin:dart'] = const McpProbeConnected(18);
+
+      await tester.runAsync(() => dependencies.mcpServersRepository.check());
+      await _settle(tester);
+
+      expect(inRow('builtin:dart', find.text('18 tools')), findsOneWidget);
+      expect(
+        inRow('builtin:dart', find.textContaining('/bin/dart mcp-server --flutter-sdk')),
+        findsOneWidget,
+      );
+      expect(inRow('builtin:dart', find.text('Flutter SDK not found')), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the Dart MCP row without an SDK says so in Russian', (tester) async {
+      await openSettings(tester, locale: const Locale('ru'), appServer: running);
+
+      expect(inRow('builtin:dart', find.text('Flutter SDK не найден')), findsOneWidget);
+      expect(
+        inRow('builtin:app', find.text('Запущен на 127.0.0.1:4321 · 9 инструментов')),
+        findsOneWidget,
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a connected server shows its tool count and a failed one why', (tester) async {
+      await openSettings(
+        tester,
+        appServer: running,
+        own: const <McpServerDraft>[
+          stdio,
+          McpServerDraft(
+            name: 'broken',
+            transport: McpTransport.http,
+            url: 'https://x.example/mcp',
+          ),
+        ],
+      );
+      probe.results['user:1'] = const McpProbeConnected(3);
+      probe.results['user:2'] = const McpProbeFailed('Timed out');
+
+      await tester.runAsync(() => dependencies.mcpServersRepository.check());
+      await _settle(tester);
+
+      expect(inRow('user:1', find.text('3 tools')), findsOneWidget);
+      expect(inRow('user:2', find.text('Not connected: Timed out')), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the dot follows the status', (tester) async {
+      McpServer server(int id, McpStatus status) => McpServer(
+        id: 'user:$id',
+        name: 'srv$id',
+        transport: McpTransport.stdio,
+        command: 'x',
+        status: status,
+      );
+      await openSettings(
+        tester,
+        wrap: (real) => _StubServers(
+          real,
+          servers: <McpServer>[
+            server(1, McpStatus.ready),
+            server(2, McpStatus.needsAuth),
+            server(3, McpStatus.failed),
+            server(4, McpStatus.unknown),
+          ],
+        ),
+      );
+      final colors = tester.element(_row('user:1')).colors;
+      Color dot(String id) {
+        final box = tester.widget<DecoratedBox>(
+          inRow(
+            id,
+            find.byWidgetPredicate(
+              (w) => w is DecoratedBox && (w.decoration as BoxDecoration).shape == BoxShape.circle,
+            ),
+          ),
+        );
+        return (box.decoration as BoxDecoration).color!;
+      }
+
+      expect(dot('user:1'), colors.ok);
+      expect(dot('user:2'), colors.warn);
+      expect(dot('user:3'), colors.danger);
+      expect(dot('user:4'), colors.muted);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('opening the section probes the enabled servers', (tester) async {
+      await openSettings(tester, own: const <McpServerDraft>[stdio]);
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+
+      // The SDK of Settings is no SDK here, so only the user's server is probed.
+      expect(probe.probedIds, ['user:1']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('adding a server probes it', (tester) async {
+      await openSettings(tester, appServer: running);
+      expect(probe.probedIds, isEmpty);
+
+      await tester.tap(find.text('＋ stdio (command)'));
+      await tester.pumpAndSettle();
+      await tester.enterText(_field('name'), 'figma-local');
+      await tester.enterText(_field('command'), 'npx');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pump();
+      await _settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(probe.probedIds, ['user:1']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('switching a server on probes it again, switching it off does not', (tester) async {
+      await openSettings(tester, appServer: running, own: const <McpServerDraft>[stdio]);
+      probe.probed.clear();
+      final switchFinder = inRow('user:1', find.byType(Switch));
+
+      await tester.tap(switchFinder);
+      await tester.pump();
+      await _settle(tester);
+      expect(probe.probedIds, isEmpty);
+
+      await tester.tap(switchFinder);
+      await tester.pump();
+      await _settle(tester);
+      expect(probe.probedIds, ['user:1']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a note says when changes reach the chats', (tester) async {
+      await openSettings(tester, appServer: running);
+
+      expect(find.text('Changes apply to new and reopened chats'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the note is in Russian too', (tester) async {
+      await openSettings(tester, locale: const Locale('ru'), appServer: running);
+
+      expect(find.text('Изменения применятся к новым и заново открытым чатам'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
   });
 
   testWidgets('tool counts use the Russian plural forms', (tester) async {

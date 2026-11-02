@@ -47,10 +47,12 @@ dependencies:
   freezed_annotation: ^3.1.0
   intl: any
   l: ^5.0.1
+  mcp_dart: ^2.4.3
   meta: ^1.19.0
   path: ^1.9.1
   path_provider: ^2.1.6
   platform_info: ^5.0.0
+  vm_service: ^15.4.0
   window_manager: ^0.5.2
   yaml: ^3.1.4
 
@@ -88,6 +90,14 @@ flutter:
     - assets/knowledge/rules/
     - assets/knowledge/skills/feature-architecture/
     - assets/knowledge/skills/feature-architecture/templates/
+    - assets/knowledge/skills/repository-streams/
+    - assets/knowledge/skills/repository-streams/templates/
+    - assets/knowledge/skills/paginated-controller/
+    - assets/knowledge/skills/paginated-controller/templates/
+    - assets/knowledge/skills/controller-patterns/
+    - assets/knowledge/skills/controller-patterns/templates/
+    - assets/knowledge/skills/dependency-injection/
+    - assets/knowledge/skills/dependency-injection/templates/
     - assets/knowledge/skills/drift-migration/
     - assets/knowledge/skills/pub-freshness/
     - assets/knowledge/skills/widget-test/

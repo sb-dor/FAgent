@@ -21,8 +21,11 @@
 // `slow` is never answered, `cmd` first sends an available_commands_update.
 // A loaded session whose id starts with `bypass` is in bypassPermissions mode
 // (as a session saved in it).
+// With FAKE_AGENT_REQUESTS_FILE set, the params of every session/new and
+// session/load are appended to that file as JSON lines {"method", "params"}.
 
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_acp_sdk/dart_acp_sdk.dart';
@@ -66,6 +69,16 @@ Future<void> main(List<String> arguments) async {
     select('effort', efforts[session] ?? 'low', <String>['low', 'high']),
   ];
 
+  void record(String method, Map<String, Object?> params) {
+    final file = Platform.environment['FAKE_AGENT_REQUESTS_FILE'];
+    if (file == null) return;
+    File(file).writeAsStringSync(
+      '${jsonEncode(<String, Object?>{'method': method, 'params': params})}\n',
+      mode: FileMode.append,
+      flush: true,
+    );
+  }
+
   Future<void> say(AcpAgentContext client, SessionId session, String text, {String? id}) =>
       client.updateSession(
         SessionNotification(
@@ -94,7 +107,8 @@ Future<void> main(List<String> arguments) async {
               auth: AgentAuthCapabilities(),
             ),
           )
-          .onNewSession((_) {
+          .onNewSession((context) {
+            record('session/new', context.params.toJson());
             final session = 's${nextSession++}';
             return NewSessionResponse.fromJson(<String, Object?>{
               'sessionId': session,
@@ -135,6 +149,7 @@ Future<void> main(List<String> arguments) async {
             });
           })
           .onLoadSession((context) async {
+            record('session/load', context.params.toJson());
             final session = context.params.sessionId;
             if (session.value == 'missing') {
               throw JsonRpcRequestException(

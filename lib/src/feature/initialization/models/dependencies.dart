@@ -1,5 +1,7 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
@@ -10,9 +12,12 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 
 /// {@template dependencies}
@@ -61,6 +66,12 @@ class Dependencies {
   /// Skills and rules: the built-in ones, the user's and the projects', and where they are on.
   late final ISkillsRepository skillsRepository;
 
+  /// Which skills a single chat turns on or off against its project.
+  late final IChatSkillsRepository chatSkillsRepository;
+
+  /// Connects to MCP servers to show their status; stopped when the app closes.
+  late final IMcpProbe mcpProbe;
+
   /// The MCP servers handed to agents: the built-in ones and the user's own.
   late final IMcpServersRepository mcpServersRepository;
 
@@ -72,6 +83,15 @@ class Dependencies {
 
   /// Creates new Flutter projects.
   late final IProjectCreationRepository projectCreationRepository;
+
+  /// The bearer tokens that tie agents' requests to the app's MCP server to their chats.
+  late final AppMcpTokens appMcpTokens;
+
+  /// The app's own MCP server for the agents (`flutter_code_agent`).
+  late final IAppMcpServer appMcpServer;
+
+  /// The MCP servers, rules and skills every agent session of a chat starts with.
+  late final ISessionContextRepository sessionContextRepository;
 
   @override
   String toString() => 'Dependencies{}';

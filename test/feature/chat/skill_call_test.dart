@@ -18,7 +18,7 @@ ChatSkill _skill(String name, SkillSource source) => ChatSkill(
   description: '',
   source: source,
   enabled: true,
-  invocable: source == SkillSource.project,
+  invocable: source != SkillSource.git,
 );
 
 Widget _view(

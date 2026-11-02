@@ -26,6 +26,12 @@ final class _ScriptedRun implements IAppRunRepository {
   final List<LogEntry> lines;
 
   @override
+  RunState currentRun(int projectId) => const RunIdle();
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) => lines;
+
+  @override
   bool get isPreview => false;
 
   @override
@@ -53,7 +59,7 @@ final class _ScriptedRun implements IAppRunRepository {
   Future<Duration> hotReload(int projectId) async => Duration.zero;
 
   @override
-  Future<void> hotRestart(int projectId) async {}
+  Future<Duration> hotRestart(int projectId) async => Duration.zero;
 
   @override
   Future<void> openDevTools(int projectId) async {}
@@ -79,7 +85,7 @@ final class _CountingRun extends ScriptedAppRunRepository {
   }
 
   @override
-  Future<void> hotRestart(int projectId) {
+  Future<Duration> hotRestart(int projectId) {
     restartCalls++;
     return super.hotRestart(projectId);
   }

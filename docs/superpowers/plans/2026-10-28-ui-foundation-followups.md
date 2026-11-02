@@ -199,7 +199,6 @@ Deferred from the reviews of the M2 plan (docs/superpowers/plans/2026-10-31-m2-a
   - The `/run` row says "Choose a device" also when the app is already running or building; the hint cannot tell the two cases apart (`feature/prompt_sending/models/slash_commands.dart`)
 - **Next steps:**
   - DevTools inside the app window (the settings value "Окно приложения" works as the browser until a webview is added)
-  - Take runtime errors from the `Flutter.Error` event of the VM service instead of parsing the text of the output (needs the VM service connection M3 adds)
   - Remember the build mode and the entry point per project (only the run arguments are stored in `run_configs`)
   - Separate iOS simulators in "Available" (an unbooted simulator is listed as an emulator only)
 - **Rulings recorded during the stage** (revisit if they cost too much):
@@ -236,3 +235,52 @@ Deferred from the reviews of the M2 plan (docs/superpowers/plans/2026-10-31-m2-a
   - T8: the `appCommandsFor` tests live in `slash_command_test.dart`
   - T8: `onAppCommand` is read at build time in `chat_screen`
   - The Run tab duplicates the window's device / arguments / start logic (`feature/app_run/widgets/run_tab.dart`)
+
+## M3 follow-ups
+
+Deferred from the reviews of the M3 plan (docs/superpowers/plans/2026-11-01-m3-agent-knowledge.md). Paths are under `lib/src/` unless they start with `assets/`, `test/` or name a root file.
+
+- **Bugs and risks:**
+  - Knowledge: the deletion snippets of `feature-architecture` are condensed and reference `ExampleDeletionConfigInhWidget` without defining it (`assets/knowledge/skills/feature-architecture/SKILL.md`)
+  - Knowledge: the SKILL snippets and their templates drift in naming (`_repo` / `_repository`, `error()` / `error(error:)`) (`assets/knowledge/skills/`)
+  - Knowledge: project-specific names (`TryAgainButton`, `store_uid`) in the neutral text (`assets/knowledge/skills/feature-architecture/SKILL.md`, `assets/knowledge/skills/paginated-controller/SKILL.md`)
+  - Knowledge: the error state of `products_list_widget` has no retry, against the widgets rule (`assets/knowledge/skills/paginated-controller/templates/products_list_widget.dart`)
+  - Knowledge: the opt-in template test needs the network, and an aborted run leaves the fixture's `lib/` behind (`test/feature/skills/builtin_knowledge_content_test.dart`)
+  - AGENTS.md: in the library a root `AGENTS.md` hides `.claude/rules/AGENTS.md` (same id; the rules prompt no longer drops the latter); `snapshotAgents` uses sync file calls in the async poll loop (`feature/skills/data/knowledge_scanner.dart`, `feature/skills/data/skills_repository.dart`)
+  - AGENTS.md: the "Always on" text is unstyled (`feature/skills/widgets/skill_scope.dart`, `feature/skills/widgets/skill_card.dart`)
+  - Menu F: a failed chat skill toggle is silent — the failed state is not shown, and `chat_screen`'s `StateConsumer` ignores `chatSkillsState` (`feature/skills/controller/chat_skill_actions_controller.dart`, `feature/chat/widgets/chat_screen.dart`)
+  - Menu F: the inner subscription of `chat_skills_repository` has no `onDone`, and the close-on-cancel test does not assert the closure (`feature/skills/data/chat_skills_repository.dart`)
+  - Menu F: the chat config re-watch never unwatches when `canOpenSkills` turns false; chat skill states are watched only while it is true, and before their first value chat-off skills count as on (`feature/chat/widgets/chat_config_widget.dart`)
+  - Menu F: the reopen subtitle replaces the project skill's description (`feature/skills/widgets/chat_skills_chip.dart`)
+  - App MCP server: the 401 tests assert `echo.calls isEmpty` after a ping, not a `tools/call`, so they prove nothing (`test/common/app_mcp/app_mcp_server_test.dart`)
+  - App MCP server: `_callers` entries of sessions ended by `DELETE` stay until `close()`; `setMcpLogHandler` is process-wide, set in `start()`, and stays after a failed bind; `JsonSchema.fromJson(...) as JsonObject` in `_createSession` breaks every session on one bad schema (`common/app_mcp/app_mcp_server.dart`)
+  - App MCP tools: a permission error on a skill file is reported as "File not found" (`feature/app_mcp_tools/data/skill_tools.dart`)
+  - App MCP tools: a numeric-string `lines` silently falls back to 200 (`feature/app_mcp_tools/data/run_tools.dart`)
+  - Run: `Duration.zero` is the failure marker of a reload or restart; a restart answered with code 0 by a launch that was replaced reports success (`feature/app_run/data/app_run_repository.dart`)
+  - Session context: the provider-timeout branch is untested and the timeouts stack to twice `setupTimeout` (`common/acp/agent_hub.dart`)
+  - Session context: a user server named `dart` or `flutter_code_agent` would collide with a built-in (add rejects reserved names; the import path is unchecked); a user server with an empty command or URL is dropped without a log line (`feature/mcp_servers/data/mcp_servers_repository.dart`, `feature/session_context/data/session_context_repository.dart`)
+  - MCP status: a probe result is written back after its server was removed (stale status on a reused id) (`feature/mcp_servers/data/mcp_servers_repository.dart`)
+  - MCP status: `McpServersRepositoryImpl._changed` (a broadcast controller) is never closed and the repository has no `dispose`; harmless while it lives as long as the app (`feature/mcp_servers/data/mcp_servers_repository.dart`)
+  - MCP status: 401 detection relies on the "HTTP 401" text of `mcp_dart`; an empty catch swallows client `onmessage` errors; the 10 s timeout covers only the handshake, so the worst case is longer; the `Stopped` message is not localized (`feature/mcp_servers/data/mcp_probe.dart`)
+  - MCP status: `McpServer.error` is raw English instead of a sentinel, and the app server's start error is not one-lined or capped (`feature/mcp_servers/models/mcp_server.dart`, `feature/mcp_servers/widgets/mcp_server_row.dart`)
+  - MCP status: fixed 20 / 50 ms delays in the controller and repository tests; the chat skills dedupe test uses two real 50 ms delays (flake risk) (`test/feature/mcp_servers/`, `test/feature/skills/chat_skills_repository_test.dart`)
+  - Skills in the composer: an unreadable `SKILL.md` is swallowed without a log line; the text goes without the resource (`feature/prompt_sending/models/skill_prompt.dart`)
+  - Runtime errors: an error the app reports before the VM service connection subscribes is lost — with structured errors on (the debug default) the framework no longer prints it, and `flutter run --machine` does not either (`feature/app_run/data/app_run_repository.dart`)
+  - Runtime errors: with `--dart-define=flutter.inspector.structuredErrors=false`, the first errors after a hot restart, before the new isolate is switched on again, are printed and logged as plain lines (`feature/app_run/data/flutter_error_listener.dart`)
+  - Runtime errors: a listener that ends mid-run (the VM service connection drops while the app lives) is untested and not logged, so later errors are lost silently (`feature/app_run/data/flutter_error_listener.dart`)
+  - Runtime errors: while the listener is connected, every text error block is suppressed, which also hides error blocks the app prints itself (`feature/app_run/data/app_run_repository.dart`)
+  - Runtime errors: a `_stop()` error in the attach `catch` can mask the attach error; stop and dispose await `VmService.dispose()` without a timeout (`feature/app_run/data/flutter_error_listener.dart`)
+  - Initialization: a step that fails after "App MCP server" leaves the HTTP server listening — the step loop rethrows without cleanup, as for the database and the hub; matters once initialization can be retried (`feature/initialization/data/initialize_dependencies.dart`)
+- **Next steps:**
+  - Knowledge: the templates use private named parameters (Dart ≥ 3.12) — add an SDK note; the forbidden-phrase test checks only 3 phrases (`assets/knowledge/skills/`, `test/feature/skills/builtin_knowledge_content_test.dart`)
+  - AGENTS.md: widget tests for the AGENTS branches of `SkillScope` / `SkillCard`, for duplicating AGENTS (its copy has no frontmatter) and for the Duplicate button of the always-on item (`feature/skills/widgets/`)
+  - Menu F: keep the skills menu open across picks; unit tests for `ChatSkillsController` and `ChatSkillActionsController` (`feature/skills/widgets/chat_skills_chip.dart`, `feature/skills/controller/`)
+  - App MCP server: a test for a re-issued token of the same chat inside its existing MCP session; document in the class doc that a session is bound by the first valid token after `initialize`; two expected warning lines in the test output (`common/app_mcp/app_mcp_server.dart`)
+  - App MCP tools: the `projectRoot` drift query is duplicated in the dependency wiring (`feature/initialization/data/initialize_dependencies.dart`)
+  - Session context: gate the app's HTTP entry on the agent's `mcpCapabilities.http` (needed in M5) (`feature/session_context/data/session_context_repository.dart`)
+  - Session context: tests for the default fvm-aware `flutterExecutableFor` closure and `flutterSdkRootOf`; a stray blank import line in `test/common/acp/agent_hub_test.dart` (`common/flutter_daemon/flutter_executable.dart`)
+  - MCP status: the Dart MCP server is probed with the SDK of the Flutter settings while sessions run it with the project's SDK (documented) (`feature/mcp_servers/data/mcp_servers_repository.dart`)
+  - Skills in the composer: the transcript ignores resource blocks, so the feed and the history do not show which skill ran (`feature/chat/models/chat_transcript.dart`)
+  - Skills in the composer: `send()` wiring is tested only through `promptFor`; a full `SkillTextController` is created just to read; re-nesting `PromptComposer` rebuilds the composer on skill-choice changes (`feature/prompt_sending/widgets/prompt_composer.dart`, `feature/skills/controller/skill_text_controller.dart`)
+  - Test support: doc lines of `test/support/test_app.dart` exceed 100 characters
+  - Runtime errors: a multi-line `if` without braces in `flutter_error_listener.dart`; a sync `_resolved` call in an async path; `app_run_repository.dart` is ~900 lines — move `_Launch` out (`feature/app_run/data/`)

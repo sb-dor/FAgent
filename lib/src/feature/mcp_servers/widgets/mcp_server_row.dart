@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
@@ -24,15 +25,42 @@ class McpServerRow extends StatelessWidget {
   /// The server to show.
   final McpServer server;
 
-  /// What the server starts or connects to, in one line; `null` when it has neither.
+  /// Whether this is the app's own server: the only built-in one that is reached over HTTP.
+  bool get _isAppServer => server.builtin && server.transport == McpTransport.http;
+
+  /// What the server starts or connects to, in one line; `null` when it has neither. The app's
+  /// own server tells where it runs in [_status] instead.
   String? get _target => switch (server.transport) {
     McpTransport.stdio when server.command != null => <String>[
       server.command!,
       ...server.args,
     ].join(' '),
-    McpTransport.http => server.url,
-    McpTransport.stdio => null,
+    McpTransport.http when !_isAppServer => server.url,
+    McpTransport.http || McpTransport.stdio => null,
   };
+
+  /// What the server offers, in one line: where the app's server runs and the tool count.
+  String? _status(GeneratedLocalization localization) {
+    final toolCount = server.toolCount;
+    final tools = toolCount == null ? null : localization.mcpToolCount(toolCount);
+    final address = server.status == McpStatus.ready && _isAppServer
+        ? Uri.tryParse(server.url ?? '')
+        : null;
+    final running = address == null
+        ? null
+        : localization.mcpRunningOn('${address.host}:${address.port}');
+    final parts = <String>[?running, ?tools];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  /// Why the server does not work, in the user's language; `null` when it does.
+  String? _problem(GeneratedLocalization localization) {
+    final error = server.error;
+    if (server.status != McpStatus.failed) return null;
+    if (error == mcpSdkNotFoundError) return localization.mcpSdkNotFound;
+    if (error == null) return null;
+    return _isAppServer ? localization.mcpStartFailed(error) : localization.mcpConnectFailed(error);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +69,8 @@ class McpServerRow extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final scope = McpServersConfigInhWidget.of(context);
     final target = _target;
-    final summary = server.summary;
-    final toolCount = server.toolCount;
+    final status = _status(localization);
+    final problem = _problem(localization);
     final info = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -71,21 +99,15 @@ class McpServerRow extends StatelessWidget {
               style: AppText.mono(context, size: 12).copyWith(color: colors.muted),
             ),
           ),
-        if (summary != null || toolCount != null)
+        if (status != null)
           Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Wrap(
-              spacing: 8,
-              children: <Widget>[
-                if (summary != null)
-                  Text(summary, style: textTheme.bodySmall!.copyWith(color: colors.muted)),
-                if (toolCount != null)
-                  Text(
-                    localization.mcpToolCount(toolCount),
-                    style: textTheme.bodySmall!.copyWith(color: colors.muted),
-                  ),
-              ],
-            ),
+            child: Text(status, style: textTheme.bodySmall!.copyWith(color: colors.muted)),
+          ),
+        if (problem != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(problem, style: textTheme.bodySmall!.copyWith(color: colors.danger)),
           ),
         if (server.status == McpStatus.needsAuth)
           Padding(
@@ -160,8 +182,8 @@ class McpServerRow extends StatelessWidget {
   }
 }
 
-/// The dot before the name: green when the server is ready, amber when it needs a sign-in, grey
-/// while nothing is known.
+/// The dot before the name: green when the server is ready, amber when it needs a sign-in, red
+/// when it does not work, grey while nothing is known.
 class _StatusDot extends StatelessWidget {
   const _StatusDot({required this.status});
 
@@ -173,6 +195,7 @@ class _StatusDot extends StatelessWidget {
     final color = switch (status) {
       McpStatus.ready => colors.ok,
       McpStatus.needsAuth => colors.warn,
+      McpStatus.failed => colors.danger,
       McpStatus.unknown => colors.muted,
     };
     return SizedBox.square(

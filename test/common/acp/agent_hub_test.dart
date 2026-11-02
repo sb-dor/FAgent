@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:dart_acp_sdk/dart_acp_sdk.dart' as acp;
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +10,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
+import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
@@ -86,15 +89,18 @@ void main() {
     Future<Map<String, String>> Function(String agentId)? sessionDefaults,
     Duration setupTimeout = const Duration(seconds: 60),
     void Function(String agentId, List<Map<String, Object?>> options)? onConfigOptions,
+    SessionContextProvider? sessionContext,
+    AgentDefinition? agent,
   }) {
     final hub = AgentHub(
+      sessionContext: sessionContext,
       observers: observers,
       sessionDefaults: sessionDefaults,
       onConfigOptions: onConfigOptions,
       setupTimeout: setupTimeout,
       database: database,
       environment: environment,
-      agents: <String, AgentDefinition>{'fake': fakeAgent},
+      agents: <String, AgentDefinition>{'fake': agent ?? fakeAgent},
       connector: (definition, onPermission) => AgentConnection.start(
         definition: definition,
         environment: environment,
@@ -143,6 +149,29 @@ void main() {
     expect(live.store.events.first.kind, SessionEventKind.prompt);
     expect(_agentText(live).join(), 'hello world');
     expect(live.store.events.last.payload, containsPair('stopReason', 'end_turn'));
+  });
+
+  test('an embedded resource block reaches the agent intact and is journaled', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    const skill = <String, Object?>{
+      'type': 'resource',
+      'resource': <String, Object?>{
+        'uri': 'skill://feature-architecture/SKILL.md',
+        'mimeType': 'text/markdown',
+        'text': '# Feature architecture\n',
+      },
+    };
+
+    await hub.prompt(chat, 'echo hello', resources: <Map<String, Object?>>[skill]);
+
+    final prompt = live.store.events.firstWhere((e) => e.kind == SessionEventKind.prompt);
+    expect(prompt.payload['prompt'], <Object?>[
+      <String, Object?>{'type': 'text', 'text': 'echo hello'},
+      skill,
+    ]);
+    expect(_agentText(live).join(), 'hello');
   });
 
   test('config options reach onConfigOptions', () async {
@@ -718,6 +747,134 @@ void main() {
 
       expect(live.canForceStop.value, isFalse);
       expect(live.problem.value, isNull);
+    });
+  });
+
+  group('session context', () {
+    late File requests;
+    late AgentDefinition recordingAgent;
+
+    setUp(() {
+      requests = File('${temp.path}/requests-${DateTime.now().microsecondsSinceEpoch}.jsonl');
+      recordingAgent = AgentDefinition(
+        id: 'fake',
+        displayName: fakeAgent.displayName,
+        executable: fakeAgent.executable,
+        loginArguments: fakeAgent.loginArguments,
+        environment: <String, String>{
+          ...fakeAgent.environment,
+          'FAKE_AGENT_REQUESTS_FILE': requests.path,
+        },
+      );
+    });
+
+    List<Map<String, Object?>> recorded() => !requests.existsSync()
+        ? const <Map<String, Object?>>[]
+        : <Map<String, Object?>>[
+            for (final line in requests.readAsLinesSync())
+              if (line.isNotEmpty) jsonDecode(line) as Map<String, Object?>,
+          ];
+
+    final servers = <acp.McpServer>[
+      acp.McpServerMcpServerHttp(
+        acp.McpServerHttp(
+          name: 'flutter_code_agent',
+          url: 'http://127.0.0.1:1/mcp',
+          headers: <acp.HttpHeader>[acp.HttpHeader(name: 'Authorization', value: 'Bearer t')],
+        ),
+      ),
+      acp.McpServerStdioVariant(
+        acp.McpServerStdio(
+          name: 'dart',
+          command: '/sdk/bin/dart',
+          args: const <String>['mcp-server'],
+          env: <acp.EnvVariable>[acp.EnvVariable(name: 'PATH', value: '/bin')],
+        ),
+      ),
+    ];
+    const meta = <String, Object?>{
+      'systemPrompt': <String, Object?>{'append': 'Rules'},
+      'claudeCode': <String, Object?>{
+        'options': <String, Object?>{
+          'allowedTools': <String>['mcp__flutter_code_agent'],
+          'skills': <String>['proj'],
+        },
+      },
+    };
+    final expectedServers = <Object?>[for (final server in servers) server.toJson()];
+
+    test('session/new carries the servers and meta of the provider', () async {
+      final asked = <(int, String)>[];
+      final hub = newHub(
+        agent: recordingAgent,
+        sessionContext: (sessionId, agent) async {
+          asked.add((sessionId, agent.id));
+          return SessionContext(servers: servers, meta: meta);
+        },
+      );
+      final chat = await newChat();
+
+      await hub.prompt(chat, 'echo hi');
+
+      expect(asked, <(int, String)>[(chat, 'fake')]);
+      final request = recorded().single;
+      expect(request['method'], 'session/new');
+      final params = request['params']! as Map<String, Object?>;
+      expect(params['mcpServers'], expectedServers);
+      expect(params['_meta'], meta);
+    });
+
+    test('session/load carries the servers and meta of the provider', () async {
+      final chat = await newChat();
+      await newHub(agent: recordingAgent).prompt(chat, 'echo one');
+      await hubs.single.dispose();
+      hubs.clear();
+      requests.deleteSync();
+      final asked = <int>[];
+      final second = newHub(
+        agent: recordingAgent,
+        sessionContext: (sessionId, agent) async {
+          asked.add(sessionId);
+          return SessionContext(servers: servers, meta: meta);
+        },
+      );
+
+      await second.prompt(chat, 'echo two');
+
+      expect(asked, <int>[chat]);
+      final request = recorded().single;
+      expect(request['method'], 'session/load');
+      final params = request['params']! as Map<String, Object?>;
+      expect(params['mcpServers'], expectedServers);
+      expect(params['_meta'], meta);
+    });
+
+    test('without a provider the session gets no servers and no meta', () async {
+      final hub = newHub(agent: recordingAgent);
+      final chat = await newChat();
+
+      await hub.prompt(chat, 'echo hi');
+
+      final params = recorded().single['params']! as Map<String, Object?>;
+      expect(params['mcpServers'], isEmpty);
+      expect(params.containsKey('_meta'), isFalse);
+    });
+
+    test('a provider that throws still lets the session start, without context', () async {
+      final hub = newHub(
+        agent: recordingAgent,
+        sessionContext: (_, _) async => throw StateError('no project'),
+      );
+      final chat = await newChat();
+
+      await hub.prompt(chat, 'echo hi');
+
+      final request = recorded().single;
+      expect(request['method'], 'session/new');
+      final params = request['params']! as Map<String, Object?>;
+      expect(params['mcpServers'], isEmpty);
+      expect(params.containsKey('_meta'), isFalse);
+      expect(_agentText(await hub.session(chat)).join(), 'hi');
     });
   });
 }

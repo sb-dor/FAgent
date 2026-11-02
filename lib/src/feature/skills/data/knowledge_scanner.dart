@@ -37,6 +37,42 @@ Future<Snapshot> snapshotRoot(String root) async {
   return snapshot;
 }
 
+/// The file in the project root that other coding agents read their rules from.
+const String agentsFileName = 'AGENTS.md';
+
+/// Fingerprints the `AGENTS.md` in [projectRoot]; empty when there is no such file.
+Snapshot snapshotAgents(String projectRoot) {
+  final path = p.join(projectRoot, agentsFileName);
+  try {
+    if (FileSystemEntity.typeSync(path) != FileSystemEntityType.file) return {};
+    final stat = File(path).statSync();
+    return {path: '${stat.modified.microsecondsSinceEpoch}:${stat.size}'};
+  } on FileSystemException {
+    return {};
+  }
+}
+
+/// The project rule for the `AGENTS.md` that [snapshot] (of [snapshotAgents]) lists; `null` when it
+/// lists none.
+///
+/// The rule is read-only and always on, and it is not parsed: the file has no frontmatter.
+KnowledgeItem? agentsItem({required String projectRoot, required Snapshot snapshot}) {
+  final path = p.join(projectRoot, agentsFileName);
+  final revision = snapshot[path];
+  if (revision == null) return null;
+  return KnowledgeItem(
+    id: agentsRuleId,
+    kind: KnowledgeKind.rule,
+    source: SkillSource.project,
+    name: p.basenameWithoutExtension(agentsFileName),
+    title: p.basenameWithoutExtension(agentsFileName),
+    description: '',
+    path: path,
+    revision: revision,
+    readOnly: true,
+  );
+}
+
 /// Passes every entry of [directory] to [onEntity], skipping the ones that cannot be listed.
 ///
 /// An unreadable subfolder or a missing [directory] ends only its own part of the listing: the

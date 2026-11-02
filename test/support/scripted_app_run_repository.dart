@@ -18,6 +18,9 @@ final class _FakeRun {
 
   RunState state = const RunIdle();
   int nextSeq = 0;
+
+  /// The `seq` of the first line of the current run.
+  int runStartSeq = 0;
   int reloads = 0;
 
   /// Changes with every start and stop, so a scenario that was cut off notices.
@@ -135,6 +138,23 @@ class ScriptedAppRunRepository implements IAppRunRepository {
   );
 
   @override
+  RunState currentRun(int projectId) => _runs[projectId]?.state ?? const RunIdle();
+
+  @override
+  List<LogEntry> recentLogs(int projectId, {int limit = kRunLogLimit}) {
+    final run = _runs[projectId];
+    final buffer = run?.buffer.where((entry) => entry.seq >= run.runStartSeq).toList() ?? const [];
+    return buffer.sublist(buffer.length - limit.clamp(0, buffer.length));
+  }
+
+  /// Puts the project's run into [state] without a scenario, for tests of what reads it.
+  void setRunState(int projectId, RunState state) => _run(projectId).setState(state);
+
+  /// Adds a line to the project's output, for tests of what reads it.
+  void addLog(int projectId, LogLevel level, String text, {RunError? error}) =>
+      _run(projectId).log(level, text, error: error);
+
+  @override
   Future<void> markSent(int projectId, int seq) async {
     final buffer = _runs[projectId]?.buffer;
     final index = buffer?.indexWhere((log) => log.seq == seq) ?? -1;
@@ -186,7 +206,9 @@ class ScriptedAppRunRepository implements IAppRunRepository {
     ));
     final run = _run(projectId);
     if (run.state is RunBuilding || run.state is RunRunning) await stop(projectId);
-    run.reloads = 0;
+    run
+      ..reloads = 0
+      ..runStartSeq = run.nextSeq;
     final generation = ++run.generation;
     run
       ..setState(const RunBuilding(progress: 0.2, label: 'Resolving dependencies'))
@@ -261,14 +283,15 @@ class ScriptedAppRunRepository implements IAppRunRepository {
   }
 
   @override
-  Future<void> hotRestart(int projectId) async {
+  Future<Duration> hotRestart(int projectId) async {
     final run = _runs[projectId];
-    if (run == null || run.state is! RunRunning) return;
+    if (run == null || run.state is! RunRunning) return Duration.zero;
     final generation = run.generation;
-    if (!await run.wait(step) || run.generation != generation) return;
+    if (!await run.wait(step) || run.generation != generation) return Duration.zero;
     const took = Duration(milliseconds: 640);
     run.log(LogLevel.info, 'Restarted application in 640ms.');
     if (run.state case final RunRunning running) run.setState(running.withReload(took));
+    return took;
   }
 
   @override

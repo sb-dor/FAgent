@@ -13,10 +13,11 @@ KnowledgeItem _item(KnowledgeKind kind, SkillSource source, String name) => Know
 );
 
 void main() {
-  test('only project skills are invocable', () {
+  test('skills of the project, mine and built-in are invocable; rules and git skills are not', () {
     expect(_item(KnowledgeKind.skill, SkillSource.project, 'a').invocable, isTrue);
-    expect(_item(KnowledgeKind.skill, SkillSource.user, 'a').invocable, isFalse);
-    expect(_item(KnowledgeKind.skill, SkillSource.builtin, 'a').invocable, isFalse);
+    expect(_item(KnowledgeKind.skill, SkillSource.user, 'a').invocable, isTrue);
+    expect(_item(KnowledgeKind.skill, SkillSource.builtin, 'a').invocable, isTrue);
+    expect(_item(KnowledgeKind.skill, SkillSource.git, 'a').invocable, isFalse);
     expect(_item(KnowledgeKind.rule, SkillSource.project, 'a').invocable, isFalse);
   });
 

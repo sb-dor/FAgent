@@ -26,6 +26,8 @@ class ComposerToolbar extends StatelessWidget {
     required this.onAttach,
     required this.onMakeDefault,
     this.chatSkills = ChatSkills.empty,
+    this.chatSkillStates = const <String, bool>{},
+    this.onToggleChatSkill,
     this.onOpenSkillLibrary,
     super.key,
   });
@@ -53,6 +55,12 @@ class ComposerToolbar extends StatelessWidget {
 
   /// The skills of the chat's project, for the 🧩 chip.
   final ChatSkills chatSkills;
+
+  /// What this chat changed in its project's skills, by skill id.
+  final Map<String, bool> chatSkillStates;
+
+  /// A skill was ticked or cleared in the 🧩 menu; `null` leaves the rows without effect.
+  final void Function(ChatSkill skill, {required bool enabled})? onToggleChatSkill;
 
   /// The skill library was asked for from the 🧩 chip; `null` hides the chip.
   final VoidCallback? onOpenSkillLibrary;
@@ -90,7 +98,12 @@ class ComposerToolbar extends StatelessWidget {
             if (!taken.contains(option)) _otherChip(option),
         ],
         if (onOpenSkillLibrary != null)
-          ChatSkillsChip(skills: chatSkills, onOpenLibrary: onOpenSkillLibrary!),
+          ChatSkillsChip(
+            skills: chatSkills,
+            chatStates: chatSkillStates,
+            onToggle: onToggleChatSkill,
+            onOpenLibrary: onOpenSkillLibrary!,
+          ),
       ],
     );
   }

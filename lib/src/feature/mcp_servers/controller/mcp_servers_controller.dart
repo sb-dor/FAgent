@@ -4,6 +4,7 @@ import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:l/l.dart';
 
 part 'mcp_servers_controller.freezed.dart';
 
@@ -21,7 +22,7 @@ sealed class McpServersState with _$McpServersState {
       McpServers$ErrorState;
 }
 
-/// Follows the MCP servers in the database.
+/// Follows the MCP servers in the database and has their status checked.
 final class McpServersController extends StateController<McpServersState>
     with SequentialControllerHandler {
   McpServersController({
@@ -36,11 +37,19 @@ final class McpServersController extends StateController<McpServersState>
   /// The last known servers; empty before the first list arrives.
   List<McpServer> get servers => _servers;
 
-  /// Starts following the servers. Calling it again changes nothing.
+  /// Starts following the servers and checks them in the background (the list shows the status as
+  /// each check finishes). Calling it again changes nothing.
   void watch() => handle(
     () async {
       if (isDisposed || _subscription != null) return;
       _subscription = _subscribe();
+      _repository
+          .check()
+          .catchError(
+            (Object error, StackTrace stackTrace) =>
+                l.w('MCP servers | the status check failed: $error', stackTrace),
+          )
+          .ignore();
     },
     error: (error, stackTrace) async =>
         setState(McpServersState.error(error: error, servers: _servers)),

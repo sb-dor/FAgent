@@ -1,6 +1,9 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
@@ -16,9 +19,11 @@ import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +35,7 @@ import 'memory_project_creation_repository.dart';
 import 'memory_run_config_repository.dart';
 import 'memory_skills_repository.dart';
 import 'scripted_app_run_repository.dart';
+import 'scripted_mcp_probe.dart';
 
 /// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
 /// [appRunRepository], [devicesRepository], [widgetPickerRepository] or [runConfigRepository] (a
@@ -42,12 +48,15 @@ import 'scripted_app_run_repository.dart';
 /// its own [skillsRepository]; it never touches the file system. The agents are an in-memory
 /// [MemoryAgentsRepository] (a signed-in Claude and the two preview agents) unless the test passes
 /// its own [agentsRepository]. The MCP servers repository runs on the in-memory database unless the
-/// test passes its own [mcpServersRepository]. The permission rules are an in-memory
+/// test passes its own [mcpServersRepository]. The chat skills repository runs on the in-memory
+/// database unless the test passes its own [chatSkillsRepository]. The permission rules are an in-memory
 /// [MemoryPermissionRulesRepository] without any rule unless the test passes its own
 /// [permissionRulesRepository]. The Flutter SDK repository is the fake one with a `flutter` on
 /// `PATH` and no delay unless the test passes its own [flutterSdkRepository]. The project creation
 /// repository is a [MemoryProjectCreationRepository] unless the test passes its own
-/// [projectCreationRepository].
+/// [projectCreationRepository]. The app's MCP server is a real one that is never started unless the
+/// test passes its own [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
+/// that fails every server unless the test passes its own [mcpProbe].
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
@@ -55,14 +64,29 @@ Dependencies testDependencies({
   IWidgetPickerRepository? widgetPickerRepository,
   IRunConfigRepository? runConfigRepository,
   ISkillsRepository? skillsRepository,
+  IChatSkillsRepository? chatSkillsRepository,
   IAgentsRepository? agentsRepository,
   IMcpServersRepository? mcpServersRepository,
   IPermissionRulesRepository? permissionRulesRepository,
   IFlutterSdkRepository? flutterSdkRepository,
   IProjectCreationRepository? projectCreationRepository,
+  IAppMcpServer? appMcpServer,
+  IMcpProbe? mcpProbe,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
+  final appMcpTokens = AppMcpTokens(database: database);
+  final appServer =
+      appMcpServer ??
+      AppMcpServerImpl(
+        tokens: appMcpTokens,
+        tools: const <AppMcpTool>[],
+        instructions: appMcpInstructions,
+      );
+  final probe = mcpProbe ?? ScriptedMcpProbe();
+  final sdkRepository =
+      flutterSdkRepository ??
+      FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero);
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment
@@ -73,12 +97,21 @@ Dependencies testDependencies({
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)
     ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
-    ..mcpServersRepository = mcpServersRepository ?? McpServersRepositoryImpl(database: database)
+    ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()
-    ..flutterSdkRepository =
-        flutterSdkRepository ??
-        FakeFlutterSdkRepositoryImpl(which: (_) => '/opt/flutter/bin/flutter', step: Duration.zero)
+    ..appMcpTokens = appMcpTokens
+    ..appMcpServer = appServer
+    ..flutterSdkRepository = sdkRepository
+    ..mcpProbe = probe
+    ..mcpServersRepository =
+        mcpServersRepository ??
+        McpServersRepositoryImpl(
+          database: database,
+          appServer: appServer,
+          probe: probe,
+          flutterSdk: sdkRepository,
+        )
     ..skillsRepository =
         skillsRepository ??
         MemorySkillsRepository(

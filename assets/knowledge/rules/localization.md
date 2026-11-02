@@ -1,14 +1,14 @@
 ---
 name: localization
-description: "All visible text goes through gen-l10n; add every key to both .arb files."
+description: "All visible text is localized; add every key to every .arb file."
 ---
 
 # Localization
 
-- Every user-facing string uses `Localization.of(context).key`. No hardcoded English or Russian
-  text in widgets.
-- Add each new key to both `lib/src/common/localization/intl_en.arb` and `intl_ru.arb`.
-- Reuse an existing key before adding a new one.
-- `flutter pub get` regenerates the strings. Never edit files under
+- Every user-facing string uses `Localization.of(context).key`. No hardcoded text in widgets
+  (temporary debug text excepted).
+- Add each new key to every `.arb` file, e.g. `lib/src/common/localization/intl_en.arb` and
+  `intl_ru.arb`. Reuse an existing key first.
+- Regenerate the strings with the project's localization tool; never edit files under
   `lib/src/common/localization/generated/`.
-- Use ICU placeholders and plurals in the `.arb` text instead of concatenating strings in code.
+- Use ICU placeholders and plurals in the `.arb` text, not string concatenation.

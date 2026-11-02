@@ -32,6 +32,11 @@ final class SkillTextController extends StateController<SkillTextState>
   final ISkillsRepository _repository;
   int _generation = 0;
 
+  /// The text of [id] once, without touching the state: for a caller that needs it for something
+  /// other than the editor (an item of a project needs its [projectRoot]).
+  Future<String> read(String id, {String? projectRoot}) =>
+      _repository.read(id, projectRoot: projectRoot);
+
   /// Reads the text of [id]; an item of a project needs its [projectRoot].
   void load(String id, {String? projectRoot}) {
     final generation = ++_generation;

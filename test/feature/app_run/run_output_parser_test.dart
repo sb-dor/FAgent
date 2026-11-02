@@ -1,5 +1,6 @@
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _overflowBlock = '''
@@ -369,6 +370,130 @@ More detail.
     test('lose the `flutter: ` prefix and ANSI colors', () {
       expect(_parser().add('flutter: hi').single.text, 'hi');
       expect(_parser().add('\x1B[31mred\x1B[0m').single.text, 'red');
+    });
+  });
+
+  group('with structured errors', () {
+    RunOutputParser structured() => _parser()..structuredErrors = true;
+
+    test('a Flutter error block comes out as plain lines without an error', () {
+      final lines = _feed(structured(), _overflowBlock, prefix: 'flutter: ');
+
+      expect(lines, hasLength(_overflowBlock.split('\n').length));
+      expect(lines.every((line) => line.error == null), isTrue);
+      expect(lines.every((line) => line.level == LogLevel.info), isTrue);
+      expect(lines.first.text, startsWith('══╡ EXCEPTION CAUGHT BY RENDERING LIBRARY'));
+    });
+
+    test('compile errors and unhandled exceptions are still errors', () {
+      final parser = structured();
+
+      final compile = parser.add('lib/main.dart:3:7: Error: Expected an identifier.');
+      final unhandled = <ParsedLine>[
+        ...parser.add('[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: x'),
+        ...parser.add('#0      main (package:app/main.dart:5:3)'),
+        ...parser.flush(),
+      ];
+
+      expect(compile.single.error!.title, 'Compilation error');
+      expect(unhandled.single.error!.title, 'Unhandled exception');
+    });
+
+    test('switched off again, blocks are errors again', () {
+      final parser = structured()..structuredErrors = false;
+
+      expect(_feed(parser, _overflowBlock).single.error!.title, 'Layout overflow');
+    });
+  });
+
+  group('flutterError', () {
+    test('makes the file project-relative and the title the text of the line', () {
+      final line = _parser().flutterError(
+        const RunError(
+          title: 'A RenderFlex overflowed by 42 pixels on the right.',
+          message: 'The following assertion was thrown during layout:',
+          file: 'file:///p/app/lib/main.dart',
+          line: 14,
+          location: 'main.dart:14:18',
+        ),
+      );
+
+      expect(line.level, LogLevel.error);
+      expect(line.text, 'A RenderFlex overflowed by 42 pixels on the right.');
+      expect(
+        line.error,
+        const RunError(
+          title: 'A RenderFlex overflowed by 42 pixels on the right.',
+          message: 'The following assertion was thrown during layout:',
+          file: 'lib/main.dart',
+          line: 14,
+          location: 'main.dart:14:18',
+        ),
+      );
+    });
+
+    test('a path under the resolved project folder is the project\'s too', () {
+      final parser = RunOutputParser(
+        projectRoot: '/var/p/app',
+        resolvedProjectRoot: '/private/var/p/app',
+        packageName: 'app',
+      );
+
+      final line = parser.flutterError(
+        const RunError(
+          title: 't',
+          message: 'm',
+          file: 'file:///private/var/p/app/lib/a.dart',
+          line: 2,
+        ),
+      );
+
+      expect(line.error!.file, 'lib/a.dart');
+      expect(parser.add('/var/p/app/lib/b.dart:1:2: Error: x').single.error!.file, 'lib/b.dart');
+    });
+
+    test('a package path of the project is under lib/', () {
+      final line = _parser().flutterError(
+        const RunError(title: 't', message: 'm', file: 'package:app/src/a.dart', line: 3),
+      );
+
+      expect(line.error!.file, 'lib/src/a.dart');
+      expect(line.error!.line, 3);
+    });
+
+    test('a place outside the project gives way to the first project frame', () {
+      final line = _parser().flutterError(
+        const RunError(
+          title: 'Bad state: boom',
+          message: 'm',
+          file: 'file:///sdk/packages/flutter/lib/src/material/app.dart',
+          line: 900,
+          location: 'app.dart:900:3',
+          stack:
+              '#0      Element.build (package:flutter/src/widgets/framework.dart:10:1)\n'
+              '#1      Home.build (package:app/home.dart:7:5)',
+        ),
+      );
+
+      expect(line.error!.file, 'lib/home.dart');
+      expect(line.error!.line, 7);
+      expect(line.error!.location, 'home.dart:7:5');
+    });
+
+    test('without a project place keeps the location but names no file', () {
+      final line = _parser().flutterError(
+        const RunError(
+          title: 't',
+          message: 'm',
+          file: 'file:///sdk/packages/flutter/lib/src/material/app.dart',
+          line: 900,
+          location: 'app.dart:900:3',
+        ),
+      );
+
+      expect(line.error!.file, isNull);
+      expect(line.error!.line, isNull);
+      expect(line.error!.location, 'app.dart:900:3');
     });
   });
 }

@@ -5,9 +5,11 @@ import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 
 final RegExp _whitespace = RegExp(r'\s');
 
-/// The skills of the chat's project as `/` commands: only the ones that are on. Only a project
-/// skill can be run now ([ChatSkill.invocable]); the others are dimmed with `Coming in M3`. Of
-/// equal names the first one wins, and a name with whitespace is skipped.
+/// The skills of the chat's project as `/` commands: only the ones that are on. A skill that
+/// cannot be run ([ChatSkill.invocable], for now one installed from git) is dimmed with
+/// `Coming in M3`. Of equal names the first one wins, and a name with whitespace is skipped.
+///
+/// Pass `ChatSkills.forChat` to leave out the skills the chat turned off.
 List<SlashCommand> skillCommands(ChatSkills skills, GeneratedLocalization localization) {
   final seen = <String>{};
   return <SlashCommand>[

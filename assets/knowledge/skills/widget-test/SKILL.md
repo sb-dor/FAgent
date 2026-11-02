@@ -15,7 +15,8 @@ Test behaviour the user sees, not the widget tree layout.
 2. Replace services with in-memory fakes of the repository interfaces (`IFooRepository`), and pass
    them to the real controller. Do not mock the widget itself.
 3. Wrap the widget in `MaterialApp` with `Localization.localizationsDelegates` and the app theme,
-   so `Localization.of(context)` and `context.colors` work. Give it a desktop-sized window.
+   so `Localization.of(context)` and the theme extensions work. Set the test window size
+   (`tester.view.physicalSize`) to the screen size the widget targets, and reset it in `addTearDown`.
 4. `await tester.pumpWidget(...)`, interact with `tester.tap` and `tester.enterText`, then
    `await tester.pump()` or `pumpAndSettle()`.
 5. Assert on visible text and state: `find.text`, `find.byType`, the fake repository's calls.

@@ -30,7 +30,7 @@ these overrides win:
 
 ```bash
 flutter pub get                                             # also regenerates localization
-dart run build_runner build --delete-conflicting-outputs    # freezed, drift
+dart run build_runner build                                 # freezed, drift
 flutter analyze
 flutter test
 flutter run -d macos

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
+import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/source_tag.dart';
 
 /// {@template skill_list_tile}
 /// A row of the skills list: the name in monospace, where the item comes from, its description
-/// (two lines at most) and a switch that turns it on or off.
+/// (two lines at most) and a switch that turns it on or off. An always-on item has no switch; a
+/// rule Claude reads itself ([KnowledgeItem.readByClaude]) has a note instead.
 /// {@endtemplate}
 class SkillListTile extends StatelessWidget {
   /// {@macro skill_list_tile}
@@ -76,18 +78,29 @@ class SkillListTile extends StatelessWidget {
                           style: theme.bodySmall!.copyWith(color: colors.muted),
                         ),
                       ],
+                      if (item.readByClaude) ...<Widget>[
+                        const SizedBox(height: 2),
+                        Text(
+                          Localization.of(context).skillClaudeReadsRule,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.bodySmall!.copyWith(color: colors.muted),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Semantics(
-                  label: item.title,
-                  child: Switch(
-                    value: item.enabled,
-                    onChanged: onToggle,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                if (!item.alwaysOn && !item.readByClaude) ...<Widget>[
+                  const SizedBox(width: 8),
+                  Semantics(
+                    label: item.title,
+                    child: Switch(
+                      value: item.enabled,
+                      onChanged: onToggle,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

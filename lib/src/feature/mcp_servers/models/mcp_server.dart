@@ -19,9 +19,16 @@ enum McpStatus {
   /// Needs the user to sign in.
   needsAuth,
 
+  /// Could not be started or reached; [McpServer.error] says why.
+  failed,
+
   /// Not checked yet.
   unknown,
 }
+
+/// The [McpServer.error] of Dart MCP when Settings knows no Flutter SDK to start it from; the row
+/// shows it in the user's language.
+const String mcpSdkNotFoundError = 'SDK not found';
 
 /// An MCP server as the Settings screen shows it.
 @freezed
@@ -54,10 +61,12 @@ abstract class McpServer with _$McpServer {
 
     /// How many tools the server offers; `null` when not known.
     int? toolCount,
-    String? summary,
 
-    /// Whether [status] and [toolCount] are made up until the agents connect to servers.
-    @Default(true) bool isPreview,
+    /// Why the server [McpStatus.failed], in English and in one line.
+    String? error,
+
+    /// Whether [status] and [toolCount] are made up.
+    @Default(false) bool isPreview,
   }) = _McpServer;
 }
 

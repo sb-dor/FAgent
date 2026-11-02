@@ -3,15 +3,18 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/flutter_error_listener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:l/l.dart' show l;
 import 'package:path/path.dart' as p;
 
 import '../../support/scripted_daemon_process.dart';
+import '../../support/scripted_vm_service.dart';
 
 const Device _macos = Device(
   id: 'macos',
@@ -83,6 +86,8 @@ void main() {
     late AppRunRepositoryImpl repository;
     late List<Uri> opened;
     late DateTime clock;
+    late FlutterErrorListenerConnect connectErrors;
+    late List<Uri> connectedTo;
     final subscriptions = <StreamSubscription<Object?>>[];
 
     ScriptedDaemonProcess create() {
@@ -163,6 +168,9 @@ void main() {
       };
       opened = <Uri>[];
       clock = DateTime(2026, 10, 31, 9, 5, 7);
+      // Unless a test connects, the VM service never answers: the output text is all there is.
+      connectErrors = (_) => Completer<IFlutterErrorListener>().future;
+      connectedTo = <Uri>[];
       repository = AppRunRepositoryImpl(
         projectPath: (id) async => paths[id],
         flutter: (_) => flutterPath,
@@ -172,6 +180,10 @@ void main() {
         restartTimeout: const Duration(milliseconds: 50),
         openUrl: (url) async => opened.add(url),
         now: () => clock,
+        connectErrors: (uri) {
+          connectedTo.add(uri);
+          return connectErrors(uri);
+        },
       );
     });
 
@@ -318,6 +330,65 @@ void main() {
       expect(added.single.error!.title, 'Layout overflow');
     });
 
+    test(
+      'currentRun and recentLogs give the state and the newest lines without a stream',
+      () async {
+        expect(repository.currentRun(1), const RunIdle());
+        expect(repository.recentLogs(1), isEmpty);
+
+        await startRun(1);
+        final process = started.single;
+        await launch(process);
+        process
+          ..emitLine('first')
+          ..emitLine('second')
+          ..emitLine('third');
+        await pumpEventQueue();
+
+        expect(repository.currentRun(1), isA<RunRunning>());
+        expect(repository.currentRun(2), const RunIdle());
+        final all = repository.recentLogs(1);
+        expect(all.map((entry) => entry.text).toList().sublist(all.length - 3), [
+          'first',
+          'second',
+          'third',
+        ]);
+        expect(repository.recentLogs(1, limit: 2).map((entry) => entry.text), ['second', 'third']);
+        expect(repository.recentLogs(1, limit: 0), isEmpty);
+        expect(repository.recentLogs(2), isEmpty);
+      },
+    );
+
+    test(
+      'recentLogs holds only the lines of the current run, the last run once it ended',
+      () async {
+        await startRun(1);
+        final first = started.single;
+        await launch(first);
+        first.emitLine('from the first run');
+        await pumpEventQueue();
+        expect(repository.recentLogs(1).map((entry) => entry.text), contains('from the first run'));
+
+        await startRun(1);
+        final second = started.last;
+        expect(second, isNot(same(first)));
+        second.emitLine('from the second run');
+        await pumpEventQueue();
+
+        final texts = repository.recentLogs(1).map((entry) => entry.text).toList();
+        expect(texts, contains('from the second run'));
+        expect(texts.any((text) => text.contains('first run')), isFalse);
+        expect(texts.first, startsWith('/opt/flutter/bin/flutter run'));
+
+        await repository.stop(1);
+        await pumpEventQueue();
+        expect(
+          repository.recentLogs(1).map((entry) => entry.text),
+          contains('from the second run'),
+        );
+      },
+    );
+
     test('daemon.logMessage and output outside the protocol go to the log', () async {
       final log = logs(1);
       await startRun(1);
@@ -401,9 +472,11 @@ void main() {
         }
       };
 
-      await repository.hotRestart(1);
+      final took = await repository.hotRestart(1);
       await pumpEventQueue();
 
+      expect(took, greaterThan(Duration.zero));
+      expect(took, (seen.last as RunRunning).lastReload);
       final request = process.sent.lastWhere((request) => request['method'] == 'app.restart');
       expect((request['params']! as Map<String, Object?>)['fullRestart'], isTrue);
       expect((seen.last as RunRunning).lastReload, isNotNull);
@@ -449,9 +522,10 @@ void main() {
           }
         };
 
-        await repository.hotRestart(1);
+        final took = await repository.hotRestart(1);
         await pumpEventQueue();
 
+        expect(took, Duration.zero);
         expect(log.last.error?.title, 'Hot restart failed');
       },
     );
@@ -473,10 +547,11 @@ void main() {
       expect(log.last.text, 'Hot reload failed: timed out');
     });
 
-    test('hotReload does nothing unless the app is running', () async {
+    test('hotReload and hotRestart do nothing unless the app is running', () async {
       await startRun(1);
 
       expect(await repository.hotReload(1), Duration.zero);
+      expect(await repository.hotRestart(1), Duration.zero);
       expect(started.single.sent, isEmpty);
       expect(await repository.hotReload(2), Duration.zero);
     });
@@ -919,6 +994,226 @@ void main() {
       expect(repository.watchRun(1), emitsDone);
     });
 
+    group('runtime errors from the VM service', () {
+      late ScriptedVmService vm;
+
+      setUp(() {
+        vm = ScriptedVmService();
+        connectErrors = (_) => FlutterErrorListener.attach(vm.service);
+      });
+
+      String projectFile(String relative) => Uri.file(p.join(paths[1]!, relative)).toString();
+
+      List<RunError> errorsIn(List<LogEntry> log) => <RunError>[for (final e in log) ?e.error];
+
+      /// Runs [body] and returns the warnings it logged.
+      Future<List<String>> warnings(Future<void> Function() body) async {
+        final logged = <String>[];
+        final subscription = l.listen((event) {
+          if (event.level.maybeWhen(warning: () => true, orElse: () => false)) {
+            logged.add('${event.message}');
+          }
+        });
+        try {
+          await body();
+        } finally {
+          await subscription.cancel();
+        }
+        return logged;
+      }
+
+      test('connects to the VM service of a debug run after app.debugPort', () async {
+        await startRun(1);
+        await launch(started.single);
+
+        expect(connectedTo, <Uri>[Uri.parse('ws://127.0.0.1:1234/abc=/ws')]);
+        expect(vm.enabledIn, <String>['isolates/1']);
+      });
+
+      test('a Flutter.Error event is one error line with the project file', () async {
+        final log = logs(1);
+        await startRun(1);
+        await launch(started.single);
+        final before = log.length;
+
+        vm.emitFlutterError(overflowFlutterError(file: projectFile('lib/main.dart')));
+        await pumpEventQueue();
+
+        final added = log.sublist(before);
+        expect(added, hasLength(1));
+        expect(added.single.level, LogLevel.error);
+        expect(added.single.text, 'A RenderFlex overflowed by 42 pixels on the right.');
+        final error = added.single.error!;
+        expect(error.title, 'A RenderFlex overflowed by 42 pixels on the right.');
+        expect(error.file, 'lib/main.dart');
+        expect(error.line, 14);
+        expect(error.location, 'main.dart:14:18');
+        expect(repository.recentLogs(1).last.error, error);
+      });
+
+      test('a file under the resolved project folder is the project\'s', () async {
+        final real = io.Directory(p.join(root.path, 'real'))..createSync();
+        io.File(p.join(real.path, 'pubspec.yaml')).writeAsStringSync('name: demo_app\n');
+        final link = io.Link(p.join(root.path, 'linked'))..createSync(real.path);
+        paths[1] = link.path;
+        final log = logs(1);
+        await startRun(1);
+        await launch(started.single);
+        final before = log.length;
+
+        final file = Uri.file(p.join(real.resolveSymbolicLinksSync(), 'lib', 'main.dart'));
+        vm.emitFlutterError(overflowFlutterError(file: file.toString()));
+        await pumpEventQueue();
+
+        expect(log.sublist(before).single.error!.file, 'lib/main.dart');
+      });
+
+      test('while connected, the same error block in the output gives no second error', () async {
+        final log = logs(1);
+        await startRun(1);
+        final process = started.single;
+        await launch(process);
+        final before = log.length;
+
+        vm.emitFlutterError(overflowFlutterError(file: projectFile('lib/main.dart')));
+        await pumpEventQueue();
+        for (final line in overflowBlockLines(file: projectFile('lib/main.dart'))) {
+          await emit(process, 'app.log', <String, Object?>{'appId': 'app-1', 'log': line});
+        }
+
+        final added = log.sublist(before);
+        expect(errorsIn(added), hasLength(1));
+        expect(added.length, greaterThan(1), reason: 'the block is still in the log as text');
+      });
+
+      test('a failed connect is logged once and leaves the errors to the output text', () async {
+        connectErrors = (_) async => throw const io.SocketException('Connection refused');
+        final log = logs(1);
+        late int before;
+        final logged = await warnings(() async {
+          await startRun(1);
+          final process = started.single;
+          await launch(process);
+          before = log.length;
+
+          for (final line in overflowBlockLines(file: projectFile('lib/main.dart'))) {
+            await emit(process, 'app.log', <String, Object?>{'appId': 'app-1', 'log': line});
+          }
+        });
+
+        final errors = errorsIn(log.sublist(before));
+        expect(errors, hasLength(1));
+        expect(errors.single.title, 'Layout overflow');
+        expect(repository.currentRun(1), isA<RunRunning>());
+        expect(logged, hasLength(1));
+        expect(logged.single, contains('Connection refused'));
+      });
+
+      test('an app without the inspector extension leaves the errors to the text', () async {
+        connectErrors = (_) => FlutterErrorListener.attach(
+          vm.service,
+          extensionTimeout: const Duration(milliseconds: 20),
+        );
+        vm.isolates['isolates/1']!.clear();
+        final log = logs(1);
+        late int before;
+        final logged = await warnings(() async {
+          await startRun(1);
+          final process = started.single;
+          await launch(process);
+          await Future<void>.delayed(const Duration(milliseconds: 40));
+          await pumpEventQueue();
+          before = log.length;
+
+          for (final line in overflowBlockLines(file: projectFile('lib/main.dart'))) {
+            await emit(process, 'app.log', <String, Object?>{'appId': 'app-1', 'log': line});
+          }
+        });
+
+        expect(errorsIn(log.sublist(before)).single.title, 'Layout overflow');
+        expect(vm.disposed, isTrue);
+        expect(logged, hasLength(1));
+      });
+
+      test('profile and release runs do not connect', () async {
+        await startRun(1, mode: BuildMode.profile);
+        await launch(started.single);
+        await startRun(2, mode: BuildMode.release);
+        await launch(started.last);
+
+        expect(connectedTo, isEmpty);
+      });
+
+      test('stop closes the connection', () async {
+        await startRun(1);
+        await launch(started.single);
+        expect(vm.disposed, isFalse);
+
+        await repository.stop(1);
+
+        expect(vm.disposed, isTrue);
+      });
+
+      test('a second start closes the connection of the first', () async {
+        final first = vm;
+        await startRun(1);
+        await launch(started.single);
+        vm = ScriptedVmService();
+
+        await startRun(1);
+
+        expect(first.disposed, isTrue);
+        expect(vm.disposed, isFalse);
+      });
+
+      test('a crash of the app closes the connection', () async {
+        await startRun(1);
+        final process = started.single;
+        await launch(process);
+
+        process.exit(1);
+        await pumpEventQueue();
+
+        expect(vm.disposed, isTrue);
+      });
+
+      test('dispose closes the connection', () async {
+        await startRun(1);
+        await launch(started.single);
+
+        await repository.dispose();
+
+        expect(vm.disposed, isTrue);
+      });
+
+      test('a connect that ends after the stop is closed at once', () async {
+        final pending = Completer<IFlutterErrorListener>();
+        connectErrors = (_) => pending.future;
+        await startRun(1);
+        await launch(started.single);
+        await repository.stop(1);
+
+        pending.complete(await FlutterErrorListener.attach(vm.service));
+        await pumpEventQueue();
+
+        expect(vm.disposed, isTrue);
+      });
+
+      test('a second app.debugPort does not connect again', () async {
+        await startRun(1);
+        final process = started.single;
+        await launch(process);
+
+        await emit(process, 'app.debugPort', <String, Object?>{
+          'appId': 'app-1',
+          'port': 1234,
+          'wsUri': 'ws://127.0.0.1:1234/abc=/ws',
+        });
+
+        expect(connectedTo, hasLength(1));
+      });
+    });
+
     group('DevTools', () {
       /// Brings the run up with [devTools] as the `app.devTools` address (none when `null`).
       Future<ScriptedDaemonProcess> runWithDevTools(String? devTools) async {
@@ -989,6 +1284,7 @@ void main() {
           start: scriptedStarter(create, started: started),
           stopTimeout: const Duration(milliseconds: 50),
           openUrl: (url) async => throw const io.ProcessException('open', <String>[], 'no', 1),
+          connectErrors: (uri) => connectErrors(uri),
         );
         final seen = logs(1);
         await runWithDevTools('http://127.0.0.1:9100');

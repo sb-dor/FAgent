@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/permission_broker.dart';
 import 'package:flutter_code_agent/src/common/acp/raw_acp_message.dart';
+import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
@@ -83,12 +84,14 @@ final class AgentHub {
     Map<String, AgentDefinition>? agents,
     AgentConnector? connector,
     AgentAuth? auth,
+    SessionContextProvider? sessionContext,
     this._sessionDefaults,
     this._onConfigOptions,
     this._observers = const <TurnObserver>[],
     this.setupTimeout = const Duration(seconds: 60),
     this.cancelTimeout = const Duration(seconds: 15),
   }) : auth = auth ?? AgentAuth(environment: environment),
+       _sessionContext = sessionContext ?? _noContext,
        _slots = <String, _AgentSlot>{
          for (final MapEntry(:key, :value) in (agents ?? _defaultAgents).entries)
            key: _AgentSlot(value),
@@ -106,7 +109,11 @@ final class AgentHub {
     'claude': AgentDefinition.claude,
   };
 
+  static Future<SessionContext> _noContext(int _, AgentDefinition _) async =>
+      SessionContext.empty;
+
   final AppDatabase _database;
+  final SessionContextProvider _sessionContext;
   final List<TurnObserver> _observers;
   final Future<Map<String, String>> Function(String agentId)? _sessionDefaults;
   final void Function(String agentId, List<Map<String, Object?>> options)? _onConfigOptions;
@@ -590,8 +597,15 @@ final class AgentHub {
     _AgentSlot? registered;
     String? registeredId;
     try {
+      final context = await _contextOf(live);
       final response = await connection.agent
-          .createSession(NewSessionRequest(cwd: live.cwd, mcpServers: const <McpServer>[]))
+          .createSession(
+            NewSessionRequest(
+              cwd: live.cwd,
+              mcpServers: context.servers,
+              meta: _metaOf(context),
+            ),
+          )
           .timeout(setupTimeout);
       final acpId = response.sessionId.value;
       // Registered at once: the agent may notify (commands, config) while the
@@ -689,6 +703,25 @@ final class AgentHub {
     return contains(option['options']);
   }
 
+  /// The servers and `_meta` for a new or loaded session of [live]. Never throws: a provider that
+  /// fails or does not answer within [setupTimeout] is logged and the session starts without them.
+  Future<SessionContext> _contextOf(LiveSession live) async {
+    try {
+      return await _sessionContext(
+        live.id,
+        _slots[live.agentId]!.definition,
+      ).timeout(setupTimeout);
+    } on Object catch (error, stackTrace) {
+      l.w('AgentHub | session ${live.id}: no MCP servers and rules: $error', stackTrace);
+      return SessionContext.empty;
+    }
+  }
+
+  static AcpJsonObject? _metaOf(SessionContext context) {
+    final meta = context.meta;
+    return meta == null ? null : AcpJsonObject.fromObject(meta);
+  }
+
   Future<void> _load(LiveSession live, AgentConnection connection) async {
     _move(live, SessionStatus.loading);
     final acpId = live.acpSessionId!;
@@ -696,12 +729,14 @@ final class AgentHub {
     slot.byAcpId[acpId] = live;
     live.replaying = true;
     try {
+      final context = await _contextOf(live);
       final response = await connection.agent
           .loadSession(
             LoadSessionRequest(
               sessionId: SessionId(acpId),
               cwd: live.cwd,
-              mcpServers: const <McpServer>[],
+              mcpServers: context.servers,
+              meta: _metaOf(context),
             ),
           )
           .timeout(setupTimeout);

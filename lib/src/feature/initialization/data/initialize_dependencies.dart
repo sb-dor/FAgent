@@ -3,12 +3,17 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/run_tools.dart';
+import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/skill_tools.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
@@ -17,10 +22,13 @@ import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_re
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
+import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_observer.dart';
 import 'package:l/l.dart';
@@ -83,6 +91,9 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
     observers: <TurnObserver>[GitTurnFilesObserver(environment: dependencies.shellEnvironment)],
+    // Read when a chat starts its agent session, after initialization has finished.
+    sessionContext: (sessionId, agent) =>
+        dependencies.sessionContextRepository.forSession(sessionId: sessionId, agent: agent),
     sessionDefaults: (agentId) async =>
         (await AppSettingsRepositoryImpl(
           database: dependencies.database,
@@ -107,15 +118,72 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create chat skills repository': (dependencies) =>
+      dependencies.chatSkillsRepository = ChatSkillsRepositoryImpl(database: dependencies.database),
   'Create run config repository': (dependencies) =>
       dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
-  'Create MCP servers repository': (dependencies) =>
-      dependencies.mcpServersRepository = McpServersRepositoryImpl(database: dependencies.database),
-  'Create permission rules repository': (dependencies) =>
-      dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
   // The SDK path and the fvm version are real; the Flutter version and doctor are made up (M4).
   'Create Flutter SDK repository': (dependencies) => dependencies.flutterSdkRepository =
       FakeFlutterSdkRepositoryImpl(which: dependencies.shellEnvironment.which),
+  // A server that cannot start leaves the app working without its tools (a hub notice says so).
+  'App MCP server': (dependencies) async {
+    final database = dependencies.database;
+    final runs = dependencies.appRunRepository;
+    final builtin = AssetBuiltinKnowledge(bundle: rootBundle);
+    final catalog = ChatSkillCatalog(
+      skills: dependencies.skillsRepository,
+      chatSkills: dependencies.chatSkillsRepository,
+    );
+    final tokens = AppMcpTokens(database: database);
+    final server = AppMcpServerImpl(
+      tokens: tokens,
+      tools: <AppMcpTool>[
+        ListSkillsTool(catalog: catalog),
+        LoadSkillTool(catalog: catalog, skills: dependencies.skillsRepository),
+        ReadSkillFileTool(catalog: catalog, builtin: builtin),
+        AppStatusTool(runs: runs),
+        AppLogsTool(runs: runs),
+        RuntimeErrorsTool(runs: runs),
+        HotReloadTool(runs: runs),
+        HotRestartTool(runs: runs),
+        ScreenshotTool(
+          runs: runs,
+          projectRoot: (projectId) async => (await (database.select(
+            database.projectsTable,
+          )..where((project) => project.id.equals(projectId))).getSingleOrNull())?.path,
+        ),
+      ],
+      instructions: appMcpInstructions,
+    );
+    await server.start();
+    dependencies
+      ..appMcpTokens = tokens
+      ..appMcpServer = server;
+  },
+  // The status of the servers in Settings: the app's server is read, the others are probed.
+  'Create MCP servers repository': (dependencies) {
+    final probe = McpProbeImpl(environment: dependencies.shellEnvironment);
+    dependencies
+      ..mcpProbe = probe
+      ..mcpServersRepository = McpServersRepositoryImpl(
+        database: dependencies.database,
+        appServer: dependencies.appMcpServer,
+        probe: probe,
+        flutterSdk: dependencies.flutterSdkRepository,
+      );
+  },
+  'Create session context repository': (dependencies) =>
+      dependencies.sessionContextRepository = SessionContextRepositoryImpl(
+        database: dependencies.database,
+        appServer: dependencies.appMcpServer,
+        tokens: dependencies.appMcpTokens,
+        skills: dependencies.skillsRepository,
+        chatSkills: dependencies.chatSkillsRepository,
+        mcpServers: dependencies.mcpServersRepository,
+        environment: dependencies.shellEnvironment,
+      ),
+  'Create permission rules repository': (dependencies) =>
+      dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
   // The target checks are real; the creation itself is made up (M4).
   'Create project creation repository': (dependencies) => dependencies.projectCreationRepository =
       FakeProjectCreationRepositoryImpl(database: dependencies.database),

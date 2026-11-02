@@ -2,7 +2,6 @@ import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
@@ -117,7 +116,19 @@ void main() {
   });
 
   group('menu F', () {
-    testWidgets('lists enabled skills first and opens the library', (tester) async {
+    Future<void> openMenu(WidgetTester tester) async {
+      await tester.tap(chip());
+      await tester.pumpAndSettle();
+    }
+
+    Finder box(String name, IconData icon) => find.descendant(
+      of: find.ancestor(of: find.text(name), matching: find.byType(GestureDetector)).first,
+      matching: find.byIcon(icon),
+    );
+
+    testWidgets('lists the skills of the project, not the ones it has off, and opens the library', (
+      tester,
+    ) async {
       await pumpChat(tester);
       await tester.runAsync(
         () => repository.setEnabled(
@@ -128,18 +139,15 @@ void main() {
       );
       await settle(tester);
 
-      final badges = find.byType(PreviewBadge).evaluate().length;
-      await tester.tap(chip());
-      await tester.pumpAndSettle();
+      await openMenu(tester);
 
       expect(find.text('Enabled for avera-hotel'), findsOneWidget);
-      final names = ['checklist', 'drift-migration', 'feature-architecture'];
-      final ys = [for (final name in names) tester.getTopLeft(find.text(name)).dy];
-      expect(ys, orderedEquals([...ys]..sort()), reason: 'enabled first, disabled last');
-      expect(find.text('Before a release'), findsOneWidget);
-      // The note says the rows do not switch yet, and carries the Preview badge.
-      expect(find.textContaining('come in M3'), findsOneWidget);
-      expect(find.byType(PreviewBadge), findsNWidgets(badges + 1));
+      expect(find.text('checklist'), findsOneWidget);
+      expect(find.text('drift-migration'), findsOneWidget);
+      expect(find.text('feature-architecture'), findsNothing);
+      // A project skill carries the note instead of its description.
+      expect(find.text('Applies when the chat is reopened'), findsNWidgets(2));
+      expect(find.text('Before a release'), findsNothing);
 
       await tester.tap(find.text('Open the skill library →'));
       await tester.pumpAndSettle();
@@ -150,6 +158,38 @@ void main() {
         SkillsConfigInhWidget.of(tester.element(find.byType(SkillsList))).view.projectId,
         projectId,
       );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a checkbox turns a skill off for this chat only and back on', (tester) async {
+      await pumpChat(tester);
+      expect(chipCount('3'), findsOneWidget);
+
+      await openMenu(tester);
+      expect(box('feature-architecture', Icons.check_box), findsOneWidget);
+      await tester.tap(find.text('feature-architecture'));
+      await tester.pumpAndSettle();
+      await settle(tester);
+
+      final saved = await tester.runAsync(
+        () => dependencies.chatSkillsRepository.current(sessionId),
+      );
+      expect(saved, {'skill:builtin:feature-architecture': false});
+      expect(chipCount('2'), findsOneWidget);
+      // The project itself is untouched.
+      expect(repository.calls.where((call) => call.contains('setEnabled')), isEmpty);
+
+      await openMenu(tester);
+      expect(box('feature-architecture', Icons.check_box_outline_blank), findsOneWidget);
+      await tester.tap(find.text('feature-architecture'));
+      await tester.pumpAndSettle();
+      await settle(tester);
+
+      expect(
+        await tester.runAsync(() => dependencies.chatSkillsRepository.current(sessionId)),
+        isEmpty,
+      );
+      expect(chipCount('3'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
   });
@@ -204,7 +244,9 @@ void main() {
   });
 
   group('the / menu', () {
-    testWidgets('shows project skills first; only project skills can be inserted', (tester) async {
+    testWidgets('shows project skills first; a skill of any source can be inserted', (
+      tester,
+    ) async {
       await pumpChat(tester);
 
       await tester.enterText(find.byType(TextField), '/');
@@ -213,24 +255,23 @@ void main() {
       expect(_inMenu('Skills'), findsOneWidget);
       final skillsY = tester.getTopLeft(_inMenu('Skills')).dy;
       expect(skillsY, lessThan(tester.getTopLeft(find.text('App')).dy));
-      // The built-in skill is dimmed and says when it comes.
+      // The built-in skill is a command like the project's: not dimmed, no `Coming in M3`.
       expect(find.text('/feature-architecture'), findsOneWidget);
-      expect(
-        find.descendant(
-          of: find.ancestor(of: find.text('/feature-architecture'), matching: find.byType(Opacity)),
-          matching: find.text('Coming in M3'),
-        ),
-        findsWidgets,
-      );
-      await tester.tap(find.text('/feature-architecture'));
-      await tester.pump();
-      expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '/');
+      expect(find.text('Coming in M3'), findsNothing);
 
-      // Enter takes the first row that can be inserted: a project skill.
+      // Enter takes the first row: a project skill.
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       await tester.pump();
-
       expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, '/checklist ');
+
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+      await tester.tap(find.text('/feature-architecture'));
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '/feature-architecture ',
+      );
       await disposeTestApp(tester, dependencies);
     });
 
@@ -246,6 +287,26 @@ void main() {
       await tester.pump();
 
       expect(find.text('/checklist'), findsNothing);
+      expect(find.text('/drift-migration'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('does not list skills turned off for this chat only', (tester) async {
+      await pumpChat(tester);
+      await tester.runAsync(
+        () => dependencies.chatSkillsRepository.set(
+          sessionId,
+          'skill:builtin:feature-architecture',
+          enabled: false,
+          projectEnabled: true,
+        ),
+      );
+      await settle(tester);
+
+      await tester.enterText(find.byType(TextField), '/');
+      await tester.pump();
+
+      expect(find.text('/feature-architecture'), findsNothing);
       expect(find.text('/drift-migration'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
@@ -317,7 +378,40 @@ void main() {
         ['c-project', 'a-mine', 'b-built-in'],
       );
       expect(skills.skills.first.invocable, isTrue);
-      expect(skills.skills.last.invocable, isFalse);
+      expect(skills.skills.last.invocable, isTrue);
+    });
+
+    test('forChat drops the skills the chat turned off and keeps the rest', () {
+      final skills = of([
+        memorySkill('a'),
+        memorySkill('b'),
+        memorySkill('c', source: SkillSource.user),
+        memorySkill('off-for-project').copyWith(enabled: false),
+      ]);
+
+      final forChat = skills.forChat({
+        'skill:builtin:a': false,
+        'skill:builtin:off-for-project': true,
+      });
+
+      expect([for (final skill in forChat.skills) skill.name], ['c', 'b', 'off-for-project']);
+      expect(forChat.projectName, skills.projectName);
+      // A chat's `true` does not bring in a skill its project has off.
+      expect(forChat.runnable('off-for-project'), isNull);
+      expect(skills.forChat(const {}), skills);
+    });
+
+    test('runnable finds the first skill of the name that is on: project, mine, built-in', () {
+      final skills = of([
+        memorySkill('same'),
+        memorySkill('same', source: SkillSource.user),
+        memorySkill('same', source: SkillSource.project).copyWith(enabled: false),
+        memorySkill('only-built-in'),
+      ]);
+
+      expect(skills.runnable('same')?.source, SkillSource.user);
+      expect(skills.runnable('only-built-in')?.source, SkillSource.builtin);
+      expect(skills.runnable('missing'), isNull);
     });
 
     test('an unchanged emission leaves the composer notifier silent', () {

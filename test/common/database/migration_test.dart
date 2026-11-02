@@ -10,6 +10,7 @@ import '../../generated_migrations/schema_v3.dart' as v3;
 import '../../generated_migrations/schema_v4.dart' as v4;
 import '../../generated_migrations/schema_v5.dart' as v5;
 import '../../generated_migrations/schema_v6.dart' as v6;
+import '../../generated_migrations/schema_v7.dart' as v7;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -130,5 +131,34 @@ void main() {
     expect(project.path, '/work/app');
     expect((await database.select(database.mcpServersTable).getSingle()).name, 'figma');
     expect(await database.select(database.runConfigsTable).get(), isEmpty);
+  });
+
+  test('v7 → v8 adds chat_skill_states and keeps chats', () async {
+    final schema = await verifier.schemaAt(7);
+    final old = v7.DatabaseAtV7(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 8);
+
+    expect((await database.select(database.sessionsTable).getSingle()).title, 'chat');
+    expect(await database.select(database.chatSkillStatesTable).get(), isEmpty);
+    await database
+        .into(database.chatSkillStatesTable)
+        .insert(
+          ChatSkillStatesTableCompanion.insert(
+            sessionId: 1,
+            skillId: 'skill:user:a',
+            enabled: false,
+          ),
+        );
+    expect(await database.select(database.chatSkillStatesTable).get(), hasLength(1));
   });
 }

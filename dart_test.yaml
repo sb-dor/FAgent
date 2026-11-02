@@ -7,3 +7,6 @@ tags:
   flutter:
     # Runs the real `flutter run` on macOS; the test skips itself unless FLUTTER_RUN_TEST=1.
     timeout: 10m
+  agent:
+    # The real Claude adapter and the app MCP server; the test skips itself unless FLUTTER_AGENT_TEST=1.
+    timeout: 10m

@@ -20,11 +20,16 @@ import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/skill_prompt.dart';
 import 'package:flutter_code_agent/src/feature/session_config/controller/session_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/chat_skill_actions_controller.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/chat_skills_controller.dart';
+import 'package:flutter_code_agent/src/feature/skills/controller/skill_text_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 import 'package:path/path.dart' as p;
 
 /// Gives the chat widgets access to [ChatConfigWidgetState].
@@ -111,6 +116,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final PermissionAnswerController permissionController;
   late final SessionConfigController configController;
   late final FileMentionController fileMentionController;
+  late final ChatSkillsController chatSkillsController;
+  late final ChatSkillActionsController chatSkillActionsController;
+  late final SkillTextController skillTextController;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
 
@@ -149,6 +157,13 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     fileMentionController = FileMentionController(
       repository: ProjectFilesRepositoryImpl(environment: dependencies.shellEnvironment),
     );
+    chatSkillsController = ChatSkillsController(repository: dependencies.chatSkillsRepository);
+    // Only the 🧩 chip shows the choices, so a chat without the chip does not watch them.
+    if (canOpenSkills) chatSkillsController.watch(sessionId);
+    chatSkillActionsController = ChatSkillActionsController(
+      repository: dependencies.chatSkillsRepository,
+    );
+    skillTextController = SkillTextController(repository: dependencies.skillsRepository);
   }
 
   @override
@@ -161,6 +176,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     permissionController.dispose();
     configController.dispose();
     fileMentionController.dispose();
+    chatSkillsController.dispose();
+    chatSkillActionsController.dispose();
+    skillTextController.dispose();
     textController.dispose();
     composerFocus.dispose();
     runContext.dispose();
@@ -173,6 +191,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.didUpdateWidget(oldWidget);
     runContext.value = widget.runContext;
     chatSkills.value = widget.chatSkills;
+    if (canOpenSkills) chatSkillsController.watch(sessionId);
   }
 
   /// Whether the skill library can be shown from the chat.
@@ -181,6 +200,14 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Shows the skill library for the chat's project, on the skill [itemId] when given.
   void openSkills({String? itemId}) =>
       widget.onOpenSkills?.call(itemId: itemId, projectId: widget.project.id);
+
+  /// Turns [skill] on or off for this chat only.
+  void setChatSkill(ChatSkill skill, {required bool enabled}) => chatSkillActionsController.set(
+    sessionId,
+    skill.id,
+    enabled: enabled,
+    projectEnabled: skill.enabled,
+  );
 
   /// Hands the latest view to [ChatConfigWidget.onHandle] once the frame is done; several views
   /// in one frame publish only the last.
@@ -228,8 +255,37 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     return resourceLinks(widget.project.path, mentioned);
   }
 
-  /// Sends the composer text with the mentioned files as `resource_link`s;
-  /// the first prompt in a folder asks for trust.
+  /// The skills this chat works with: the ones on for its project, minus the ones the chat turned
+  /// off.
+  ChatSkills get skillsOfChat => chatSkills.value.forChat(chatSkillsController.states);
+
+  /// What goes to the agent for the composer [text]: the text and the content blocks beside it.
+  ///
+  /// A leading `/<name>` of a built-in or user skill that is on for the chat sends the rest of the
+  /// text (or `Use the <name> skill.`) with `SKILL.md` embedded as a resource: the agent does not
+  /// find those skills on disk. The project's own skills (`.claude/skills`) and every other text
+  /// go as typed, as does a command whose `SKILL.md` cannot be read. Mentioned files follow as
+  /// `resource_link`s ([resourcesFor]).
+  Future<({String text, List<Map<String, Object?>> resources})> promptFor(String text) async {
+    final files = await resourcesFor(text);
+    final command = leadingCommand(text);
+    final skill = command == null ? null : skillsOfChat.runnable(command.name);
+    if (command == null || skill == null || skill.source == SkillSource.project) {
+      return (text: text, resources: files);
+    }
+    final String markdown;
+    try {
+      markdown = await skillTextController.read(skill.id, projectRoot: projectRoot);
+    } on Object {
+      return (text: text, resources: files);
+    }
+    return (
+      text: skillPromptText(skill.name, command.rest),
+      resources: <Map<String, Object?>>[skillResource(skill.name, markdown), ...files],
+    );
+  }
+
+  /// Sends the composer text ([promptFor]); the first prompt in a folder asks for trust.
   Future<void> send() async {
     final text = textController.text.trim();
     if (text.isEmpty) return;
@@ -237,10 +293,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
     }
-    final resources = await resourcesFor(text);
+    final prompt = await promptFor(text);
     if (!mounted) return;
     textController.clear();
-    promptController.send(sessionId, text, resources: resources);
+    promptController.send(sessionId, prompt.text, resources: prompt.resources);
   }
 
   void stop() => promptController.stop(sessionId).ignore();
