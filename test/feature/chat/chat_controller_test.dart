@@ -26,7 +26,11 @@ final class _FakeChatRepository implements IChatRepository {
   Future<void> startNewAgentSession(int sessionId) async {}
 
   @override
-  List<AgentLoginMethod> loginMethods(String agentId) => const <AgentLoginMethod>[];
+  Stream<Map<String, List<AgentLoginMethod>>> watchLoginMethods() =>
+      const Stream<Map<String, List<AgentLoginMethod>>>.empty();
+
+  @override
+  Future<void> cancelLogin(String agentId) async {}
 
   @override
   Future<bool> login(

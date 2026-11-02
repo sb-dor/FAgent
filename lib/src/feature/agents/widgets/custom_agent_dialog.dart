@@ -12,8 +12,9 @@ import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.
 /// Asks for a custom ACP agent: its name, the command and its arguments (one per line, no shell),
 /// `KEY=value` lines for its environment, and where the app's rules go.
 ///
-/// The name and the command are required; a line that is not `KEY=value` is explained under the
-/// field and the dialog stays open. It returns the draft, or `null` when the user cancels.
+/// The name and the command are required. A line that is not `KEY=value`, whose key is not a
+/// variable name, or whose key came before is explained under the field and the dialog stays
+/// open. It returns the draft, or `null` when the user cancels.
 /// {@endtemplate}
 class CustomAgentDialog extends StatefulWidget {
   /// {@macro custom_agent_dialog}
@@ -45,7 +46,8 @@ class _CustomAgentDialogState extends State<CustomAgentDialog> {
     text: widget.initial?.environment.entries.map((e) => '${e.key}=${e.value}').join('\n'),
   );
   late RulesChannel _rules = widget.initial?.rulesChannel ?? RulesChannel.firstMessage;
-  bool _badEnvironment = false;
+  /// Why the environment lines were refused; `null` until a save finds a bad line.
+  String? _environmentProblem;
 
   bool get _complete => _name.text.trim().isNotEmpty && _command.text.trim().isNotEmpty;
 
@@ -59,10 +61,29 @@ class _CustomAgentDialogState extends State<CustomAgentDialog> {
 
   void _submit() {
     if (!_complete) return;
-    final environment = _parseEnvironment(_environment.text);
-    if (environment == null) {
-      setState(() => _badEnvironment = true);
-      return;
+    final localization = Localization.of(context);
+    final variables = <String, String>{};
+    final lines = _environment.text.split('\n');
+    for (final (index, line) in lines.indexed) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty) continue;
+      final at = trimmed.indexOf('=');
+      final key = at < 0 ? '' : trimmed.substring(0, at).trim();
+      final String? problem;
+      if (key.isEmpty) {
+        problem = localization.agentErrorEnvironmentLine;
+      } else if (!_variableName.hasMatch(key)) {
+        problem = localization.agentErrorEnvironmentName(index + 1, key);
+      } else if (variables.containsKey(key)) {
+        problem = localization.agentErrorEnvironmentDuplicate(index + 1, key);
+      } else {
+        problem = null;
+      }
+      if (problem != null) {
+        setState(() => _environmentProblem = problem);
+        return;
+      }
+      variables[key] = trimmed.substring(at + 1).trim();
     }
     Navigator.of(context).pop(
       CustomAgentDraft(
@@ -72,25 +93,14 @@ class _CustomAgentDialogState extends State<CustomAgentDialog> {
           for (final line in _arguments.text.split('\n'))
             if (line.trim().isNotEmpty) line.trim(),
         ],
-        environment: environment,
+        environment: variables,
         rulesChannel: _rules,
       ),
     );
   }
 
-  /// `KEY=value` lines; blank lines are skipped. `null` when a line has no key.
-  static Map<String, String>? _parseEnvironment(String text) {
-    final variables = <String, String>{};
-    for (final line in text.split('\n')) {
-      final trimmed = line.trim();
-      if (trimmed.isEmpty) continue;
-      final at = trimmed.indexOf('=');
-      final key = at < 0 ? '' : trimmed.substring(0, at).trim();
-      if (key.isEmpty) return null;
-      variables[key] = trimmed.substring(at + 1).trim();
-    }
-    return variables;
-  }
+  /// A name a shell would take as an environment variable.
+  static final RegExp _variableName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
 
   Widget _field({
     required String id,
@@ -183,9 +193,9 @@ class _CustomAgentDialogState extends State<CustomAgentDialog> {
                 controller: _environment,
                 label: localization.agentFieldEnvironment,
                 hint: localization.agentFieldEnvironmentHint,
-                error: _badEnvironment ? localization.agentErrorEnvironmentLine : null,
+                error: _environmentProblem,
                 multiline: true,
-                onChanged: () => _badEnvironment = false,
+                onChanged: () => _environmentProblem = null,
               ),
               gap,
               Text(

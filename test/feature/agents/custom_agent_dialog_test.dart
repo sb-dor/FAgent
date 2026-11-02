@@ -105,6 +105,47 @@ void main() {
     expect(results.single!.environment, <String, String>{'A': ''});
   });
 
+  testWidgets('an environment key that is not a variable name is refused', (tester) async {
+    final results = await open(tester);
+
+    await tester.enterText(_field('name'), 'Mine');
+    await tester.enterText(_field('command'), 'mine');
+    await tester.enterText(_field('environment'), 'GOOD_1=x\n1BAD=y');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Line 2: "1BAD" is not a variable name.'), findsOneWidget);
+    expect(results, isEmpty);
+
+    await tester.enterText(_field('environment'), 'GOOD_1=x\nMY-VAR=y');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+    expect(find.text('Line 2: "MY-VAR" is not a variable name.'), findsOneWidget);
+
+    await tester.enterText(_field('environment'), '_ok=x\nB2=y');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+    expect(results.single!.environment, <String, String>{'_ok': 'x', 'B2': 'y'});
+  });
+
+  testWidgets('a key given twice is refused', (tester) async {
+    final results = await open(tester);
+
+    await tester.enterText(_field('name'), 'Mine');
+    await tester.enterText(_field('command'), 'mine');
+    await tester.enterText(_field('environment'), 'A=1\nB=2\nA=3');
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Line 3: "A" is already set.'), findsOneWidget);
+    expect(find.text('Add ACP agent'), findsOneWidget);
+    expect(results, isEmpty);
+  });
+
   testWidgets('the rules channel defaults to the first message and can be changed', (tester) async {
     final results = await open(tester);
 

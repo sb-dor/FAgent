@@ -74,7 +74,17 @@ final class AgentActionsController extends StateController<AgentActionsState>
   }
 
   /// Stops the running browser or key sign-in of [agentId].
-  void cancelLogin(String agentId) => _run(() => _repository.cancelLogin(agentId));
+  ///
+  /// Like the sign-in itself it runs outside the one-action-at-a-time handler, so another action
+  /// in flight never drops it.
+  void cancelLogin(String agentId) {
+    if (isDisposed) return;
+    unawaited(
+      _repository.cancelLogin(agentId).catchError((Object error, StackTrace stackTrace) {
+        if (!isDisposed) setState(state.copyWith(error: error));
+      }),
+    );
+  }
 
   /// Signs [agentId] out.
   void logout(String agentId) => _run(() async {

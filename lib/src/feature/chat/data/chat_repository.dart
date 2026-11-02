@@ -19,8 +19,12 @@ abstract interface class IChatRepository {
   /// Destructive: a new agent session; the agent loses the chat's context.
   Future<void> startNewAgentSession(int sessionId);
 
-  /// The sign-in methods of [agentId] as last checked; empty for an unknown agent.
-  List<AgentLoginMethod> loginMethods(String agentId);
+  /// The sign-in methods of every agent by agent id: the last known at once, then again whenever
+  /// an agent is checked. Cancel the subscription to stop watching.
+  Stream<Map<String, List<AgentLoginMethod>>> watchLoginMethods();
+
+  /// Stops the running browser or key sign-in of [agentId]; the pending [login] returns `false`.
+  Future<void> cancelLogin(String agentId);
 
   /// Signs [agentId] in with [methodId]; `true` on success, `false` when it
   /// failed or was cancelled. [onOutput] gets a terminal login's output lines
@@ -55,9 +59,14 @@ final class ChatRepositoryImpl implements IChatRepository {
   Future<void> startNewAgentSession(int sessionId) => _hub.startNewAgentSession(sessionId);
 
   @override
-  List<AgentLoginMethod> loginMethods(String agentId) =>
-      _agents.agents.where((agent) => agent.id == agentId).firstOrNull?.methods ??
-      const <AgentLoginMethod>[];
+  Stream<Map<String, List<AgentLoginMethod>>> watchLoginMethods() => _agents.watchAgents().map(
+    (agents) => <String, List<AgentLoginMethod>>{
+      for (final agent in agents) agent.id: agent.methods,
+    },
+  );
+
+  @override
+  Future<void> cancelLogin(String agentId) => _agents.cancelLogin(agentId);
 
   @override
   Future<bool> login(

@@ -26,10 +26,12 @@ const ChatView _codexChat = ChatView(
 Widget _banner(
   List<AgentLoginMethod> methods, {
   ValueChanged<String>? onLogin,
+  VoidCallback? onCancelLogin,
   bool busy = false,
 }) => ChatProblemBanner(
   view: _codexChat,
   busy: busy,
+  onCancelLogin: onCancelLogin,
   loginFailed: false,
   loginMethods: methods,
   onRetry: () {},
@@ -103,6 +105,47 @@ void main() {
     );
   });
 
+  testWidgets('needsAuth with no methods shows the message and the Settings pointer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(testApp(_banner(const <AgentLoginMethod>[])));
+
+    expect(find.text('The agent needs you to sign in.'), findsOneWidget);
+    expect(find.text('Sign in from Settings → Agents.'), findsOneWidget);
+    expect(find.byType(FilledButton), findsNothing);
+  });
+
+  testWidgets('only methods set up in the agent also point to Settings', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        _banner(const <AgentLoginMethod>[
+          AgentLoginMethod(id: 'vertex-ai', name: 'Vertex AI', kind: AgentLoginKind.unsupported),
+        ]),
+      ),
+    );
+
+    expect(find.text('Sign in from Settings → Agents.'), findsOneWidget);
+  });
+
+  testWidgets('a running browser sign-in can be cancelled from the banner', (tester) async {
+    var cancels = 0;
+    await tester.pumpWidget(
+      testApp(_banner(memoryCodexAgent.methods, busy: true, onCancelLogin: () => cancels++)),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
+
+    expect(cancels, 1);
+  });
+
+  testWidgets('no Cancel without a running cancellable sign-in', (tester) async {
+    await tester.pumpWidget(testApp(_banner(memoryCodexAgent.methods, onCancelLogin: () {})));
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
+
+    await tester.pumpWidget(testApp(_banner(memoryClaudeAgent.methods, busy: true)));
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
+  });
+
   group('ChatRepositoryImpl', () {
     late AppDatabase database;
     late AgentHub hub;
@@ -120,12 +163,29 @@ void main() {
       await database.close();
     });
 
-    test('takes the login methods from the agents repository', () {
-      final repository = ChatRepositoryImpl(hub: hub, agents: MemoryAgentsRepository());
+    test('follows the login methods of the agents repository', () async {
+      final agents = MemoryAgentsRepository();
+      final repository = ChatRepositoryImpl(hub: hub, agents: agents);
+      final seen = <Map<String, List<AgentLoginMethod>>>[];
+      final subscription = repository.watchLoginMethods().listen(seen.add);
+      addTearDown(subscription.cancel);
+      await pumpEventQueue();
 
-      expect(repository.loginMethods('codex'), memoryCodexAgent.methods);
-      expect(repository.loginMethods('claude'), memoryClaudeAgent.methods);
-      expect(repository.loginMethods('unknown'), isEmpty);
+      expect(seen.last['codex'], memoryCodexAgent.methods);
+      expect(seen.last['claude'], memoryClaudeAgent.methods);
+      expect(seen.last['unknown'], isNull);
+
+      agents.update(memoryCodexAgent.copyWith(methods: const <AgentLoginMethod>[]));
+      await pumpEventQueue();
+      expect(seen.last['codex'], isEmpty);
+    });
+
+    test('cancelLogin goes to the agents repository', () async {
+      final agents = MemoryAgentsRepository();
+
+      await ChatRepositoryImpl(hub: hub, agents: agents).cancelLogin('codex');
+
+      expect(agents.calls, <String>['cancelLogin:codex']);
     });
 
     test('a browser login waits for the sign-in and reports it', () async {

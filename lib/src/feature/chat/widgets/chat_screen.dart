@@ -2,7 +2,9 @@ import 'package:control/control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
@@ -64,24 +66,32 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
-          StateConsumer<ChatRecoveryController, ChatRecoveryState>(
-            controller: _scope.recoveryController,
-            builder: (context, recovery, _) => ChatProblemBanner(
-              view: view,
-              busy: recovery is ChatRecovery$InProgressState,
-              loginFailed: recovery is ChatRecovery$ErrorState,
-              loginOutput: switch (recovery) {
-                ChatRecovery$InProgressState(:final output) => output,
-                ChatRecovery$ErrorState(:final output) => output,
-                _ => const <String>[],
-              },
-              loginMethods: _scope.loginMethods(view.agentId),
-              onRetry: _scope.retry,
-              onStartNewAgentSession: _scope.startNewAgentSession,
-              onForceStop: () => _scope.forceStop(view.agentId),
-              onLogin: (method) => _scope.login(view.agentId, method),
-              onRepeatPrompt: _scope.repeatPrompt,
-            ),
+          // Rebuilt when the agent's check finds its sign-in methods.
+          StateConsumer<ChatLoginMethodsController, Map<String, List<AgentLoginMethod>>>(
+            controller: _scope.loginMethodsController,
+            builder: (context, methods, _) =>
+                StateConsumer<ChatRecoveryController, ChatRecoveryState>(
+                  controller: _scope.recoveryController,
+                  builder: (context, recovery, _) => ChatProblemBanner(
+                    view: view,
+                    busy: recovery is ChatRecovery$InProgressState,
+                    loginFailed: recovery is ChatRecovery$ErrorState,
+                    loginOutput: switch (recovery) {
+                      ChatRecovery$InProgressState(:final output) => output,
+                      ChatRecovery$ErrorState(:final output) => output,
+                      _ => const <String>[],
+                    },
+                    loginMethods: methods[view.agentId] ?? const <AgentLoginMethod>[],
+                    onRetry: _scope.retry,
+                    onStartNewAgentSession: _scope.startNewAgentSession,
+                    onForceStop: () => _scope.forceStop(view.agentId),
+                    onLogin: (method) => _scope.login(view.agentId, method),
+                    onCancelLogin: recovery is ChatRecovery$InProgressState && recovery.cancellable
+                        ? () => _scope.cancelLogin(view.agentId)
+                        : null,
+                    onRepeatPrompt: _scope.repeatPrompt,
+                  ),
+                ),
           ),
           ChatStatusLine(status: view.status, preparing: view.preparingTurn),
           if (view.bypassBlocked) BypassGateBanner(onAllow: _scope.allowBypass),

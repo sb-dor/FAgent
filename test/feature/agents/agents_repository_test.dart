@@ -55,7 +55,7 @@ final class _MemoryCatalog implements IAgentOptionsCatalog {
 }
 
 /// A probe that answers with [results] (by agent id) and records what it was asked.
-final class _ScriptedProbe implements IAgentProbe {
+class _ScriptedProbe implements IAgentProbe {
   final Map<String, AgentProbeResult> results = <String, AgentProbeResult>{};
 
   /// Agent id and the auth status wait of every probe.
@@ -69,6 +69,20 @@ final class _ScriptedProbe implements IAgentProbe {
 
   @override
   Future<void> dispose() async {}
+}
+
+/// A probe whose answers wait for [gate].
+final class _SlowProbe extends _ScriptedProbe {
+  _SlowProbe(this.gate);
+
+  final Future<void> gate;
+
+  @override
+  Future<AgentProbeResult> probe(AgentDefinition agent, {Duration? authStatusWait}) async {
+    final result = super.probe(agent, authStatusWait: authStatusWait);
+    await gate;
+    return result;
+  }
 }
 
 /// Custom agents in memory: records the calls and sends [value] to its watchers.
@@ -389,6 +403,39 @@ void main() {
 
     expect(calls.where((c) => c.arguments.contains('status')), hasLength(1));
     expect(probe.calls.map((c) => c.$1), unorderedEquals(<String>['codex', 'gemini']));
+  });
+
+  test('refreshAll skips an agent whose check is still running', () async {
+    final slow = Completer<void>();
+    final slowProbe = _SlowProbe(slow.future);
+    probe = slowProbe;
+    final repository = newRepository();
+
+    final startup = repository.refreshAll();
+    await pumpEventQueue();
+    // Settings → Agents opens while the startup check runs.
+    final settings = repository.refreshAll();
+    await pumpEventQueue();
+    slow.complete();
+    await Future.wait(<Future<void>>[startup, settings]);
+
+    // Claude's quick check had finished, so only it ran again; the probes ran once each.
+    expect(slowProbe.calls.map((c) => c.$1), unorderedEquals(<String>['codex', 'gemini']));
+  });
+
+  test('refresh of a running check still checks once more', () async {
+    final slow = Completer<void>();
+    final slowProbe = _SlowProbe(slow.future);
+    probe = slowProbe;
+    final repository = newRepository();
+
+    final first = repository.refresh('codex');
+    await pumpEventQueue();
+    final second = repository.refresh('codex');
+    slow.complete();
+    await Future.wait(<Future<void>>[first, second]);
+
+    expect(slowProbe.calls.map((c) => c.$1), <String>['codex', 'codex']);
   });
 
   group('status', () {

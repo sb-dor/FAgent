@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
@@ -113,6 +114,7 @@ class ChatConfigWidget extends StatefulWidget {
 class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final ChatController chatController;
   late final ChatRecoveryController recoveryController;
+  late final ChatLoginMethodsController loginMethodsController;
   late final PromptSendingController promptController;
   late final PermissionAnswerController permissionController;
   late final SessionConfigController configController;
@@ -146,9 +148,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     )
       ..addListener(_schedulePublish)
       ..open(sessionId);
-    recoveryController = ChatRecoveryController(
-      repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
-    );
+    final chatRepository = ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository);
+    recoveryController = ChatRecoveryController(repository: chatRepository);
+    loginMethodsController = ChatLoginMethodsController(repository: chatRepository)..watch();
     promptController = PromptSendingController(repository: PromptSendingRepositoryImpl(hub: hub));
     permissionController = PermissionAnswerController(
       repository: PermissionAnswerRepositoryImpl(hub: hub),
@@ -177,6 +179,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       ..removeListener(_schedulePublish)
       ..dispose();
     recoveryController.dispose();
+    loginMethodsController.dispose();
     promptController.dispose();
     permissionController.dispose();
     configController.dispose();
@@ -386,10 +389,21 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     }
   }
 
-  List<AgentLoginMethod> loginMethods(String agentId) =>
-      recoveryController.loginMethods(agentId);
+  /// Signs [agentId] in with [methodId]; a browser or key sign-in can be cancelled.
+  void login(String agentId, String methodId) {
+    final method = loginMethodsController
+        .methodsOf(agentId)
+        .where((m) => m.id == methodId)
+        .firstOrNull;
+    recoveryController.login(
+      agentId,
+      methodId,
+      cancellable: method != null && method.kind != AgentLoginKind.terminal,
+    );
+  }
 
-  void login(String agentId, String methodId) => recoveryController.login(agentId, methodId);
+  /// Stops the running browser or key sign-in of [agentId].
+  void cancelLogin(String agentId) => recoveryController.cancelLogin(agentId);
 
   /// Destructive; asks first.
   Future<void> startNewAgentSession() async {

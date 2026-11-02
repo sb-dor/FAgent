@@ -84,7 +84,8 @@ abstract interface class IAgentsRepository {
   /// Checks [agentId] again: Claude through its CLI, every other agent with an ACP handshake.
   Future<void> refresh(String agentId);
 
-  /// Checks every agent again.
+  /// Checks every agent again, except those whose check is still running (their result is
+  /// fresh enough; no second check is queued).
   Future<void> refreshAll();
 
   /// Signs [agentId] in with [methodId]; once that succeeds the agent is checked again.
@@ -96,7 +97,8 @@ abstract interface class IAgentsRepository {
   /// method. Throws [UnsupportedError] for a method set up in the agent itself.
   Future<AgentLogin?> login(String agentId, String methodId);
 
-  /// Stops the running ACP sign-in of [agentId] (its connection closes); without one, nothing.
+  /// Stops the running ACP sign-in of [agentId] (its connection closes; the pending [login]
+  /// throws a [CancellationException]); without one, nothing.
   Future<void> cancelLogin(String agentId);
 
   /// Signs [agentId] out and checks it again: Claude through its CLI, any other agent with ACP
@@ -296,8 +298,10 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
   }
 
   @override
-  Future<void> refreshAll() =>
-      Future.wait(<Future<void>>[for (final definition in _definitions) refresh(definition.id)]);
+  Future<void> refreshAll() => Future.wait(<Future<void>>[
+    for (final definition in _definitions)
+      _checking[definition.id] ?? refresh(definition.id),
+  ]);
 
   Future<void> _checkUntilSettled(String agentId) async {
     try {
@@ -448,17 +452,32 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
     return null;
   }
 
-  /// ACP `authenticate`, one per agent at a time.
-  Future<void> _signIn(String agentId, String methodId) {
-    if (_signIns[agentId] case final running?) return running.done;
-    final signIn = _SignIn();
-    _signIns[agentId] = signIn;
-    return signIn.done = _hub
-        .authenticate(agentId, methodId, cancel: signIn.source.token)
-        .whenComplete(() {
-          if (identical(_signIns[agentId], signIn)) _signIns.remove(agentId);
-        })
-        .then((_) => unawaited(refresh(agentId)));
+  /// ACP `authenticate`, one per agent at a time; a request while one runs waits for it.
+  ///
+  /// The callers may be in different error zones (a controller handler, a widget), and an error
+  /// never crosses zones: the shared future carries the outcome as a value, and each caller throws
+  /// it in its own zone.
+  Future<void> _signIn(String agentId, String methodId) async {
+    var signIn = _signIns[agentId];
+    if (signIn == null) {
+      final started = signIn = _SignIn();
+      _signIns[agentId] = started;
+      started.outcome = _hub
+          .authenticate(agentId, methodId, cancel: started.source.token)
+          .then<(Object, StackTrace)?>(
+            (_) {
+              unawaited(refresh(agentId));
+              return null;
+            },
+            onError: (Object error, StackTrace stackTrace) => (error, stackTrace),
+          )
+          .whenComplete(() {
+            if (identical(_signIns[agentId], started)) _signIns.remove(agentId);
+          });
+    }
+    if (await signIn.outcome case (final error, final stackTrace)) {
+      Error.throwWithStackTrace(error, stackTrace);
+    }
   }
 
   @override
@@ -466,11 +485,8 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
     final running = _signIns[agentId];
     if (running == null) return;
     running.source.cancel('Sign-in cancelled');
-    try {
-      await running.done;
-    } on Object catch (_) {
-      // The caller of `login` gets the cancellation.
-    }
+    // Ends with the sign-in; its error goes to the callers of `login`.
+    await running.outcome;
   }
 
   @override
@@ -541,5 +557,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
 /// One ACP sign-in in flight.
 final class _SignIn {
   final CancellationSource source = CancellationSource();
-  late final Future<void> done;
+
+  /// Completes when the sign-in ends: `null` on success, else its error. Never fails.
+  late final Future<(Object, StackTrace)?> outcome;
 }

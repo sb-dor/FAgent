@@ -24,6 +24,7 @@ class ChatProblemBanner extends StatelessWidget {
     required this.onRepeatPrompt,
     this.loginMethods = const <AgentLoginMethod>[],
     this.loginOutput = const <String>[],
+    this.onCancelLogin,
     super.key,
   });
 
@@ -51,11 +52,22 @@ class ChatProblemBanner extends StatelessWidget {
   final List<String> loginOutput;
   final VoidCallback onRepeatPrompt;
 
+  /// Stops the running browser or key sign-in; `null` when none runs (a terminal login cannot be
+  /// cancelled here).
+  final VoidCallback? onCancelLogin;
+
   @override
   Widget build(BuildContext context) {
     final localization = Localization.of(context);
     final problem = view.problem;
     final status = view.status;
+    final signInMethods = <AgentLoginMethod>[
+      if (status == SessionStatus.needsAuth)
+        for (final method in loginMethods)
+          if (method.kind != AgentLoginKind.unsupported &&
+              (method.kind != AgentLoginKind.apiKey || method.keyPresent))
+            method,
+    ];
     final actions = <Widget>[
       // A chat of a removed agent cannot continue.
       if ((status == SessionStatus.setupFailed || status == SessionStatus.error) &&
@@ -66,20 +78,19 @@ class ChatProblemBanner extends StatelessWidget {
           onPressed: busy ? null : onStartNewAgentSession,
           child: Text(localization.startNewAgentSession),
         ),
-      if (status == SessionStatus.needsAuth)
-        for (final method in loginMethods)
-          if (method.kind != AgentLoginKind.unsupported &&
-              (method.kind != AgentLoginKind.apiKey || method.keyPresent))
-            FilledButton.tonal(
-              onPressed: busy ? null : () => onLogin(method.id),
-              child: Text(switch (method) {
-                AgentLoginMethod(id: 'claude-ai-login', kind: AgentLoginKind.terminal) =>
-                  localization.loginWithClaudeAi,
-                AgentLoginMethod(id: 'console-login', kind: AgentLoginKind.terminal) =>
-                  localization.loginWithConsole,
-                _ => method.name,
-              }),
-            ),
+      for (final method in signInMethods)
+        FilledButton.tonal(
+          onPressed: busy ? null : () => onLogin(method.id),
+          child: Text(switch (method) {
+            AgentLoginMethod(id: 'claude-ai-login', kind: AgentLoginKind.terminal) =>
+              localization.loginWithClaudeAi,
+            AgentLoginMethod(id: 'console-login', kind: AgentLoginKind.terminal) =>
+              localization.loginWithConsole,
+            _ => method.name,
+          }),
+        ),
+      if (status == SessionStatus.needsAuth && busy && onCancelLogin != null)
+        OutlinedButton(onPressed: onCancelLogin, child: Text(localization.cancel)),
       if (view.canForceStop)
         OutlinedButton(onPressed: onForceStop, child: Text(localization.forceStop)),
       // A prompt held back by the bypass gate is sent by its banner.
@@ -90,12 +101,13 @@ class ChatProblemBanner extends StatelessWidget {
       if (status == SessionStatus.needsAuth)
         for (final method in loginMethods)
           if (method.kind == AgentLoginKind.apiKey && !method.keyPresent)
-            localization.agentApiKeyMissing(
-              method.keyVariables.join(' ${localization.agentOr} '),
-            ),
+            localization.agentApiKeyMissing(method.keyVariables.join(' ${localization.agentOr} ')),
     ];
     final removed = problem?.kind == SessionProblemKind.removed;
-    if (actions.isEmpty && keyHints.isEmpty && !removed) return const SizedBox.shrink();
+    final needsAuth = status == SessionStatus.needsAuth;
+    if (actions.isEmpty && !needsAuth && !removed) return const SizedBox.shrink();
+    // Nothing to press here (the agent is not checked yet, or failed): sign in from Settings.
+    final settingsPointer = needsAuth && signInMethods.isEmpty && keyHints.isEmpty;
 
     final theme = Theme.of(context);
     final message = switch (status) {
@@ -122,6 +134,13 @@ class ChatProblemBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   SelectableText(message),
+                  if (settingsPointer) ...<Widget>[
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      localization.chatSignInInSettings,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                   for (final hint in keyHints) ...<Widget>[
                     const SizedBox(height: 4),
                     SelectableText(hint, style: theme.textTheme.bodySmall),
