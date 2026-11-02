@@ -25,7 +25,9 @@ import 'package:flutter_code_agent/src/feature/initialization/models/dependencie
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
+import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
@@ -184,7 +186,14 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       ),
   'Create permission rules repository': (dependencies) =>
       dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
-  // The target checks are real; the creation itself is made up (M4).
-  'Create project creation repository': (dependencies) => dependencies.projectCreationRepository =
-      FakeProjectCreationRepositoryImpl(database: dependencies.database),
+  // After the Flutter SDK repository and the shell environment: it runs `flutter` and `git`.
+  'Create project creation repository': (dependencies) =>
+      dependencies.projectCreationRepository = ProjectCreationRepositoryImpl(
+        database: dependencies.database,
+        flutterSdk: dependencies.flutterSdkRepository,
+        environment: dependencies.shellEnvironment,
+        projectOpening: ProjectOpeningRepositoryImpl(database: dependencies.database),
+        projectTrust: ProjectTrustRepositoryImpl(database: dependencies.database),
+        loadAsset: rootBundle.loadString,
+      ),
 };

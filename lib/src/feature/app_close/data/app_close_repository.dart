@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:l/l.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -25,8 +26,8 @@ abstract interface class IAppCloseRepository {
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
-  /// Stops the runs, the devices daemon, the agents, the app's MCP server and the MCP status probes,
-  /// then closes the database.
+  /// Stops the runs, the devices daemon, a project creation, the agents, the app's MCP server and
+  /// the MCP status probes, then closes the database.
   Future<void> shutdown();
 
   /// Quits the app (answering a pending ⌘Q or logout on macOS).
@@ -47,6 +48,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._devices,
     required this._appMcpServer,
     required this._mcpProbe,
+    required this._projectCreation,
   });
 
   final AgentHub _hub;
@@ -56,6 +58,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IDevicesRepository _devices;
   final IAppMcpServer _appMcpServer;
   final IMcpProbe _mcpProbe;
+  final IProjectCreationRepository _projectCreation;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -89,11 +92,13 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   @override
   Future<void> shutdown() async {
     // `flutter run` and `flutter daemon` live in their own process groups, so they outlive the app
-    // unless they are killed here (the app on the device closes with them). One that refuses to
-    // stop must not keep the agents running or the database open.
+    // unless they are killed here (the app on the device closes with them); so does the command of
+    // a project creation (what it wrote stays on disk, the project is not added). One that refuses
+    // to stop must not keep the agents running or the database open.
     await Future.wait<void>(<Future<void>>[
       _stopQuietly('runs', _appRun.dispose),
       _stopQuietly('devices', _devices.dispose),
+      _stopQuietly('project creation', _projectCreation.dispose),
     ]);
     await _hub.dispose();
     // After the agents, so none of them is cut off mid-call; before the database its tools read.

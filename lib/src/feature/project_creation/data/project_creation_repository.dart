@@ -22,14 +22,22 @@ abstract interface class IProjectCreationRepository {
   /// Whether `<parent>/<name>` can be created; `null` when it can.
   Future<TargetProblem?> checkTarget(String parent, String name);
 
-  /// Creates the project of [request]. Emits the snapshot of the run whenever a step changes and
-  /// closes after the last step. Cancel the subscription to stop listening.
+  /// Creates the project of [request]. Emits the snapshot of the run whenever a step changes
+  /// (output lines included) and closes after the last step; a step that fails ends the run, the
+  /// later ones stay pending. Once the steps are over, if `flutter create` is done, the project is
+  /// added and trusted and a last snapshot carries its `projectId`; a failure to add it is an error
+  /// of the stream.
+  ///
+  /// Cancelling the subscription kills the running command and closes the stream: no snapshot is
+  /// emitted after that and the project is not added.
   Stream<CreationRun> create(NewProjectRequest request);
 
-  /// Kills the command that is running now. The stream of [create] then ends as a failure: the
-  /// step that was running is `failed`.
+  /// Kills the command that is running now. That step fails with the last output line `Stopped`,
+  /// no later step runs, and the stream of [create] ends as a failure (the project is still added
+  /// if `flutter create` is done). Never throws.
   Future<void> stop();
 
-  /// Kills whatever is still running and releases the repository.
+  /// Kills whatever is still running, as if every subscription to [create] were cancelled, and
+  /// releases the repository. Never throws.
   Future<void> dispose();
 }

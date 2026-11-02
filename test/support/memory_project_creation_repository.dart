@@ -1,17 +1,38 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/project_creation/data/fake_project_creation_repository.dart'
-    show fakeStepOutput, kFakeStepDurations;
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 
+/// How long each made-up step "took".
+const Map<CreationStepKind, Duration> _stepDurations = <CreationStepKind, Duration>{
+  CreationStepKind.flutterCreate: Duration(seconds: 6),
+  CreationStepKind.gitInit: Duration(seconds: 1),
+  CreationStepKind.skeleton: Duration(seconds: 3),
+  CreationStepKind.analyze: Duration(seconds: 2),
+  CreationStepKind.firstCommit: Duration(seconds: 1),
+};
+
+/// The lines a made-up step of the project [name] prints.
+List<String> _stepOutput(CreationStepKind kind, String name) => switch (kind) {
+  CreationStepKind.flutterCreate => <String>['Creating project $name...', 'Wrote 130 files.'],
+  CreationStepKind.skeleton => const <String>[
+    '✎ lib/src/common/localization/intl_en.arb',
+    '✎ lib/src/feature/initialization/…',
+    '⌁ flutter pub add control drift freezed_annotation…',
+    '⌁ dart run build_runner build',
+  ],
+  CreationStepKind.analyze => const <String>['No issues found!'],
+  CreationStepKind.gitInit || CreationStepKind.firstCommit => const <String>[],
+};
+
 /// [IProjectCreationRepository] for tests: no file system, no timers beyond [step].
 ///
-/// [existing] are the full paths [checkTarget] reports as taken. [create] plays the same run as the
-/// fake repository (first all pending, then each step of [creationStepsFor] with its output and
-/// duration) and records the request in [requests]. Every snapshot after the first carries [completedProjectId];
-/// with [failAt] set, that step fails and the run ends there. [stop] only counts in [stopCalls].
+/// [existing] are the full paths [checkTarget] reports as taken. [create] plays a made-up run
+/// (first all pending, then each step of [creationStepsFor] with its output and duration) and
+/// records the request in [requests]. Every snapshot after the first carries
+/// [completedProjectId]; with [failAt] set, that step fails and the run ends there. [stop] only
+/// counts in [stopCalls].
 final class MemoryProjectCreationRepository implements IProjectCreationRepository {
   /// Creates the repository.
   MemoryProjectCreationRepository({
@@ -64,7 +85,7 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
     controller
       ..onListen = () {
         final kinds = creationStepsFor(request);
-        // Like the fake repository: all pending first, then each step starts, prints its lines
+        // All pending first, then each step starts, prints its lines
         // one by one and finishes.
         var steps = <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
         final snapshots = <CreationRun>[];
@@ -74,7 +95,7 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
         }
 
         for (var i = 0; i < kinds.length; i++) {
-          final output = fakeStepOutput(kinds[i], request.name);
+          final output = _stepOutput(kinds[i], request.name);
           change(i, (step) => step.copyWith(status: CreationStepStatus.running));
           if (kinds[i] == failAt) {
             change(i, (step) => step.copyWith(status: CreationStepStatus.failed));
@@ -86,7 +107,7 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
           change(
             i,
             (step) =>
-                step.copyWith(status: CreationStepStatus.done, took: kFakeStepDurations[step.kind]),
+                step.copyWith(status: CreationStepStatus.done, took: _stepDurations[step.kind]),
           );
         }
         controller.add(

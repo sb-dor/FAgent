@@ -7,6 +7,9 @@ import 'package:flutter_code_agent/src/feature/app_close/data/app_close_reposito
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
@@ -92,6 +95,35 @@ final class _RecordingProbe implements IMcpProbe {
   }
 }
 
+/// Records when it is disposed; throws when [error] is set.
+final class _RecordingCreation implements IProjectCreationRepository {
+  _RecordingCreation(this.events, {this.error});
+
+  final List<String> events;
+  final Error? error;
+
+  @override
+  bool get isPreview => false;
+
+  @override
+  Future<String> defaultParent() async => '/';
+
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async => null;
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream<CreationRun>.empty();
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {
+    events.add('creation:dispose');
+    if (error case final error?) throw error;
+  }
+}
+
 void main() {
   late AppDatabase database;
   late List<String> events;
@@ -99,10 +131,12 @@ void main() {
   late _RecordingRun run;
   late _RecordingDevices devices;
   late AgentHub hub;
+  late List<String> creationEvents;
 
   setUp(() {
     database = AppDatabase(NativeDatabase.memory());
     events = <String>[];
+    creationEvents = <String>[];
     run = _RecordingRun(events, database);
     devices = _RecordingDevices(events, database);
     hub = AgentHub(
@@ -117,6 +151,7 @@ void main() {
       devices: devices,
       appMcpServer: _RecordingAppMcpServer(events, database),
       mcpProbe: _RecordingProbe(events, database),
+      projectCreation: _RecordingCreation(creationEvents),
     );
   });
 
@@ -134,6 +169,12 @@ void main() {
       ]);
       // The database is closed once everything else is stopped.
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
+    });
+
+    test('shutdown disposes the project creation', () async {
+      await repository.shutdown();
+
+      expect(creationEvents, <String>['creation:dispose']);
     });
 
     test('stops the MCP probes before the database closes', () async {
@@ -171,11 +212,16 @@ void main() {
           devices: devices,
           appMcpServer: _RecordingAppMcpServer(events, database),
           mcpProbe: _RecordingProbe(events, database),
+          projectCreation: _RecordingCreation(
+            creationEvents,
+            error: StateError('the process would not die'),
+          ),
         );
 
         await repository.shutdown();
 
         expect(events, contains('devices:end'));
+        expect(creationEvents, <String>['creation:dispose']);
         await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
       },
     );
