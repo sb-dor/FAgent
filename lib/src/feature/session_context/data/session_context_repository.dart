@@ -65,6 +65,7 @@ abstract interface class ISessionContextRepository {
 /// ones with the login shell's `PATH` added to their `env`. `http` servers go only to an agent
 /// whose `initialize` reported `mcpCapabilities.http` (`sse` ones would need `.sse`; the app has
 /// none yet); the names of the others are [SessionContext.skippedServers].
+/// [SessionContext.withAppServer] says whether the app's server is among them.
 ///
 /// The rules are [buildRulesPrompt] of [promptRules], the project's `AGENTS.md` and the app's
 /// skills that are on for the chat, one per name (none without the app's server), without what
@@ -171,9 +172,19 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
     );
     switch (agent.rulesChannel) {
       case RulesChannel.systemPrompt:
-        return SessionContext(servers: entries, systemPrompt: prompt, skippedServers: skipped);
+        return SessionContext(
+          servers: entries,
+          systemPrompt: prompt,
+          skippedServers: skipped,
+          withAppServer: withApp,
+        );
       case RulesChannel.firstMessage:
-        return SessionContext(servers: entries, firstMessageRules: prompt, skippedServers: skipped);
+        return SessionContext(
+          servers: entries,
+          firstMessageRules: prompt,
+          skippedServers: skipped,
+          withAppServer: withApp,
+        );
       case RulesChannel.claudeMeta:
         break;
     }
@@ -185,6 +196,7 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
     return SessionContext(
       servers: entries,
       skippedServers: skipped,
+      withAppServer: withApp,
       meta: <String, Object?>{
         'systemPrompt': <String, Object?>{'append': prompt},
         'claudeCode': <String, Object?>{

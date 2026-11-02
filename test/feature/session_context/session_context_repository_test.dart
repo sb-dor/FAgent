@@ -222,6 +222,7 @@ void main() {
       final result = await context();
 
       final app = serverNamed(result, appMcpServerName)!;
+      expect(result.withAppServer, isTrue);
       expect(app['type'], 'http');
       expect(app['url'], 'http://127.0.0.1:4321/mcp');
       final headers = (app['headers']! as List<Object?>).cast<Map<String, Object?>>();
@@ -380,6 +381,7 @@ void main() {
       final result = await context();
 
       expect(result.servers, isEmpty);
+      expect(result.withAppServer, isFalse);
       expect(appendOf(result), isNot(contains('Skills from flutter_code_agent')));
       expect(optionsOf(result).containsKey('allowedTools'), isFalse);
     });
@@ -400,6 +402,7 @@ void main() {
       final result = await context(agent: _otherAgent);
 
       expect(names(result), [appMcpServerName, 'dart']);
+      expect(result.withAppServer, isTrue);
       expect(result.meta, isNull);
       expect(result.skippedServers, isEmpty);
     });
@@ -420,6 +423,7 @@ void main() {
 
       expect(names(result), ['dart', 'tool']);
       expect(result.skippedServers, [appMcpServerName, 'remote']);
+      expect(result.withAppServer, isFalse);
       // Without the app's server its skills cannot be loaded.
       expect(result.firstMessageRules, isNot(contains('Skills from flutter_code_agent')));
     });

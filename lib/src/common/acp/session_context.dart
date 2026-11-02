@@ -35,6 +35,7 @@ final class SessionContext {
     this.systemPrompt,
     this.firstMessageRules,
     this.skippedServers = const <String>[],
+    this.withAppServer = false,
   });
 
   /// A session without servers and without rules.
@@ -58,11 +59,15 @@ final class SessionContext {
   /// Names of the servers left out because the agent does not support their transport.
   final List<String> skippedServers;
 
+  /// [servers] include the app's own MCP server; only then does the hub allow its tools without
+  /// asking.
+  final bool withAppServer;
+
   @override
   String toString() =>
       'SessionContext(${servers.length} servers, meta: ${meta != null}, '
       'systemPrompt: ${systemPrompt != null}, firstMessageRules: ${firstMessageRules != null}, '
-      'skipped: $skippedServers)';
+      'skipped: $skippedServers, withAppServer: $withAppServer)';
 }
 
 /// The context of the chat [sessionId] that runs [agent]; read on every `session/new` and

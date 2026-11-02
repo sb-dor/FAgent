@@ -88,6 +88,7 @@ void main() {
   AgentHub newHub({
     SessionContextProvider? sessionContext,
     RulesChannel rulesChannel = RulesChannel.firstMessage,
+    Map<String, String> agentEnvironment = const <String, String>{},
   }) {
     final agent = AgentDefinition(
       id: 'fake',
@@ -95,7 +96,7 @@ void main() {
       executable: compiled.executable,
       loginArguments: compiled.loginArguments,
       rulesChannel: rulesChannel,
-      environment: <String, String>{'FAKE_AGENT_REQUESTS_FILE': requests.path},
+      environment: <String, String>{'FAKE_AGENT_REQUESTS_FILE': requests.path, ...agentEnvironment},
     );
     final hub = AgentHub(
       database: database,
@@ -142,6 +143,10 @@ void main() {
 
   Future<SessionContext> rules(int _, AgentDefinition _, Map<String, Object?> _) async =>
       const SessionContext(servers: [], firstMessageRules: 'Rules text');
+
+  /// A session that got the app's server (the provider puts it in `servers`).
+  Future<SessionContext> withApp(int _, AgentDefinition _, Map<String, Object?> _) async =>
+      const SessionContext(servers: [], withAppServer: true);
 
   group('context', () {
     test('the provider gets the agent and its initialize result', () async {
@@ -257,6 +262,44 @@ void main() {
       }
     });
 
+    test('rules on the first prompt after startNewAgentSession', () async {
+      final hub = newHub(sessionContext: rules);
+      final chat = await newChat(acpSessionId: 'missing');
+      final live = await hub.session(chat);
+      await expectLater(hub.prompt(chat, 'echo lost'), throwsA(anything));
+      expect(live.status.value, SessionStatus.setupFailed);
+
+      await hub.startNewAgentSession(chat);
+      await hub.prompt(chat, 'echo fresh');
+
+      expect(_prompts(live).single, <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': 'echo fresh'},
+        rulesResource('Rules text'),
+      ]);
+    });
+
+    test('rules exactly once across the bypass-consent retry', () async {
+      final hub = newHub(
+        sessionContext: rules,
+        agentEnvironment: const <String, String>{
+          'FAKE_AGENT_NEW_SESSION_MODE': 'bypassPermissions',
+        },
+      );
+      final chat = await newChat();
+      final live = await hub.session(chat);
+      await expectLater(hub.prompt(chat, 'echo hi'), throwsA(isA<BypassNotAllowedException>()));
+      expect(live.canRetryPrompt.value, isTrue);
+
+      await hub.acknowledgeBypass(chat);
+      await hub.retryPrompt(chat);
+
+      expect(_agentText(live).join(), 'hi');
+      expect(_prompts(live).single, <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': 'echo hi'},
+        rulesResource('Rules text'),
+      ]);
+    });
+
     test('skipped servers are one notice per chat start', () async {
       final hub = newHub(
         sessionContext: (_, _, _) async =>
@@ -279,7 +322,7 @@ void main() {
 
   group('permissions', () {
     test('app tool permission is auto-allowed for a non-Claude agent', () async {
-      final hub = newHub();
+      final hub = newHub(sessionContext: withApp);
       final chat = await newChat();
       final live = await hub.session(chat);
       final statuses = <SessionStatus>[];
@@ -304,8 +347,27 @@ void main() {
       );
     });
 
-    test('other permissions still ask', () async {
+    test('the same title asks in a session that did not get the app server', () async {
       final hub = newHub();
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      final turn = hub.prompt(chat, 'permission title=flutter_code_agent.list_skills');
+      await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
+      final request = live.store.events.singleWhere(
+        (e) => e.kind == SessionEventKind.permissionRequest,
+      );
+      expect(
+        hub.resolvePermission(chat, request.payload['requestId']! as String, 'reject'),
+        isTrue,
+      );
+      await turn;
+
+      expect(_agentText(live), <String>['reject']);
+    });
+
+    test('other permissions still ask', () async {
+      final hub = newHub(sessionContext: withApp);
       final chat = await newChat();
       final live = await hub.session(chat);
 
@@ -324,7 +386,7 @@ void main() {
     });
 
     test('app tool permission still asks for Claude, which allows it with allowedTools', () async {
-      final hub = newHub(rulesChannel: RulesChannel.claudeMeta);
+      final hub = newHub(sessionContext: withApp, rulesChannel: RulesChannel.claudeMeta);
       final chat = await newChat();
       final live = await hub.session(chat);
 
@@ -345,12 +407,25 @@ void main() {
       'options': const <Object?>[],
     };
 
-    test('the app server in the title or the tool call fields', () {
-      expect(isAppToolPermission(request({'title': 'flutter_code_agent.list_skills'})), isTrue);
-      expect(
-        isAppToolPermission(request({'title': 'list_skills (flutter_code_agent MCP Server)'})),
-        isTrue,
-      );
+    test('the app server named in the title', () {
+      for (final title in <String>[
+        'flutter_code_agent',
+        'flutter_code_agent.list_skills',
+        'flutter_code_agent__list_skills',
+        'flutter_code_agent:list_skills',
+        'mcp__flutter_code_agent__list_skills',
+        'list_skills (flutter_code_agent MCP Server)',
+        'Tool list_skills from flutter_code_agent MCP',
+      ]) {
+        expect(
+          isAppToolPermission(request({'title': title, 'kind': 'other'})),
+          isTrue,
+          reason: title,
+        );
+      }
+    });
+
+    test('the app server in a server field of rawInput or _meta', () {
       expect(
         isAppToolPermission(
           request({
@@ -359,6 +434,64 @@ void main() {
           }),
         ),
         isTrue,
+      );
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'list_skills',
+            '_meta': {'serverName': 'flutter_code_agent'},
+          }),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a name that only contains the server name is not the app server', () {
+      for (final title in <String>[
+        'my_flutter_code_agent.list_skills',
+        'flutter_code_agent_rm',
+        'mcp__my_flutter_code_agent__x',
+        'Fetch https://github.com/x/flutter_code_agent',
+        'Read package:flutter_code_agent/src/main.dart',
+        'run (my_flutter_code_agent MCP Server)',
+      ]) {
+        expect(
+          isAppToolPermission(request({'title': title, 'kind': 'other'})),
+          isFalse,
+          reason: title,
+        );
+      }
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'x',
+            'rawInput': {'server': 'my_flutter_code_agent'},
+          }),
+        ),
+        isFalse,
+      );
+    });
+
+    test('argument values that mention the server are not the app server', () {
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'search',
+            'kind': 'other',
+            'rawInput': {'query': 'flutter_code_agent', 'server': 'search'},
+          }),
+        ),
+        isFalse,
+      );
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'Fetch',
+            'kind': 'fetch',
+            'rawInput': {'url': 'https://github.com/x/flutter_code_agent'},
+          }),
+        ),
+        isFalse,
       );
     });
 
@@ -372,6 +505,12 @@ void main() {
       expect(
         isAppToolPermission(
           request({'title': 'grep -r flutter_code_agent lib', 'kind': 'execute'}),
+        ),
+        isFalse,
+      );
+      expect(
+        isAppToolPermission(
+          request({'title': 'flutter_code_agent.list_skills', 'kind': 'execute'}),
         ),
         isFalse,
       );

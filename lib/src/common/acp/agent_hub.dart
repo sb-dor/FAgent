@@ -759,7 +759,7 @@ final class AgentHub {
     _AgentSlot? registered;
     String? registeredId;
     try {
-      final context = await _contextOf(live);
+      final context = await _contextOf(live, connection);
       final response = await _newSession(
         connection,
         NewSessionRequest(cwd: live.cwd, mcpServers: context.servers, meta: _metaOf(context)),
@@ -862,12 +862,14 @@ final class AgentHub {
     return contains(option['options']);
   }
 
-  /// The servers and rules for a new or loaded session of [live] (called once
-  /// the agent runs, so its `initialize` result is known). Servers the agent
-  /// cannot take are reported in one notice. Never throws: a provider that
-  /// fails or does not answer within [setupTimeout] is logged and the session
-  /// starts without them.
-  Future<SessionContext> _contextOf(LiveSession live) async {
+  /// The servers and rules for a new or loaded session of [live] on
+  /// [connection] (its `initialize` result says what the agent takes), and
+  /// whether the session gets the app's server ([LiveSession.hasAppServer]).
+  /// Servers the agent cannot take are reported in one notice. Never throws: a
+  /// provider that fails or does not answer within [setupTimeout] is logged and
+  /// the session starts without them.
+  Future<SessionContext> _contextOf(LiveSession live, AgentConnection connection) async {
+    live.hasAppServer = false;
     final slot = _slots[live.agentId];
     if (slot == null) return SessionContext.empty;
     final SessionContext context;
@@ -875,7 +877,7 @@ final class AgentHub {
       context = await _sessionContext(
         live.id,
         slot.definition,
-        initializeResultOf(live.agentId) ?? const <String, Object?>{},
+        connection.initializeResult,
       ).timeout(setupTimeout);
     } on Object catch (error, stackTrace) {
       l.w('AgentHub | session ${live.id}: no MCP servers and rules: $error', stackTrace);
@@ -888,6 +890,7 @@ final class AgentHub {
         'so they were left out: ${context.skippedServers.join(', ')}',
       );
     }
+    live.hasAppServer = context.withAppServer;
     return context;
   }
 
@@ -947,7 +950,7 @@ final class AgentHub {
     slot.byAcpId[acpId] = live;
     live.replaying = true;
     try {
-      final context = await _contextOf(live);
+      final context = await _contextOf(live, connection);
       final response = await _loadSession(
         connection,
         LoadSessionRequest(
@@ -1046,9 +1049,12 @@ final class AgentHub {
       return _response(const PermissionCancelled('unknown session'));
     final params = raw?.params ?? _plain(context.params.toJson());
     // Claude allows the app's tools through `allowedTools`; other agents ask,
-    // and the app answers for the user.
+    // and the app answers for the user — only in a session that got the app's
+    // server, so no other server can pose as it.
     final autoAllow =
-        slot.definition.rulesChannel != RulesChannel.claudeMeta && isAppToolPermission(params)
+        slot.definition.rulesChannel != RulesChannel.claudeMeta &&
+            live.hasAppServer &&
+            isAppToolPermission(params)
         ? _allowOption(context.params.options)
         : null;
     final decided = permissions.wait(requestId, sessionId: live.id);
@@ -1382,23 +1388,47 @@ final class AgentHub {
   };
 }
 
+/// The forms of a tool call title (regular expressions) that name a tool of
+/// the app's own MCP server: the bare server name, `<server>.tool`,
+/// `<server>__tool`, `<server>:tool`, `mcp__<server>__tool`, and Gemini's
+/// `tool (<server> MCP Server)` / `… <server> MCP …`. The name is always
+/// token-bounded, so `my_flutter_code_agent` or `flutter_code_agent_rm` do not
+/// match.
+const List<String> appToolTitleForms = <String>[
+  '^$appMcpServerName\$',
+  '^$appMcpServerName[.:]',
+  '^${appMcpServerName}__',
+  '^mcp__${appMcpServerName}__',
+  '\\($appMcpServerName MCP Server\\)',
+  '(^|\\s)$appMcpServerName MCP\\b',
+];
+
+/// Keys of `toolCall.rawInput` and `toolCall._meta` that name the server of an
+/// MCP tool call; only their exact value counts.
+const List<String> _serverKeys = <String>['server', 'serverName'];
+
 /// Whether the `session/request_permission` [params] (raw JSON) ask for a tool
 /// of the app's own MCP server ([appMcpServerName]), which the app allows
 /// without asking the user.
 ///
-/// The server's name must appear in the tool call's title or in its other
-/// fields, except `content` and `locations`: a diff or a path that mentions it
-/// says nothing about which tool runs. Calls of kind `execute`, `edit`,
-/// `delete` and `move` never qualify (a shell command can mention the name).
+/// Only the server's identity counts: the title in one of [appToolTitleForms],
+/// or a `server`/`serverName` field of `rawInput` or `_meta` equal to the
+/// name. Argument values, `content`, `locations` and the call id are never
+/// read (they can mention the name without being the app's tool). Calls of
+/// kind `execute`, `edit`, `delete` and `move` never qualify.
 bool isAppToolPermission(Map<String, Object?> params) {
   final toolCall = params['toolCall'];
   if (toolCall is! Map<Object?, Object?>) return false;
   if (const <String>{'execute', 'edit', 'delete', 'move'}.contains(toolCall['kind'])) return false;
-  final described = <Object?, Object?>{
-    for (final MapEntry(:key, :value) in toolCall.entries)
-      if (key != 'content' && key != 'locations') key: value,
-  };
-  return jsonEncode(described).contains(appMcpServerName);
+  if (toolCall['title'] case final String title
+      when appToolTitleForms.any((form) => RegExp(form).hasMatch(title.trim()))) {
+    return true;
+  }
+  for (final field in <Object?>[toolCall['rawInput'], toolCall['_meta']]) {
+    if (field is! Map<Object?, Object?>) continue;
+    if (_serverKeys.any((key) => field[key] == appMcpServerName)) return true;
+  }
+  return false;
 }
 
 /// A chat of an agent that is no longer configured cannot start (its problem

@@ -23,7 +23,8 @@
 // cmd) and an `effort` select (low, high). Setting model `bad` fails with an error,
 // `slow` is never answered, `cmd` first sends an available_commands_update.
 // A loaded session whose id starts with `bypass` is in bypassPermissions mode
-// (as a session saved in it).
+// (as a session saved in it). With FAKE_AGENT_NEW_SESSION_MODE=<mode> new sessions
+// start in that mode (as with a default mode from the user's agent settings).
 // With FAKE_AGENT_REQUESTS_FILE set, the params of every session/new,
 // session/load, authenticate and logout are appended to that file as JSON lines
 // {"method", "params"}; `authenticate` also appends the client's capabilities as
@@ -159,6 +160,9 @@ Future<void> main(List<String> arguments) async {
           })
           .onNewSession((context) {
             final session = 's${nextSession++}';
+            if (Platform.environment['FAKE_AGENT_NEW_SESSION_MODE'] case final String mode) {
+              modes[session] = mode;
+            }
             return NewSessionResponse.fromJson(<String, Object?>{
               'sessionId': session,
               'configOptions': configOptions(session),
@@ -315,10 +319,9 @@ Future<void> main(List<String> arguments) async {
     AcpDuplexStream<Object?>(
       readable: stdio.readable.map((frame) {
         for (final message in frame is List<Object?> ? frame : <Object?>[frame]) {
-          if (message case {
-            'method': final String method,
-            'params': final Map<String, Object?> params,
-          } when method == 'session/new' || method == 'session/load') {
+          if (message
+              case {'method': final String method, 'params': final Map<String, Object?> params}
+              when method == 'session/new' || method == 'session/load') {
             record(method, params);
           }
         }
