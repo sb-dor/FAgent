@@ -326,7 +326,7 @@ Deferred from the reviews of the M5 plan (docs/superpowers/plans/2026-11-02-m5-a
   - Agents repository: a login before the first check cannot classify an unsupported method id; `late final outcome` would stay unassigned if `authenticate` ever threw synchronously; busy state is per chat (`feature/agents/data/agents_repository.dart`)
   - Agent chip: switching away from `needsAuth` drops the unsent first prompt; `createChat` falls back to Claude silently when the default is missing (as the spec says) (`feature/chat/widgets/chat_config_widget.dart`, `feature/sessions/controller/session_agent_controller.dart`)
 - **Next steps:**
-  - Hub: split slot lifecycle and sign-in out of `agent_hub.dart` (~1.5k lines) early in M6; the constructor map key vs `definition.id`; `_closing` naming (`common/acp/agent_hub.dart`)
+  - Hub: the constructor map key vs `definition.id`; `_closing` naming (`common/acp/agent_hub.dart`)
   - Gemini: run a hands-on browser sign-in before calling Gemini real in release notes
   - Hub tests: no tests for an edit during `slot.starting`, a remove with a pending permission, or `signIns` holding a restart; `throwsA(anything)` (`test/common/acp/agent_hub_agents_test.dart`)
   - Auto-allow: `announcedToolCall` scans the chat's whole event list per permission request (`common/acp/agent_hub.dart`)
@@ -345,10 +345,10 @@ Deferred from the reviews of the M6 plan (docs/superpowers/plans/2026-11-02-m6-w
   - Picker: the 2 s wait after a dropped connection ignores a user cancel or `dispose` arriving in it (bounded); a `WebSocketException` may not be an `IOException` — `vm_service` reports drops as `RPCError` (`data/widget_picker_repository_impl.dart`)
   - Picker: `AppCloseRepositoryImpl` has no timeout of its own around the picker; the bound lives inside the picker (`feature/app_close/data/app_close_repository.dart`, `data/widget_picker_repository_impl.dart`)
   - Picker: file paths are made relative to the project folder and to its real path, but not when the project is the real folder and the app reports a path through a symlink (`data/widget_picker_repository_impl.dart`)
-  - Card: the picker state is a side `ValueNotifier` on `RunActionsController` (justified: stop and reload must cancel synchronously); one slot only, so another project's pick discards the previous project's card; `gaplessPlayback` shows the previous thumbnail for a moment on a new pick (`controller/run_actions_controller.dart`, `widgets/picked_widget_card.dart`)
+  - Card: the picker state is a side `ValueNotifier` on `RunActionsController` (justified: stop and reload must cancel synchronously); one slot only, so another project's pick discards the previous project's card (untested); `gaplessPlayback` shows the previous thumbnail for a moment on a new pick (`controller/run_actions_controller.dart`, `widgets/picked_widget_card.dart`)
 - **Next steps:**
   - Client tests: the `FormatException` of a string-of-JSON result, a `close()` in flight, and a missing isolate during a drop are untested; two tests leak a client (`test/feature/app_run/widget_inspector_client_test.dart`)
-  - Picker tests: nothing separates pruning by modification time from pruning by name (an old `widget-*.png` pruned before a newer `screenshot-*.png`); the new error branches of `select` are untested; another project's pick discarding the card is untested (`test/feature/app_run/widget_picker_repository_impl_test.dart`)
+  - Picker tests: nothing separates pruning by modification time from pruning by name (an old `widget-*.png` pruned before a newer `screenshot-*.png`); the new error branches of `select` are untested (`test/feature/app_run/widget_picker_repository_impl_test.dart`)
   - Card tests: the layout at 340 px with a thumbnail is untested; the thumbnail test waits 10 x 10 ms of real time for the file read (`test/feature/app_run/picked_widget_card_test.dart`)
   - Opt-in test: it selects the widget through `setSelectionById`, not a real tap, and does not hot restart during a pick (`test/integration/widget_picker_test.dart`)
   - Wiring: `initialize_dependencies.dart` got unrelated formatter churn in the `sessionContext` block with Task 2 (`feature/initialization/data/initialize_dependencies.dart`)
