@@ -11,6 +11,7 @@ import '../../generated_migrations/schema_v4.dart' as v4;
 import '../../generated_migrations/schema_v5.dart' as v5;
 import '../../generated_migrations/schema_v6.dart' as v6;
 import '../../generated_migrations/schema_v7.dart' as v7;
+import '../../generated_migrations/schema_v8.dart' as v8;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -160,5 +161,31 @@ void main() {
           ),
         );
     expect(await database.select(database.chatSkillStatesTable).get(), hasLength(1));
+  });
+
+  test('v8 → v9 adds custom_agents and keeps chats', () async {
+    final schema = await verifier.schemaAt(8);
+    final old = v8.DatabaseAtV8(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 9);
+
+    expect((await database.select(database.sessionsTable).getSingle()).title, 'chat');
+    expect(await database.select(database.customAgentsTable).get(), isEmpty);
+    await database
+        .into(database.customAgentsTable)
+        .insert(CustomAgentsTableCompanion.insert(name: 'Mine', executable: 'mine'));
+    expect(
+      (await database.select(database.customAgentsTable).getSingle()).rulesChannel,
+      'firstMessage',
+    );
   });
 }

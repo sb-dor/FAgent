@@ -59,7 +59,7 @@ abstract interface class ISessionContextRepository {
 /// none or it is off in the project; then the user's servers that are on for the project, `stdio`
 /// ones with the login shell's `PATH` added to their `env`.
 ///
-/// Only for an agent with [AgentDefinition.acceptsClaudeMeta], the `_meta`:
+/// Only for an agent whose [AgentDefinition.rulesChannel] is [RulesChannel.claudeMeta], the `_meta`:
 /// * `systemPrompt.append` — [buildRulesPrompt] of [promptRules] (the project's rules are left
 ///   out: Claude Code reads `.claude/rules` itself), the project's `AGENTS.md` and the app's skills
 ///   that are on for the chat, one per name (none without the app's server);
@@ -127,7 +127,7 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
         if (!server.builtin && server.enabled && !server.disabledIn.contains(projectId))
           ?_userServer(server),
     ];
-    if (!agent.acceptsClaudeMeta) return SessionContext(servers: entries);
+    if (agent.rulesChannel != RulesChannel.claudeMeta) return SessionContext(servers: entries);
 
     final library = await _skills.watch(projectId: projectId, projectRoot: projectRoot).first;
     final chatStates = await _chatSkills.current(sessionId);
@@ -136,7 +136,7 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
       rules: await _enabledRules(
         library,
         projectRoot,
-        agentReadsProjectRules: agent.acceptsClaudeMeta,
+        agentReadsProjectRules: agent.rulesChannel == RulesChannel.claudeMeta,
       ),
       skills: [
         if (withApp)
