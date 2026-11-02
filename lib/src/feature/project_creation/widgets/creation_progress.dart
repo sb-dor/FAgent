@@ -66,6 +66,7 @@ class CreationProgress extends StatelessWidget {
         _ => localization.newProjectCreating(request.name),
       };
       final running = state is ProjectCreation$RunningState;
+      final stopping = state is ProjectCreation$RunningState && state.stopping;
       return Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -97,7 +98,9 @@ class CreationProgress extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: running ? _runningButtons(context) : _finishedButtons(context, projectId),
+              child: running
+                  ? _runningButtons(context, stopping: stopping)
+                  : _finishedButtons(context, projectId),
             ),
           ),
         ],
@@ -105,7 +108,7 @@ class CreationProgress extends StatelessWidget {
     },
   );
 
-  Widget _runningButtons(BuildContext context) {
+  Widget _runningButtons(BuildContext context, {required bool stopping}) {
     final localization = Localization.of(context);
     final colors = context.colors;
     return Row(
@@ -119,8 +122,8 @@ class CreationProgress extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.medium - 2),
             ),
           ),
-          onPressed: controller.stop,
-          child: Text(localization.newProjectStop),
+          onPressed: stopping ? null : controller.stop,
+          child: Text(stopping ? localization.newProjectStopping : localization.newProjectStop),
         ),
         const SizedBox(width: 8),
         OutlinedButton(

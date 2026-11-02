@@ -34,7 +34,9 @@ abstract interface class IProjectCreationRepository {
   /// if `flutter create` is done). Never throws.
   Future<void> stop();
 
-  /// Kills whatever is still running, as if every subscription to [create] were cancelled, and
-  /// releases the repository. Never throws.
+  /// Stops the command that is running and closes the stream of a run in progress with a normal
+  /// done: no step is marked failed and nothing is added. Listeners must not read that as success;
+  /// the controller treats a run without every step done as interrupted. Releases the repository.
+  /// Never throws.
   Future<void> dispose();
 }

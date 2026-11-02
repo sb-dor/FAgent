@@ -12,7 +12,7 @@ enum CreationStepKind {
   /// `git init`.
   gitInit,
 
-  /// The architecture skeleton and the agent's instructions.
+  /// The architecture skeleton: the template files and their packages.
   skeleton,
 
   /// `flutter analyze`.
@@ -75,6 +75,16 @@ final class CreationStepFailed implements Exception {
 
   @override
   String toString() => 'CreationStepFailed(${kind.name})';
+}
+
+/// A creation whose stream ended before every step was done, for example because the repository was
+/// disposed while it ran.
+final class CreationInterrupted implements Exception {
+  /// Creates the error.
+  const CreationInterrupted();
+
+  @override
+  String toString() => 'CreationInterrupted';
 }
 
 /// The stages [request] goes through, in order.

@@ -337,6 +337,24 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
+  testWidgets('after stop the button is disabled and says stopping', (tester) async {
+    await pumpWindow(tester);
+    await startCreation(tester);
+    await _elapse(tester, _step);
+
+    await tester.tap(find.byKey(_stop));
+    await tester.pump();
+
+    final button = tester.widget<TextButton>(find.byKey(_stop));
+    expect(button.onPressed, isNull);
+    expect(find.text('Stopping…'), findsOneWidget);
+    expect(find.text('Stop'), findsNothing);
+    await tester.tap(find.byKey(_stop), warnIfMissed: false);
+    expect(memory.stopCalls, 1);
+    await _elapse(tester, const Duration(seconds: 5));
+    await disposeTestApp(tester, dependencies);
+  });
+
   testWidgets('completed offers open project and close', (tester) async {
     await pumpWindow(tester);
     await startCreation(tester);

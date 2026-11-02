@@ -13,10 +13,12 @@ sealed class ProjectCreationState with _$ProjectCreationState {
   /// Nothing is being created.
   const factory ProjectCreationState.idle() = ProjectCreation$IdleState;
 
-  /// The project of [request] is being created; [steps] are all its stages as of now.
+  /// The project of [request] is being created; [steps] are all its stages as of now. [stopping]
+  /// is set once a stop was asked for and the creation has not ended yet.
   const factory ProjectCreationState.running({
     required NewProjectRequest request,
     required List<CreationStep> steps,
+    @Default(false) bool stopping,
   }) = ProjectCreation$RunningState;
 
   /// The project of [request] was created; [projectId] is its id in the app's database.
@@ -76,7 +78,14 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
             steps = snapshot.steps;
             projectId = snapshot.projectId ?? projectId;
             if (!isDisposed) {
-              setState(ProjectCreationState.running(request: request, steps: steps));
+              final current = state;
+              setState(
+                ProjectCreationState.running(
+                  request: request,
+                  steps: steps,
+                  stopping: current is ProjectCreation$RunningState && current.stopping,
+                ),
+              );
             }
           },
           onError: (Object error, StackTrace stackTrace) {
@@ -91,9 +100,16 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     await finished.future;
     _subscription = null;
     if (isDisposed) return;
-    // A stream that ends normally with a failed step is a failed creation too.
+    // A stream that ends normally with a failed step is a failed creation too, and so is one that
+    // ends before every step is done (for example when the repository is disposed at quit).
     final failedStep = steps.where((step) => step.status == CreationStepStatus.failed).firstOrNull;
-    final error = failure ?? (failedStep == null ? null : CreationStepFailed(failedStep.kind));
+    final error =
+        failure ??
+        (failedStep != null
+            ? CreationStepFailed(failedStep.kind)
+            : (steps.every((step) => step.status == CreationStepStatus.done)
+                  ? null
+                  : const CreationInterrupted()));
     setState(
       error == null
           ? ProjectCreationState.completed(request: request, steps: steps, projectId: projectId)
@@ -107,9 +123,14 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
   }, error: (error, stackTrace) async => _failWith(error));
 
   /// Kills the command that is running now; the creation then ends as failed. Does nothing unless
-  /// a creation is running.
+  /// a creation is running, and a second call while it is stopping does nothing too.
   void stop() {
-    if (state is ProjectCreation$RunningState) _repository.stop().ignore();
+    final current = state;
+    if (current is! ProjectCreation$RunningState || current.stopping) return;
+    setState(
+      ProjectCreationState.running(request: current.request, steps: current.steps, stopping: true),
+    );
+    _repository.stop().ignore();
   }
 
   /// Goes from a finished (completed or failed) creation back to idle; does nothing otherwise.

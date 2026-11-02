@@ -304,8 +304,10 @@ px**, отступы 32; карточки только в одну колонк�
   `failed`, — это `failed`, а не `completed`. С M4 это `Stream<CreationRun>` (шаги и `projectId`).
 - `ProjectCreationController` живёт на уровне окна (`WorkspaceConfigWidget`), создание одно за раз;
   закрытие диалога (Свернуть, Esc) его не останавливает, диалог не закрывается кликом по фону. Пока
-  создание идёт или ждёт «Готово», диалог открывается сразу на прогрессе; «Готово» закрывает диалог и
-  после его исчезновения сбрасывает контроллер.
+  создание идёт или завершено, диалог открывается сразу на прогрессе. Пока создание идёт, есть
+  «Остановить» (после нажатия кнопка заблокирована и называется «Останавливаю…») и «Свернуть». По
+  окончании «Закрыть» закрывает диалог и после его исчезновения сбрасывает контроллер; «Открыть
+  проект» (если проект добавлен) открывает его и, при «Открыть чат после создания», начинает чат.
 - Чип прогресса («Создаю имя · N/M» / «имя: готово» / «имя: ошибка», у завершённого есть ✕) стоит
   в сайдбаре сразу под кнопкой «＋ Проект», к которой относится; нажатие открывает диалог на прогрессе.
 - На этапе 7 репозиторий был `FakeProjectCreationRepositoryImpl` (правило фейков, §4): `create`
@@ -350,7 +352,7 @@ px**, отступы 32; карточки только в одну колонк�
 | `mcp_servers` | `IMcpServersRepository`: `watchServers()`, `add`, `remove`, `setEnabled(id, enabled, projectId?)`, `importMcpJson(path)` | Хранение — Real (drift: `mcp_servers`, `mcp_server_states`); статус и число инструментов — Real (`IMcpProbe`), доставка агенту — Real (M3: `session/new` и `session/load` → `mcpServers`) |
 | `app_run` | `IDevicesRepository.watchDevices()`, `IAppRunRepository`: `watchRun(projectId) → RunState`, `logs(projectId) → Stream<LogEntry>`, `start`, `stop`, `hotReload`, `hotRestart`, `screenshot` | Real: `DevicesRepositoryImpl` (`flutter daemon`) и `AppRunRepositoryImpl` (`flutter run --machine`), разбор вывода `RunOutputParser`, аргументы запуска — drift `run_configs`; адреса VM service / DTD / DevTools запуска сохраняются для M3 и M6; Flutter-ошибки debug-запуска — из VM service (`Flutter.Error`, `FlutterErrorListener`, M3), в profile, release и без подключения — разбор текста |
 | `widget_picker` | `IWidgetPickerRepository.pick(projectId) → PickedWidget` | Fake до M6 |
-| `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`), версия fvm проекта и версия Flutter (`flutter --version --machine`, M4) — Real; `doctor()` — Fake |
+| `flutter_sdk` | `IFlutterSdkRepository`: `sdkFor(projectPath)`, `pathFor(projectPath)` (путь без запуска процесса), `doctor()` | Путь к SDK (`ShellEnvironment.which('flutter')`), версия fvm проекта и версия Flutter (`flutter --version --machine`, M4) — Real; `doctor()` — Fake |
 | `project_creation` | `IProjectCreationRepository`: `create(NewProjectRequest) → Stream<CreationRun>`, `stop()`, `dispose()`, `defaultParent()`, `checkTarget(parent, name) → TargetProblem?` (решения этапа 7 и M4 — в §3.9) | Real (M4): `ProjectCreationRepositoryImpl` — `flutter create`, `git init`, скелет архитектуры, `flutter analyze`, первый коммит; проект добавляется и становится доверенным |
 | `changes_pane`, `plan_pane` | читают `ChatTranscript` (`TurnFilesItem`, `ToolCallItem` с diff, `PlanItem`) | Real |
 

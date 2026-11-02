@@ -159,6 +159,49 @@ void main() {
     expect(repository.stopCalls, 1);
   });
 
+  test('stop twice asks the repository once', () async {
+    controller
+      ..start(_request)
+      ..stop()
+      ..stop();
+
+    expect(repository.stopCalls, 1);
+    expect((controller.state as ProjectCreation$RunningState).stopping, isTrue);
+    await _until(controller, () => controller.state is! ProjectCreation$RunningState);
+  });
+
+  test('stopping survives later snapshots', () async {
+    final slow = MemoryProjectCreationRepository(step: const Duration(milliseconds: 5));
+    final stopping = ProjectCreationController(repository: slow);
+    addTearDown(stopping.dispose);
+
+    stopping.start(_request);
+    await Future<void>.delayed(const Duration(milliseconds: 12));
+    final before = (stopping.state as ProjectCreation$RunningState).steps;
+    stopping.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+
+    final state = stopping.state as ProjectCreation$RunningState;
+    expect(state.stopping, isTrue);
+    expect(state.steps, isNot(before));
+    await _until(stopping, () => stopping.state is! ProjectCreation$RunningState);
+  });
+
+  test('a run that ends with a running step is failed, not completed', () async {
+    final interrupted = ProjectCreationController(repository: _InterruptedRepository());
+    addTearDown(interrupted.dispose);
+
+    interrupted.start(_request);
+    await _until(interrupted, () => interrupted.state is! ProjectCreation$RunningState);
+
+    final state = interrupted.state as ProjectCreation$FailedState;
+    expect(state.error, isA<CreationInterrupted>());
+    expect('${state.error}', 'CreationInterrupted');
+    expect(state.projectId, 5);
+    expect(state.steps.first.status, CreationStepStatus.done);
+    expect(state.steps[1].status, CreationStepStatus.running);
+  });
+
   test('a creation without a project id completes with null', () async {
     repository.completedProjectId = null;
 
@@ -236,6 +279,35 @@ final class _FailedStepRepository implements IProjectCreationRepository {
                 : (i == failAt ? CreationStepStatus.failed : CreationStepStatus.pending),
           ),
       ],
+    );
+  }
+}
+
+/// A stream that registers the project, leaves the second step running and ends normally, as
+/// after a dispose of the repository.
+final class _InterruptedRepository implements IProjectCreationRepository {
+  @override
+  Future<String> defaultParent() async => '/Users/test/StudioProjects';
+
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async => null;
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) async* {
+    final kinds = creationStepsFor(request);
+    yield CreationRun(
+      steps: <CreationStep>[
+        CreationStep(kind: kinds[0], status: CreationStepStatus.done),
+        CreationStep(kind: kinds[1], status: CreationStepStatus.running),
+        for (final kind in kinds.skip(2)) CreationStep(kind: kind),
+      ],
+      projectId: 5,
     );
   }
 }
