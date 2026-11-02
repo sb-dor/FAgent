@@ -1096,10 +1096,11 @@ final class AgentHub {
     if (live == null || _isTerminal(live))
       return _response(const PermissionCancelled('unknown session'));
     final params = raw?.params ?? _plain(context.params.toJson());
-    // Claude allows the app's tools through `allowedTools`; other agents ask,
-    // and the app answers for the user — only in a session that got the app's
-    // server, so no other server can pose as it. Codex names the server only in
-    // the `tool_call` update that announced the call.
+    // Claude allows the app's tools through `allowedTools`; other agents ask.
+    // The app allows once, for the user, only Codex's calls of the app's server
+    // (named in the `tool_call` update that announced the call) and only in a
+    // session that got that server, so no other server can pose as it; Gemini
+    // and custom agents ask the user.
     final autoAllow =
         slot.definition.rulesChannel != RulesChannel.claudeMeta &&
             live.hasAppServer &&
@@ -1184,13 +1185,11 @@ final class AgentHub {
     return _response(decision);
   }
 
-  /// The id of the first option that allows the call (once or always), if any.
+  /// The id of the first option that allows the call once, if any. The app
+  /// never picks an "always" option for the user (it can allow a whole
+  /// server): without an allow-once option the request asks.
   static String? _allowOption(List<PermissionOption> options) => options
-      .where(
-        (option) =>
-            option.kind == PermissionOptionKind.allowOnce ||
-            option.kind == PermissionOptionKind.allowAlways,
-      )
+      .where((option) => option.kind == PermissionOptionKind.allowOnce)
       .firstOrNull
       ?.optionId
       .value;
@@ -1445,60 +1444,49 @@ final class AgentHub {
 
 /// The forms of a tool call title (regular expressions) that name a tool of
 /// the app's own MCP server, as the agents really send them; group 1 is the
-/// tool:
+/// tool. Only one so far:
 ///
 /// * codex-acp 2.5.0: `mcp.<server>.<tool>`, in the `tool_call` update that
 ///   announces the call (its permission request has no title). It counts only
 ///   together with `rawInput` `{server, tool}` and `_meta.is_mcp_tool_call`
 ///   ([isAppToolPermission]): a shell command can have any title.
-/// * Gemini CLI 0.66.0: `<tool> (<server> MCP Server)` for a call without
-///   arguments. With arguments Gemini titles it `<tool>(arg: value)`, which
-///   names no server: such calls ask.
 ///
-/// The whole title must match, so `x (other MCP Server)` or
-/// `mcp.my_flutter_code_agent.x` never do.
-const List<String> appToolTitleForms = <String>[
-  '^mcp\\.$appMcpServerName\\.([A-Za-z0-9_-]+)\$',
-  '^([A-Za-z0-9_-]+) \\($appMcpServerName MCP Server\\)\$',
-];
+/// Gemini CLI has no form: it builds a title from a `command` argument, so
+/// any server's tool can be titled `x (flutter_code_agent MCP Server)`. Its
+/// app-tool calls ask the user.
+///
+/// The whole title must match, so `mcp.my_flutter_code_agent.x` never does.
+const List<String> appToolTitleForms = <String>['^mcp\\.$appMcpServerName\\.([A-Za-z0-9_-]+)\$'];
 
 /// Whether the `session/request_permission` [params] (raw JSON) ask for a tool
 /// of the app's own MCP server ([appMcpServerName]), which the app allows
-/// without asking the user.
+/// once without asking the user.
 ///
 /// [announced] is the call as the agent's earlier `tool_call` updates
 /// described it ([announcedToolCall]); the request's own fields win over it,
 /// as an ACP `ToolCallUpdate` does.
 ///
-/// Only the server's identity counts — the title in one of
-/// [appToolTitleForms]:
-///
-/// * Codex's form also needs `rawInput.server` equal to the name,
-///   `rawInput.tool` equal to the titled tool and `_meta.is_mcp_tool_call`
-///   `true` (codex-acp reports every MCP call as kind `execute`).
-/// * Gemini's form never qualifies for kind `execute`, `edit`, `delete` or
-///   `move`.
-///
-/// Argument values, `content`, `locations` and the call id are never read
-/// (they can mention the name without being the app's tool).
+/// Only Codex's calls qualify: the title in the form of [appToolTitleForms],
+/// `rawInput.server` equal to the name, `rawInput.tool` equal to the titled
+/// tool and `_meta.is_mcp_tool_call` `true` (codex-acp reports every MCP call
+/// as kind `execute`). Argument values, `content`, `locations` and the call
+/// id are never read (they can mention the name without being the app's
+/// tool).
 bool isAppToolPermission(Map<String, Object?> params, {Map<String, Object?>? announced}) {
   final own = params['toolCall'];
   if (own is! Map<Object?, Object?>) return false;
   final toolCall = <Object?, Object?>{...?announced, ...own};
   final title = toolCall['title'];
   if (title is! String) return false;
-  final codex = RegExp(appToolTitleForms[0]).firstMatch(title);
-  if (codex != null) {
-    final rawInput = toolCall['rawInput'];
-    final meta = toolCall['_meta'];
-    return rawInput is Map<Object?, Object?> &&
-        rawInput['server'] == appMcpServerName &&
-        rawInput['tool'] == codex.group(1) &&
-        meta is Map<Object?, Object?> &&
-        meta['is_mcp_tool_call'] == true;
-  }
-  if (const <String>{'execute', 'edit', 'delete', 'move'}.contains(toolCall['kind'])) return false;
-  return RegExp(appToolTitleForms[1]).hasMatch(title);
+  final codex = RegExp(appToolTitleForms.single).firstMatch(title);
+  if (codex == null) return false;
+  final rawInput = toolCall['rawInput'];
+  final meta = toolCall['_meta'];
+  return rawInput is Map<Object?, Object?> &&
+      rawInput['server'] == appMcpServerName &&
+      rawInput['tool'] == codex.group(1) &&
+      meta is Map<Object?, Object?> &&
+      meta['is_mcp_tool_call'] == true;
 }
 
 /// The tool call [toolCallId] as the agent's `tool_call` and

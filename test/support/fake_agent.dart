@@ -6,11 +6,14 @@
 //                 ask for permission n times (default 1) for a tool call titled <t>
 //                 (default: Run `rm -rf build`), reply with each selected option id
 //                 or `cancelled`
-//   mcp-call <codex|gemini> <server> <tool>
+//   mcp-call <codex|gemini|gemini-command> <server> <tool> [always-only]
 //                 announce a call of MCP tool <tool> of <server> with a tool_call update and
-//                 ask for permission for it, both as that agent sends them (codex-acp 2.5.0:
-//                 identity only in the update, the request names just the call; Gemini CLI
-//                 0.66.0: `<tool> (<server> MCP Server)` in both); reply like `permission`
+//                 ask for permission for it, both as that agent sends them, with its option
+//                 list (codex-acp 2.5.0: identity only in the update, the request names just
+//                 the call; Gemini CLI 0.66.0: `<tool> (<server> MCP Server)` in both;
+//                 `gemini-command`: the title Gemini takes from a `command` argument,
+//                 `x (flutter_code_agent MCP Server)`). `always-only` drops the allow-once
+//                 option. Call ids come from a counter. Replies like `permission`
 //   hang          never finish until the client sends session/cancel
 //   spawn         start a background process re-parented to launchd; its pid goes
 //                 to the file named by FAKE_AGENT_PID_FILE
@@ -99,6 +102,9 @@ Future<void> main(List<String> arguments) async {
       flush: true,
     );
   }
+
+  // Ids of the tool calls `mcp-call` announces.
+  var toolCalls = 0;
 
   Future<void> say(AcpAgentContext client, SessionId session, String text, {String? id}) =>
       client.updateSession(
@@ -280,29 +286,51 @@ Future<void> main(List<String> arguments) async {
                   });
                 }
               case 'mcp-call':
-                final [style, server, tool] = rest.split(' ');
-                final announced = switch (style) {
-                  'codex' => <String, Object?>{
-                    'toolCallId': 'exec-1',
-                    'kind': 'execute',
-                    'title': 'mcp.$server.$tool',
-                    'status': 'in_progress',
-                    'rawInput': <String, Object?>{
-                      'server': server,
-                      'tool': tool,
-                      'arguments': <String, Object?>{},
-                    },
-                    '_meta': <String, Object?>{'is_mcp_tool_call': true},
-                  },
-                  _ => <String, Object?>{
-                    'toolCallId': '$tool-1',
-                    'status': 'pending',
-                    'title': '$tool ($server MCP Server)',
-                    'content': <Object?>[],
-                    'locations': <Object?>[],
-                    'kind': 'other',
-                  },
+                final [style, server, tool, ...flags] = rest.split(' ');
+                final alwaysOnly = flags.contains('always-only');
+                final id = ++toolCalls;
+                final codex = style == 'codex';
+                final announced = codex
+                    ? <String, Object?>{
+                        'toolCallId': 'exec-$id',
+                        'kind': 'execute',
+                        'title': 'mcp.$server.$tool',
+                        'status': 'in_progress',
+                        'rawInput': <String, Object?>{
+                          'server': server,
+                          'tool': tool,
+                          'arguments': <String, Object?>{},
+                        },
+                        '_meta': <String, Object?>{'is_mcp_tool_call': true},
+                      }
+                    : <String, Object?>{
+                        'toolCallId': '${server}_$tool-1793609305463-$id',
+                        'status': 'pending',
+                        'title': style == 'gemini-command'
+                            ? 'x (flutter_code_agent MCP Server)'
+                            : '$tool ($server MCP Server)',
+                        'content': <Object?>[],
+                        'locations': <Object?>[],
+                        'kind': 'other',
+                      };
+                Map<String, Object?> option(String optionId, String kind) => <String, Object?>{
+                  'optionId': optionId,
+                  'name': optionId,
+                  'kind': kind,
                 };
+                final options = codex
+                    ? <Map<String, Object?>>[
+                        if (!alwaysOnly) option('allow_once', 'allow_once'),
+                        option('allow_session', 'allow_always'),
+                        option('allow_always', 'allow_always'),
+                        option('cancel', 'reject_once'),
+                      ]
+                    : <Map<String, Object?>>[
+                        option('proceed_always_server', 'allow_always'),
+                        option('proceed_always_tool', 'allow_always'),
+                        if (!alwaysOnly) option('proceed_once', 'allow_once'),
+                        option('cancel', 'reject_once'),
+                      ];
                 await context.client.updateSession(
                   SessionNotification.fromJson(<String, Object?>{
                     'sessionId': session.value,
@@ -312,21 +340,14 @@ Future<void> main(List<String> arguments) async {
                 final response = await context.client.requestPermission(
                   RequestPermissionRequest.fromJson(<String, Object?>{
                     'sessionId': session.value,
-                    'toolCall': style == 'codex'
+                    'toolCall': codex
                         ? <String, Object?>{
-                            'toolCallId': 'exec-1',
+                            'toolCallId': 'exec-$id',
                             'kind': 'execute',
                             'status': 'pending',
                           }
                         : announced,
-                    'options': <Object?>[
-                      <String, Object?>{'optionId': 'allow', 'name': 'Allow', 'kind': 'allow_once'},
-                      <String, Object?>{
-                        'optionId': 'reject',
-                        'name': 'Reject',
-                        'kind': 'reject_once',
-                      },
-                    ],
+                    'options': options,
                   }),
                 );
                 await say(context.client, session, switch (response.outcome) {

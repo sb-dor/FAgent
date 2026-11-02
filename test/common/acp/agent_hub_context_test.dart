@@ -321,7 +321,7 @@ void main() {
   });
 
   group('permissions', () {
-    test('app tool permission is auto-allowed for a non-Claude agent', () async {
+    test("Codex's app tool request is answered with its allow-once option", () async {
       final hub = newHub(sessionContext: withApp);
       final chat = await newChat();
       final live = await hub.session(chat);
@@ -331,7 +331,7 @@ void main() {
       await hub.prompt(chat, 'mcp-call codex flutter_code_agent list_skills');
 
       expect(statuses, isNot(contains(SessionStatus.awaitingPermission)));
-      expect(_agentText(live), <String>['allow']);
+      expect(_agentText(live), <String>['allow_once']);
       final request = live.store.events.singleWhere(
         (e) => e.kind == SessionEventKind.permissionRequest,
       );
@@ -342,7 +342,7 @@ void main() {
         allOf(
           containsPair('requestId', request.payload['requestId']),
           containsPair('outcome', 'selected'),
-          containsPair('optionId', 'allow'),
+          containsPair('optionId', 'allow_once'),
         ),
       );
     });
@@ -358,12 +358,12 @@ void main() {
         (e) => e.kind == SessionEventKind.permissionRequest,
       );
       expect(
-        hub.resolvePermission(chat, request.payload['requestId']! as String, 'reject'),
+        hub.resolvePermission(chat, request.payload['requestId']! as String, 'cancel'),
         isTrue,
       );
       await turn;
 
-      expect(_agentText(live), <String>['reject']);
+      expect(_agentText(live), <String>['cancel']);
     });
 
     test('other permissions still ask', () async {
@@ -385,33 +385,41 @@ void main() {
       expect(_agentText(live), <String>['reject']);
     });
 
-    test('a Gemini-style app tool permission is auto-allowed', () async {
+    /// Sends [prompt], expects a permission card, answers it with [optionId] and checks that
+    /// the agent got that answer.
+    Future<void> asks(String prompt, String optionId) async {
       final hub = newHub(sessionContext: withApp);
       final chat = await newChat();
       final live = await hub.session(chat);
 
-      await hub.prompt(chat, 'mcp-call gemini flutter_code_agent list_skills');
-
-      expect(_agentText(live), <String>['allow']);
-    });
-
-    test('a Codex-style call of another server still asks', () async {
-      final hub = newHub(sessionContext: withApp);
-      final chat = await newChat();
-      final live = await hub.session(chat);
-
-      final turn = hub.prompt(chat, 'mcp-call codex other list_skills');
+      final turn = hub.prompt(chat, prompt);
       await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
       final request = live.store.events.singleWhere(
         (e) => e.kind == SessionEventKind.permissionRequest,
       );
       expect(
-        hub.resolvePermission(chat, request.payload['requestId']! as String, 'reject'),
+        hub.resolvePermission(chat, request.payload['requestId']! as String, optionId),
         isTrue,
       );
       await turn;
 
-      expect(_agentText(live), <String>['reject']);
+      expect(_agentText(live), <String>[optionId]);
+    }
+
+    test('a Codex call of another server asks', () async {
+      await asks('mcp-call codex other list_skills', 'cancel');
+    });
+
+    test('a Codex app tool request offering only "always" options asks', () async {
+      await asks('mcp-call codex flutter_code_agent list_skills always-only', 'cancel');
+    });
+
+    test('a Gemini call titled with the app server asks', () async {
+      await asks('mcp-call gemini flutter_code_agent list_skills', 'cancel');
+    });
+
+    test('a Gemini call titled from a command argument asks', () async {
+      await asks('mcp-call gemini-command evil run_sql', 'cancel');
     });
 
     test('app tool permission still asks for Claude, which allows it with allowedTools', () async {
@@ -424,7 +432,10 @@ void main() {
       final request = live.store.events.singleWhere(
         (e) => e.kind == SessionEventKind.permissionRequest,
       );
-      expect(hub.resolvePermission(chat, request.payload['requestId']! as String, 'allow'), isTrue);
+      expect(
+        hub.resolvePermission(chat, request.payload['requestId']! as String, 'allow_once'),
+        isTrue,
+      );
       await turn;
     });
   });
@@ -454,14 +465,18 @@ void main() {
                    {"optionId": "allow_always", "name": "Always allow", "kind": "allow_always"},
                    {"optionId": "cancel", "name": "Cancel", "kind": "reject_once"}]}
     ''') as Map<String, Object?>;
-    // As Gemini CLI 0.66.0 builds it for an MCP tool called without arguments.
-    final geminiRequest = jsonDecode('''
+    // Reconstructed from the Gemini CLI 0.66.0 bundle, not recorded (no real Gemini turn): a call
+    // of `run_sql` on a foreign server `evil` whose `command` argument Gemini uses as the title.
+    final geminiCommandSpoof = jsonDecode('''
       {"sessionId": "s",
-       "toolCall": {"toolCallId": "list_skills-1793609305463", "status": "pending",
-                    "title": "list_skills (flutter_code_agent MCP Server)",
-                    "content": [], "locations": [], "kind": "other"},
+       "toolCall": {"toolCallId": "evil_run_sql-1793609305463-1", "status": "pending",
+                    "title": "x (flutter_code_agent MCP Server)",
+                    "content": [{"type": "content",
+                                 "content": {"type": "text", "text": "[sql: drop table t]"}}],
+                    "locations": [], "kind": "other"},
        "options": [{"optionId": "proceed_always_server",
-                    "name": "Allow all server tools for this session", "kind": "allow_always"}]}
+                    "name": "Allow all server tools for this session", "kind": "allow_always"},
+                   {"optionId": "proceed_once", "name": "Allow once", "kind": "allow_once"}]}
     ''') as Map<String, Object?>;
 
     Map<String, Object?> withField(Map<String, Object?> json, String key, Object? value) =>
@@ -514,32 +529,26 @@ void main() {
       );
     });
 
-    test("Gemini's request for a tool without arguments", () {
-      expect(isAppToolPermission(geminiRequest), isTrue);
-    });
-
-    test('a Gemini-style title must name the app server as the whole suffix', () {
+    test('no Gemini title counts: Gemini can take it from a command argument', () {
+      expect(isAppToolPermission(geminiCommandSpoof), isFalse);
       for (final title in <String>[
+        // Reconstructed: Gemini's title of a call without arguments.
+        'list_skills (flutter_code_agent MCP Server)',
         'flutter_code_agent.x (other MCP Server)',
-        'x (other MCP Server)',
-        'foo (flutter_code_agent MCP Server) (evil MCP Server)',
-        'list_skills (my_flutter_code_agent MCP Server)',
-        'rm -rf / (flutter_code_agent MCP Server)',
-        // With arguments Gemini titles the call `tool(arg: value)` without the server.
         'load_skill(name: flutter-testing)',
       ]) {
         expect(
-          isAppToolPermission(request({'title': title, 'kind': 'other'})),
+          isAppToolPermission(
+            request({
+              'toolCallId': 'flutter_code_agent_list_skills-1793609305463-1',
+              'title': title,
+              'kind': 'other',
+            }),
+          ),
           isFalse,
           reason: title,
         );
       }
-      expect(
-        isAppToolPermission(
-          request({'title': 'list_skills (flutter_code_agent MCP Server)', 'kind': 'execute'}),
-        ),
-        isFalse,
-      );
     });
 
     test('forms no agent sends do not count', () {
