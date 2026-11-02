@@ -222,4 +222,21 @@ void main() {
       expect(enabled(tester, 'Add to message'), isFalse);
     });
   }
+
+  testWidgets('a long inspector error is shown shortened, after the localized prefix', (
+    tester,
+  ) async {
+    final detail = List<String>.filled(200, 'boom').join(' ');
+    await pumpCard(
+      tester,
+      RunPickState(
+        projectId: 1,
+        problem: PickFailed(PickFailure.inspectorError, detail: detail),
+      ),
+    );
+
+    final text = tester.widget<Text>(find.textContaining('The widget inspector failed: boom'));
+    expect(text.maxLines, 3);
+    expect(text.overflow, TextOverflow.ellipsis);
+  });
 }

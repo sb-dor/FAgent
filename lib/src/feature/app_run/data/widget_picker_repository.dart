@@ -113,8 +113,8 @@ final class PickFailed extends PickResult {
   /// Why the pick failed.
   final PickFailure kind;
 
-  /// The error behind a [PickFailure.inspectorError], as the app or the picker reported it (not for
-  /// the user as it is); `null` for the other kinds.
+  /// The error behind a [PickFailure.inspectorError], as the app or the picker reported it (the card
+  /// shows it shortened to three lines); `null` for the other kinds.
   final String? detail;
 
   @override

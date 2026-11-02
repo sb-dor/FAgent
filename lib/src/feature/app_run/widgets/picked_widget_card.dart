@@ -94,6 +94,8 @@ class PickedWidgetCard extends StatelessWidget {
                     if (widget != null) const SizedBox(height: 6),
                     Text(
                       _problemText(localization, problem),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
                       style: small.copyWith(
                         color: problem is PickFailed ? colors.danger : colors.muted,
                       ),
@@ -123,17 +125,17 @@ class PickedWidgetCard extends StatelessWidget {
     );
   }
 
-  static String _problemText(GeneratedLocalization localization, PickResult problem) => switch (problem) {
-    PickNoProjectWidget() => localization.pickNoProjectWidget,
-    PickGone() => localization.pickGone,
-    PickFailed(kind: PickFailure.inspectorUnavailable) => localization.pickInspectorUnavailable,
-    PickFailed(kind: PickFailure.notDebug) => localization.pickNotDebug,
-    PickFailed(kind: PickFailure.connectionLost) => localization.pickConnectionLost,
-    PickFailed(kind: PickFailure.inspectorError, :final detail) => localization.pickInspectorError(
-      detail ?? '',
-    ),
-    PickPicked() || PickCancelled() => '',
-  };
+  static String _problemText(GeneratedLocalization localization, PickResult problem) =>
+      switch (problem) {
+        PickNoProjectWidget() => localization.pickNoProjectWidget,
+        PickGone() => localization.pickGone,
+        PickFailed(kind: PickFailure.inspectorUnavailable) => localization.pickInspectorUnavailable,
+        PickFailed(kind: PickFailure.notDebug) => localization.pickNotDebug,
+        PickFailed(kind: PickFailure.connectionLost) => localization.pickConnectionLost,
+        PickFailed(kind: PickFailure.inspectorError, :final detail) =>
+          localization.pickInspectorError(detail ?? ''),
+        PickPicked() || PickCancelled() => '',
+      };
 }
 
 /// The thumbnail, the name and the place of [widget]; a note instead of the thumbnail when there
