@@ -228,7 +228,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
 
   /// The `flutter` of the SDK the form shows, looked up once per creation.
   Future<String> _flutter(_Run run) async => run.flutter ??=
-      (await _flutterSdk.sdkFor(null)).path ?? (throw const _StepFailure('Flutter SDK not found'));
+      (await _flutterSdk.pathFor(null)) ?? (throw const _StepFailure('Flutter SDK not found'));
 
   String _git() => _environment.which('git') ?? (throw const _StepFailure('git not found'));
 

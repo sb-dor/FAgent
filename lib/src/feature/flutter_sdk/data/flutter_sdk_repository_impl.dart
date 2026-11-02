@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 
@@ -19,11 +20,14 @@ typedef ProcessRunner = Future<io.ProcessResult> Function(
 final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   /// Creates the repository. [which] finds an executable on `PATH` by name; [environment] is the
   /// environment `flutter` runs in (the login shell's, since a GUI app does not inherit it);
-  /// [runProcess] starts it; [step] is the time "running" `flutter doctor` takes.
+  /// [runProcess] starts it; [versionTimeout] is how long [sdkFor] waits for the version, since a
+  /// cold or locked `flutter` can take long (or hang); [step] is the time "running" `flutter doctor`
+  /// takes.
   FlutterSdkRepositoryImpl({
     required this._which,
     this._environment,
     this._runProcess = io.Process.run,
+    this.versionTimeout = const Duration(seconds: 10),
     this.step = const Duration(milliseconds: 300),
   });
 
@@ -31,12 +35,15 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   final Map<String, String>? _environment;
   final ProcessRunner _runProcess;
 
+  /// How long [sdkFor] waits for `flutter --version`; the process itself is not killed.
+  final Duration versionTimeout;
+
   /// The time the made-up `flutter doctor` takes.
   final Duration step;
 
   @override
   Future<FlutterSdk> sdkFor(String? projectPath) async {
-    final path = flutterExecutableFor(projectPath, which: _which);
+    final path = await pathFor(projectPath);
     final version = path == null ? null : await _versionOf(path);
     return FlutterSdk(
       path: path,
@@ -45,6 +52,10 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
       fvmVersion: projectPath == null ? null : _fvmVersion(projectPath),
     );
   }
+
+  @override
+  Future<String?> pathFor(String? projectPath) async =>
+      flutterExecutableFor(projectPath, which: _which);
 
   @override
   Future<List<DoctorCheck>> doctor() async {
@@ -73,7 +84,7 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
       final result = await _runProcess(flutter, const <String>[
         '--version',
         '--machine',
-      ], environment: _environment);
+      ], environment: _environment).timeout(versionTimeout);
       if (result.exitCode != 0) {
         l.w('Flutter SDK | $flutter --version exited with ${result.exitCode}');
         return null;
@@ -89,6 +100,8 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
       }
       final channel = json is Map<String, Object?> ? json['channel'] : null;
       return (version: version, channel: channel is String && channel.isNotEmpty ? channel : null);
+    } on TimeoutException {
+      l.w('Flutter SDK | $flutter --version did not finish in $versionTimeout');
     } on io.ProcessException catch (error, stackTrace) {
       l.w('Flutter SDK | cannot run $flutter --version: $error', stackTrace);
     } on FormatException catch (error, stackTrace) {

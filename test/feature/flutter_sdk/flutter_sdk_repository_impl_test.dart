@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
@@ -23,10 +24,12 @@ void main() {
     String? path = '/opt/flutter/bin/flutter',
     ProcessRunner? runProcess,
     Map<String, String>? environment,
+    Duration versionTimeout = const Duration(seconds: 10),
   }) => FlutterSdkRepositoryImpl(
     which: (_) => path,
     environment: environment,
     runProcess: runProcess ?? runner(),
+    versionTimeout: versionTimeout,
     step: Duration.zero,
   );
 
@@ -126,6 +129,16 @@ void main() {
       expect(sdk.version, isNull);
     });
 
+    test('version call that never completes times out', () async {
+      final sdk = await repository(
+        runProcess: (executable, arguments, {environment}) => Completer<ProcessResult>().future,
+        versionTimeout: const Duration(milliseconds: 10),
+      ).sdkFor(null);
+      expect(sdk.path, '/opt/flutter/bin/flutter');
+      expect(sdk.version, isNull);
+      expect(sdk.channel, isNull);
+    });
+
     test('no flutter has no path and runs nothing', () async {
       final sdk = await repository(path: null).sdkFor(null);
       expect(sdk.path, isNull);
@@ -175,6 +188,32 @@ void main() {
       ).sdkFor(null);
       expect(asked, 'flutter');
       expect(sdk.path, '/x/flutter');
+    });
+  });
+
+  group('pathFor', () {
+    test('finds flutter and runs nothing', () async {
+      expect(await repository().pathFor(null), '/opt/flutter/bin/flutter');
+      expect(ran, isEmpty);
+    });
+
+    test('no flutter gives no path', () async {
+      expect(await repository(path: null).pathFor(null), isNull);
+    });
+
+    test('a pinned project without its fvm SDK gives no path', () async {
+      write('.fvmrc', '{"flutter":"3.24.0"}');
+      expect(await repository().pathFor(root.path), isNull);
+      expect(ran, isEmpty);
+    });
+
+    test('a project with its fvm SDK gives that SDK', () async {
+      write('.fvm/flutter_sdk/bin/flutter', '');
+      expect(
+        await repository().pathFor(root.path),
+        p.join(root.path, '.fvm', 'flutter_sdk', 'bin', 'flutter'),
+      );
+      expect(ran, isEmpty);
     });
   });
 

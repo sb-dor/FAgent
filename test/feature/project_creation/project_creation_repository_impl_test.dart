@@ -47,6 +47,9 @@ final class _StubSdk implements IFlutterSdkRepository {
   Future<FlutterSdk> sdkFor(String? projectPath) async => FlutterSdk(path: path);
 
   @override
+  Future<String?> pathFor(String? projectPath) async => path;
+
+  @override
   Future<List<DoctorCheck>> doctor() => throw UnimplementedError();
 }
 

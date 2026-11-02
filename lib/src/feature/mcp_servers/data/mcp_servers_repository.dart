@@ -230,7 +230,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
 
   /// Looks up the SDK of Settings, then probes Dart MCP on it.
   Future<void> _checkDart() async {
-    final flutter = (await _flutterSdk.sdkFor(null)).path;
+    final flutter = await _flutterSdk.pathFor(null);
     final root = flutter == null ? null : flutterSdkRootOf(flutter);
     if (!_sdkLookedUp || root != _dartSdkRoot) {
       _sdkLookedUp = true;

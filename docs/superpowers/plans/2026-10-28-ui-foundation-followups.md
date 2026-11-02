@@ -300,6 +300,7 @@ Deferred from the reviews of the M4 plan (docs/superpowers/plans/2026-11-02-m4-n
   - Creation repository: a multi-line exception message lands as one output entry; one snapshot per output line; blank output lines are kept (`feature/project_creation/data/project_creation_repository_impl.dart`)
   - Wizard: the Stop button is not latched after a tap (`feature/project_creation/widgets/creation_progress.dart`)
   - Flutter SDK: `flutter doctor` stays made up, as the command has no machine output (`feature/flutter_sdk/data/flutter_sdk_repository_impl.dart`)
+  - Flutter SDK: the made-up doctor row still says "Channel stable, 3.27.1" next to the real version; `step` is a doctor-only delay on an otherwise real repository (`feature/flutter_sdk/data/flutter_sdk_repository_impl.dart`)
 - **Next steps:**
   - Skeleton: the asset test does not catch a template file missing from `projectTemplateFiles` (`test/feature/project_creation/project_template_test.dart`)
   - Creation repository: no tests for stop or cancel between commands, between steps, or while a process starts; the opt-in test prints the whole step report on success (`test/feature/project_creation/`, `test/integration/new_project_test.dart`)

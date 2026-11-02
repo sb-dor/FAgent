@@ -29,6 +29,9 @@ final class _FvmRepository implements IFlutterSdkRepository {
       (await _fake.sdkFor(null)).copyWith(fvmVersion: '3.24.0');
 
   @override
+  Future<String?> pathFor(String? projectPath) => _fake.pathFor(projectPath);
+
+  @override
   Future<List<DoctorCheck>> doctor() => _fake.doctor();
 }
 
