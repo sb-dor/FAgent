@@ -14,6 +14,7 @@ import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart' show appMcpServerName;
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:l/l.dart';
@@ -129,7 +130,8 @@ final class AgentHub {
     'claude': AgentDefinition.claude,
   };
 
-  static Future<SessionContext> _noContext(int _, AgentDefinition _) async => SessionContext.empty;
+  static Future<SessionContext> _noContext(int _, AgentDefinition _, Map<String, Object?> _) async =>
+      SessionContext.empty;
 
   final AppDatabase _database;
   final SessionContextProvider _sessionContext;
@@ -311,6 +313,12 @@ final class AgentHub {
       if (live.status.value != SessionStatus.idle) {
         throw StateError('The agent stopped while the session was being prepared');
       }
+      // A new agent session's first prompt carries the rules, after the text
+      // ([retryPrompt] takes the text from the first block). A repeated prompt
+      // has them already.
+      final rules = live.firstMessageRules;
+      final blocks = live.lastPrompt!;
+      if (rules != null && !blocks.any(isRulesResource)) blocks.insert(1, rulesResource(rules));
       // The mode is only known once the agent session exists; the prompt waits
       // for the user's consent and can be repeated after it.
       if (live.bypassBlocked) {
@@ -381,6 +389,7 @@ final class AgentHub {
         ).catchError((Object error) => l.w('AgentHub | could not update the chat title: $error')),
       );
       sent = true;
+      live.firstMessageRules = null;
       final response = await connection.agent.sendPrompt(request);
       await live.store
           .addDurable(SessionEventOrigin.app, SessionEventKind.system, <String, Object?>{
@@ -751,11 +760,11 @@ final class AgentHub {
     String? registeredId;
     try {
       final context = await _contextOf(live);
-      final response = await connection.agent
-          .createSession(
-            NewSessionRequest(cwd: live.cwd, mcpServers: context.servers, meta: _metaOf(context)),
-          )
-          .timeout(setupTimeout);
+      final response = await _newSession(
+        connection,
+        NewSessionRequest(cwd: live.cwd, mcpServers: context.servers, meta: _metaOf(context)),
+        systemPrompt: context.systemPrompt,
+      ).timeout(setupTimeout);
       final acpId = response.sessionId.value;
       // Registered at once: the agent may notify (commands, config) while the
       // defaults are applied, and `_route` drops what it cannot place.
@@ -779,6 +788,7 @@ final class AgentHub {
       if (contextLostFrom != null) _slots[live.agentId]?.byAcpId.remove(contextLostFrom);
       live
         ..acpSessionId = acpId
+        ..firstMessageRules = context.firstMessageRules
         ..configOptions.value = _objects(_plain(response.toJson())['configOptions']);
       // Still `creating`: the first prompt only runs once the defaults are in.
       await _applySessionDefaults(live, connection, acpId);
@@ -852,23 +862,79 @@ final class AgentHub {
     return contains(option['options']);
   }
 
-  /// The servers and `_meta` for a new or loaded session of [live]. Never throws: a provider that
-  /// fails or does not answer within [setupTimeout] is logged and the session starts without them.
+  /// The servers and rules for a new or loaded session of [live] (called once
+  /// the agent runs, so its `initialize` result is known). Servers the agent
+  /// cannot take are reported in one notice. Never throws: a provider that
+  /// fails or does not answer within [setupTimeout] is logged and the session
+  /// starts without them.
   Future<SessionContext> _contextOf(LiveSession live) async {
     final slot = _slots[live.agentId];
     if (slot == null) return SessionContext.empty;
+    final SessionContext context;
     try {
-      return await _sessionContext(live.id, slot.definition).timeout(setupTimeout);
+      context = await _sessionContext(
+        live.id,
+        slot.definition,
+        initializeResultOf(live.agentId) ?? const <String, Object?>{},
+      ).timeout(setupTimeout);
     } on Object catch (error, stackTrace) {
       l.w('AgentHub | session ${live.id}: no MCP servers and rules: $error', stackTrace);
       return SessionContext.empty;
     }
+    if (context.skippedServers.isNotEmpty) {
+      _notice(
+        live,
+        '${slot.definition.displayName} does not support the transport of these MCP servers, '
+        'so they were left out: ${context.skippedServers.join(', ')}',
+      );
+    }
+    return context;
   }
 
   static AcpJsonObject? _metaOf(SessionContext context) {
     final meta = context.meta;
     return meta == null ? null : AcpJsonObject.fromObject(meta);
   }
+
+  /// `session/new`; with [systemPrompt] sent raw, since the SDK's request
+  /// model has no such param.
+  static Future<NewSessionResponse> _newSession(
+    AgentConnection connection,
+    NewSessionRequest request, {
+    required String? systemPrompt,
+  }) async {
+    if (systemPrompt == null) return connection.agent.createSession(request);
+    return NewSessionResponse.fromJson(
+      await connection.requestRaw('session/new', _withSystemPrompt(request.toJson(), systemPrompt)),
+    );
+  }
+
+  /// `session/load`; with [systemPrompt] sent raw, like [_newSession].
+  static Future<LoadSessionResponse> _loadSession(
+    AgentConnection connection,
+    LoadSessionRequest request, {
+    required String? systemPrompt,
+  }) async {
+    if (systemPrompt == null) return connection.agent.loadSession(request);
+    return LoadSessionResponse.fromJson(
+      await connection.requestRaw(
+        'session/load',
+        _withSystemPrompt(request.toJson(), systemPrompt),
+      ),
+    );
+  }
+
+  /// [params] with codex-acp's `systemPrompt`: [rules] appended to the
+  /// agent's own system prompt.
+  static Map<String, Object?> _withSystemPrompt(Object? params, String rules) => <String, Object?>{
+    ..._plain(params),
+    'systemPrompt': <String, Object?>{
+      'mode': 'append',
+      'content': <Object?>[
+        <String, Object?>{'type': 'text', 'text': rules},
+      ],
+    },
+  };
 
   Future<void> _load(LiveSession live, AgentConnection connection) async {
     final slot = _slots[live.agentId];
@@ -882,16 +948,16 @@ final class AgentHub {
     live.replaying = true;
     try {
       final context = await _contextOf(live);
-      final response = await connection.agent
-          .loadSession(
-            LoadSessionRequest(
-              sessionId: SessionId(acpId),
-              cwd: live.cwd,
-              mcpServers: context.servers,
-              meta: _metaOf(context),
-            ),
-          )
-          .timeout(setupTimeout);
+      final response = await _loadSession(
+        connection,
+        LoadSessionRequest(
+          sessionId: SessionId(acpId),
+          cwd: live.cwd,
+          mcpServers: context.servers,
+          meta: _metaOf(context),
+        ),
+        systemPrompt: context.systemPrompt,
+      ).timeout(setupTimeout);
       live.configOptions.value = _objects(_plain(response.toJson())['configOptions']);
       if (live.status.value == SessionStatus.loading) _move(live, SessionStatus.idle);
     } on Object catch (error, stackTrace) {
@@ -978,15 +1044,19 @@ final class AgentHub {
     final live = slot.byAcpId[context.params.sessionId.value];
     if (live == null || _isTerminal(live))
       return _response(const PermissionCancelled('unknown session'));
+    final params = raw?.params ?? _plain(context.params.toJson());
+    // Claude allows the app's tools through `allowedTools`; other agents ask,
+    // and the app answers for the user.
+    final autoAllow =
+        slot.definition.rulesChannel != RulesChannel.claudeMeta && isAppToolPermission(params)
+        ? _allowOption(context.params.options)
+        : null;
     final decided = permissions.wait(requestId, sessionId: live.id);
     try {
       await live.store.addDurable(
         SessionEventOrigin.agent,
         SessionEventKind.permissionRequest,
-        <String, Object?>{
-          'requestId': requestId,
-          'params': raw?.params ?? _plain(context.params.toJson()),
-        },
+        <String, Object?>{'requestId': requestId, 'params': params},
       );
     } on Object catch (error) {
       // Fail closed: the agent must not wait forever on a request the user
@@ -1011,7 +1081,12 @@ final class AgentHub {
       );
       return _response(await decided);
     }
-    if (live.status.value == SessionStatus.running) _move(live, SessionStatus.awaitingPermission);
+    if (autoAllow != null) {
+      // Journaled below like the user's answer, so the card shows the call allowed.
+      permissions.resolve(requestId, PermissionSelected(autoAllow), sessionId: live.id);
+    } else if (live.status.value == SessionStatus.running) {
+      _move(live, SessionStatus.awaitingPermission);
+    }
     unawaited(
       context.cancellationToken.whenCancelled.then(
         (_) => permissions.resolve(requestId, const PermissionCancelled('withdrawn by the agent')),
@@ -1047,6 +1122,17 @@ final class AgentHub {
     }
     return _response(decision);
   }
+
+  /// The id of the first option that allows the call (once or always), if any.
+  static String? _allowOption(List<PermissionOption> options) => options
+      .where(
+        (option) =>
+            option.kind == PermissionOptionKind.allowOnce ||
+            option.kind == PermissionOptionKind.allowAlways,
+      )
+      .firstOrNull
+      ?.optionId
+      .value;
 
   static RequestPermissionResponse _response(PermissionDecision decision) =>
       RequestPermissionResponse(
@@ -1294,6 +1380,25 @@ final class AgentHub {
     ],
     _ => const <Map<String, Object?>>[],
   };
+}
+
+/// Whether the `session/request_permission` [params] (raw JSON) ask for a tool
+/// of the app's own MCP server ([appMcpServerName]), which the app allows
+/// without asking the user.
+///
+/// The server's name must appear in the tool call's title or in its other
+/// fields, except `content` and `locations`: a diff or a path that mentions it
+/// says nothing about which tool runs. Calls of kind `execute`, `edit`,
+/// `delete` and `move` never qualify (a shell command can mention the name).
+bool isAppToolPermission(Map<String, Object?> params) {
+  final toolCall = params['toolCall'];
+  if (toolCall is! Map<Object?, Object?>) return false;
+  if (const <String>{'execute', 'edit', 'delete', 'move'}.contains(toolCall['kind'])) return false;
+  final described = <Object?, Object?>{
+    for (final MapEntry(:key, :value) in toolCall.entries)
+      if (key != 'content' && key != 'locations') key: value,
+  };
+  return jsonEncode(described).contains(appMcpServerName);
 }
 
 /// A chat of an agent that is no longer configured cannot start (its problem

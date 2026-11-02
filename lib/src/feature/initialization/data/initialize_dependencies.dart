@@ -103,8 +103,12 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     },
     observers: <TurnObserver>[GitTurnFilesObserver(environment: dependencies.shellEnvironment)],
     // Read when a chat starts its agent session, after initialization has finished.
-    sessionContext: (sessionId, agent) =>
-        dependencies.sessionContextRepository.forSession(sessionId: sessionId, agent: agent),
+    sessionContext: (sessionId, agent, initializeResult) =>
+        dependencies.sessionContextRepository.forSession(
+          sessionId: sessionId,
+          agent: agent,
+          initializeResult: initializeResult,
+        ),
     sessionDefaults: (agentId) async =>
         (await AppSettingsRepositoryImpl(
           database: dependencies.database,

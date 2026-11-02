@@ -1,0 +1,408 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/acp/live_session.dart';
+import 'package:flutter_code_agent/src/common/acp/session_context.dart';
+import 'package:flutter_code_agent/src/common/acp/session_event.dart';
+import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fake_agent_binary.dart';
+
+/// Completes when [notifier] reaches a value matching [test].
+Future<void> _until<T>(ValueListenable<T> notifier, bool Function(T value) test) {
+  if (test(notifier.value)) return Future<void>.value();
+  final done = Completer<void>();
+  void listener() {
+    if (test(notifier.value) && !done.isCompleted) done.complete();
+  }
+
+  notifier.addListener(listener);
+  return done.future
+      .timeout(const Duration(seconds: 15))
+      .whenComplete(() => notifier.removeListener(listener));
+}
+
+List<String> _agentText(LiveSession live) => <String>[
+  for (final event in live.store.events)
+    if (event.kind == 'agent_message_chunk')
+      if (event.payload case {'params': {'update': {'content': {'text': final String text}}}}) text,
+];
+
+/// The content blocks of every prompt in the journal of [live], in order.
+List<List<Map<String, Object?>>> _prompts(LiveSession live) => <List<Map<String, Object?>>>[
+  for (final event in live.store.events)
+    if (event.kind == SessionEventKind.prompt)
+      <Map<String, Object?>>[
+        for (final block in event.payload['prompt']! as List<Object?>)
+          (block! as Map<Object?, Object?>).cast<String, Object?>(),
+      ],
+];
+
+bool _isRules(Map<String, Object?> block) =>
+    block['type'] == 'resource' &&
+    (block['resource'] as Map<Object?, Object?>?)?['uri'] == rulesResourceUri;
+
+void main() {
+  late Directory temp;
+  late AgentDefinition compiled;
+  late ShellEnvironment environment;
+  late AppDatabase database;
+  late int projectId;
+  late File requests;
+  final hubs = <AgentHub>[];
+
+  setUpAll(() async {
+    temp = Directory.systemTemp.createTempSync('agent_hub_context_test');
+    compiled = await compileFakeAgent(temp);
+    environment = await ShellEnvironment.resolve();
+  });
+
+  tearDownAll(() => temp.deleteSync(recursive: true));
+
+  setUp(() async {
+    requests = File('${temp.path}/requests-${DateTime.now().microsecondsSinceEpoch}.jsonl');
+    database = AppDatabase(NativeDatabase.memory());
+    projectId = await database
+        .into(database.projectsTable)
+        .insert(ProjectsTableCompanion.insert(path: temp.path, name: 'project'));
+  });
+
+  tearDown(() async {
+    for (final hub in hubs) {
+      await hub.dispose();
+    }
+    hubs.clear();
+    await database.close();
+  });
+
+  AgentHub newHub({
+    SessionContextProvider? sessionContext,
+    RulesChannel rulesChannel = RulesChannel.firstMessage,
+  }) {
+    final agent = AgentDefinition(
+      id: 'fake',
+      displayName: compiled.displayName,
+      executable: compiled.executable,
+      loginArguments: compiled.loginArguments,
+      rulesChannel: rulesChannel,
+      environment: <String, String>{'FAKE_AGENT_REQUESTS_FILE': requests.path},
+    );
+    final hub = AgentHub(
+      database: database,
+      environment: environment,
+      agents: <String, AgentDefinition>{'fake': agent},
+      sessionContext: sessionContext,
+      connector: (definition, onPermission) => AgentConnection.start(
+        definition: definition,
+        environment: environment,
+        onPermissionRequest: onPermission,
+        initializeTimeout: const Duration(seconds: 20),
+      ),
+      cancelTimeout: const Duration(seconds: 1),
+    );
+    hubs.add(hub);
+    return hub;
+  }
+
+  Future<void> restart() async {
+    for (final hub in hubs) {
+      await hub.dispose();
+    }
+    hubs.clear();
+  }
+
+  Future<int> newChat({String? acpSessionId}) => database
+      .into(database.sessionsTable)
+      .insert(
+        SessionsTableCompanion.insert(
+          projectId: projectId,
+          agentId: 'fake',
+          acpSessionId: acpSessionId == null
+              ? const Value<String?>.absent()
+              : Value<String?>(acpSessionId),
+        ),
+      );
+
+  List<Map<String, Object?>> recorded() => !requests.existsSync()
+      ? const <Map<String, Object?>>[]
+      : <Map<String, Object?>>[
+          for (final line in requests.readAsLinesSync())
+            if (line.isNotEmpty) jsonDecode(line) as Map<String, Object?>,
+        ];
+
+  Future<SessionContext> rules(int _, AgentDefinition _, Map<String, Object?> _) async =>
+      const SessionContext(servers: [], firstMessageRules: 'Rules text');
+
+  group('context', () {
+    test('the provider gets the agent and its initialize result', () async {
+      final asked = <(String, Object?)>[];
+      final hub = newHub(
+        sessionContext: (sessionId, agent, initializeResult) async {
+          asked.add((agent.id, initializeResult['agentCapabilities']));
+          return SessionContext.empty;
+        },
+      );
+
+      await hub.prompt(await newChat(), 'echo hi');
+
+      expect(asked, hasLength(1));
+      expect(asked.single.$1, 'fake');
+      expect(asked.single.$2, containsPair('loadSession', true));
+    });
+
+    test('systemPrompt reaches session/new and session/load raw', () async {
+      Future<SessionContext> context(int _, AgentDefinition _, Map<String, Object?> _) async =>
+          const SessionContext(servers: [], systemPrompt: 'Rules text');
+      const expected = <String, Object?>{
+        'mode': 'append',
+        'content': <Object?>[
+          <String, Object?>{'type': 'text', 'text': 'Rules text'},
+        ],
+      };
+      final chat = await newChat();
+      await newHub(
+        sessionContext: context,
+        rulesChannel: RulesChannel.systemPrompt,
+      ).prompt(chat, 'echo one');
+      await restart();
+
+      final second = newHub(sessionContext: context, rulesChannel: RulesChannel.systemPrompt);
+      await second.prompt(chat, 'echo two');
+
+      final sent = recorded();
+      expect(sent.map((r) => r['method']), <String>['session/new', 'session/load']);
+      for (final request in sent) {
+        final params = request['params']! as Map<String, Object?>;
+        expect(params['systemPrompt'], expected);
+        expect(params.containsKey('_meta'), isFalse);
+      }
+      final live = await second.session(chat);
+      expect(_agentText(live).join(), 'onetwo');
+      expect(_prompts(live).expand((p) => p).where(_isRules), isEmpty);
+    });
+
+    test('without systemPrompt the request has none', () async {
+      await newHub(sessionContext: rules).prompt(await newChat(), 'echo hi');
+
+      final params = recorded().single['params']! as Map<String, Object?>;
+      expect(params.containsKey('systemPrompt'), isFalse);
+    });
+
+    test('rules resource only in the first prompt of a new session', () async {
+      final hub = newHub(sessionContext: rules);
+      final chat = await newChat();
+      const file = <String, Object?>{
+        'type': 'resource_link',
+        'uri': 'file:///p/a.dart',
+        'name': 'a.dart',
+      };
+
+      await hub.prompt(chat, 'echo one', resources: const [file]);
+      await hub.prompt(chat, 'echo two');
+
+      final live = await hub.session(chat);
+      final prompts = _prompts(live);
+      expect(prompts, hasLength(2));
+      expect(prompts.first, hasLength(3));
+      expect(prompts.first[0], <String, Object?>{'type': 'text', 'text': 'echo one'});
+      expect(prompts.first[1], rulesResource('Rules text'));
+      expect(prompts.first[2], containsPair('uri', 'file:///p/a.dart'));
+      expect(prompts.last, <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': 'echo two'},
+      ]);
+      expect(_agentText(live).join(), 'onetwo');
+    });
+
+    test('no rules resource after session/load', () async {
+      final chat = await newChat(acpSessionId: 'earlier');
+      final hub = newHub(sessionContext: rules);
+
+      await hub.prompt(chat, 'echo hi');
+
+      expect(recorded().single['method'], 'session/load');
+      final live = await hub.session(chat);
+      expect(_prompts(live).single, <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': 'echo hi'},
+      ]);
+    });
+
+    test('retry after a first-prompt failure sends text first', () async {
+      final hub = newHub(sessionContext: rules);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+      await hub.prompt(chat, 'auth');
+      expect(live.status.value, SessionStatus.needsAuth);
+      await hub.authenticate('fake', 'browser-login');
+      await _until(live.status, (s) => s == SessionStatus.cold);
+
+      await hub.retryPrompt(chat);
+
+      expect(_agentText(live), <String>['authenticated']);
+      final prompts = _prompts(live);
+      expect(prompts, hasLength(2));
+      for (final prompt in prompts) {
+        expect(prompt.first, <String, Object?>{'type': 'text', 'text': 'auth'});
+        expect(prompt.where(_isRules), hasLength(1));
+        expect(_isRules(prompt[1]), isTrue);
+      }
+    });
+
+    test('skipped servers are one notice per chat start', () async {
+      final hub = newHub(
+        sessionContext: (_, _, _) async =>
+            const SessionContext(servers: [], skippedServers: <String>['remote', 'events']),
+      );
+      final notices = <HubNotice>[];
+      final subscription = hub.notices.listen(notices.add);
+      addTearDown(subscription.cancel);
+      final chat = await newChat();
+
+      await hub.prompt(chat, 'echo one');
+      await hub.prompt(chat, 'echo two');
+      await pumpEventQueue();
+
+      expect(notices, hasLength(1));
+      expect(notices.single.sessionId, chat);
+      expect(notices.single.message, contains('remote, events'));
+    });
+  });
+
+  group('permissions', () {
+    test('app tool permission is auto-allowed for a non-Claude agent', () async {
+      final hub = newHub();
+      final chat = await newChat();
+      final live = await hub.session(chat);
+      final statuses = <SessionStatus>[];
+      live.status.addListener(() => statuses.add(live.status.value));
+
+      await hub.prompt(chat, 'permission title=flutter_code_agent.list_skills');
+
+      expect(statuses, isNot(contains(SessionStatus.awaitingPermission)));
+      expect(_agentText(live), <String>['allow']);
+      final request = live.store.events.singleWhere(
+        (e) => e.kind == SessionEventKind.permissionRequest,
+      );
+      expect(
+        live.store.events
+            .singleWhere((e) => e.kind == SessionEventKind.permissionResolution)
+            .payload,
+        allOf(
+          containsPair('requestId', request.payload['requestId']),
+          containsPair('outcome', 'selected'),
+          containsPair('optionId', 'allow'),
+        ),
+      );
+    });
+
+    test('other permissions still ask', () async {
+      final hub = newHub();
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      final turn = hub.prompt(chat, 'permission');
+      await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
+      final request = live.store.events.singleWhere(
+        (e) => e.kind == SessionEventKind.permissionRequest,
+      );
+      expect(
+        hub.resolvePermission(chat, request.payload['requestId']! as String, 'reject'),
+        isTrue,
+      );
+      await turn;
+
+      expect(_agentText(live), <String>['reject']);
+    });
+
+    test('app tool permission still asks for Claude, which allows it with allowedTools', () async {
+      final hub = newHub(rulesChannel: RulesChannel.claudeMeta);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      final turn = hub.prompt(chat, 'permission title=flutter_code_agent.list_skills');
+      await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
+      final request = live.store.events.singleWhere(
+        (e) => e.kind == SessionEventKind.permissionRequest,
+      );
+      expect(hub.resolvePermission(chat, request.payload['requestId']! as String, 'allow'), isTrue);
+      await turn;
+    });
+  });
+
+  group('isAppToolPermission', () {
+    Map<String, Object?> request(Map<String, Object?> toolCall) => <String, Object?>{
+      'sessionId': 's',
+      'toolCall': <String, Object?>{'toolCallId': 'c1', ...toolCall},
+      'options': const <Object?>[],
+    };
+
+    test('the app server in the title or the tool call fields', () {
+      expect(isAppToolPermission(request({'title': 'flutter_code_agent.list_skills'})), isTrue);
+      expect(
+        isAppToolPermission(request({'title': 'list_skills (flutter_code_agent MCP Server)'})),
+        isTrue,
+      );
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'list_skills',
+            'rawInput': {'server': 'flutter_code_agent', 'tool': 'list_skills'},
+          }),
+        ),
+        isTrue,
+      );
+    });
+
+    test('other tools are not', () {
+      expect(isAppToolPermission(request({'title': 'Run `rm -rf build`'})), isFalse);
+      expect(isAppToolPermission(request({'title': 'dart (MCP Server)'})), isFalse);
+      expect(isAppToolPermission(<String, Object?>{'sessionId': 's'}), isFalse);
+    });
+
+    test('commands, edits and file contents that mention the server are not', () {
+      expect(
+        isAppToolPermission(
+          request({'title': 'grep -r flutter_code_agent lib', 'kind': 'execute'}),
+        ),
+        isFalse,
+      );
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'Edit lib/main.dart',
+            'kind': 'edit',
+            'content': [
+              {
+                'type': 'diff',
+                'path': '/p/lib/main.dart',
+                'newText': 'package:flutter_code_agent/',
+              },
+            ],
+          }),
+        ),
+        isFalse,
+      );
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'Read file',
+            'kind': 'read',
+            'locations': [
+              {'path': '/Users/me/flutter_code_agent/lib/main.dart'},
+            ],
+          }),
+        ),
+        isFalse,
+      );
+    });
+  });
+}

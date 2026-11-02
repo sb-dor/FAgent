@@ -2,8 +2,10 @@
 //
 // The first word of the prompt selects the behaviour:
 //   echo <text>   reply with <text> in two chunks of one message
-//   permission [n] ask for permission n times (default 1), reply with each selected
-//                 option id or `cancelled`
+//   permission [n] [title=<t>]
+//                 ask for permission n times (default 1) for a tool call titled <t>
+//                 (default: Run `rm -rf build`), reply with each selected option id
+//                 or `cancelled`
 //   hang          never finish until the client sends session/cancel
 //   spawn         start a background process re-parented to launchd; its pid goes
 //                 to the file named by FAKE_AGENT_PID_FILE
@@ -25,7 +27,9 @@
 // With FAKE_AGENT_REQUESTS_FILE set, the params of every session/new,
 // session/load, authenticate and logout are appended to that file as JSON lines
 // {"method", "params"}; `authenticate` also appends the client's capabilities as
-// {"method": "client/capabilities", "params"}.
+// {"method": "client/capabilities", "params"}. session/new and session/load are
+// recorded raw, as they came over the wire, so params the SDK does not model (a
+// top-level `systemPrompt`) are kept.
 // Sign-in: the agent offers `browser-login` and `api-key` (with
 // `_meta.api-key.provider: fake`) and can log out. `authenticate` succeeds, or
 // fails with FAKE_AGENT_AUTH_FAIL=1, or never answers with FAKE_AGENT_AUTH_HANG=1.
@@ -154,7 +158,6 @@ Future<void> main(List<String> arguments) async {
             return LogoutResponse();
           })
           .onNewSession((context) {
-            record('session/new', context.params.toJson());
             final session = 's${nextSession++}';
             return NewSessionResponse.fromJson(<String, Object?>{
               'sessionId': session,
@@ -195,7 +198,6 @@ Future<void> main(List<String> arguments) async {
             });
           })
           .onLoadSession((context) async {
-            record('session/load', context.params.toJson());
             final session = context.params.sessionId;
             if (session.value == 'missing') {
               throw JsonRpcRequestException(
@@ -233,14 +235,21 @@ Future<void> main(List<String> arguments) async {
                 await say(context.client, session, rest.substring(0, half), id: 'm1');
                 await say(context.client, session, rest.substring(half), id: 'm1');
               case 'permission':
-                final count = int.tryParse(rest) ?? 1;
+                final words = rest.split(' ');
+                final count = words.map(int.tryParse).nonNulls.firstOrNull ?? 1;
+                final title =
+                    words
+                        .where((word) => word.startsWith('title='))
+                        .map((word) => word.substring('title='.length))
+                        .firstOrNull ??
+                    'Run `rm -rf build`';
                 for (var asked = 0; asked < count; asked++) {
                   final response = await context.client.requestPermission(
                     RequestPermissionRequest(
                       sessionId: session,
                       toolCall: ToolCallUpdate(
                         toolCallId: ToolCallId('call-${asked + 1}'),
-                        title: const AcpPatch<String>.set('Run `rm -rf build`'),
+                        title: AcpPatch<String>.set(title),
                       ),
                       options: <PermissionOption>[
                         PermissionOption(
@@ -299,7 +308,25 @@ Future<void> main(List<String> arguments) async {
             return PromptResponse(stopReason: StopReason.endTurn);
           });
 
-  final connection = agent.connect(acpStdioTransport());
+  // The SDK's request models drop params they do not know: record session/new and
+  // session/load from the raw frames.
+  final stdio = acpStdioTransport();
+  final connection = agent.connect(
+    AcpDuplexStream<Object?>(
+      readable: stdio.readable.map((frame) {
+        for (final message in frame is List<Object?> ? frame : <Object?>[frame]) {
+          if (message case {
+            'method': final String method,
+            'params': final Map<String, Object?> params,
+          } when method == 'session/new' || method == 'session/load') {
+            record(method, params);
+          }
+        }
+        return frame;
+      }),
+      writable: stdio.writable,
+    ),
+  );
   final authStatus = Platform.environment['FAKE_AGENT_AUTH_STATUS'];
   if (authStatus != null) {
     unawaited(

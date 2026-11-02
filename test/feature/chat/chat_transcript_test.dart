@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_transcript.dart';
@@ -235,6 +236,34 @@ void main() {
                   'prompt': <Object?>[
                     <String, Object?>{'type': 'text', 'text': 'Fix the bug in '},
                     <String, Object?>{
+                      'type': 'resource_link',
+                      'uri': 'file:///p/lib/main.dart',
+                      'name': 'main.dart',
+                    },
+                  ],
+                },
+                createdAt: DateTime(2026),
+              ),
+            ]).single
+            as UserMessageItem;
+
+    expect(item.text, 'Fix the bug in ');
+    expect(item.resources, <String>['file:///p/lib/main.dart']);
+  });
+
+  test('rules resource hidden from the user message', () {
+    final item =
+        ChatTranscript.fold(<SessionEvent>[
+              SessionEvent(
+                seq: 0,
+                origin: SessionEventOrigin.user,
+                kind: SessionEventKind.prompt,
+                payload: <String, Object?>{
+                  'sessionId': 's',
+                  'prompt': <Object?>[
+                    const <String, Object?>{'type': 'text', 'text': 'Fix the bug in '},
+                    rulesResource('## base\nRule text'),
+                    const <String, Object?>{
                       'type': 'resource_link',
                       'uri': 'file:///p/lib/main.dart',
                       'name': 'main.dart',

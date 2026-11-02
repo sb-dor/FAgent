@@ -807,7 +807,7 @@ void main() {
       final asked = <(int, String)>[];
       final hub = newHub(
         agent: recordingAgent,
-        sessionContext: (sessionId, agent) async {
+        sessionContext: (sessionId, agent, _) async {
           asked.add((sessionId, agent.id));
           return SessionContext(servers: servers, meta: meta);
         },
@@ -833,7 +833,7 @@ void main() {
       final asked = <int>[];
       final second = newHub(
         agent: recordingAgent,
-        sessionContext: (sessionId, agent) async {
+        sessionContext: (sessionId, agent, _) async {
           asked.add(sessionId);
           return SessionContext(servers: servers, meta: meta);
         },
@@ -863,7 +863,7 @@ void main() {
     test('a provider that throws still lets the session start, without context', () async {
       final hub = newHub(
         agent: recordingAgent,
-        sessionContext: (_, _) async => throw StateError('no project'),
+        sessionContext: (_, _, _) async => throw StateError('no project'),
       );
       final chat = await newChat();
 

@@ -164,6 +164,8 @@ abstract final class ChatTranscript {
     final text = StringBuffer();
     final resources = <String>[];
     for (final block in blocks.map(_map).whereType<Map<String, Object?>>()) {
+      // `resource` blocks (a skill the user picked, the rules a new agent session starts with)
+      // are context for the agent, not part of what the user wrote.
       switch (block['type']) {
         case 'text':
           text.write(_string(block['text']) ?? '');

@@ -243,6 +243,27 @@ final class AgentConnection {
   /// Typed client → agent requests (`createSession`, `sendPrompt`, …).
   AcpClientContext get agent => _connection.agent;
 
+  /// Sends the client → agent request [method] with [params] as they are and returns the raw
+  /// result: for params the SDK's request models drop (codex-acp's top-level `systemPrompt` of
+  /// `session/new` and `session/load`). No capability check, unlike the typed requests.
+  Future<Map<String, Object?>> requestRaw(String method, Map<String, Object?> params) =>
+      _connection.agent.request(
+        AcpMethodDescriptor<Map<String, Object?>, Map<String, Object?>>(
+          name: method,
+          dartName: method,
+          protocol: AcpProtocolGeneration.v1,
+          stability: AcpMethodStability.stable,
+          direction: AcpMethodDirection.clientToAgent,
+          kind: AcpMethodKind.request,
+          // Any name but the SDK's custom-method marker: a standard method name is allowed.
+          paramsDefinition: 'raw',
+          resultDefinition: 'raw',
+          paramsCodec: const _JsonObjectCodec(),
+          resultCodec: const _JsonObjectCodec(),
+        ),
+        params,
+      );
+
   /// Last stderr lines of the agent.
   List<String> get stderrTail => _stderr.items;
 
@@ -265,4 +286,19 @@ final class AgentConnection {
     _connection.close();
     await _process.stop(exitAfterEof: const Duration(milliseconds: 300), gracePeriod: gracePeriod);
   }
+}
+
+/// Passes a JSON object through unchanged; a `null` result decodes to an empty object.
+final class _JsonObjectCodec implements AcpCodec<Map<String, Object?>> {
+  const _JsonObjectCodec();
+
+  @override
+  Map<String, Object?> decode(Object? value) => switch (value) {
+    final Map<Object?, Object?> map => map.cast<String, Object?>(),
+    null => const <String, Object?>{},
+    _ => throw FormatException('Expected a JSON object, got ${value.runtimeType}'),
+  };
+
+  @override
+  Object? encode(Map<String, Object?> value) => value;
 }
