@@ -445,9 +445,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// (one that still has to sign in, or is still being checked, can), else Claude.
   String _agentForNewChat() {
     final defaultId = settingsController.settings.defaultAgentId;
-    final agent = Dependencies.of(context).agentsRepository.agents
-        .where((agent) => agent.id == defaultId)
-        .firstOrNull;
+    final agent = agentsController.agents.where((agent) => agent.id == defaultId).firstOrNull;
     return agent != null && agent.canStartChats ? defaultId : AgentDefinition.claude.id;
   }
 

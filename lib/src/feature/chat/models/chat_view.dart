@@ -76,12 +76,16 @@ class ChatView {
 
   /// The chat's agent can still be changed: no message was sent, and the chat is not starting,
   /// creating its agent session or running (a first message may be on its way before it is
-  /// journaled).
+  /// journaled). A chat that failed to set up (`error`, `setupFailed`) can too: a chat with a
+  /// message is locked by [agentLocked], and the hub refuses one that has an agent session.
   bool get agentChangeable =>
       !agentLocked &&
       switch (status) {
-        SessionStatus.cold || SessionStatus.idle || SessionStatus.needsAuth => true,
-        SessionStatus.error => problem?.kind == SessionProblemKind.removed,
+        SessionStatus.cold ||
+        SessionStatus.idle ||
+        SessionStatus.needsAuth ||
+        SessionStatus.error ||
+        SessionStatus.setupFailed => true,
         _ => false,
       };
 }

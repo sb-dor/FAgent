@@ -508,6 +508,26 @@ void main() {
     expect(_agentText(live).join(), 'onetwo');
   });
 
+  test('a new chat whose agent could not start can still change its agent', () async {
+    final hub = newHub(
+      agent: AgentDefinition(
+        id: 'fake',
+        displayName: 'Broken',
+        executable: '${temp.path}/no-such-agent',
+      ),
+    );
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await expectLater(hub.prompt(chat, 'echo x'), throwsA(anything));
+
+    expect(live.status.value, SessionStatus.error);
+    expect(live.acpSessionId, isNull);
+    expect(hub.canChangeAgent(chat), isTrue);
+    expect(await hub.forget(chat), isTrue);
+    expect(hub.opened(chat), isNull);
+  });
+
   test('loading an unknown agent session fails with notFound and can start over', () async {
     final hub = newHub();
     final chat = await newChat(acpSessionId: 'missing');

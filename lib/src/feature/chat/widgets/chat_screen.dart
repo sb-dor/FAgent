@@ -1,5 +1,6 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
@@ -114,6 +115,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         focusNode: _scope.composerFocus,
                         canSend:
                             !view.bypassBlocked &&
+                            // A removed agent cannot take a message: it would be lost.
+                            view.problem?.kind != SessionProblemKind.removed &&
                             switch (view.status) {
                               SessionStatus.cold ||
                               SessionStatus.idle ||
@@ -142,6 +145,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               agentName: agentDisplayName(
                                 view.agentId,
                                 _scope.agentsController.agents,
+                                Localization.of(context),
                               ),
                               agentId: view.agentId,
                               agents: _scope.agentsController.agents,

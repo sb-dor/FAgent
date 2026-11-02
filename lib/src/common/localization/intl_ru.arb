@@ -345,6 +345,7 @@
   "agentsLoadFailed": "Не удалось получить список агентов.",
   "agentsRetry": "Повторить",
   "agentStatusFailed": "ошибка",
+  "agentRemovedName": "Удалённый агент",
   "agentLockedHint": "Агента нельзя сменить после первого сообщения",
   "agentDefaultUnavailable": "Агент недоступен, поэтому новые чаты начинаются с Claude.",
   "agentUseApiKey": "Использовать API-ключ",

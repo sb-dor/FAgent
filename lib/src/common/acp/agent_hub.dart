@@ -212,14 +212,6 @@ final class AgentHub {
     }
   }
 
-  /// The raw `initialize` result of [agentId]'s live connection
-  /// (`agentCapabilities`, `authMethods`, `agentInfo`); `null` when the agent
-  /// is not running.
-  Map<String, Object?>? initializeResultOf(String agentId) {
-    final connection = _slots[agentId]?.connection;
-    return connection != null && connection.isAlive ? connection.initializeResult : null;
-  }
-
   /// Chats opened so far (chats whose journal failed to open are skipped).
   Future<List<LiveSession>> get liveSessions async => <LiveSession>[
     for (final opening in List<Future<LiveSession>>.of(_sessions.values))
@@ -249,8 +241,9 @@ final class AgentHub {
   }
 
   /// Whether the agent of chat [sessionId] can still change: the chat has no agent session, no
-  /// setup or turn is queued or running for it, and it is cold, idle, waiting for a sign-in, or
-  /// (its agent removed) in error. A chat that was not opened in this run can.
+  /// setup or turn is queued or running for it, and it is not starting, creating or running (in
+  /// any other status, `error` and `setupFailed` included). A chat that was not opened in this
+  /// run can.
   bool canChangeAgent(int sessionId) {
     if (_disposing) return false;
     final live = _opened[sessionId];
@@ -261,8 +254,11 @@ final class AgentHub {
       live.acpSessionId == null &&
       !_lanesInFlight.containsKey(live.id) &&
       switch (live.status.value) {
-        SessionStatus.cold || SessionStatus.idle || SessionStatus.needsAuth => true,
-        SessionStatus.error => live.problem.value?.kind == SessionProblemKind.removed,
+        SessionStatus.cold ||
+        SessionStatus.idle ||
+        SessionStatus.needsAuth ||
+        SessionStatus.error ||
+        SessionStatus.setupFailed => true,
         _ => false,
       };
 
@@ -290,6 +286,7 @@ final class AgentHub {
     _opened.remove(sessionId);
     _setupLanes.remove(sessionId);
     await live.store.close();
+    live.dispose();
     return true;
   }
 

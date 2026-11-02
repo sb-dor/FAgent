@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/status.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
@@ -7,9 +8,11 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/wor
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_row.dart';
 
-/// Name of the agent [id] among [agents]; an agent that is not listed is shown by its id.
-String agentDisplayName(String id, List<AgentInfo> agents) =>
-    agents.where((agent) => agent.id == id).firstOrNull?.name ?? id;
+/// Name of the agent [id] among [agents]. A custom agent that is not listed was removed, so it
+/// is shown as "Removed agent"; any other unlisted agent is shown by its id.
+String agentDisplayName(String id, List<AgentInfo> agents, GeneratedLocalization localization) =>
+    agents.where((agent) => agent.id == id).firstOrNull?.name ??
+    (id.startsWith('custom:') ? localization.agentRemovedName : id);
 
 /// {@template workspace_sidebar_footer}
 /// The bottom of the sidebar: the Skills and Settings screens and the default agent.
@@ -52,6 +55,7 @@ class WorkspaceSidebarFooter extends StatelessWidget {
                     agentDisplayName(
                       scope.settingsController.settings.defaultAgentId,
                       scope.agentsController.agents,
+                      localization,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

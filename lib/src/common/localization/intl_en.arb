@@ -381,6 +381,7 @@
   "agentsLoadFailed": "Could not get the list of agents.",
   "agentsRetry": "Try again",
   "agentStatusFailed": "error",
+  "agentRemovedName": "Removed agent",
   "agentLockedHint": "The agent can't be changed after the first message",
   "agentDefaultUnavailable": "This agent is unavailable, so new chats start with Claude.",
   "agentUseApiKey": "Use API key",

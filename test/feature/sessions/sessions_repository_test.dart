@@ -142,6 +142,16 @@ void main() {
     },
   );
 
+  test('forget disposes the dropped runtime state', () async {
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    expect(await hub.forget(chat), isTrue);
+
+    // A disposed notifier refuses new listeners.
+    expect(() => live.status.addListener(() {}), throwsFlutterError);
+  });
+
   test('a chat that is running is not dropped by forget', () async {
     final chat = await newChat();
     final live = await hub.session(chat);

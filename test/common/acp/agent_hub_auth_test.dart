@@ -189,7 +189,6 @@ void main() {
 
     await expectLater(signIn, throwsA(isA<acp.CancellationException>()));
     await connections.single.exitCode.timeout(const Duration(seconds: 10));
-    expect(hub.initializeResultOf('fake'), isNull);
     expect(live.status.value, SessionStatus.needsAuth, reason: 'the chat still waits for a login');
   });
 
@@ -203,21 +202,18 @@ void main() {
 
     expect(recorded().map((r) => r['method']), contains('logout'));
     await connections.single.exitCode.timeout(const Duration(seconds: 10));
-    expect(hub.initializeResultOf('fake'), isNull);
     expect(live.status.value, SessionStatus.cold);
   });
 
-  test('initializeResultOf returns agentCapabilities after a chat started', () async {
+  test('the connection keeps the initialize result with agentCapabilities', () async {
     final hub = newHub();
-    expect(hub.initializeResultOf('fake'), isNull);
-    expect(hub.initializeResultOf('unknown'), isNull);
     final chat = await newChat();
     await hub.prompt(chat, 'echo hi');
 
-    final result = hub.initializeResultOf('fake');
+    final result = connections.single.initializeResult;
 
-    expect(result?['agentCapabilities'], containsPair('loadSession', true));
-    expect(result?['authMethods'], <Object?>[
+    expect(result['agentCapabilities'], containsPair('loadSession', true));
+    expect(result['authMethods'], <Object?>[
       <String, Object?>{'id': 'browser-login', 'name': 'Browser login'},
       <String, Object?>{
         'id': 'api-key',

@@ -12,8 +12,10 @@
 //                 list (codex-acp 2.5.0: identity only in the update, the request names just
 //                 the call; Gemini CLI 0.66.0: `<tool> (<server> MCP Server)` in both;
 //                 `gemini-command`: the title Gemini takes from a `command` argument,
-//                 `x (flutter_code_agent MCP Server)`). `always-only` drops the allow-once
-//                 option. Call ids come from a counter. Replies like `permission`
+//                 `x (flutter_code_agent MCP Server)`; the Gemini titles are reconstructed
+//                 from the Gemini CLI 0.66.0 source, not recorded from a running CLI).
+//                 `always-only` drops the allow-once option. Call ids come from a counter.
+//                 Replies like `permission`
 //   hang          never finish until the client sends session/cancel
 //   spawn         start a background process re-parented to launchd; its pid goes
 //                 to the file named by FAKE_AGENT_PID_FILE
