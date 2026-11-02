@@ -82,6 +82,15 @@ void main() {
     return AgentDefinition(id: 'silent', displayName: 'Silent', executable: script.path);
   }
 
+  /// Waits until the process [pid] no longer exists.
+  Future<void> expectGone(int pid) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (Process.killPid(pid, ProcessSignal.sigcont)) {
+      if (DateTime.now().isAfter(deadline)) fail('process $pid survived');
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+  }
+
   test('ready agent reports version, methods and capabilities', () async {
     final probe = createProbe();
     addTearDown(probe.dispose);
@@ -115,7 +124,7 @@ void main() {
     expect(result.authStatus.toString(), isNot(contains('example.com')));
   });
 
-  test('missing executable is a failure "command not found: …"', () async {
+  test('missing executable is not installed with its reason', () async {
     final probe = createProbe();
     addTearDown(probe.dispose);
 
@@ -123,8 +132,9 @@ void main() {
       const AgentDefinition(id: 'x', displayName: 'X', executable: 'no-such-agent-binary'),
     );
 
-    expect(result.failure, 'command not found: no-such-agent-binary');
-    expect(result.notInstalled, isFalse);
+    expect(result.notInstalled, isTrue);
+    expect(result.notInstalledReason, contains('no-such-agent-binary'));
+    expect(result.failure, isNull);
   });
 
   test('old Node is not installed with the hint', () async {
@@ -136,6 +146,7 @@ void main() {
     );
 
     expect(result.notInstalled, isTrue);
+    expect(result.notInstalledReason, contains('Node.js 999'));
     expect(result.notInstalledHint, contains('Node.js 999'));
     expect(result.failure, isNull);
   });
@@ -144,10 +155,12 @@ void main() {
     final probe = createProbe(timeout: const Duration(milliseconds: 700));
     addTearDown(probe.dispose);
 
-    final result = await probe.probe(silentAgent());
+    final pidFile = File(p.join(temp.path, 'timeout.pid'));
+    final result = await probe.probe(silentAgent(pidFile: pidFile.path));
 
     expect(result.failure, 'no ACP answer to initialize');
     expect(result.notInstalled, isFalse);
+    await expectGone(int.parse(pidFile.readAsStringSync().trim()));
   });
 
   test('the probe process is gone afterwards', () async {
@@ -177,17 +190,27 @@ void main() {
 
     final pidFile = File(p.join(temp.path, 'silent.pid'));
     final running = probe.probe(silentAgent(pidFile: pidFile.path));
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+    final started = DateTime.now().add(const Duration(seconds: 10));
+    while (!pidFile.existsSync() || pidFile.readAsStringSync().trim().isEmpty) {
+      if (DateTime.now().isAfter(started)) fail('the silent agent did not start');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
     final pid = int.parse(pidFile.readAsStringSync().trim());
     await probe.dispose();
     final result = await running.timeout(const Duration(seconds: 10));
 
     expect(result.failure, isNotNull);
     expect(opened, isEmpty);
-    final deadline = DateTime.now().add(const Duration(seconds: 10));
-    while (Process.killPid(pid, ProcessSignal.sigcont)) {
-      if (DateTime.now().isAfter(deadline)) fail('the starting agent survived dispose');
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
+    await expectGone(pid);
+  });
+
+  test('probe after dispose fails without starting anything', () async {
+    final probe = createProbe();
+    await probe.dispose();
+
+    final result = await probe.probe(fakeAgent);
+
+    expect(result.failure, 'probe disposed');
+    expect(opened, isEmpty);
   });
 }

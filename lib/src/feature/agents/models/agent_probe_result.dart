@@ -71,6 +71,9 @@ abstract class AgentProbeResult with _$AgentProbeResult {
     /// The agent or what it needs (Node.js) is missing; [notInstalledHint] says how to fix it.
     @Default(false) bool notInstalled,
 
+    /// What is missing, as the preflight words it (names the executable or the Node.js version).
+    String? notInstalledReason,
+
     /// Command or action that installs what is missing.
     String? notInstalledHint,
   }) = _AgentProbeResult;

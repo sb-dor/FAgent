@@ -47,9 +47,11 @@ final class AgentProbeImpl implements IAgentProbe {
   final Duration _authStatusWait;
   final AgentConnector _connect;
   final Set<_ProbeRun> _runs = <_ProbeRun>{};
+  bool _disposed = false;
 
   @override
   Future<AgentProbeResult> probe(AgentDefinition agent) async {
+    if (_disposed) return const AgentProbeResult(failure: 'probe disposed');
     final run = _ProbeRun();
     _runs.add(run);
     try {
@@ -58,15 +60,16 @@ final class AgentProbeImpl implements IAgentProbe {
       return const AgentProbeResult(failure: 'probe cancelled');
     } on AgentPreflightException catch (error) {
       // The executable is missing, or Node.js is missing or too old.
-      if (error.message.startsWith('Node.js')) {
-        return AgentProbeResult(notInstalled: true, notInstalledHint: error.hint);
-      }
-      return AgentProbeResult(failure: 'command not found: ${agent.executable}');
+      return AgentProbeResult(
+        notInstalled: true,
+        notInstalledReason: error.message,
+        notInstalledHint: error.hint,
+      );
     } on AgentStartException catch (error) {
       return AgentProbeResult(failure: run.timedOut ? _noAnswer : _firstLine(error));
     } on Object catch (error, stackTrace) {
       l.w('Agents | probing ${agent.id} failed: $error', stackTrace);
-      return AgentProbeResult(failure: '$error');
+      return AgentProbeResult(failure: '$error'.split('\n').first);
     } finally {
       _runs.remove(run);
       await run.finish();
@@ -74,8 +77,10 @@ final class AgentProbeImpl implements IAgentProbe {
   }
 
   @override
-  Future<void> dispose() =>
-      Future.wait(<Future<void>>[for (final run in _runs.toList()) run.cancel()]);
+  Future<void> dispose() {
+    _disposed = true;
+    return Future.wait(<Future<void>>[for (final run in _runs.toList()) run.cancel()]);
+  }
 
   Future<AgentProbeResult> _probe(AgentDefinition agent, _ProbeRun run) async {
     run.startedAt = Stopwatch()..start();
