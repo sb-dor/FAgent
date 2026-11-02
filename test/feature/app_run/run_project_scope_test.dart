@@ -17,24 +17,30 @@ import '../../support/test_app.dart';
 
 /// A picker whose pick ends when the test says so.
 final class _ManualPicker implements IWidgetPickerRepository {
-  final List<Completer<PickedWidget?>> pending = <Completer<PickedWidget?>>[];
+  final List<Completer<PickResult>> pending = <Completer<PickResult>>[];
 
   @override
-  bool get isPreview => true;
-
-  @override
-  Future<PickedWidget?> pick(int projectId) {
-    final completer = Completer<PickedWidget?>();
+  Future<PickResult> pick(int projectId) {
+    final completer = Completer<PickResult>();
     pending.add(completer);
     return completer.future;
   }
+
+  @override
+  Future<void> cancel(int projectId) async {}
+
+  @override
+  Future<PickResult> select(int projectId, String id) async => const PickGone();
+
+  @override
+  Future<void> dispose() async {}
 }
 
 const PickedWidget _fromA = PickedWidget(
   name: 'WidgetOfA',
   file: 'lib/a.dart',
   line: 1,
-  ancestors: <String>[],
+  ancestors: <PickedAncestor>[],
 );
 
 void main() {
@@ -120,7 +126,7 @@ void main() {
       reason: 'project B never asked for a pick',
     );
 
-    picker.pending.single.complete(_fromA);
+    picker.pending.single.complete(const PickPicked(_fromA));
     await settle(tester);
     await settle(tester);
 
@@ -142,7 +148,7 @@ void main() {
 
     await tester.tap(inPane('Pick a widget in the app'));
     await tester.pump();
-    picker.pending.single.complete(_fromA);
+    picker.pending.single.complete(const PickPicked(_fromA));
     await settle(tester);
     await settle(tester);
 

@@ -5,7 +5,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_co
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/memory_devices_repository.dart';
 import '../../support/memory_run_config_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
+import '../../support/scripted_widget_picker_repository.dart';
 
 const Device _macos = Device(
   id: 'macos',
@@ -289,7 +290,7 @@ void main() {
         name: 'Card',
         file: 'lib/card.dart',
         line: 7,
-        ancestors: <String>[],
+        ancestors: <PickedAncestor>[],
       );
 
       controller.setPicked(picked);
@@ -420,7 +421,7 @@ void main() {
       addTearDown(run.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
       await pumpEventQueue();
@@ -486,7 +487,7 @@ void main() {
       addTearDown(subscription.cancel);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
 
@@ -509,7 +510,7 @@ void main() {
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
 
@@ -521,12 +522,34 @@ void main() {
       expect(state.picked!.name, 'BookingCard');
     });
 
+    test('pickWidget completes with null when nothing was picked', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final picker = ScriptedWidgetPickerRepository(step: _step);
+      final actions = RunActionsController(runRepository: repository, pickerRepository: picker);
+      addTearDown(actions.dispose);
+
+      for (final result in <PickResult>[
+        const PickCancelled(),
+        const PickNoProjectWidget(),
+        const PickGone(),
+        const PickFailed(PickFailed.connectionLost),
+      ]) {
+        picker.result = result;
+        actions.pickWidget(1);
+        await Future<void>.delayed(_step * 50);
+
+        final state = actions.state as RunActions$CompletedState;
+        expect(state.picked, isNull, reason: '$result');
+      }
+    });
+
     test('stop is not dropped while another action hangs', () async {
       final repository = _ScriptedRunRepository()..screenshotGate = Completer<String?>();
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
 
@@ -547,7 +570,7 @@ void main() {
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step * 20),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step * 20),
       );
       addTearDown(actions.dispose);
 

@@ -105,9 +105,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// bar, the `@` menu) says so. The widget picker is separate: see [pickerIsPreview].
   late final bool runIsPreview;
 
-  /// Whether the widget picker is made up. Next to a real run its widget (a `BookingCard` that is
-  /// not in the app) would be a lie, so the Run tab says "Coming in M6" instead of picking.
-  late final bool pickerIsPreview;
+  /// Whether the widget picker is made up; it never is since it talks to the app's inspector, so
+  /// the Run tab always picks.
+  final bool pickerIsPreview = false;
 
   /// Asks the user for a folder; the argument is the text of the confirm button. Tests replace it,
   /// because the native picker cannot be driven from a widget test.
@@ -154,7 +154,6 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     sessionsController.watchAll();
     runIsPreview =
         dependencies.appRunRepository.isPreview || dependencies.devicesRepository.isPreview;
-    pickerIsPreview = dependencies.widgetPickerRepository.isPreview;
     devicesController = DevicesController(repository: dependencies.devicesRepository)..watch();
     runController = RunController(
       repository: dependencies.appRunRepository,

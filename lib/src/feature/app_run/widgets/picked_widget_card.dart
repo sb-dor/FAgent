@@ -79,7 +79,7 @@ class PickedWidgetCard extends StatelessWidget {
                   ),
                   if (picked.ancestors.isNotEmpty)
                     Text(
-                      picked.ancestors.join(' › '),
+                      picked.ancestors.map((ancestor) => ancestor.name).join(' › '),
                       style: textTheme.bodySmall!.copyWith(color: colors.muted),
                     ),
                   const SizedBox(height: 8),

@@ -90,10 +90,12 @@ final class RunActionsController extends StateController<RunActionsState>
     setState(RunActionsState.completed(projectId: projectId, screenshot: path));
   }, error: (error, stackTrace) async => setState(RunActionsState.error(error: error)));
 
-  /// Lets the user pick a widget in the app; completes with it, or with `null` if none was picked.
+  /// Lets the user pick a widget in the app; completes with it, or with `null` if none was picked
+  /// (cancelled, no widget of the project, failed).
   void pickWidget(int projectId) => handle(() async {
     setState(const RunActionsState.inProgress());
-    final picked = await _pickerRepository.pick(projectId);
+    final result = await _pickerRepository.pick(projectId);
+    final picked = result is PickPicked ? result.widget : null;
     setState(RunActionsState.completed(projectId: projectId, picked: picked));
   }, error: (error, stackTrace) async => setState(RunActionsState.error(error: error)));
 

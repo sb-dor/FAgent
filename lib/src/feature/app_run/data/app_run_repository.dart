@@ -97,6 +97,43 @@ const String kScreenshotsFolder = '.dart_tool/flutter_code_agent/screenshots';
 /// How many of the newest screenshots a project keeps.
 const int kScreenshotLimit = 20;
 
+/// Writes [bytes] to a new PNG in the screenshot folder of the project at [root] and returns its path
+/// relative to [root]. The file is `<name>.png`, or `<name>-2.png` and so on when that exists.
+/// Then drops all but the newest [kScreenshotLimit] shots of the folder: the app's
+/// (`screenshot-…`) and the widget picker's (`widget-…`) together; other files are left alone.
+Future<String> saveScreenshotPng(String root, List<int> bytes, {required String name}) async {
+  final folder = io.Directory(p.join(root, kScreenshotsFolder));
+  await folder.create(recursive: true);
+  var unique = name;
+  for (var n = 2; io.File(p.join(folder.path, '$unique.png')).existsSync(); n++) {
+    unique = '$name-$n';
+  }
+  final file = io.File(p.join(folder.path, '$unique.png'));
+  await file.writeAsBytes(bytes, flush: true);
+  try {
+    final shots =
+        <({String path, DateTime modified})>[
+            await for (final entity in folder.list())
+              if (entity is io.File && _shotName.hasMatch(p.basename(entity.path)))
+                (path: entity.path, modified: entity.lastModifiedSync()),
+          ]
+          // Oldest first; the name orders shots of the same moment (the app's carry a time stamp).
+          ..sort((a, b) {
+            final byTime = a.modified.compareTo(b.modified);
+            return byTime != 0 ? byTime : a.path.compareTo(b.path);
+          });
+    for (final old in shots.take(math.max(0, shots.length - kScreenshotLimit))) {
+      if (old.path != file.path) await io.File(old.path).delete();
+    }
+  } on io.FileSystemException catch (error) {
+    l.w('Screenshots | cannot prune the screenshots in ${folder.path}: $error');
+  }
+  return p.posix.join(kScreenshotsFolder, '$unique.png');
+}
+
+/// The shots [saveScreenshotPng] counts toward [kScreenshotLimit].
+final RegExp _shotName = RegExp(r'^(screenshot|widget)-.+\.png$');
+
 /// {@template app_run_repository_impl}
 /// Runs `flutter run --machine` per project and follows it over the daemon protocol: the events
 /// become the [RunState], the output goes through a [RunOutputParser] into the log.
@@ -373,7 +410,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       final root = await _projectPath(projectId);
       if (root == null) throw StateError('The project folder is unknown.');
       final bytes = await launch.screenshot();
-      return await _saveScreenshot(root, bytes);
+      return await saveScreenshotPng(root, bytes, name: 'screenshot-${_stamp(_now())}');
     } on DaemonRequestException catch (error) {
       _logFailure(run, launch, title, '${error.error}');
     } on Object catch (error, stackTrace) {
@@ -382,35 +419,6 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     }
     return null;
   }
-
-  /// Writes [bytes] to a new file in the screenshot folder of [root], drops all but the newest
-  /// [kScreenshotLimit] and returns the path of the new one relative to [root].
-  Future<String> _saveScreenshot(String root, List<int> bytes) async {
-    final folder = io.Directory(p.join(root, kScreenshotsFolder));
-    await folder.create(recursive: true);
-    final stamp = _stamp(_now());
-    var name = 'screenshot-$stamp';
-    for (var n = 2; io.File(p.join(folder.path, '$name.png')).existsSync(); n++) {
-      name = 'screenshot-$stamp-$n';
-    }
-    final file = io.File(p.join(folder.path, '$name.png'));
-    await file.writeAsBytes(bytes, flush: true);
-    try {
-      final names = <String>[
-        await for (final entity in folder.list())
-          if (entity is io.File && _screenshotName.hasMatch(p.basename(entity.path)))
-            p.basenameWithoutExtension(entity.path),
-      ]..sort();
-      for (final old in names.take(math.max(0, names.length - kScreenshotLimit))) {
-        await io.File(p.join(folder.path, '$old.png')).delete();
-      }
-    } on io.FileSystemException catch (error) {
-      l.w('AppRunRepository | cannot prune the screenshots in ${folder.path}: $error');
-    }
-    return p.posix.join(kScreenshotsFolder, '$name.png');
-  }
-
-  static final RegExp _screenshotName = RegExp(r'^screenshot-.+\.png$');
 
   /// `yyyyMMdd-HHmmss`.
   static String _stamp(DateTime time) {

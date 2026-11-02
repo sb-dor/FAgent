@@ -310,7 +310,7 @@ void main() {
           name: 'BookingCard',
           file: 'lib/src/feature/booking/widgets/booking_card.dart',
           line: 42,
-          ancestors: <String>[],
+          ancestors: <PickedAncestor>[],
         ),
       );
       await tester.pump();
@@ -732,7 +732,7 @@ void main() {
           name: 'BookingCard',
           file: 'lib/src/feature/booking/widgets/booking_card.dart',
           line: 42,
-          ancestors: <String>[],
+          ancestors: <PickedAncestor>[],
         ),
       );
       await settle(tester);

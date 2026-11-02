@@ -505,7 +505,15 @@ void main() {
           name: 'BookingCard',
           file: 'lib/src/feature/booking/widgets/booking_card.dart',
           line: 42,
-          ancestors: <String>['Row', 'Padding', 'BookingCard', 'ListView', 'BookingScreen'],
+          ancestors: <PickedAncestor>[
+            PickedAncestor(name: 'BookingList', file: 'lib/booking_list.dart', line: 20, id: 'a'),
+            PickedAncestor(
+              name: 'BookingScreen',
+              file: 'lib/booking_screen.dart',
+              line: 9,
+              id: 'b',
+            ),
+          ],
         ),
       );
       await startAndReload(tester);
@@ -1074,7 +1082,7 @@ void main() {
       expect(find.text('Tap a widget in the running app…'), findsNothing);
       expect(find.text('BookingCard'), findsOneWidget);
       expect(find.text('booking_card.dart:42'), findsOneWidget);
-      expect(find.text('Row › Padding › BookingCard › ListView › BookingScreen'), findsOneWidget);
+      expect(find.text('BookingList › BookingScreen'), findsOneWidget);
       expect(find.text('Add to message'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });

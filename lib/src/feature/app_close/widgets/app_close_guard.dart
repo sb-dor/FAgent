@@ -41,6 +41,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             settings: AppSettingsRepositoryImpl(database: dependencies.database),
             appRun: dependencies.appRunRepository,
             devices: dependencies.devicesRepository,
+            widgetPicker: dependencies.widgetPickerRepository,
             appMcpServer: dependencies.appMcpServer,
             mcpProbe: dependencies.mcpProbe,
             agentProbe: dependencies.agentProbe,

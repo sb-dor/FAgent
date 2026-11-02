@@ -74,6 +74,9 @@ void main() {
         client.events.listen(events.add);
         // Waits for the streams to be listened to.
         await client.setSelectMode('isolates/1', enabled: true);
+        // The app's echo of that call.
+        await pumpEventQueue();
+        events.clear();
       });
 
       Future<void> settle() => pumpEventQueue();

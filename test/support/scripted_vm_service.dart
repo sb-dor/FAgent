@@ -118,7 +118,13 @@ final class ScriptedVmService {
           });
         }
       case inspectorShowExtension:
-        _inspector(id, method, <String, Object?>{'enabled': params['enabled'] ?? 'false'});
+        final enabled = params['enabled'] ?? 'false';
+        // The framework posts the new state for every call, its caller's own included, before it
+        // answers.
+        if (inspectorErrorCode == null) {
+          emitSelectModeChanged(enabled == 'true', isolateId: params['isolateId']! as String);
+        }
+        _inspector(id, method, <String, Object?>{'enabled': enabled});
       case 'ext.flutter.inspector.getSelectedSummaryWidget':
         _inspector(id, method, <String, Object?>{'result': selectedSummaryWidget});
       case 'ext.flutter.inspector.getParentChain':
