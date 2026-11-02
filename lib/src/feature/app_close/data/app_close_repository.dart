@@ -28,8 +28,9 @@ abstract interface class IAppCloseRepository {
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
-  /// Ends a widget pick, then stops the runs, the devices daemon, a project creation, the agent list, the agents, the app's
-  /// MCP server, the MCP status probes and the agent probes, then closes the database.
+  /// Ends a widget pick, then stops the runs, the devices daemon, a project creation, the agent
+  /// list, the agents, the app's MCP server, the MCP status probes and the agent probes, then
+  /// closes the database.
   Future<void> shutdown();
 
   /// Quits the app (answering a pending ⌘Q or logout on macOS).

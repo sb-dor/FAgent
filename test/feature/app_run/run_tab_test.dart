@@ -508,7 +508,8 @@ void main() {
 
       Finder pickButton() => find.widgetWithIcon(IconButton, Icons.ads_click);
 
-      bool canPick(WidgetTester tester) => tester.widget<IconButton>(pickButton()).onPressed != null;
+      bool canPick(WidgetTester tester) =>
+          tester.widget<IconButton>(pickButton()).onPressed != null;
 
       const hint = 'Tap a widget in the running app…';
 

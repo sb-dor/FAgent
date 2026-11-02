@@ -163,10 +163,9 @@ final class RunActionsController extends StateController<RunActionsState>
           chain: <PickedAncestor>[_link(widget), ...widget.ancestors],
         ),
         PickCancelled() => idle,
-        PickNoProjectWidget() || PickGone() || PickFailed() => RunPickState(
-          projectId: projectId,
-          problem: result,
-        ),
+        PickNoProjectWidget() ||
+        PickGone() ||
+        PickFailed() => RunPickState(projectId: projectId, problem: result),
       };
     });
   }
