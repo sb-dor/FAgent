@@ -62,7 +62,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
   /// Whether the folder could not be checked (or no default folder could be found).
   bool _folderFailed = false;
 
-  /// Whether the git template was tapped: it is a preview, so the form says so inline.
+  /// Whether the git template was tapped: it is not available yet, so the form says so inline.
   bool _gitHint = false;
 
   @override
@@ -171,7 +171,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
   });
 
   void _chooseTemplate(NewProjectTemplate template) {
-    // A SnackBar would show under the dialog's barrier, so the preview note is inline.
+    // A SnackBar would show under the dialog's barrier, so the hint is inline.
     setState(() {
       _gitHint = template == NewProjectTemplate.git;
       if (!_gitHint) _template = template;
@@ -255,7 +255,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         gap,
         _Field(
           label: localization.newProjectTemplate,
-          messages: <Widget>[if (_gitHint) _Message.hint(localization.comingInMilestone('M4'))],
+          messages: <Widget>[if (_gitHint) _Message.hint(localization.comingLater)],
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[

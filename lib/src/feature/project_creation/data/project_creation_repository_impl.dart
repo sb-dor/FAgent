@@ -55,9 +55,6 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   final Set<_Run> _runs = <_Run>{};
 
   @override
-  bool get isPreview => false;
-
-  @override
   Future<String> defaultParent() async {
     try {
       final last =

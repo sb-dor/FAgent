@@ -37,9 +37,6 @@ final class _SlowTargets implements IProjectCreationRepository {
   final Map<String, Completer<TargetProblem?>> answers = <String, Completer<TargetProblem?>>{};
 
   @override
-  bool get isPreview => true;
-
-  @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
   @override
@@ -58,9 +55,6 @@ final class _SlowTargets implements IProjectCreationRepository {
 /// A repository whose default folder arrives when the test says so.
 final class _SlowParent implements IProjectCreationRepository {
   final Completer<String> parent = Completer<String>();
-
-  @override
-  bool get isPreview => true;
 
   @override
   Future<String> defaultParent() => parent.future;
@@ -83,9 +77,6 @@ final class _FailingFolders implements IProjectCreationRepository {
   _FailingFolders({this.failDefaultParent = false});
 
   final bool failDefaultParent;
-
-  @override
-  bool get isPreview => true;
 
   @override
   Future<String> defaultParent() async {
@@ -437,24 +428,24 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('git template is a preview', (tester) async {
+  testWidgets('git template says coming later', (tester) async {
     await openDialog(tester);
 
-    expect(find.text('Coming in M4'), findsNothing);
+    expect(find.text('Coming later'), findsNothing);
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
 
     // Shown inline: a SnackBar would sit under the dialog's barrier.
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
 
     await tester.tap(find.text('My architecture'));
     await tester.pump();
-    expect(find.text('Coming in M4'), findsNothing);
+    expect(find.text('Coming later'), findsNothing);
 
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     await typeName(tester, 'avera_booking');
     await tester.tap(createButton());
     await tester.pumpAndSettle();
@@ -543,7 +534,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('clone stays a preview', (tester) async {
+  testWidgets('clone says coming later', (tester) async {
     await openDialog(tester);
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
@@ -553,7 +544,7 @@ void main() {
     await tester.tap(find.text('Clone from git…'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     expect(find.byType(NewProjectDialog), findsNothing);
     await disposeTestApp(tester, dependencies);
   });

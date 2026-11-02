@@ -52,9 +52,6 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
   StreamSubscription<CreationRun>? _subscription;
   Completer<void>? _finished;
 
-  /// Whether the creation is a made-up run that writes nothing (until milestone M4).
-  bool get isPreview => _repository.isPreview;
-
   /// The folder to suggest as the parent of a new project.
   Future<String> defaultParent() => _repository.defaultParent();
 

@@ -182,9 +182,6 @@ void main() {
 
 final class _FailingRepository implements IProjectCreationRepository {
   @override
-  bool get isPreview => true;
-
-  @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
   @override
@@ -212,9 +209,6 @@ final class _FailedStepRepository implements IProjectCreationRepository {
   _FailedStepRepository({this.failAt = 0});
 
   final int failAt;
-
-  @override
-  bool get isPreview => true;
 
   @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';

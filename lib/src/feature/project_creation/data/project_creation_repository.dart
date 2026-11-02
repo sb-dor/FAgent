@@ -12,9 +12,6 @@ enum TargetProblem {
 
 /// Creates new Flutter projects.
 abstract interface class IProjectCreationRepository {
-  /// Whether [create] only pretends (until milestone M4).
-  bool get isPreview;
-
   /// The folder to suggest as the parent: the one the last opened project is in, if it is on
   /// disk; else `~/StudioProjects`, if it exists; else the home folder.
   Future<String> defaultParent();

@@ -436,6 +436,20 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     });
   }
 
+  /// Opens the project that the New project wizard has just created: it becomes selected and the
+  /// window leaves Skills or Settings for the chat view (asking about unsaved work first). With
+  /// [openChat] a new chat with the default agent is started there too, as [createChat] does.
+  void openCreatedProject(int projectId, {required bool openChat}) {
+    if (openChat) {
+      createChat(projectId: projectId);
+      return;
+    }
+    dataController.whenMayLeave(() {
+      dataController.selectProject(projectId);
+      if (dataController.view != WorkspaceView.chat) dataController.backToChat();
+    });
+  }
+
   /// Asks which chat to open, then opens it: its project and the chat become selected and the
   /// window leaves Skills or Settings for the chat.
   Future<void> openChatSearch() async {

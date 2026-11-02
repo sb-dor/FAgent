@@ -201,13 +201,13 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('the git template is a preview', (tester) async {
+  testWidgets('the git template says coming later', (tester) async {
     await openSettings(tester);
 
     await tester.tap(find.text('From git'));
     await tester.pump();
     await _settle(tester);
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     expect(_settings(tester).projectTemplate, NewProjectTemplate.architecture);
     await disposeTestApp(tester, dependencies);
   });

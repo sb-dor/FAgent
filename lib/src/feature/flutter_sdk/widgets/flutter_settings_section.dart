@@ -344,7 +344,7 @@ class _NewProjectGroup extends StatelessWidget {
                     selected: settings.settings.projectTemplate,
                     onChanged: (template) {
                       if (template == NewProjectTemplate.git) {
-                        scope.showComingSoon('M4');
+                        scope.showComingLater();
                         return;
                       }
                       settings.update((s) => s.copyWith(projectTemplate: template));

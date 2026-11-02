@@ -175,8 +175,6 @@ void main() {
     expect(condition(), isTrue, reason: 'timed out');
   }
 
-  test('is not a preview', () => expect(build().isPreview, isFalse));
-
   group('create', () {
     test("architecture with git runs the five steps' commands", () async {
       final runs = await build().create(request()).toList();

@@ -103,9 +103,6 @@ final class _RecordingCreation implements IProjectCreationRepository {
   final Error? error;
 
   @override
-  bool get isPreview => false;
-
-  @override
   Future<String> defaultParent() async => '/';
 
   @override

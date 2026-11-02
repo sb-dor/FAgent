@@ -62,9 +62,6 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
   final List<NewProjectRequest> requests = <NewProjectRequest>[];
 
   @override
-  bool get isPreview => true;
-
-  @override
   Future<String> defaultParent() async => parent;
 
   @override
