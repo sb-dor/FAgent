@@ -6,6 +6,11 @@ abstract interface class IFlutterSdkRepository {
   /// is described.
   Future<FlutterSdk> sdkFor(String? projectPath);
 
+  /// The `flutter` executable that [projectPath] builds with; `null` when there is none. Starts no
+  /// process, so a caller that only needs the path does not wait for [sdkFor] to ask `flutter` for
+  /// its version.
+  Future<String?> pathFor(String? projectPath);
+
   /// Runs `flutter doctor` and returns its checks in report order.
   Future<List<DoctorCheck>> doctor();
 }

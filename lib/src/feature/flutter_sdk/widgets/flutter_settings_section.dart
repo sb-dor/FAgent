@@ -18,8 +18,8 @@ import 'package:flutter_code_agent/src/feature/flutter_sdk/widgets/flutter_sdk_c
 /// `flutter doctor` report with a button that hands a finding to an agent, what a new project
 /// starts from, and where DevTools opens.
 ///
-/// The Flutter version, the doctor report, the `git` template and in-app DevTools are previews
-/// (milestones M4 and M2) and say so.
+/// The doctor report, the `git` template and in-app DevTools are previews (made up or not built
+/// yet) and say so.
 /// {@endtemplate}
 class FlutterSettingsSection extends StatelessWidget {
   /// {@macro flutter_settings_section}
@@ -344,7 +344,7 @@ class _NewProjectGroup extends StatelessWidget {
                     selected: settings.settings.projectTemplate,
                     onChanged: (template) {
                       if (template == NewProjectTemplate.git) {
-                        scope.showComingSoon('M4');
+                        scope.showComingLater();
                         return;
                       }
                       settings.update((s) => s.copyWith(projectTemplate: template));

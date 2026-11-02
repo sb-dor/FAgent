@@ -15,7 +15,9 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 /// It reads the window's [ProjectCreationController] from the workspace, so it has to be shown
 /// under a [WorkspaceConfigInhWidget] (`WorkspaceConfigWidgetState.openNewProject` does that).
 /// Closing it does not stop a creation: the controller lives as long as the window, and the
-/// dialog opens on the progress again while the creation runs or waits for its "Done".
+/// dialog opens on the progress again while the creation runs or waits for its "Close" or
+/// "Open project". "Open project" closes the dialog and opens the created project in the
+/// workspace, with a chat if the request asked for one.
 /// {@endtemplate}
 class NewProjectDialog extends StatefulWidget {
   /// {@macro new_project_dialog}
@@ -30,7 +32,7 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
 
   /// Closes the dialog and, once it has faded out (so the empty form does not flash), resets the
   /// finished creation.
-  void _done() {
+  void _close() {
     final creation = _creation;
     final animation = ModalRoute.of(context)?.animation;
     Navigator.of(context).pop();
@@ -45,6 +47,18 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
     }
 
     animation.addStatusListener(onStatus);
+  }
+
+  /// Closes the dialog as [_close] does and opens the created project [projectId].
+  void _openProject(int projectId) {
+    final workspace = WorkspaceConfigInhWidget.of(context);
+    final openChat = switch (_creation.state) {
+      ProjectCreation$CompletedState(:final request) ||
+      ProjectCreation$FailedState(:final request) => request.openChat,
+      _ => false,
+    };
+    _close();
+    workspace.openCreatedProject(projectId, openChat: openChat);
   }
 
   @override
@@ -81,7 +95,11 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
                   const Flexible(child: NewProjectForm()),
                 ],
               ),
-              _ => CreationProgress(controller: _creation, onDone: _done),
+              _ => CreationProgress(
+                controller: _creation,
+                onClose: _close,
+                onOpenProject: _openProject,
+              ),
             },
           ),
         ),

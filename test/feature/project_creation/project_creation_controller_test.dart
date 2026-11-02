@@ -120,6 +120,97 @@ void main() {
     expect((state.error as CreationStepFailed).kind, creationStepsFor(_request)[1]);
   });
 
+  test('completed carries the project id', () async {
+    repository.completedProjectId = 7;
+
+    controller.start(_request);
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    expect((controller.state as ProjectCreation$CompletedState).projectId, 7);
+  });
+
+  test('failed carries the project id', () async {
+    final failing = ProjectCreationController(
+      repository: MemoryProjectCreationRepository()
+        ..failAt = CreationStepKind.analyze
+        ..completedProjectId = 7,
+    );
+    addTearDown(failing.dispose);
+
+    failing.start(_request);
+    await _until(failing, () => failing.state is! ProjectCreation$RunningState);
+
+    final state = failing.state as ProjectCreation$FailedState;
+    expect(state.projectId, 7);
+    expect((state.error as CreationStepFailed).kind, CreationStepKind.analyze);
+  });
+
+  test('stop asks the repository while running, and only then', () async {
+    controller.stop();
+    expect(repository.stopCalls, 0);
+
+    controller
+      ..start(_request)
+      ..stop();
+    expect(repository.stopCalls, 1);
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    controller.stop();
+    expect(repository.stopCalls, 1);
+  });
+
+  test('stop twice asks the repository once', () async {
+    controller
+      ..start(_request)
+      ..stop()
+      ..stop();
+
+    expect(repository.stopCalls, 1);
+    expect((controller.state as ProjectCreation$RunningState).stopping, isTrue);
+    await _until(controller, () => controller.state is! ProjectCreation$RunningState);
+  });
+
+  test('stopping survives later snapshots', () async {
+    final slow = MemoryProjectCreationRepository(step: const Duration(milliseconds: 5));
+    final stopping = ProjectCreationController(repository: slow);
+    addTearDown(stopping.dispose);
+
+    stopping.start(_request);
+    await Future<void>.delayed(const Duration(milliseconds: 12));
+    final before = (stopping.state as ProjectCreation$RunningState).steps;
+    stopping.stop();
+    await Future<void>.delayed(const Duration(milliseconds: 25));
+
+    final state = stopping.state as ProjectCreation$RunningState;
+    expect(state.stopping, isTrue);
+    expect(state.steps, isNot(before));
+    await _until(stopping, () => stopping.state is! ProjectCreation$RunningState);
+  });
+
+  test('a run that ends with a running step is failed, not completed', () async {
+    final interrupted = ProjectCreationController(repository: _InterruptedRepository());
+    addTearDown(interrupted.dispose);
+
+    interrupted.start(_request);
+    await _until(interrupted, () => interrupted.state is! ProjectCreation$RunningState);
+
+    final state = interrupted.state as ProjectCreation$FailedState;
+    expect(state.error, isA<CreationInterrupted>());
+    expect('${state.error}', 'CreationInterrupted');
+    expect(state.projectId, 5);
+    expect(state.steps.first.status, CreationStepStatus.done);
+    expect(state.steps[1].status, CreationStepStatus.running);
+  });
+
+  test('a creation without a project id completes with null', () async {
+    repository.completedProjectId = null;
+
+    controller.start(_request);
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    expect((controller.state as ProjectCreation$CompletedState).projectId, isNull);
+  });
+
   test('dispose cancels the subscription', () async {
     final slow = MemoryProjectCreationRepository(step: const Duration(milliseconds: 5));
     final sliding = ProjectCreationController(repository: slow)..start(_request);
@@ -134,19 +225,24 @@ void main() {
 
 final class _FailingRepository implements IProjectCreationRepository {
   @override
-  bool get isPreview => true;
-
-  @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
   @override
   Future<TargetProblem?> checkTarget(String parent, String name) async => null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) async* {
-    yield <CreationStep>[
-      CreationStep(kind: creationStepsFor(request).first, status: CreationStepStatus.running),
-    ];
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) async* {
+    yield CreationRun(
+      steps: <CreationStep>[
+        CreationStep(kind: creationStepsFor(request).first, status: CreationStepStatus.running),
+      ],
+    );
     throw StateError('flutter create failed');
   }
 }
@@ -158,8 +254,38 @@ final class _FailedStepRepository implements IProjectCreationRepository {
   final int failAt;
 
   @override
-  bool get isPreview => true;
+  Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async => null;
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) async* {
+    final kinds = creationStepsFor(request);
+    yield CreationRun(steps: <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)]);
+    yield CreationRun(
+      steps: <CreationStep>[
+        for (var i = 0; i < kinds.length; i++)
+          CreationStep(
+            kind: kinds[i],
+            status: i < failAt
+                ? CreationStepStatus.done
+                : (i == failAt ? CreationStepStatus.failed : CreationStepStatus.pending),
+          ),
+      ],
+    );
+  }
+}
+
+/// A stream that registers the project, leaves the second step running and ends normally, as
+/// after a dispose of the repository.
+final class _InterruptedRepository implements IProjectCreationRepository {
   @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
@@ -167,17 +293,21 @@ final class _FailedStepRepository implements IProjectCreationRepository {
   Future<TargetProblem?> checkTarget(String parent, String name) async => null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) async* {
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) async* {
     final kinds = creationStepsFor(request);
-    yield <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
-    yield <CreationStep>[
-      for (var i = 0; i < kinds.length; i++)
-        CreationStep(
-          kind: kinds[i],
-          status: i < failAt
-              ? CreationStepStatus.done
-              : (i == failAt ? CreationStepStatus.failed : CreationStepStatus.pending),
-        ),
-    ];
+    yield CreationRun(
+      steps: <CreationStep>[
+        CreationStep(kind: kinds[0], status: CreationStepStatus.done),
+        CreationStep(kind: kinds[1], status: CreationStepStatus.running),
+        for (final kind in kinds.skip(2)) CreationStep(kind: kind),
+      ],
+      projectId: 5,
+    );
   }
 }

@@ -12,8 +12,8 @@ enum CreationStepKind {
   /// `git init`.
   gitInit,
 
-  /// The architecture skeleton and the agent's instructions.
-  agentSetup,
+  /// The architecture skeleton: the template files and their packages.
+  skeleton,
 
   /// `flutter analyze`.
   analyze,
@@ -53,6 +53,18 @@ abstract class CreationStep with _$CreationStep {
   }) = _CreationStep;
 }
 
+/// A snapshot of a creation: all its steps as of now and the project, once it is registered.
+@freezed
+abstract class CreationRun with _$CreationRun {
+  /// Creates a snapshot.
+  const factory CreationRun({
+    required List<CreationStep> steps,
+
+    /// The id of the project in the app's database; `null` until the project is registered.
+    int? projectId,
+  }) = _CreationRun;
+}
+
 /// A creation whose steps ended with the step [kind] failed.
 final class CreationStepFailed implements Exception {
   /// Creates the error.
@@ -65,11 +77,21 @@ final class CreationStepFailed implements Exception {
   String toString() => 'CreationStepFailed(${kind.name})';
 }
 
+/// A creation whose stream ended before every step was done, for example because the repository was
+/// disposed while it ran.
+final class CreationInterrupted implements Exception {
+  /// Creates the error.
+  const CreationInterrupted();
+
+  @override
+  String toString() => 'CreationInterrupted';
+}
+
 /// The stages [request] goes through, in order.
 List<CreationStepKind> creationStepsFor(NewProjectRequest request) => <CreationStepKind>[
   CreationStepKind.flutterCreate,
   if (request.gitInit) CreationStepKind.gitInit,
-  if (request.template == NewProjectTemplate.architecture) CreationStepKind.agentSetup,
+  if (request.template == NewProjectTemplate.architecture) CreationStepKind.skeleton,
   CreationStepKind.analyze,
   if (request.gitInit) CreationStepKind.firstCommit,
 ];

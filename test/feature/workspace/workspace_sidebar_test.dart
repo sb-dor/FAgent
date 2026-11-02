@@ -390,7 +390,7 @@ void main() {
 
       await tester.tap(find.text('Clone from git…'));
       await tester.pumpAndSettle();
-      expect(find.text('Coming in M4'), findsOneWidget);
+      expect(find.text('Coming later'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
 

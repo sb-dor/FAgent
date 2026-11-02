@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/fake_flutter_sdk_repository.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
@@ -17,6 +17,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/wor
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/flutter_version_runner.dart';
 import '../../support/memory_project_creation_repository.dart';
 import '../../support/test_app.dart';
 
@@ -37,9 +38,6 @@ final class _SlowTargets implements IProjectCreationRepository {
   final Map<String, Completer<TargetProblem?>> answers = <String, Completer<TargetProblem?>>{};
 
   @override
-  bool get isPreview => true;
-
-  @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
   @override
@@ -47,15 +45,17 @@ final class _SlowTargets implements IProjectCreationRepository {
       (answers[name] = Completer<TargetProblem?>()).future;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 /// A repository whose default folder arrives when the test says so.
 final class _SlowParent implements IProjectCreationRepository {
   final Completer<String> parent = Completer<String>();
-
-  @override
-  bool get isPreview => true;
 
   @override
   Future<String> defaultParent() => parent.future;
@@ -64,7 +64,12 @@ final class _SlowParent implements IProjectCreationRepository {
   Future<TargetProblem?> checkTarget(String parent, String name) async => null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 /// A repository whose folder questions fail like an unreadable (protected) parent does:
@@ -73,9 +78,6 @@ final class _FailingFolders implements IProjectCreationRepository {
   _FailingFolders({this.failDefaultParent = false});
 
   final bool failDefaultParent;
-
-  @override
-  bool get isPreview => true;
 
   @override
   Future<String> defaultParent() async {
@@ -90,7 +92,12 @@ final class _FailingFolders implements IProjectCreationRepository {
   }
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 void main() {
@@ -127,8 +134,9 @@ void main() {
     );
     dependencies = testDependencies(
       projectCreationRepository: repository ?? memory,
-      flutterSdkRepository: FakeFlutterSdkRepositoryImpl(
+      flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => sdkPath,
+        runProcess: flutterVersionRunner,
         step: Duration.zero,
       ),
     );
@@ -422,24 +430,24 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('git template is a preview', (tester) async {
+  testWidgets('git template says coming later', (tester) async {
     await openDialog(tester);
 
-    expect(find.text('Coming in M4'), findsNothing);
+    expect(find.text('Coming later'), findsNothing);
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
 
     // Shown inline: a SnackBar would sit under the dialog's barrier.
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
 
     await tester.tap(find.text('My architecture'));
     await tester.pump();
-    expect(find.text('Coming in M4'), findsNothing);
+    expect(find.text('Coming later'), findsNothing);
 
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     await typeName(tester, 'avera_booking');
     await tester.tap(createButton());
     await tester.pumpAndSettle();
@@ -528,7 +536,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('clone stays a preview', (tester) async {
+  testWidgets('clone says coming later', (tester) async {
     await openDialog(tester);
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
@@ -538,7 +546,7 @@ void main() {
     await tester.tap(find.text('Clone from git…'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Coming in M4'), findsOneWidget);
+    expect(find.text('Coming later'), findsOneWidget);
     expect(find.byType(NewProjectDialog), findsNothing);
     await disposeTestApp(tester, dependencies);
   });

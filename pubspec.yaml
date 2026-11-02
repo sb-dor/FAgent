@@ -101,6 +101,16 @@ flutter:
     - assets/knowledge/skills/drift-migration/
     - assets/knowledge/skills/pub-freshness/
     - assets/knowledge/skills/widget-test/
+    - assets/project_template/architecture/
+    - assets/project_template/architecture/lib/
+    - assets/project_template/architecture/lib/src/common/utils/
+    - assets/project_template/architecture/lib/src/common/widget/
+    - assets/project_template/architecture/lib/src/common/localization/
+    - assets/project_template/architecture/lib/src/feature/initialization/models/
+    - assets/project_template/architecture/lib/src/feature/initialization/widget/
+    - assets/project_template/architecture/lib/src/feature/initialization/data/
+    - assets/project_template/architecture/lib/src/feature/home/widgets/
+    - assets/project_template/architecture/test/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -108,12 +108,11 @@ class FlutterSdkConfigWidgetState extends State<FlutterSdkConfigWidget> {
     );
   }
 
-  /// Says in a snack bar that an option arrives with [milestone].
-  void showComingSoon(String milestone) {
+  /// Says in a snack bar that an option arrives later.
+  void showComingLater() {
     if (!mounted) return;
-    ScaffoldMessenger.maybeOf(
-      context,
-    )?.showSnackBar(SnackBar(content: Text(Localization.of(context).comingInMilestone(milestone))));
+    ScaffoldMessenger.maybeOf(context)
+        ?.showSnackBar(SnackBar(content: Text(Localization.of(context).comingLater)));
   }
 
   @override

@@ -262,7 +262,7 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
         _scope.openNewProject().ignore();
       case _AddProjectAction.clone:
         ScaffoldMessenger.maybeOf(context)
-            ?.showSnackBar(SnackBar(content: Text(localization.comingInMilestone('M4'))));
+            ?.showSnackBar(SnackBar(content: Text(localization.comingLater)));
       case null:
         break;
     }

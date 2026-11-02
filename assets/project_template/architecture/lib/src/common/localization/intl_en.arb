@@ -1,0 +1,6 @@
+{
+  "@@locale": "en",
+  "appTitle": "{{package}}",
+  "homeMessage": "Your app starts here",
+  "somethingWentWrong": "Something went wrong"
+}
