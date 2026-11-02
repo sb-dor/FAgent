@@ -2,6 +2,7 @@ import 'package:control/control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
@@ -134,18 +135,28 @@ class _ChatScreenState extends State<ChatScreen> {
                             ? _scope.cycleMode
                             : null,
                         toolbar: <Widget>[
-                          ComposerToolbar(
-                            agentName: agentDisplayName(view.agentId),
-                            agentLocked: view.agentLocked,
-                            options: view.configOptions,
-                            enabled: view.canChangeConfig,
-                            onChanged: _scope.setConfig,
-                            onAttach: _scope.attachFile,
-                            onMakeDefault: _scope.makeDefault,
-                            chatSkills: chatSkills,
-                            chatSkillStates: _scope.chatSkillsController.states,
-                            onToggleChatSkill: _scope.setChatSkill,
-                            onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                          // Rebuilt when an agent's check changes its status.
+                          StateConsumer<AgentsController, AgentsState>(
+                            controller: _scope.agentsController,
+                            builder: (context, _, _) => ComposerToolbar(
+                              agentName: agentDisplayName(
+                                view.agentId,
+                                _scope.agentsController.agents,
+                              ),
+                              agentId: view.agentId,
+                              agents: _scope.agentsController.agents,
+                              onAgentSelected: _scope.setAgent,
+                              agentLocked: view.agentLocked,
+                              options: view.configOptions,
+                              enabled: view.canChangeConfig,
+                              onChanged: _scope.setConfig,
+                              onAttach: _scope.attachFile,
+                              onMakeDefault: _scope.makeDefault,
+                              chatSkills: chatSkills,
+                              chatSkillStates: _scope.chatSkillsController.states,
+                              onToggleChatSkill: _scope.setChatSkill,
+                              onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
+                            ),
                           ),
                         ],
                       ),

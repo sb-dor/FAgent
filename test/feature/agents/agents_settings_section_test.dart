@@ -90,7 +90,8 @@ final class _OpenLoginAgents extends MemoryAgentsRepository {
       lastLogin = AgentLogin.forTest(agentId, methodId);
 }
 
-/// A repository whose first watch fails with an error before any agent arrives.
+/// A repository whose watch of the Settings section fails with an error before any agent arrives.
+/// The workspace watches first (for the names in the sidebar), and that watch works.
 final class _FailingWatchAgents extends MemoryAgentsRepository {
   _FailingWatchAgents({super.agents});
 
@@ -100,7 +101,7 @@ final class _FailingWatchAgents extends MemoryAgentsRepository {
   @override
   Stream<List<AgentInfo>> watchAgents() {
     watches++;
-    if (failures > 0) {
+    if (watches > 1 && failures > 0) {
       failures--;
       return Stream<List<AgentInfo>>.error(StateError('secret internal detail'));
     }
@@ -200,7 +201,12 @@ void main() {
 
     expect(
       agents.calls.where((call) => call.startsWith('refresh:')),
-      unorderedEquals(<String>['refresh:claude', 'refresh:codex', 'refresh:gemini', 'refresh:custom:1']),
+      unorderedEquals(<String>[
+        'refresh:claude',
+        'refresh:codex',
+        'refresh:gemini',
+        'refresh:custom:1',
+      ]),
     );
     await disposeTestApp(tester, dependencies);
   });
@@ -217,7 +223,7 @@ void main() {
     final agents = _FailingWatchAgents(agents: _repository().agents);
     await openSettings(tester, 'agents', agents);
 
-    expect(agents.watches, 1);
+    expect(agents.watches, 2);
     expect(find.text('Не удалось получить список агентов.'), findsOneWidget);
     expect(find.textContaining('secret internal detail'), findsNothing);
     expect(find.text('Claude Code'), findsNothing);
@@ -226,7 +232,7 @@ void main() {
     await tester.pumpAndSettle();
     await _settle(tester);
 
-    expect(agents.watches, 2);
+    expect(agents.watches, 3);
     expect(find.text('Не удалось получить список агентов.'), findsNothing);
     expect(find.text('Повторить'), findsNothing);
     expect(find.text('Claude Code'), findsOneWidget);
@@ -469,10 +475,7 @@ void main() {
       final gemini = memoryGeminiAgent.copyWith(
         methods: <AgentLoginMethod>[
           for (final method in memoryGeminiAgent.methods)
-            if (method.kind == AgentLoginKind.apiKey)
-              method.copyWith(keyPresent: true)
-            else
-              method,
+            if (method.kind == AgentLoginKind.apiKey) method.copyWith(keyPresent: true) else method,
         ],
       );
       final agents = MemoryAgentsRepository(
@@ -723,31 +726,52 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
+  testWidgets('a default that cannot start chats says new chats use Claude', (tester) async {
+    const unavailable = 'Агент недоступен, поэтому новые чаты начинаются с Claude.';
+    final agents = _repository(
+      more: const <AgentInfo>[
+        AgentInfo(
+          id: 'missing',
+          name: 'Missing Agent',
+          status: AgentStatus.notInstalled,
+          problem: 'Node.js 22 is required',
+        ),
+      ],
+    );
+
+    // The default was removed: Settings → General says so.
+    await openSettings(tester, 'general', agents);
+    expect(find.text(unavailable), findsNothing);
+    _settings(tester).update((current) => current.copyWith(defaultAgentId: 'custom:9'));
+    await tester.pumpAndSettle();
+    expect(find.text(unavailable), findsOneWidget);
+
+    // The default is an agent that is not installed: its card says so too.
+    _settings(tester).update((current) => current.copyWith(defaultAgentId: 'missing'));
+    await tester.pumpAndSettle();
+    expect(find.text(unavailable), findsOneWidget);
+    _workspace(tester).dataController.openView(WorkspaceView.settings, section: 'agents');
+    await tester.pumpAndSettle();
+    expect(_inCard('missing', unavailable), findsOneWidget);
+    expect(_inCard('claude', unavailable), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
   group('layout', () {
     for (final section in const <String>['general', 'agents']) {
       for (final size in const <Size>[Size(900, 600), Size(1280, 800)]) {
         for (final locale in const <Locale>[Locale('en'), Locale('ru')]) {
           for (final dark in const <bool>[false, true]) {
-            testWidgets(
-              '$section fits ${size.width.toInt()}×${size.height.toInt()} in '
-              '${locale.languageCode}, ${dark ? 'dark' : 'light'}',
-              (tester) async {
-                final agents = _repository(
-                  claude: _claude(account: 'a.very.long.account.name@example-organization.com'),
-                );
-                await openSettings(
-                  tester,
-                  section,
-                  agents,
-                  locale: locale,
-                  dark: dark,
-                  size: size,
-                );
-                expect(_pageContent(), findsOneWidget);
-                expect(tester.takeException(), isNull);
-                await disposeTestApp(tester, dependencies);
-              },
-            );
+            testWidgets('$section fits ${size.width.toInt()}×${size.height.toInt()} in '
+                '${locale.languageCode}, ${dark ? 'dark' : 'light'}', (tester) async {
+              final agents = _repository(
+                claude: _claude(account: 'a.very.long.account.name@example-organization.com'),
+              );
+              await openSettings(tester, section, agents, locale: locale, dark: dark, size: size);
+              expect(_pageContent(), findsOneWidget);
+              expect(tester.takeException(), isNull);
+              await disposeTestApp(tester, dependencies);
+            });
           }
         }
       }

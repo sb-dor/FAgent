@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
@@ -23,12 +24,13 @@ AppStatusTone statusTone(SessionStatus status) => switch (status) {
 
 /// {@template workspace_chat_tile}
 /// A chat in the sidebar: a live status dot and the title, which ends with an ellipsis when it
-/// does not fit.
+/// does not fit, and a small label with the agent's name unless the chat is Claude's.
 /// {@endtemplate}
 class WorkspaceChatTile extends StatelessWidget {
   /// {@macro workspace_chat_tile}
   const WorkspaceChatTile({
     required this.session,
+    required this.agentName,
     required this.selected,
     required this.status,
     required this.onTap,
@@ -37,6 +39,9 @@ class WorkspaceChatTile extends StatelessWidget {
 
   /// The chat.
   final ChatSession session;
+
+  /// Name of the chat's agent, shown beside the title unless the agent is Claude.
+  final String agentName;
 
   /// Whether the chat is open.
   final bool selected;
@@ -82,6 +87,18 @@ class WorkspaceChatTile extends StatelessWidget {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
+                if (session.agentId != AgentDefinition.claude.id) ...<Widget>[
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 72),
+                    child: Text(
+                      agentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelSmall!.copyWith(color: colors.muted),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

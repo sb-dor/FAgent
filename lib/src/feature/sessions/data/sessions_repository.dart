@@ -16,6 +16,13 @@ abstract interface class ISessionsRepository {
   /// Live status of chat [sessionId], or `null` while it was not opened in
   /// this run (it is then `cold`).
   ValueListenable<SessionStatus>? statusOf(int sessionId);
+
+  /// Makes [agentId] run chat [sessionId], which has not started an agent session yet (its first
+  /// message was not sent). The next time the chat opens it uses the new agent.
+  ///
+  /// Throws a [StateError] when the chat already has an agent session: its agent can no longer
+  /// change.
+  Future<void> setAgent(int sessionId, String agentId);
 }
 
 /// Drift and AgentHub backed [ISessionsRepository].
@@ -46,4 +53,19 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
 
   @override
   ValueListenable<SessionStatus>? statusOf(int sessionId) => _hub.opened(sessionId)?.status;
+
+  @override
+  Future<void> setAgent(int sessionId, String agentId) async {
+    final row = await (_database.select(
+      _database.sessionsTable,
+    )..where((s) => s.id.equals(sessionId))).getSingle();
+    if (row.acpSessionId != null) {
+      throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
+    }
+    if (row.agentId == agentId) return;
+    await (_database.update(_database.sessionsTable)..where((s) => s.id.equals(sessionId))).write(
+      SessionsTableCompanion(agentId: Value<String>(agentId)),
+    );
+    await _hub.forget(sessionId);
+  }
 }

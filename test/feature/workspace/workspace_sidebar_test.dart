@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/widget/status.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
@@ -14,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_agents_repository.dart';
 import '../../support/test_app.dart';
 
 /// Lets drift's real-async work finish, then rebuilds.
@@ -465,6 +467,90 @@ void main() {
       await pressWithMeta(tester, LogicalKeyboardKey.keyN);
 
       expect((await sessions(tester)).single.agentId, 'codex');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('default pointing at a removed agent starts a Claude chat', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int avera;
+      await tester.runAsync(() async {
+        avera = await addProject('avera-hotel');
+      });
+      await pumpSidebar(tester);
+      AppSettingsConfigInhWidget.of(tester.element(find.byType(WorkspaceConfigWidget))).controller
+          .update((current) => current.copyWith(defaultAgentId: 'custom:7'));
+      await tester.pump();
+      scopeOf(tester).dataController.selectProject(avera);
+      await tester.pump();
+
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+
+      expect(tester.takeException(), isNull);
+      expect((await sessions(tester)).single.agentId, 'claude');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('default pointing at an agent that is not installed or failed starts Claude', (
+      tester,
+    ) async {
+      useWindow(tester, 1280, 800);
+      late int avera;
+      await tester.runAsync(() async {
+        avera = await addProject('avera-hotel');
+      });
+      final agents = dependencies.agentsRepository as MemoryAgentsRepository;
+      await pumpSidebar(tester);
+      AppSettingsConfigInhWidget.of(tester.element(find.byType(WorkspaceConfigWidget))).controller
+          .update((current) => current.copyWith(defaultAgentId: 'codex'));
+      scopeOf(tester).dataController.selectProject(avera);
+      await tester.pump();
+
+      agents.update(memoryCodexAgent.copyWith(status: AgentStatus.notInstalled));
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+      agents.update(memoryCodexAgent.copyWith(status: AgentStatus.failed));
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+      // A default that is still being checked is not known to be bad.
+      agents.update(memoryCodexAgent.copyWith(status: AgentStatus.checking));
+      await pressWithMeta(tester, LogicalKeyboardKey.keyN);
+
+      expect((await sessions(tester)).map((s) => s.agentId), <String>['claude', 'claude', 'codex']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a chat of another agent than Claude carries the agent name in the sidebar', (
+      tester,
+    ) async {
+      useWindow(tester, 1280, 800);
+      await tester.runAsync(() async {
+        final project = await addProject('avera-hotel');
+        await addChat(project, 'Claude chat', minutes: 1);
+        await database
+            .into(database.sessionsTable)
+            .insert(
+              SessionsTableCompanion.insert(
+                projectId: project,
+                agentId: 'codex',
+                title: const Value<String>('Codex chat'),
+                updatedAt: Value<DateTime>(DateTime(2026, 10, 28, 1)),
+              ),
+            );
+      });
+      await pumpSidebar(tester);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('chat-2')),
+          matching: find.text('Codex'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey<String>('chat-1')),
+          matching: find.text('Claude Code'),
+        ),
+        findsNothing,
+      );
       await disposeTestApp(tester, dependencies);
     });
 

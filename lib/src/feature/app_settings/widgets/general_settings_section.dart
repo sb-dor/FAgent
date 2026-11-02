@@ -32,6 +32,12 @@ class GeneralSettingsSection extends StatelessWidget {
           'en': localization.settingsLanguageEnglish,
           'ru': localization.settingsLanguageRussian,
         };
+        // A default that was removed or cannot start chats: new chats start with Claude.
+        final defaultAgent = agents.agents
+            .where((agent) => agent.id == settings.defaultAgentId)
+            .firstOrNull;
+        final defaultUnavailable =
+            agents.agents.isNotEmpty && (defaultAgent == null || !defaultAgent.canStartChats);
         return SettingsCard(
           children: <Widget>[
             SettingsRow(
@@ -56,7 +62,9 @@ class GeneralSettingsSection extends StatelessWidget {
             ),
             SettingsRow(
               label: localization.settingsDefaultAgent,
-              hint: localization.settingsDefaultAgentHint,
+              hint: defaultUnavailable
+                  ? localization.agentDefaultUnavailable
+                  : localization.settingsDefaultAgentHint,
               control: SelectorChip<String>(
                 label:
                     agents.agents
@@ -90,9 +98,8 @@ class GeneralSettingsSection extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     localization.settingsQuitAsk,
-                    style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: context.colors.muted,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall!
+                        .copyWith(color: context.colors.muted),
                   ),
                   const SizedBox(width: 8),
                   Switch(

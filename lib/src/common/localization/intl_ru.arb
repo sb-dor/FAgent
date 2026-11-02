@@ -345,6 +345,8 @@
   "agentsLoadFailed": "Не удалось получить список агентов.",
   "agentsRetry": "Повторить",
   "agentStatusFailed": "ошибка",
+  "agentLockedHint": "Агента нельзя сменить после первого сообщения",
+  "agentDefaultUnavailable": "Агент недоступен, поэтому новые чаты начинаются с Claude.",
   "agentUseApiKey": "Использовать API-ключ",
   "agentApiKeyMissing": "Чтобы войти по ключу, задайте {variables} в профиле оболочки и перезапустите приложение — так оно подхватит ключ.",
   "@agentApiKeyMissing": {"placeholders": {"variables": {"type": "String"}}},

@@ -46,8 +46,10 @@ class AgentCard extends StatelessWidget {
       builder: (context, _) {
         final output = scope.actions.state.output[agent.id] ?? const <String>[];
         final notes = <String>[
-          if (agent.status == AgentStatus.notInstalled || agent.status == AgentStatus.failed)
-            ...<String>[?agent.problem, ?agent.hint],
+          if (agent.status == AgentStatus.notInstalled ||
+              agent.status == AgentStatus.failed) ...<String>[?agent.problem, ?agent.hint],
+          if (settings.settings.defaultAgentId == agent.id && !agent.canStartChats)
+            localization.agentDefaultUnavailable,
           if (agent.status == AgentStatus.needsLogin)
             for (final method in agent.methods) ?_methodNote(localization, method),
           if (agent.signInCheckedInChat) localization.agentCustomSignInHint,
@@ -71,10 +73,7 @@ class AgentCard extends StatelessWidget {
           ),
           subtitle: details.isEmpty
               ? null
-              : Text(
-                  details,
-                  style: AppText.mono(context, size: 11).copyWith(color: colors.muted),
-                ),
+              : Text(details, style: AppText.mono(context, size: 11).copyWith(color: colors.muted)),
           trailing: <Widget>[
             _StatusLabel(agent: agent),
             ..._actions(localization, scope),
