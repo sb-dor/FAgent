@@ -19,7 +19,8 @@ import 'package:path/path.dart' as p;
 /// after an agent turn.
 ///
 /// It never sends a message: everything it puts into the chat is a draft the user sends. It
-/// notifies when the offer for the `@` menu changes without the run changing (a new screenshot).
+/// notifies when the offer for the `@` menu changes without the run changing (a new screenshot, a
+/// picked widget).
 /// {@endtemplate}
 class WorkspaceRunLink extends ChangeNotifier {
   /// {@macro workspace_run_link}
@@ -33,6 +34,7 @@ class WorkspaceRunLink extends ChangeNotifier {
     this._now = DateTime.now,
   }) {
     _data.chatHandle.addListener(_onChatHandle);
+    _actions.pick.addListener(notifyListeners);
   }
 
   final WorkspaceDataController _data;
@@ -61,10 +63,11 @@ class WorkspaceRunLink extends ChangeNotifier {
   int? _followedSession;
   SessionStatus? _lastStatus;
 
-  /// Stops following the chat.
+  /// Stops following the chat and the picker.
   @override
   void dispose() {
     _data.chatHandle.removeListener(_onChatHandle);
+    _actions.pick.removeListener(notifyListeners);
     super.dispose();
   }
 
@@ -164,11 +167,23 @@ class WorkspaceRunLink extends ChangeNotifier {
     return true;
   }
 
-  /// Puts [picked] into the draft of the selected chat; `false` when no chat is selected.
+  /// Puts [picked] into the draft of the selected chat: the `@widget` line, the line of its
+  /// ancestors and the `@path` of its screenshot, each when there is one. The screenshot is
+  /// remembered for the `@` menu and the send like the app's screenshots, even without a chat.
+  /// `false` when no chat is selected.
   bool addWidget(PickedWidget picked) {
+    final projectId = _data.projectId;
+    if (picked.screenshot case final path? when projectId != null) _remember(projectId, path);
     final handle = _data.chatHandle.value;
     if (handle == null) return false;
-    handle.insertDraft(_widgetText(picked));
+    handle.insertDraft(
+      <String>[
+        _widgetText(picked),
+        if (picked.ancestors.isNotEmpty)
+          'in: ${picked.ancestors.map((ancestor) => ancestor.name).join(' › ')}',
+        if (picked.screenshot case final path?) _screenshotText(path),
+      ].join('\n'),
+    );
     return true;
   }
 
@@ -177,15 +192,20 @@ class WorkspaceRunLink extends ChangeNotifier {
   /// selected project and no chat is selected (the path is remembered all the same, so the `@`
   /// menu offers it).
   bool addScreenshot(int projectId, String path) {
-    _screenshots.putIfAbsent(projectId, () => <({String path, DateTime time})>[])
-      ..removeWhere((shot) => shot.path == path)
-      ..add((path: path, time: _now()));
-    notifyListeners();
+    _remember(projectId, path);
     if (projectId != _data.projectId) return true;
     final handle = _data.chatHandle.value;
     if (handle == null) return false;
     handle.insertDraft(_screenshotText(path));
     return true;
+  }
+
+  /// Remembers the PNG [path] (relative to the project) of [projectId] for the `@` menu.
+  void _remember(int projectId, String path) {
+    _screenshots.putIfAbsent(projectId, () => <({String path, DateTime time})>[])
+      ..removeWhere((shot) => shot.path == path)
+      ..add((path: path, time: _now()));
+    notifyListeners();
   }
 
   /// What the app offers the selected project's chats: the picked widget, the last error and the
@@ -194,7 +214,8 @@ class WorkspaceRunLink extends ChangeNotifier {
   RunMentions? get mentions {
     final state = _run.state;
     if (state.projectId == null || state.projectId != _data.projectId) return null;
-    final picked = state.picked;
+    final pick = _actions.pick.value;
+    final picked = pick.projectId == state.projectId ? pick.widget : null;
     final error = state.logs.reversed.where((log) => log.error != null).firstOrNull?.error;
     final shots = _screenshots[state.projectId] ?? const <({String path, DateTime time})>[];
     return RunMentions(
@@ -225,8 +246,11 @@ class WorkspaceRunLink extends ChangeNotifier {
     return '${two(time.hour)}:${two(time.minute)}:${two(time.second)}';
   }
 
-  static String _widgetText(PickedWidget picked) =>
-      '@widget ${picked.name} (${picked.file}:${picked.line})';
+  /// `@widget Name (file:line:column)`; without the column when it is not known.
+  static String _widgetText(PickedWidget picked) {
+    final column = picked.column > 0 ? ':${picked.column}' : '';
+    return '@widget ${picked.name} (${picked.file}:${picked.line}$column)';
+  }
 
   static String _errorText(RunError error) {
     final place = error.place;

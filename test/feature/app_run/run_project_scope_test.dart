@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
@@ -130,9 +129,8 @@ void main() {
     await settle(tester);
     await settle(tester);
 
-    expect(state.runActionsController.state, isA<RunActions$CompletedState>());
     expect(state.runController.state.projectId, b);
-    expect(state.runController.state.picked, isNull);
+    expect(state.runActionsController.pick.value.projectId, a, reason: 'it stays with project A');
     expect(find.text('WidgetOfA'), findsNothing);
     expect(find.text('Add to message'), findsNothing);
     expect(
@@ -140,6 +138,12 @@ void main() {
       isTrue,
       reason: 'the @ menu offers nothing from project A',
     );
+
+    state.dataController.selectProject(a);
+    for (var i = 0; i < 3; i++) {
+      await settle(tester);
+    }
+    expect(find.text('a.dart:1'), findsOneWidget, reason: 'back in project A its card is there');
     await disposeTestApp(tester, dependencies);
   });
 
@@ -152,8 +156,8 @@ void main() {
     await settle(tester);
     await settle(tester);
 
-    expect(state.runController.state.picked, _fromA);
-    expect(find.text('WidgetOfA'), findsOneWidget);
+    expect(state.runActionsController.pick.value.widget, _fromA);
+    expect(find.text('a.dart:1'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 }

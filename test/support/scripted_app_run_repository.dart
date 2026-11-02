@@ -110,6 +110,9 @@ class ScriptedAppRunRepository implements IAppRunRepository {
   static const String defaultScreenshotPath =
       '.dart_tool/flutter_code_agent/screenshots/screenshot-20261031-090507.png';
 
+  /// The VM service address the fake app reports.
+  static final Uri vmServiceUri = Uri.parse('ws://127.0.0.1:1234/abc=/ws');
+
   /// The DevTools address the fake app reports.
   static final Uri devToolsUri = Uri.parse(
     'http://127.0.0.1:9100/?uri=ws://127.0.0.1:1234/abc=/ws',
@@ -228,6 +231,7 @@ class ScriptedAppRunRepository implements IAppRunRepository {
           device: device,
           startedAt: DateTime.now(),
           mode: mode,
+          vmServiceUri: ScriptedAppRunRepository.vmServiceUri,
           devToolsUri: ScriptedAppRunRepository.devToolsUri,
         ),
       )

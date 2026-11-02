@@ -65,6 +65,12 @@ class ScriptedWidgetPickerRepository implements IWidgetPickerRepository {
   /// Whether a pick of [projectId] waits.
   bool isPicking(int projectId) => _pending.containsKey(projectId);
 
+  /// Ends the waiting pick of [projectId] with [result] now, as if the user tapped a widget.
+  void complete(int projectId) {
+    _timers.remove(projectId)?.cancel();
+    _pending.remove(projectId)?.complete(result);
+  }
+
   @override
   Future<PickResult> pick(int projectId) {
     picks.add(projectId);

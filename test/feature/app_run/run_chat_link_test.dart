@@ -28,6 +28,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
+import '../../support/scripted_widget_picker_repository.dart';
 import '../../support/test_app.dart';
 
 /// The fake run that counts what the window asks it to do.
@@ -301,7 +302,42 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('add to message puts @widget into the draft', (tester) async {
+    testWidgets('add to message writes the widget line, the ancestors line and the @png line', (
+      tester,
+    ) async {
+      await pumpShell(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      const shot = '.dart_tool/flutter_code_agent/screenshots/widget-BookingCard.png';
+      const card = ScriptedWidgetPickerRepository.bookingCard;
+
+      workspaceOf(tester).addRunWidgetToMessage(
+        PickedWidget(
+          name: card.name,
+          file: card.file,
+          line: card.line,
+          column: card.column,
+          id: card.id,
+          ancestors: card.ancestors,
+          screenshot: shot,
+        ),
+      );
+      await tester.pump();
+
+      expect(
+        chat.textController.text,
+        '@widget BookingCard (lib/src/feature/booking/widgets/booking_card.dart:42:7)\n'
+        'in: BookingList › BookingScreen\n'
+        '@$shot',
+      );
+      expect(
+        workspaceOf(tester).runLink.mentions?.attachable,
+        contains(shot),
+        reason: 'the PNG is remembered for the @ menu and the send, like a screenshot',
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('without ancestors or screenshot only the widget line', (tester) async {
       await pumpShell(tester);
       final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
 
@@ -310,6 +346,7 @@ void main() {
           name: 'BookingCard',
           file: 'lib/src/feature/booking/widgets/booking_card.dart',
           line: 42,
+          column: 7,
           ancestors: <PickedAncestor>[],
         ),
       );
@@ -317,7 +354,7 @@ void main() {
 
       expect(
         chat.textController.text,
-        '@widget BookingCard (lib/src/feature/booking/widgets/booking_card.dart:42)',
+        '@widget BookingCard (lib/src/feature/booking/widgets/booking_card.dart:42:7)',
       );
       await disposeTestApp(tester, dependencies);
     });
@@ -727,15 +764,9 @@ void main() {
       await pumpShell(tester);
       await startRun(tester);
       await reloadUntilError(tester);
-      workspaceOf(tester).runController.setPicked(
-        const PickedWidget(
-          name: 'BookingCard',
-          file: 'lib/src/feature/booking/widgets/booking_card.dart',
-          line: 42,
-          ancestors: <PickedAncestor>[],
-        ),
-      );
-      await settle(tester);
+      final workspace = workspaceOf(tester);
+      workspace.runActionsController.pickWidget(projectId);
+      await until(tester, () => workspace.runActionsController.pick.value.widget != null);
       final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
 
       await tester.enterText(find.byType(TextField), '@');
@@ -749,7 +780,7 @@ void main() {
       await tester.pump();
       expect(
         chat.textController.text,
-        '@widget BookingCard (lib/src/feature/booking/widgets/booking_card.dart:42) ',
+        '@widget BookingCard (lib/src/feature/booking/widgets/booking_card.dart:42:7) ',
       );
       await disposeTestApp(tester, dependencies);
     });

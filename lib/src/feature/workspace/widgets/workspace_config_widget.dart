@@ -102,12 +102,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final PendingChatDraft _draft = PendingChatDraft(data: dataController);
 
   /// Whether the run or the devices are made up. Everything that shows it (the Run tab, the title
-  /// bar, the `@` menu) says so. The widget picker is separate: see [pickerIsPreview].
+  /// bar, the `@` menu) says so. The widget picker is never made up: it talks to the app's
+  /// inspector.
   late final bool runIsPreview;
-
-  /// Whether the widget picker is made up; it never is since it talks to the app's inspector, so
-  /// the Run tab always picks.
-  final bool pickerIsPreview = false;
 
   /// Asks the user for a folder; the argument is the text of the confirm button. Tests replace it,
   /// because the native picker cannot be driven from a widget test.
@@ -312,16 +309,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
             .where((d) => d.kind == DeviceKind.running && d.emulatorId == emulatorId)
             .firstOrNull;
 
-  /// A picked widget outlives the next action, so it moves to the run state as soon as it arrives.
-  /// The pick may finish after the window moved to another project: the widget belongs to the
-  /// project it was picked in, so it is dropped unless that project is still the followed one.
+  /// A screenshot goes into the draft (and the `@` menu) as soon as it is ready. The picked widget
+  /// is not an action result: the picker keeps it, per project (see `RunActionsController.pick`).
   void _onRunAction() {
     final state = runActionsController.state;
     if (state is! RunActions$CompletedState || identical(state, _handledAction)) return;
     _handledAction = state;
-    if (state.picked case final picked? when state.projectId == runController.state.projectId) {
-      runController.setPicked(picked);
-    }
     if (state case RunActions$CompletedState(:final screenshot?, :final projectId?)) {
       if (!runLink.addScreenshot(projectId, screenshot) && mounted) {
         _showMessage(Localization.of(context).noChatForScreenshot);
