@@ -1,11 +1,13 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
-import 'package:flutter_code_agent/src/feature/agents/widgets/agent_card.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.dart';
+import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
@@ -58,55 +60,40 @@ AgentInfo _claude({
   AgentStatus status = AgentStatus.ready,
   String? account = 'a@b.c',
   List<ConfigOption>? options,
-}) => AgentInfo(
-  id: 'claude',
-  name: 'Claude Code',
-  version: '0.96.0',
-  runtime: 'Node 22.11',
-  status: status,
-  account: account,
-  loginMethods: const <String>['claude-ai-login', 'console-login'],
-  options: options ?? _catalog,
-  canStartChats: true,
+}) => memoryClaudeAgent.copyWith(status: status, account: account, options: options ?? _catalog);
+
+MemoryAgentsRepository _repository({
+  AgentInfo? claude,
+  List<AgentInfo> more = const [],
+  bool holdSignIns = false,
+}) => MemoryAgentsRepository(
+  agents: <AgentInfo>[claude ?? _claude(), memoryCodexAgent, memoryGeminiAgent, ...more],
+  holdSignIns: holdSignIns,
 );
 
-MemoryAgentsRepository _repository({AgentInfo? claude, List<AgentInfo> more = const []}) =>
-    MemoryAgentsRepository(
-      agents: <AgentInfo>[claude ?? _claude(), previewCodexAgent, previewGeminiAgent, ...more],
-    );
+const AgentInfo _custom = AgentInfo(
+  id: 'custom:1',
+  name: 'My agent',
+  status: AgentStatus.ready,
+  source: AgentSource.custom,
+  custom: CustomAgentDraft(name: 'My agent', executable: '/opt/mine', arguments: <String>['--acp']),
+);
 
 /// A repository whose logins stay open: the test adds their output lines itself.
-final class _OpenLoginAgents implements IAgentsRepository {
-  _OpenLoginAgents(this.inner);
+final class _OpenLoginAgents extends MemoryAgentsRepository {
+  _OpenLoginAgents({super.agents});
 
-  final MemoryAgentsRepository inner;
   AgentLogin? lastLogin;
 
   @override
-  Stream<List<AgentInfo>> watchAgents() => inner.watchAgents();
-
-  @override
-  Future<void> refresh(String agentId) => inner.refresh(agentId);
-
-  @override
-  Future<AgentLogin> login(String agentId, String methodId) async =>
+  Future<AgentLogin?> login(String agentId, String methodId) async =>
       lastLogin = AgentLogin.forTest(agentId, methodId);
-
-  @override
-  Future<void> logout(String agentId) => inner.logout(agentId);
-
-  @override
-  Future<void> install(String agentId) => inner.install(agentId);
-
-  @override
-  Future<void> openSettings(String agentId) => inner.openSettings(agentId);
 }
 
 /// A repository whose first watch fails with an error before any agent arrives.
-final class _FailingWatchAgents implements IAgentsRepository {
-  _FailingWatchAgents(this.inner);
+final class _FailingWatchAgents extends MemoryAgentsRepository {
+  _FailingWatchAgents({super.agents});
 
-  final MemoryAgentsRepository inner;
   int failures = 1;
   int watches = 0;
 
@@ -117,35 +104,24 @@ final class _FailingWatchAgents implements IAgentsRepository {
       failures--;
       return Stream<List<AgentInfo>>.error(StateError('secret internal detail'));
     }
-    return inner.watchAgents();
+    return super.watchAgents();
   }
-
-  @override
-  Future<void> refresh(String agentId) => inner.refresh(agentId);
-
-  @override
-  Future<AgentLogin> login(String agentId, String methodId) => inner.login(agentId, methodId);
-
-  @override
-  Future<void> logout(String agentId) => inner.logout(agentId);
-
-  @override
-  Future<void> install(String agentId) => inner.install(agentId);
-
-  @override
-  Future<void> openSettings(String agentId) => inner.openSettings(agentId);
 }
+
+Finder _card(String agentId) => find.byKey(ValueKey<String>('agent-card-$agentId'));
+
+Finder _inCard(String agentId, String text) =>
+    find.descendant(of: _card(agentId), matching: find.textContaining(text));
 
 Finder _chip(String agentId, String role) =>
     find.byKey(ValueKey<String>('agent-default-$agentId-$role'));
 
 Finder _pageContent() => find.byKey(const ValueKey<String>('page-content'));
 
-/// Lets the snack bar finish showing, wait out its timer and leave.
-Future<void> _expireSnackBar(WidgetTester tester) async {
-  await tester.pump(const Duration(seconds: 1));
-  await tester.pump(const Duration(seconds: 10));
-  await tester.pumpAndSettle();
+/// Lets the sign-in dialog open or close; its spinner never settles.
+Future<void> _pumpDialog(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 400));
 }
 
 /// Lets drift's real-async work finish, then rebuilds.
@@ -210,19 +186,35 @@ void main() {
     expect(find.text('Codex'), findsOneWidget);
     expect(find.text('Gemini CLI'), findsOneWidget);
     expect(find.textContaining('a@b.c'), findsOneWidget);
-    expect(find.text('не установлен'), findsOneWidget);
-    expect(find.text('нужен вход'), findsOneWidget);
+    expect(find.text('нужен вход'), findsNWidgets(2));
     expect(find.text('по умолчанию'), findsOneWidget);
-    expect(
-      find.descendant(of: find.byType(AgentCard), matching: find.byType(PreviewBadge)),
-      findsNWidgets(2),
-    );
+    expect(find.byType(PreviewBadge), findsNothing);
     expect(find.text('0.96.0 · Node 22.11'), findsOneWidget);
+    expect(find.text('2.5.0 · Node 22.11'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('opening the agents section checks every agent', (tester) async {
+    final agents = _repository(more: const <AgentInfo>[_custom]);
+    await openSettings(tester, 'agents', agents);
+
+    expect(
+      agents.calls.where((call) => call.startsWith('refresh:')),
+      unorderedEquals(<String>['refresh:claude', 'refresh:codex', 'refresh:gemini', 'refresh:custom:1']),
+    );
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('the general section checks nothing', (tester) async {
+    final agents = _repository();
+    await openSettings(tester, 'general', agents);
+
+    expect(agents.calls.where((call) => call.startsWith('refresh:')), isEmpty);
     await disposeTestApp(tester, dependencies);
   });
 
   testWidgets('a failed watch says so and can be retried', (tester) async {
-    final agents = _FailingWatchAgents(_repository());
+    final agents = _FailingWatchAgents(agents: _repository().agents);
     await openSettings(tester, 'agents', agents);
 
     expect(agents.watches, 1);
@@ -246,24 +238,16 @@ void main() {
     await openSettings(tester, 'agents', agents, locale: const Locale('en'));
 
     expect(find.text('● signed in'), findsOneWidget);
-    expect(find.text('not installed'), findsOneWidget);
-    expect(find.text('login required'), findsOneWidget);
+    expect(find.text('login required'), findsNWidgets(2));
     expect(find.text('Sign out'), findsOneWidget);
-    expect(find.text('Install'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('checking and installing agents show a state and no action', (tester) async {
-    final agents = _repository(
-      claude: _claude(status: AgentStatus.checking),
-      more: const <AgentInfo>[
-        AgentInfo(id: 'x', name: 'Installing One', status: AgentStatus.installing),
-      ],
-    );
+  testWidgets('a checking agent shows a state and no action', (tester) async {
+    final agents = _repository(claude: _claude(status: AgentStatus.checking));
     await openSettings(tester, 'agents', agents);
 
     expect(find.text('Проверяем…'), findsOneWidget);
-    expect(find.text('Устанавливаем…'), findsOneWidget);
     expect(find.text('Выйти'), findsNothing);
     await disposeTestApp(tester, dependencies);
   });
@@ -295,7 +279,7 @@ void main() {
 
   testWidgets('only the last eight login lines are shown', (tester) async {
     final agents = _OpenLoginAgents(
-      _repository(claude: _claude(status: AgentStatus.needsLogin)),
+      agents: _repository(claude: _claude(status: AgentStatus.needsLogin)).agents,
     );
     await openSettings(tester, 'agents', agents);
 
@@ -405,33 +389,281 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('preview actions say the milestone', (tester) async {
-    final agents = _repository();
-    await openSettings(tester, 'agents', agents);
+  group('sign-in methods', () {
+    testWidgets('a browser method signs in with a dialog that can be cancelled', (tester) async {
+      final agents = _repository(holdSignIns: true);
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
 
-    await tester.ensureVisible(find.text('Установить'));
-    await tester.tap(find.text('Установить'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(agents.calls, contains('install:codex'));
-    expect(find.text('Появится в M5'), findsOneWidget);
-    await _expireSnackBar(tester);
-    expect(find.text('Появится в M5'), findsNothing);
+      await tester.ensureVisible(_inCard('codex', 'Login with ChatGPT'));
+      await tester.tap(_inCard('codex', 'Login with ChatGPT'));
+      await _pumpDialog(tester);
 
-    await tester.ensureVisible(find.text('＋ Свой ACP-агент'));
-    await tester.tap(find.text('＋ Свой ACP-агент'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(find.text('Появится в M5'), findsOneWidget);
+      expect(agents.calls, contains('login:codex:chat-gpt'));
+      expect(find.text('Signing in to Codex'), findsOneWidget);
+      expect(find.text('If the agent opened a browser window, finish signing in there.'), findsOne);
 
-    await _expireSnackBar(tester);
-    await tester.ensureVisible(find.text('Войти с Google'));
-    await tester.tap(find.text('Войти с Google'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 100));
-    expect(agents.calls, contains('login:gemini:google'));
-    expect(find.text('Появится в M5'), findsOneWidget);
-    await _expireSnackBar(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await _pumpDialog(tester);
+      await _settle(tester);
+
+      expect(agents.calls, contains('cancelLogin:codex'));
+      expect(find.text('Signing in to Codex'), findsNothing);
+      // A cancelled sign-in is no error.
+      expect(find.textContaining('failed'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a finished browser sign-in closes the dialog', (tester) async {
+      final agents = _repository(holdSignIns: true);
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      await tester.ensureVisible(_inCard('gemini', 'Log in with Google'));
+      await tester.tap(_inCard('gemini', 'Log in with Google'));
+      await _pumpDialog(tester);
+      expect(find.text('Signing in to Gemini CLI'), findsOneWidget);
+
+      agents.finishSignIn('gemini');
+      await _pumpDialog(tester);
+      await _settle(tester);
+
+      expect(find.text('Signing in to Gemini CLI'), findsNothing);
+      expect(_inCard('gemini', '● signed in'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a second tap while signing in starts nothing new', (tester) async {
+      final agents = _repository(holdSignIns: true);
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+      await tester.ensureVisible(_inCard('codex', 'Login with ChatGPT'));
+      await tester.tap(_inCard('codex', 'Login with ChatGPT'));
+      await _pumpDialog(tester);
+      // The dialog covers the card; ask through the actions as a second caller would.
+      final scope = AgentsConfigInhWidget.of(tester.element(_card('codex')));
+      scope.actions.login('codex', memoryCodexAgent.methods.first);
+      await _pumpDialog(tester);
+
+      expect(agents.calls.where((call) => call == 'login:codex:chat-gpt'), hasLength(1));
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await _pumpDialog(tester);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('an API key method without its variable names it', (tester) async {
+      final agents = _repository();
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      expect(
+        _inCard(
+          'codex',
+          'To sign in with a key, set CODEX_API_KEY or OPENAI_API_KEY in your shell profile, '
+              'then restart the app to pick up the key.',
+        ),
+        findsOneWidget,
+      );
+      expect(_inCard('gemini', 'set GEMINI_API_KEY in your shell profile'), findsOneWidget);
+      expect(find.text('Use API key'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('an API key method with its variable offers Use API key', (tester) async {
+      final gemini = memoryGeminiAgent.copyWith(
+        methods: <AgentLoginMethod>[
+          for (final method in memoryGeminiAgent.methods)
+            if (method.kind == AgentLoginKind.apiKey)
+              method.copyWith(keyPresent: true)
+            else
+              method,
+        ],
+      );
+      final agents = MemoryAgentsRepository(
+        agents: <AgentInfo>[_claude(), memoryCodexAgent, gemini],
+        holdSignIns: true,
+      );
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      expect(_inCard('gemini', 'GEMINI_API_KEY'), findsNothing);
+      await tester.ensureVisible(_inCard('gemini', 'Use API key'));
+      await tester.tap(_inCard('gemini', 'Use API key'));
+      await _pumpDialog(tester);
+
+      expect(agents.calls, contains('login:gemini:gemini-api-key'));
+      expect(find.text('Signing in to Gemini CLI'), findsOneWidget);
+      agents.finishSignIn('gemini');
+      await _pumpDialog(tester);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('an unsupported method says to set it up in the agent', (tester) async {
+      final agents = _repository();
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      expect(
+        _inCard('gemini', "Vertex AI: set this up in the agent's own settings."),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(OutlinedButton, 'Vertex AI'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the method buttons are in Russian too', (tester) async {
+      final agents = _repository();
+      await openSettings(tester, 'agents', agents);
+
+      expect(_inCard('gemini', 'Чтобы войти по ключу, задайте GEMINI_API_KEY'), findsOneWidget);
+      expect(_inCard('gemini', 'Vertex AI: настройте в самом агенте.'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  testWidgets('a failed agent shows the reason and can be checked again', (tester) async {
+    final agents = _repository(
+      more: const <AgentInfo>[
+        AgentInfo(
+          id: 'custom:1',
+          name: 'Broken',
+          status: AgentStatus.failed,
+          problem: 'no ACP answer to initialize',
+          source: AgentSource.custom,
+          custom: CustomAgentDraft(name: 'Broken', executable: 'broken'),
+        ),
+      ],
+    );
+    await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+    agents.calls.clear();
+
+    expect(_inCard('custom:1', 'error'), findsOneWidget);
+    expect(_inCard('custom:1', 'no ACP answer to initialize'), findsOneWidget);
+    await tester.ensureVisible(_inCard('custom:1', 'Check again'));
+    await tester.tap(_inCard('custom:1', 'Check again'));
+    await tester.pumpAndSettle();
+
+    expect(agents.calls, <String>['refresh:custom:1']);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a ready custom agent says sign-in is checked in the first chat', (tester) async {
+    final agents = _repository(more: const <AgentInfo>[_custom]);
+    await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+    expect(_inCard('custom:1', 'Sign-in is checked in the first chat.'), findsOneWidget);
+    expect(_inCard('codex', 'Sign-in is checked in the first chat.'), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  group('custom agents', () {
+    testWidgets('Add ACP agent opens the dialog and adds the agent', (tester) async {
+      final agents = _repository();
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      await tester.ensureVisible(find.text('＋ Custom ACP agent'));
+      await tester.tap(find.text('＋ Custom ACP agent'));
+      await tester.pumpAndSettle();
+      expect(find.text('Add ACP agent'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey<String>('custom-agent-name')), 'Mine');
+      await tester.enterText(find.byKey(const ValueKey<String>('custom-agent-command')), 'mine');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Add'));
+      await tester.pumpAndSettle();
+      await _settle(tester);
+
+      expect(agents.calls, contains('addCustom:Mine'));
+      expect(find.text('Add ACP agent'), findsNothing);
+      expect(_card('custom:1'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Edit opens the dialog with the stored fields', (tester) async {
+      final agents = _repository(more: const <AgentInfo>[_custom]);
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      await tester.ensureVisible(_inCard('custom:1', 'Edit'));
+      await tester.tap(_inCard('custom:1', 'Edit'));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit ACP agent'), findsOneWidget);
+      expect(find.text('/opt/mine'), findsOneWidget);
+      await tester.enterText(find.byKey(const ValueKey<String>('custom-agent-name')), 'Renamed');
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      await _settle(tester);
+
+      expect(agents.calls, contains('updateCustom:custom:1:Renamed'));
+      expect(find.text('Renamed'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Remove of an idle custom agent removes it', (tester) async {
+      final agents = _repository(more: const <AgentInfo>[_custom]);
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      await tester.ensureVisible(_inCard('custom:1', 'Remove'));
+      await tester.tap(_inCard('custom:1', 'Remove'));
+      await tester.pumpAndSettle();
+      await _settle(tester);
+
+      expect(agents.calls, contains('removeCustom:custom:1'));
+      expect(_card('custom:1'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Remove asks when a chat of the agent is busy', (tester) async {
+      final agents = _repository(more: const <AgentInfo>[_custom])..busyAgents.add('custom:1');
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      await tester.ensureVisible(_inCard('custom:1', 'Remove'));
+      await tester.tap(_inCard('custom:1', 'Remove'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('A chat of My agent is working.'), findsOneWidget);
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+      expect(agents.calls, isNot(contains('removeCustom:custom:1')));
+
+      await tester.tap(_inCard('custom:1', 'Remove'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+      await tester.pumpAndSettle();
+      await _settle(tester);
+
+      expect(agents.calls, contains('removeCustom:custom:1'));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('built-in agents have no Edit or Remove', (tester) async {
+      final agents = _repository();
+      await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+      expect(find.text('Edit'), findsNothing);
+      expect(find.text('Remove'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
+  testWidgets('sign out of an agent with a busy chat asks first', (tester) async {
+    final agents = MemoryAgentsRepository(
+      agents: <AgentInfo>[
+        _claude(),
+        memoryCodexAgent.copyWith(status: AgentStatus.ready, account: 'ChatGPT Plus'),
+        memoryGeminiAgent,
+      ],
+    )..busyAgents.addAll(<String>['codex', 'claude']);
+    await openSettings(tester, 'agents', agents, locale: const Locale('en'));
+
+    await tester.ensureVisible(_inCard('codex', 'Sign out'));
+    await tester.tap(_inCard('codex', 'Sign out'));
+    await tester.pumpAndSettle();
+    expect(find.text('A chat of Codex is working. Signing out stops it.'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Sign out'));
+    await tester.pumpAndSettle();
+    await _settle(tester);
+    expect(agents.calls, contains('logout:codex'));
+
+    // Claude signs out through its CLI; a busy chat goes on, so nothing is asked.
+    await tester.ensureVisible(_inCard('claude', 'Sign out'));
+    await tester.tap(_inCard('claude', 'Sign out'));
+    await tester.pumpAndSettle();
+    await _settle(tester);
+    expect(find.textContaining('Signing out stops it'), findsNothing);
+    expect(agents.calls, contains('logout:claude'));
     await disposeTestApp(tester, dependencies);
   });
 
@@ -447,10 +679,17 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('general offers only agents that can start chats', (tester) async {
+  testWidgets('general offers every agent but not installed and failed ones', (tester) async {
     final agents = _repository(
       more: const <AgentInfo>[
-        AgentInfo(id: 'other', name: 'Other Agent', canStartChats: true, status: AgentStatus.ready),
+        AgentInfo(id: 'missing', name: 'Missing Agent', status: AgentStatus.notInstalled),
+        AgentInfo(
+          id: 'custom:1',
+          name: 'Broken Agent',
+          status: AgentStatus.failed,
+          source: AgentSource.custom,
+        ),
+        AgentInfo(id: 'custom:2', name: 'Other Agent', status: AgentStatus.ready),
       ],
     );
     await openSettings(tester, 'general', agents);
@@ -458,23 +697,29 @@ void main() {
 
     await tester.tap(find.text('Claude Code'));
     await tester.pumpAndSettle();
-    expect(find.byType(PreviewBadge), findsNWidgets(2));
+    expect(find.byType(PreviewBadge), findsNothing);
 
-    // Codex and Gemini cannot be picked: the menu stays open.
-    await tester.tap(find.text('Codex'));
+    // Agents that are missing or broken cannot be picked: the menu stays open.
+    await tester.tap(find.text('Missing Agent'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Gemini CLI'));
+    await tester.tap(find.text('Broken Agent'));
     await tester.pumpAndSettle();
     await _settle(tester);
     expect(_settings(tester).settings.defaultAgentId, 'claude');
-    expect(find.text('Other Agent'), findsOneWidget);
 
+    // An agent that needs a sign-in can be the default.
+    await tester.tap(find.text('Codex'));
+    await tester.pumpAndSettle();
+    await _settle(tester);
+    expect(_settings(tester).settings.defaultAgentId, 'codex');
+    expect(find.text('Gemini CLI'), findsNothing);
+
+    await tester.tap(find.text('Codex'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Other Agent'));
     await tester.pumpAndSettle();
     await _settle(tester);
-    expect(_settings(tester).settings.defaultAgentId, 'other');
-    expect(find.text('Other Agent'), findsOneWidget);
-    expect(find.text('Codex'), findsNothing);
+    expect(_settings(tester).settings.defaultAgentId, 'custom:2');
     await disposeTestApp(tester, dependencies);
   });
 
@@ -510,7 +755,7 @@ void main() {
 
     testWidgets('a login with long output fits 900×600', (tester) async {
       final agents = _OpenLoginAgents(
-        _repository(claude: _claude(status: AgentStatus.needsLogin)),
+        agents: _repository(claude: _claude(status: AgentStatus.needsLogin)).agents,
       );
       await openSettings(tester, 'agents', agents, size: const Size(900, 600), dark: true);
       await tester.tap(find.text('Войти'));

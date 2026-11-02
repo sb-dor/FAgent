@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -76,7 +75,6 @@ class GeneralSettingsSection extends StatelessWidget {
                           title: agent.name,
                           selected: agent.id == settings.defaultAgentId,
                           enabled: agent.canStartChats,
-                          badge: agent.canStartChats ? null : const PreviewBadge(),
                         ),
                     ],
                   ),

@@ -124,6 +124,19 @@ void main() {
     expect(result.authStatus.toString(), isNot(contains('example.com')));
   });
 
+  test('a per-call auth status wait replaces the default', () async {
+    // Without a push, the default wait would hold the probe for 30 seconds.
+    final probe = createProbe(authStatusWait: const Duration(seconds: 30));
+    addTearDown(probe.dispose);
+    final stopwatch = Stopwatch()..start();
+
+    final result = await probe.probe(fakeAgent, authStatusWait: Duration.zero);
+
+    expect(result.failure, isNull);
+    expect(result.authStatus, isNull);
+    expect(stopwatch.elapsed, lessThan(const Duration(seconds: 20)));
+  });
+
   test('missing executable is not installed with its reason', () async {
     final probe = createProbe();
     addTearDown(probe.dispose);

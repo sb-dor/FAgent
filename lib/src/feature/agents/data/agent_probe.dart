@@ -26,7 +26,10 @@ typedef AgentConnector = Future<AgentConnection> Function({
 abstract interface class IAgentProbe {
   /// Probes [agent]. Never throws: problems are in [AgentProbeResult.failure] and
   /// [AgentProbeResult.notInstalled].
-  Future<AgentProbeResult> probe(AgentDefinition agent);
+  ///
+  /// [authStatusWait] is how long to wait for a sign-in status push after `initialize`
+  /// ([Duration.zero]: not at all); `null` keeps the probe's default.
+  Future<AgentProbeResult> probe(AgentDefinition agent, {Duration? authStatusWait});
 
   /// Stops every probe in flight, together with its agent process.
   Future<void> dispose();
@@ -50,12 +53,12 @@ final class AgentProbeImpl implements IAgentProbe {
   bool _disposed = false;
 
   @override
-  Future<AgentProbeResult> probe(AgentDefinition agent) async {
+  Future<AgentProbeResult> probe(AgentDefinition agent, {Duration? authStatusWait}) async {
     if (_disposed) return const AgentProbeResult(failure: 'probe disposed');
     final run = _ProbeRun();
     _runs.add(run);
     try {
-      return await _probe(agent, run);
+      return await _probe(agent, run, authStatusWait ?? _authStatusWait);
     } on _ProbeCancelled {
       return const AgentProbeResult(failure: 'probe cancelled');
     } on AgentPreflightException catch (error) {
@@ -82,7 +85,11 @@ final class AgentProbeImpl implements IAgentProbe {
     return Future.wait(<Future<void>>[for (final run in _runs.toList()) run.cancel()]);
   }
 
-  Future<AgentProbeResult> _probe(AgentDefinition agent, _ProbeRun run) async {
+  Future<AgentProbeResult> _probe(
+    AgentDefinition agent,
+    _ProbeRun run,
+    Duration authStatusWait,
+  ) async {
     run.startedAt = Stopwatch()..start();
     // The probe never runs a session, so nothing project-specific is needed; the temp
     // directory exists everywhere and keeps `npx` away from a `package.json` of the app.
@@ -111,15 +118,19 @@ final class AgentProbeImpl implements IAgentProbe {
       run.cancelled.future.then<AgentConnection>((_) => throw const _ProbeCancelled()),
     ]);
     final result = _parse(connection.initializeResult);
-    final authStatus = await _authStatus(connection, run);
+    final authStatus = await _authStatus(connection, run, authStatusWait);
     return authStatus == null ? result : result.copyWith(authStatus: authStatus);
   }
 
-  /// The sign-in status the agent pushes after `initialize` (codex-acp), waiting up to
-  /// [_authStatusWait] for it.
-  Future<AcpAuthStatus?> _authStatus(AgentConnection connection, _ProbeRun run) async {
+  /// The sign-in status the agent pushes after `initialize` (codex-acp), waiting up to [wait]
+  /// for it.
+  Future<AcpAuthStatus?> _authStatus(
+    AgentConnection connection,
+    _ProbeRun run,
+    Duration wait,
+  ) async {
     var status = connection.authStatus;
-    if (status == null && _authStatusWait > Duration.zero) {
+    if (status == null && wait > Duration.zero) {
       final update = Completer<void>();
       final subscription = connection.incoming.listen((message) {
         if (parseAuthStatusUpdate(message) != null && !update.isCompleted) update.complete();
@@ -128,7 +139,7 @@ final class AgentProbeImpl implements IAgentProbe {
         await Future.any(<Future<void>>[
           update.future,
           run.cancelled.future,
-          Future<void>.delayed(_authStatusWait),
+          Future<void>.delayed(wait),
         ]);
       } finally {
         await subscription.cancel();

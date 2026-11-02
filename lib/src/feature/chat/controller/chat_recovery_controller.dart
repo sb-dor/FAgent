@@ -1,4 +1,5 @@
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -36,8 +37,8 @@ final class ChatRecoveryController extends StateController<ChatRecoveryState>
     setState(const ChatRecoveryState.completed());
   }, error: (error, stackTrace) async => setState(ChatRecoveryState.error(error: error)));
 
-  /// Login methods of [agentId].
-  List<String> loginMethods(String agentId) => _repository.loginMethods(agentId);
+  /// Sign-in methods of [agentId].
+  List<AgentLoginMethod> loginMethods(String agentId) => _repository.loginMethods(agentId);
 
   void login(String agentId, String methodId) {
     var output = const <String>[];

@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
@@ -55,6 +56,9 @@ class Dependencies {
   /// Stops feeding the built-in and custom agents into [agentHub]; called before the hub is
   /// disposed.
   late final Future<void> Function() stopFollowingCustomAgents;
+
+  /// Checks agents with a short ACP handshake; stopped when the app closes.
+  late final IAgentProbe agentProbe;
 
   /// The agents, their state on this machine, and sign-in, sign-out and settings actions.
   late final IAgentsRepository agentsRepository;

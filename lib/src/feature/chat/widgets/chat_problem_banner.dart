@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/constant/chat_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 
 /// {@template chat_problem_banner}
@@ -21,7 +22,7 @@ class ChatProblemBanner extends StatelessWidget {
     required this.onForceStop,
     required this.onLogin,
     required this.onRepeatPrompt,
-    this.loginMethods = const <String>[],
+    this.loginMethods = const <AgentLoginMethod>[],
     this.loginOutput = const <String>[],
     super.key,
   });
@@ -42,8 +43,9 @@ class ChatProblemBanner extends StatelessWidget {
   /// Logs in with a method id.
   final ValueChanged<String> onLogin;
 
-  /// Login methods offered when the agent needs a login.
-  final List<String> loginMethods;
+  /// The agent's sign-in methods, offered when it needs a sign-in: a button each, except a key
+  /// method without its variable (a hint instead) and one set up in the agent itself (left out).
+  final List<AgentLoginMethod> loginMethods;
 
   /// Output of the running or failed login (it may show a link or a code).
   final List<String> loginOutput;
@@ -66,22 +68,34 @@ class ChatProblemBanner extends StatelessWidget {
         ),
       if (status == SessionStatus.needsAuth)
         for (final method in loginMethods)
-          FilledButton.tonal(
-            onPressed: busy ? null : () => onLogin(method),
-            child: Text(switch (method) {
-              'claude-ai-login' => localization.loginWithClaudeAi,
-              'console-login' => localization.loginWithConsole,
-              _ => method,
-            }),
-          ),
+          if (method.kind != AgentLoginKind.unsupported &&
+              (method.kind != AgentLoginKind.apiKey || method.keyPresent))
+            FilledButton.tonal(
+              onPressed: busy ? null : () => onLogin(method.id),
+              child: Text(switch (method) {
+                AgentLoginMethod(id: 'claude-ai-login', kind: AgentLoginKind.terminal) =>
+                  localization.loginWithClaudeAi,
+                AgentLoginMethod(id: 'console-login', kind: AgentLoginKind.terminal) =>
+                  localization.loginWithConsole,
+                _ => method.name,
+              }),
+            ),
       if (view.canForceStop)
         OutlinedButton(onPressed: onForceStop, child: Text(localization.forceStop)),
       // A prompt held back by the bypass gate is sent by its banner.
       if (view.canRetryPrompt && !view.bypassBlocked)
         FilledButton.tonal(onPressed: onRepeatPrompt, child: Text(localization.repeatPrompt)),
     ];
+    final keyHints = <String>[
+      if (status == SessionStatus.needsAuth)
+        for (final method in loginMethods)
+          if (method.kind == AgentLoginKind.apiKey && !method.keyPresent)
+            localization.agentApiKeyMissing(
+              method.keyVariables.join(' ${localization.agentOr} '),
+            ),
+    ];
     final removed = problem?.kind == SessionProblemKind.removed;
-    if (actions.isEmpty && !removed) return const SizedBox.shrink();
+    if (actions.isEmpty && keyHints.isEmpty && !removed) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final message = switch (status) {
@@ -108,6 +122,10 @@ class ChatProblemBanner extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   SelectableText(message),
+                  for (final hint in keyHints) ...<Widget>[
+                    const SizedBox(height: 4),
+                    SelectableText(hint, style: theme.textTheme.bodySmall),
+                  ],
                   if (details.isNotEmpty)
                     Theme(
                       data: theme.copyWith(dividerColor: Colors.transparent),

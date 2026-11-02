@@ -1,6 +1,7 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
@@ -140,10 +141,14 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.initState();
     final dependencies = Dependencies.of(context);
     final hub = dependencies.agentHub;
-    chatController = ChatController(repository: ChatRepositoryImpl(hub: hub))
+    chatController = ChatController(
+      repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
+    )
       ..addListener(_schedulePublish)
       ..open(sessionId);
-    recoveryController = ChatRecoveryController(repository: ChatRepositoryImpl(hub: hub));
+    recoveryController = ChatRecoveryController(
+      repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
+    );
     promptController = PromptSendingController(repository: PromptSendingRepositoryImpl(hub: hub));
     permissionController = PermissionAnswerController(
       repository: PermissionAnswerRepositoryImpl(hub: hub),
@@ -381,7 +386,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     }
   }
 
-  List<String> loginMethods(String agentId) => recoveryController.loginMethods(agentId);
+  List<AgentLoginMethod> loginMethods(String agentId) =>
+      recoveryController.loginMethods(agentId);
 
   void login(String agentId, String methodId) => recoveryController.login(agentId, methodId);
 

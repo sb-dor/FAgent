@@ -2,23 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/agents/widgets/agent_card.dart';
 import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widget.dart';
 
 /// {@template agents_settings_section}
-/// The "Agents" section of Settings: one [AgentCard] per agent and the button for an own ACP agent
-/// (a preview until M5).
+/// The "Agents" section of Settings: one [AgentCard] per agent and the button that adds a custom
+/// ACP agent. Every agent is checked again when the section opens.
 /// {@endtemplate}
-class AgentsSettingsSection extends StatelessWidget {
+class AgentsSettingsSection extends StatefulWidget {
   /// {@macro agents_settings_section}
   const AgentsSettingsSection({super.key});
 
   @override
+  State<AgentsSettingsSection> createState() => _AgentsSettingsSectionState();
+}
+
+class _AgentsSettingsSectionState extends State<AgentsSettingsSection> {
+  late final AgentsConfigWidgetState scope = AgentsConfigInhWidget.of(context);
+
+  @override
+  void initState() {
+    super.initState();
+    scope.agents.refreshAll();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final scope = AgentsConfigInhWidget.of(context);
     return ListenableBuilder(
       listenable: scope.agents,
       builder: (context, _) {
@@ -48,16 +59,9 @@ class AgentsSettingsSection extends StatelessWidget {
             ],
             Align(
               alignment: Alignment.centerLeft,
-              child: Wrap(
-                spacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: <Widget>[
-                  CompactButton(
-                    label: localization.agentAddCustom,
-                    onPressed: scope.showCustomAgentComingSoon,
-                  ),
-                  const PreviewBadge(),
-                ],
+              child: CompactButton(
+                label: localization.agentAddCustom,
+                onPressed: scope.addCustomAgent,
               ),
             ),
           ],

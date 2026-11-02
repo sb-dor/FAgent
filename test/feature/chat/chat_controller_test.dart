@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
@@ -25,7 +26,7 @@ final class _FakeChatRepository implements IChatRepository {
   Future<void> startNewAgentSession(int sessionId) async {}
 
   @override
-  List<String> loginMethods(String agentId) => const <String>[];
+  List<AgentLoginMethod> loginMethods(String agentId) => const <AgentLoginMethod>[];
 
   @override
   Future<bool> login(

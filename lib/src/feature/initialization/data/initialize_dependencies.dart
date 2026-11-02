@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/run_tools.dart';
@@ -133,12 +134,21 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     dependencies.stopFollowingCustomAgents = subscription.cancel;
     await first.future.timeout(const Duration(seconds: 5), onTimeout: () {});
   },
-  'Create agents repository': (dependencies) =>
-      dependencies.agentsRepository = AgentsRepositoryImpl(
-        hub: dependencies.agentHub,
-        environment: dependencies.shellEnvironment,
-        catalog: dependencies.agentOptionsCatalog,
-      ),
+  // Every agent is checked once in the background; Settings → Agents checks again when it opens.
+  'Create agents repository': (dependencies) {
+    final probe = AgentProbeImpl(environment: dependencies.shellEnvironment);
+    final repository = AgentsRepositoryImpl(
+      hub: dependencies.agentHub,
+      environment: dependencies.shellEnvironment,
+      catalog: dependencies.agentOptionsCatalog,
+      customAgents: dependencies.customAgentsRepository,
+      probe: probe,
+    );
+    dependencies
+      ..agentProbe = probe
+      ..agentsRepository = repository;
+    unawaited(repository.refreshAll());
+  },
   'Create skills repository': (dependencies) async =>
       dependencies.skillsRepository = SkillsRepositoryImpl(
         database: dependencies.database,

@@ -1,5 +1,9 @@
+import 'package:dart_acp_sdk/dart_acp_sdk.dart' show CancellationException;
+import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 
 /// A chat's runtime state and its recovery actions.
 abstract interface class IChatRepository {
@@ -15,12 +19,13 @@ abstract interface class IChatRepository {
   /// Destructive: a new agent session; the agent loses the chat's context.
   Future<void> startNewAgentSession(int sessionId);
 
-  /// Login methods of [agentId] (`claude-ai-login`, `console-login`, …).
-  List<String> loginMethods(String agentId);
+  /// The sign-in methods of [agentId] as last checked; empty for an unknown agent.
+  List<AgentLoginMethod> loginMethods(String agentId);
 
-  /// Logs in to [agentId] with [methodId]; `true` on success. [onOutput]
-  /// gets the login command's output lines (bounded) as they come. Chats
-  /// waiting for the login continue by themselves.
+  /// Signs [agentId] in with [methodId]; `true` on success, `false` when it
+  /// failed or was cancelled. [onOutput] gets a terminal login's output lines
+  /// (bounded) as they come; a browser or key sign-in has none. Chats waiting
+  /// for the sign-in continue by themselves.
   Future<bool> login(
     String agentId,
     String methodId, {
@@ -28,12 +33,14 @@ abstract interface class IChatRepository {
   });
 }
 
-/// AgentHub-backed [IChatRepository].
+/// AgentHub-backed [IChatRepository]; sign-in goes through the agents
+/// repository, which knows each agent's methods.
 final class ChatRepositoryImpl implements IChatRepository {
   /// Creates the repository.
-  ChatRepositoryImpl({required this._hub});
+  ChatRepositoryImpl({required this._hub, required this._agents});
 
   final AgentHub _hub;
+  final IAgentsRepository _agents;
 
   @override
   Future<LiveSession> open(int sessionId) => _hub.session(sessionId);
@@ -48,8 +55,9 @@ final class ChatRepositoryImpl implements IChatRepository {
   Future<void> startNewAgentSession(int sessionId) => _hub.startNewAgentSession(sessionId);
 
   @override
-  List<String> loginMethods(String agentId) =>
-      _hub.agents.firstWhere((a) => a.id == agentId).loginArguments.keys.toList();
+  List<AgentLoginMethod> loginMethods(String agentId) =>
+      _agents.agents.where((agent) => agent.id == agentId).firstOrNull?.methods ??
+      const <AgentLoginMethod>[];
 
   @override
   Future<bool> login(
@@ -57,14 +65,22 @@ final class ChatRepositoryImpl implements IChatRepository {
     String methodId, {
     required void Function(List<String> lines) onOutput,
   }) async {
-    final login = await _hub.login(agentId, methodId);
-    void listener() => onOutput(login.output.value);
-    login.output.addListener(listener);
+    final AgentLogin? login;
+    try {
+      login = await _agents.login(agentId, methodId);
+    } on CancellationException {
+      return false;
+    }
+    // A browser or key sign-in has ended successfully.
+    if (login == null) return true;
+    final terminal = login;
+    void listener() => onOutput(terminal.output.value);
+    terminal.output.addListener(listener);
     listener();
     try {
-      return await login.succeeded;
+      return await terminal.succeeded;
     } finally {
-      login.output.removeListener(listener);
+      terminal.output.removeListener(listener);
     }
   }
 }

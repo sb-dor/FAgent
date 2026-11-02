@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_agents_repository.dart';
 import '../../support/test_app.dart';
 
 ChatView _view(SessionStatus status, {bool canRetryPrompt = false, bool bypassBlocked = false}) =>
@@ -31,7 +32,7 @@ Widget _banner(
   view: view,
   busy: busy,
   loginFailed: false,
-  loginMethods: const <String>['claude-ai-login', 'console-login'],
+  loginMethods: memoryClaudeAgent.methods,
   loginOutput: loginOutput,
   onRetry: () {},
   onStartNewAgentSession: () {},
