@@ -138,8 +138,10 @@ _Согласовано с Avaz в брейншторме 2026-10-28. Макет
 ### 3.4 Поле ввода
 Текст: `@` — контекст, `/` — скиллы и команды. Под текстом чипы `SelectorChip`:
 - **＋** — прикрепить файл или картинку (картинки — после поддержки агентом; пока только файл);
-- **Агент** — меняется только до первого сообщения чата (этап 3 показывает агента чата; выбор
-  другого — M5, пока есть только Claude);
+- **Агент** — меняется только до первого сообщения чата: пока у чата нет ACP-сессии и ничего не
+  настраивается (`AgentHub.canChangeAgent`). Меню — все агенты со статусом: «Готов», «Нужен вход» и
+  «Проверяю…» выбираются, «Не установлен» и «Ошибка» — серые с причиной. Модель, усилие и режим
+  переходят на значения нового агента; после первого сообщения чип заблокирован с подсказкой;
 - **Модель** и **Усилие** — из `configOptions` агента (меню A); галочка «по умолчанию для новых
   чатов» пишет в настройки;
 - **Режим разрешений** — меню B, тон чипа: warn для Accept edits/Auto, danger для Bypass;
@@ -262,8 +264,11 @@ px**, отступы 32; карточки только в одну колонк�
 - Статус Claude — `--cli auth status --json` через закреплённый адаптер, выход — `--cli auth logout`.
   Проверка идёт в своей группе процессов и убивается целиком по таймауту (иначе `npx` умирает, а его
   дочерние `node` остаются).
-- Codex, Gemini и свой ACP-агент — Preview до M5: кнопки сообщают «Появится в M5», агентом по умолчанию
-  они стать не могут.
+- Codex, Gemini и свой ACP-агент — настоящие (M5): статус — ACP-рукопожатие (`IAgentProbe`) плюс
+  проверка входа у встроенных (Codex — `_auth/status_update`, Gemini — `~/.gemini/oauth_creds.json` или
+  `GEMINI_API_KEY`); вход — ACP `authenticate` (браузер или ключ из окружения), выход — где агент
+  заявил `auth.logout`. Агентом по умолчанию может стать любой, кроме «Не установлен» и «Ошибка».
+  Свой агент — форма «Добавить ACP-агента» (таблица `custom_agents`).
 - У `mcp_servers` нет столбца `projectId`: переключатель по проекту — таблица `mcp_server_states`
   (`serverKey`, `projectId`, `enabled`; строка есть, только когда сервер выключен в проекте).
   Встроенные серверы выключаются только по проекту, свои — глобально и по проекту. С M3 включённые
@@ -345,7 +350,7 @@ px**, отступы 32; карточки только в одну колонк�
 | Фича | Репозиторий (главное) | Реализация сейчас |
 |---|---|---|
 | `app_settings` | `IAppSettingsRepository`: `watch()`, `update(AppSettings)` — агент по умолчанию, модель/усилие/режим по агенту, тема, язык, org, шаблон, «hot reload после хода», ширина панелей, плотность ленты, вопрос при выходе, DevTools (поля этапа 6 — в §3.8) | Real: drift-таблица `app_settings` (ключ → JSON; там же каталог `agentOptions`) |
-| `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `refresh(id)`, `install(id)`, `login(id, method)`, `logout(id)`, `openSettings(id)` | Claude — Real (`AgentHub`, `AgentAuth`, `auth status`); Codex, Gemini, свой агент — Preview (`isPreview`, действия бросают `AgentPreviewException`) до M5 |
+| `agents` | `IAgentsRepository`: `watchAgents() → List<AgentInfo>`, `refresh(id)`, `refreshAll()`, `login(id, method)`, `cancelLogin(id)`, `logout(id)`, `hasBusyChats(id)`, `addCustom` / `updateCustom` / `removeCustom`, `openSettings(id)` | Real для всех: проба `IAgentProbe` (предпроверка + ACP `initialize`) и проверка входа своя у каждого встроенного (Claude — `auth status`, Codex — `_auth/status_update`, Gemini — файл учётных данных или ключ); свой агент — «вход проверяется в первом чате» |
 | `session_config` (есть) | меню модели/режима/усилия поверх текущего | Real |
 | `chat_search` | `IChatSearchRepository.search(query)` | Real: drift читает чаты, совпадение по `sessions.title` считается в Dart (без учёта регистра, в том числе кириллицы; `%` и `_` ищутся буквально), т.к. SQLite `LIKE` не сворачивает регистр кириллицы |
 | `skills` | `ISkillsRepository`: `watch(projectId, projectRoot)`, `read/write/duplicate(id, projectRoot)`, `setEnabled(id, scope)`, `create`, `importFolder` (решения этапа 5 — в §3.7) | Real: файлы (`<app support>/skills`, `.claude/skills` проекта, встроенные в `assets/knowledge/`), включение — drift `skill_states`; git-источники — только Preview-кнопка, без данных (вне рамок M3); доставка агенту — Real (M3): правила в системном промпте сессии, скиллы через MCP-сервер приложения (`list_skills`, `load_skill`, `read_skill_file`), выбор на чат — drift `chat_skill_states` |
