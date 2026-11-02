@@ -14,6 +14,29 @@ typedef AgentPermissionHandler = Future<RequestPermissionResponse> Function(
   AcpClientRequestContext<RequestPermissionRequest> context,
 );
 
+/// Sign-in state an agent reports in `_auth/status_update`: `kind` is `none`, `account`,
+/// `api_key`, `external` or `gateway`; `label` is a human-readable summary such as
+/// "ChatGPT Plus".
+typedef AgentAuthStatus = ({String kind, String label});
+
+/// Reads an `_auth/status_update` notification; `null` for any other message.
+///
+/// Drops everything but `kind` and `label` (the notification carries the account's email).
+AgentAuthStatus? parseAuthStatusUpdate(RawAcpMessage message) {
+  if (message.method != '_auth/status_update') return null;
+  final status = message.params?['authStatus'];
+  if (status is! Map<Object?, Object?>) return null;
+  final kind = status['kind'];
+  if (kind is! String) return null;
+  return (
+    kind: kind,
+    label: switch (status['label']) {
+      final String label => label,
+      _ => '',
+    },
+  );
+}
+
 /// {@template agent_start_exception}
 /// The agent process started but did not finish ACP initialization.
 /// {@endtemplate}
@@ -39,7 +62,15 @@ final class AgentStartException implements Exception {
 /// decodes it, so the journal keeps messages the SDK does not understand.
 /// {@endtemplate}
 final class AgentConnection {
-  AgentConnection._(this.definition, this._process, this._connection, this._incoming, this._stderr);
+  AgentConnection._(
+    this.definition,
+    this._process,
+    this._connection,
+    this._incoming,
+    this._stderr,
+    this._watch,
+    this._authStatusOf,
+  );
 
   /// Client implementation sent in `initialize`.
   static final Implementation implementation = Implementation(
@@ -52,13 +83,15 @@ final class AgentConnection {
   /// Throws [AgentPreflightException] before spawning when the machine cannot
   /// run the agent, and [AgentStartException] when initialization fails or
   /// takes longer than [initializeTimeout] (the first `npx` run downloads the
-  /// adapter, hence the long default).
+  /// adapter, hence the long default). Completing [abort] while initializing stops
+  /// the process and throws [AgentStartException] right away.
   static Future<AgentConnection> start({
     required AgentDefinition definition,
     required ShellEnvironment environment,
     required AgentPermissionHandler onPermissionRequest,
     String? workingDirectory,
     Duration initializeTimeout = const Duration(seconds: 120),
+    Future<void>? abort,
   }) async {
     final executable = await AgentPreflight.check(definition, environment);
     final process = await GroupedProcess.start(
@@ -115,13 +148,19 @@ final class AgentConnection {
             // notification as handled.
             .onSessionUpdate((_) {});
 
-    // The initialize response passes the tap before anyone else can listen.
+    // The initialize response passes the tap before anyone else can listen. So does the
+    // sign-in status codex-acp pushes right after it, which may arrive before this method
+    // returns, so it is kept here.
     final initializeResult = Completer<Map<String, Object?>>();
-    final initializeWatch = incoming.stream.listen((message) {
+    AgentAuthStatus? authStatus;
+    // Cancelled in [close].
+    // ignore: cancel_subscriptions
+    final watch = incoming.stream.listen((message) {
       final result = message.result;
       if (!initializeResult.isCompleted && message.isResponse && result != null) {
         if (result.containsKey('agentCapabilities')) initializeResult.complete(result);
       }
+      authStatus = parseAuthStatusUpdate(message) ?? authStatus;
     });
     final connection = AgentConnection._(
       definition,
@@ -129,6 +168,8 @@ final class AgentConnection {
       client.connect(tapped),
       incoming,
       stderr,
+      watch,
+      () => authStatus,
     );
     unawaited(process.exitCode.then((_) => connection._alive = false));
     unawaited(
@@ -137,10 +178,19 @@ final class AgentConnection {
         onError: (Object _) => connection._alive = false,
       ),
     );
+    var settled = false;
+    final aborted = Completer<void>();
+    unawaited(aborted.future.then<void>((_) {}, onError: (Object _) {}));
+    unawaited(
+      abort?.then((_) {
+        if (!settled) aborted.completeError(StateError('start aborted'));
+      }),
+    );
     try {
       await Future.any<void>(<Future<void>>[
         connection._connection.lifecycle.ready,
         process.exitCode.then<void>((code) => throw StateError('agent exited with code $code')),
+        aborted.future,
       ]).timeout(initializeTimeout);
       connection.initializeResult = initializeResult.isCompleted
           ? await initializeResult.future
@@ -155,7 +205,7 @@ final class AgentConnection {
         stderrTail: stderr.items,
       );
     } finally {
-      await initializeWatch.cancel();
+      settled = true;
     }
   }
 
@@ -176,6 +226,15 @@ final class AgentConnection {
   final AcpClientConnection _connection;
   final StreamController<RawAcpMessage> _incoming;
   final RingBuffer<String> _stderr;
+  final StreamSubscription<RawAcpMessage> _watch;
+  final AgentAuthStatus? Function() _authStatusOf;
+
+  /// The last `_auth/status_update` the agent pushed (codex-acp does after `initialize`, to
+  /// clients that advertise `_meta.authStatus`), or `null` when it sent none yet.
+  ///
+  /// Only `kind` and `label` are kept: the notification also carries the account (the user's
+  /// email), which the app must neither store nor log.
+  AgentAuthStatus? get authStatus => _authStatusOf();
 
   /// Every incoming message, raw, in wire order. Broadcast; closes when the
   /// agent's stdout ends.
@@ -202,6 +261,7 @@ final class AgentConnection {
   /// servers it started, so the EOF wait is short.
   Future<void> close({Duration gracePeriod = const Duration(seconds: 5)}) async {
     _alive = false;
+    unawaited(_watch.cancel());
     _connection.close();
     await _process.stop(exitAfterEof: const Duration(milliseconds: 300), gracePeriod: gracePeriod);
   }

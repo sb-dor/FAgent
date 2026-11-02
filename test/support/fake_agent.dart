@@ -30,6 +30,9 @@
 // `_meta.api-key.provider: fake`) and can log out. `authenticate` succeeds, or
 // fails with FAKE_AGENT_AUTH_FAIL=1, or never answers with FAKE_AGENT_AUTH_HANG=1.
 // `logout` forgets a successful `authenticate`.
+// With FAKE_AGENT_AUTH_STATUS=<kind>:<label> (for example `account:ChatGPT Plus`) the agent
+// pushes an `_auth/status_update` notification right after answering `initialize`,
+// like codex-acp does for clients that advertise `_meta.authStatus`.
 
 import 'dart:async';
 import 'dart:convert';
@@ -297,6 +300,31 @@ Future<void> main(List<String> arguments) async {
           });
 
   final connection = agent.connect(acpStdioTransport());
+  final authStatus = Platform.environment['FAKE_AGENT_AUTH_STATUS'];
+  if (authStatus != null) {
+    unawaited(
+      connection.lifecycle.ready.then((_) async {
+        // Let the `initialize` response reach the client first.
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        final colon = authStatus.indexOf(':');
+        stdout.writeln(
+          jsonEncode(<String, Object?>{
+            'jsonrpc': '2.0',
+            'method': '_auth/status_update',
+            'params': <String, Object?>{
+              'authStatus': <String, Object?>{
+                'kind': authStatus.substring(0, colon),
+                'label': authStatus.substring(colon + 1),
+                // The real adapter sends the account; the app must never keep it.
+                'account': <String, Object?>{'email': 'user@example.com'},
+              },
+            },
+          }),
+        );
+        await stdout.flush();
+      }),
+    );
+  }
   await connection.closed;
   exit(0);
 }
