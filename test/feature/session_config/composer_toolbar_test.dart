@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
@@ -46,6 +48,25 @@ const _effort = SelectConfigOption(
     ConfigChoice(value: 'high', name: 'High'),
   ],
 );
+
+const _agents = <AgentInfo>[
+  AgentInfo(id: 'claude', name: 'Claude Code', status: AgentStatus.ready),
+  AgentInfo(id: 'codex', name: 'Codex', status: AgentStatus.needsLogin),
+  AgentInfo(
+    id: 'gemini',
+    name: 'Gemini CLI',
+    status: AgentStatus.notInstalled,
+    problem: 'Node.js 22 or newer is required',
+  ),
+  AgentInfo(
+    id: 'custom:1',
+    name: 'My agent',
+    status: AgentStatus.failed,
+    problem: 'command not found: my-agent',
+    source: AgentSource.custom,
+  ),
+  AgentInfo(id: 'custom:2', name: 'Checking agent', source: AgentSource.custom),
+];
 
 SelectConfigOption _withMode(String value) => SelectConfigOption(
   id: _mode.id,
@@ -110,6 +131,7 @@ void main() {
 
   group('ComposerToolbar', () {
     final changes = <(String, Object)>[];
+    final agentChanges = <String>[];
     var attached = 0;
     var madeDefault = 0;
     late Dependencies dependencies;
@@ -118,6 +140,7 @@ void main() {
       dependencies = testDependencies();
       addTearDown(dependencies.database.close);
       changes.clear();
+      agentChanges.clear();
       attached = 0;
       madeDefault = 0;
     });
@@ -126,10 +149,16 @@ void main() {
       List<ConfigOption> options = const <ConfigOption>[_mode, _model, _effort],
       bool agentLocked = false,
       bool enabled = true,
+      List<AgentInfo> agents = _agents,
+      String agentId = 'claude',
+      String agentName = 'Claude Code',
     }) => testApp(
       dependencies: dependencies,
       ComposerToolbar(
-        agentName: 'Claude Code',
+        agentName: agentName,
+        agentId: agentId,
+        agents: agents,
+        onAgentSelected: agentChanges.add,
         agentLocked: agentLocked,
         options: options,
         enabled: enabled,
@@ -152,7 +181,7 @@ void main() {
       expect(attached, 1);
     });
 
-    testWidgets('the agent menu marks the chat agent and lists the others as coming later', (
+    testWidgets('the agent menu lists every agent with its status and marks the chat agent', (
       tester,
     ) async {
       await tester.pumpWidget(toolbar());
@@ -162,25 +191,67 @@ void main() {
       expect(find.byIcon(Icons.check), findsOneWidget);
       expect(find.text('Codex'), findsOneWidget);
       expect(find.text('Gemini CLI'), findsOneWidget);
-      expect(find.text('Coming in M5'), findsNWidgets(2));
-
-      await tester.tap(find.text('Codex'));
-      await tester.pumpAndSettle();
-      // Disabled rows do not close the menu or change anything.
-      expect(find.text('Gemini CLI'), findsOneWidget);
-      expect(changes, isEmpty);
+      expect(find.text('My agent'), findsOneWidget);
+      expect(find.text('Coming in M5'), findsNothing);
+      // A signed-out agent can be picked and says so; the others say why they cannot.
+      expect(find.text('login required'), findsOneWidget);
+      expect(find.text('Node.js 22 or newer is required'), findsOneWidget);
+      expect(find.text('command not found: my-agent'), findsOneWidget);
     });
 
-    testWidgets('after the first message the agent cannot be changed', (tester) async {
-      await tester.pumpWidget(toolbar(agentLocked: true));
+    testWidgets('a ready, signed-out or still checked agent can be picked', (tester) async {
+      await tester.pumpWidget(toolbar());
       await tester.tap(find.text('Claude Code'));
       await tester.pumpAndSettle();
 
-      final claude = find.ancestor(
-        of: find.text('Claude Code').last,
-        matching: find.byType(Opacity),
-      );
-      expect(tester.widget<Opacity>(claude.first).opacity, lessThan(1));
+      await tester.tap(find.text('Codex'));
+      await tester.pumpAndSettle();
+      expect(agentChanges, <String>['codex']);
+
+      await tester.tap(find.text('Claude Code'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Checking agent'));
+      await tester.pumpAndSettle();
+      expect(agentChanges, <String>['codex', 'custom:2']);
+    });
+
+    testWidgets('a missing or failed agent is grey and picks nothing', (tester) async {
+      await tester.pumpWidget(toolbar());
+      await tester.tap(find.text('Claude Code'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Gemini CLI'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('My agent'));
+      await tester.pumpAndSettle();
+
+      // The menu stays open and nothing was chosen.
+      expect(find.text('Gemini CLI'), findsOneWidget);
+      expect(agentChanges, isEmpty);
+    });
+
+    testWidgets('after the first message the agent chip is locked with a hint', (tester) async {
+      await tester.pumpWidget(toolbar(agentLocked: true));
+
+      expect(find.byTooltip("The agent can't be changed after the first message"), findsOneWidget);
+      await tester.tap(find.text('Claude Code'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Codex'), findsNothing);
+      expect(agentChanges, isEmpty);
+    });
+
+    testWidgets('the chip shows the name of the chat agent, even when the list lacks it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(toolbar(agentId: 'custom:9', agentName: 'custom:9'));
+      await tester.tap(find.text('custom:9'));
+      await tester.pumpAndSettle();
+
+      // The chat's own agent is listed (selected) beside the known ones.
+      expect(find.text('custom:9'), findsNWidgets(2));
+      expect(find.byIcon(Icons.check), findsOneWidget);
+      expect(find.text('Codex'), findsOneWidget);
     });
 
     testWidgets('the model chip shows a value the agent does not list', (tester) async {
@@ -373,6 +444,8 @@ void main() {
             toolbar: <Widget>[
               ComposerToolbar(
                 agentName: 'Claude Code',
+                agentId: 'claude',
+                agents: _agents,
                 agentLocked: false,
                 options: const <ConfigOption>[_mode, _model, _effort],
                 enabled: true,

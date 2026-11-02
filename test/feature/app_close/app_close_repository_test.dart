@@ -1,8 +1,11 @@
 import 'package:drift/native.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_probe_result.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
@@ -95,6 +98,24 @@ final class _RecordingProbe implements IMcpProbe {
   }
 }
 
+/// Records when it is disposed; reads the database first, so it must still be open.
+final class _RecordingAgentProbe implements IAgentProbe {
+  _RecordingAgentProbe(this.events, this.database);
+
+  final List<String> events;
+  final AppDatabase database;
+
+  @override
+  Future<AgentProbeResult> probe(AgentDefinition agent, {Duration? authStatusWait}) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> dispose() async {
+    await database.select(database.projectsTable).get();
+    events.add('agent-probe:dispose');
+  }
+}
+
 /// Records when it is disposed; throws when [error] is set.
 final class _RecordingCreation implements IProjectCreationRepository {
   _RecordingCreation(this.events, {this.error});
@@ -148,6 +169,7 @@ void main() {
       devices: devices,
       appMcpServer: _RecordingAppMcpServer(events, database),
       mcpProbe: _RecordingProbe(events, database),
+      agentProbe: _RecordingAgentProbe(events, database),
       projectCreation: _RecordingCreation(creationEvents),
     );
   });
@@ -163,6 +185,7 @@ void main() {
         'devices:end',
         'mcp:close',
         'probe:dispose',
+        'agent-probe:dispose',
       ]);
       // The database is closed once everything else is stopped.
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
@@ -172,6 +195,13 @@ void main() {
       await repository.shutdown();
 
       expect(creationEvents, <String>['creation:dispose']);
+    });
+
+    test('stops the agent probes before the database closes', () async {
+      await repository.shutdown();
+
+      // It reads the database when it is disposed, so the event means the database was open.
+      expect(events, contains('agent-probe:dispose'));
     });
 
     test('stops the MCP probes before the database closes', () async {
@@ -186,12 +216,33 @@ void main() {
 
       await repository.shutdown();
 
-      expect(events.sublist(events.length - 3), <String>[
+      expect(events.sublist(events.length - 4), <String>[
         'hub:disposed',
         'mcp:close',
         'probe:dispose',
+        'agent-probe:dispose',
       ]);
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
+    });
+
+    test('stops following the agent list before the agents stop', () async {
+      hub.notices.listen(null, onDone: () => events.add('hub:disposed'));
+      repository = AppCloseRepositoryImpl(
+        hub: hub,
+        database: database,
+        settings: AppSettingsRepositoryImpl(database: database),
+        appRun: run,
+        devices: devices,
+        appMcpServer: _RecordingAppMcpServer(events, database),
+        mcpProbe: _RecordingProbe(events, database),
+        agentProbe: _RecordingAgentProbe(events, database),
+        projectCreation: _RecordingCreation(creationEvents),
+        stopAgentList: () async => events.add('agents:stop'),
+      );
+
+      await repository.shutdown();
+
+      expect(events, containsAllInOrder(<String>['agents:stop', 'hub:disposed']));
     });
 
     test(
@@ -209,6 +260,7 @@ void main() {
           devices: devices,
           appMcpServer: _RecordingAppMcpServer(events, database),
           mcpProbe: _RecordingProbe(events, database),
+          agentProbe: _RecordingAgentProbe(events, database),
           projectCreation: _RecordingCreation(
             creationEvents,
             error: StateError('the process would not die'),

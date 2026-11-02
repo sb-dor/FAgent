@@ -508,6 +508,26 @@ void main() {
     expect(_agentText(live).join(), 'onetwo');
   });
 
+  test('a new chat whose agent could not start can still change its agent', () async {
+    final hub = newHub(
+      agent: AgentDefinition(
+        id: 'fake',
+        displayName: 'Broken',
+        executable: '${temp.path}/no-such-agent',
+      ),
+    );
+    final chat = await newChat();
+    final live = await hub.session(chat);
+
+    await expectLater(hub.prompt(chat, 'echo x'), throwsA(anything));
+
+    expect(live.status.value, SessionStatus.error);
+    expect(live.acpSessionId, isNull);
+    expect(hub.canChangeAgent(chat), isTrue);
+    expect(await hub.forget(chat), isTrue);
+    expect(hub.opened(chat), isNull);
+  });
+
   test('loading an unknown agent session fails with notFound and can start over', () async {
     final hub = newHub();
     final chat = await newChat(acpSessionId: 'missing');
@@ -807,7 +827,7 @@ void main() {
       final asked = <(int, String)>[];
       final hub = newHub(
         agent: recordingAgent,
-        sessionContext: (sessionId, agent) async {
+        sessionContext: (sessionId, agent, _) async {
           asked.add((sessionId, agent.id));
           return SessionContext(servers: servers, meta: meta);
         },
@@ -833,7 +853,7 @@ void main() {
       final asked = <int>[];
       final second = newHub(
         agent: recordingAgent,
-        sessionContext: (sessionId, agent) async {
+        sessionContext: (sessionId, agent, _) async {
           asked.add(sessionId);
           return SessionContext(servers: servers, meta: meta);
         },
@@ -863,7 +883,7 @@ void main() {
     test('a provider that throws still lets the session start, without context', () async {
       final hub = newHub(
         agent: recordingAgent,
-        sessionContext: (_, _) async => throw StateError('no project'),
+        sessionContext: (_, _, _) async => throw StateError('no project'),
       );
       final chat = await newChat();
 

@@ -65,6 +65,20 @@ const AgentDefinition _otherAgent = AgentDefinition(
   executable: 'other',
 );
 
+/// What Claude and Gemini report in `initialize`.
+const Map<String, Object?> _httpAndSse = <String, Object?>{
+  'agentCapabilities': <String, Object?>{
+    'mcpCapabilities': <String, Object?>{'http': true, 'sse': true},
+  },
+};
+
+/// An agent that takes only stdio servers.
+const Map<String, Object?> _stdioOnly = <String, Object?>{
+  'agentCapabilities': <String, Object?>{
+    'mcpCapabilities': <String, Object?>{'http': false, 'sse': false},
+  },
+};
+
 void main() {
   late Directory temp;
   late Directory projectDir;
@@ -181,8 +195,11 @@ void main() {
     },
   );
 
-  Future<SessionContext> context({AgentDefinition agent = AgentDefinition.claude}) =>
-      repository().forSession(sessionId: chatId, agent: agent);
+  Future<SessionContext> context({
+    AgentDefinition agent = AgentDefinition.claude,
+    Map<String, Object?> initializeResult = _httpAndSse,
+  }) =>
+      repository().forSession(sessionId: chatId, agent: agent, initializeResult: initializeResult);
 
   Map<String, Object?>? serverNamed(SessionContext context, String name) => context.servers
       .map((server) => server.toJson()! as Map<String, Object?>)
@@ -205,6 +222,7 @@ void main() {
       final result = await context();
 
       final app = serverNamed(result, appMcpServerName)!;
+      expect(result.withAppServer, isTrue);
       expect(app['type'], 'http');
       expect(app['url'], 'http://127.0.0.1:4321/mcp');
       final headers = (app['headers']! as List<Object?>).cast<Map<String, Object?>>();
@@ -363,6 +381,7 @@ void main() {
       final result = await context();
 
       expect(result.servers, isEmpty);
+      expect(result.withAppServer, isFalse);
       expect(appendOf(result), isNot(contains('Skills from flutter_code_agent')));
       expect(optionsOf(result).containsKey('allowedTools'), isFalse);
     });
@@ -383,12 +402,46 @@ void main() {
       final result = await context(agent: _otherAgent);
 
       expect(names(result), [appMcpServerName, 'dart']);
+      expect(result.withAppServer, isTrue);
       expect(result.meta, isNull);
+      expect(result.skippedServers, isEmpty);
+    });
+
+    test('http servers dropped for an agent without mcp http', () async {
+      await mcpServers.add(
+        const McpServerDraft(name: 'tool', transport: McpTransport.stdio, command: 'npx'),
+      );
+      await mcpServers.add(
+        const McpServerDraft(
+          name: 'remote',
+          transport: McpTransport.http,
+          url: 'https://example.com/mcp',
+        ),
+      );
+
+      final result = await context(agent: AgentDefinition.gemini, initializeResult: _stdioOnly);
+
+      expect(names(result), ['dart', 'tool']);
+      expect(result.skippedServers, [appMcpServerName, 'remote']);
+      expect(result.withAppServer, isFalse);
+      // Without the app's server its skills cannot be loaded.
+      expect(result.firstMessageRules, isNot(contains('Skills from flutter_code_agent')));
+    });
+
+    test('an agent that reported nothing in initialize gets only stdio servers', () async {
+      final result = await context(agent: _otherAgent, initializeResult: const {});
+
+      expect(names(result), ['dart']);
+      expect(result.skippedServers, [appMcpServerName]);
     });
 
     test('a session without a row throws', () async {
       await expectLater(
-        repository().forSession(sessionId: chatId + 100, agent: AgentDefinition.claude),
+        repository().forSession(
+          sessionId: chatId + 100,
+          agent: AgentDefinition.claude,
+          initializeResult: _httpAndSse,
+        ),
         throwsA(isA<StateError>()),
       );
     });
@@ -514,6 +567,68 @@ void main() {
 
       expect(optionsOf(await context()).containsKey('skills'), isFalse);
     });
+  });
+
+  group('rules for each agent', () {
+    test('Claude: _meta without .claude/rules, with AGENTS.md', () async {
+      final result = await context();
+
+      expect(appendOf(result), isNot(contains('Team rule text')));
+      expect(appendOf(result), contains('Agents file text'));
+      expect(result.systemPrompt, isNull);
+      expect(result.firstMessageRules, isNull);
+    });
+
+    test('Codex: systemPrompt with .claude/rules, without AGENTS.md', () async {
+      final result = await context(agent: AgentDefinition.codex);
+
+      expect(result.meta, isNull);
+      expect(result.firstMessageRules, isNull);
+      final rules = result.systemPrompt!;
+      expect(rules, contains('Base rule text'));
+      expect(rules, contains('Style rule text'));
+      expect(rules, contains('Team rule text'));
+      expect(rules, isNot(contains('Agents file text')));
+      expect(rules, contains('- arch — Architecture'));
+    });
+
+    test('Gemini: firstMessageRules with .claude/rules and AGENTS.md', () async {
+      final result = await context(agent: AgentDefinition.gemini);
+
+      expect(result.meta, isNull);
+      expect(result.systemPrompt, isNull);
+      final rules = result.firstMessageRules!;
+      expect(rules, contains('Base rule text'));
+      expect(rules, contains('Team rule text'));
+      expect(rules, contains('Agents file text'));
+      expect(rules, contains('- arch — Architecture'));
+    });
+
+    test('a custom agent gets the rules on its channel, with AGENTS.md', () async {
+      const custom = AgentDefinition(
+        id: 'custom:1',
+        displayName: 'Mine',
+        executable: 'mine',
+        rulesChannel: RulesChannel.systemPrompt,
+        source: AgentSource.custom,
+      );
+
+      final result = await context(agent: custom);
+
+      expect(result.systemPrompt, contains('Team rule text'));
+      expect(result.systemPrompt, contains('Agents file text'));
+    });
+
+    test(
+      "AGENTS.md goes to Gemini even when CLAUDE.md imports it (Gemini doesn't read CLAUDE.md)",
+      () async {
+        File(p.join(projectDir.path, 'CLAUDE.md')).writeAsStringSync('@AGENTS.md\n');
+
+        final result = await context(agent: AgentDefinition.gemini);
+
+        expect(result.firstMessageRules, contains('Agents file text'));
+      },
+    );
   });
 
   group('promptRules', () {

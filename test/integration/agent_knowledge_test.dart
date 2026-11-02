@@ -109,7 +109,11 @@ void main() {
       database: database,
       environment: environment,
       setupTimeout: const Duration(minutes: 3),
-      sessionContext: (sessionId, agent) => context.forSession(sessionId: sessionId, agent: agent),
+      sessionContext: (sessionId, agent, initializeResult) => context.forSession(
+        sessionId: sessionId,
+        agent: agent,
+        initializeResult: initializeResult,
+      ),
     );
   });
 

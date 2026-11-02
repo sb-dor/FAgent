@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_agents_repository.dart';
 import '../../support/test_app.dart';
 
 ChatView _view(SessionStatus status, {bool canRetryPrompt = false, bool bypassBlocked = false}) =>
@@ -31,7 +32,7 @@ Widget _banner(
   view: view,
   busy: busy,
   loginFailed: false,
-  loginMethods: const <String>['claude-ai-login', 'console-login'],
+  loginMethods: memoryClaudeAgent.methods,
   loginOutput: loginOutput,
   onRetry: () {},
   onStartNewAgentSession: () {},
@@ -69,6 +70,23 @@ void main() {
           .onPressed,
       isNull,
     );
+  });
+
+  testWidgets('a chat of a removed agent says so and offers no retry', (tester) async {
+    const view = ChatView(
+      sessionId: 1,
+      agentId: 'custom:1',
+      items: <ChatItem>[],
+      status: SessionStatus.error,
+      problem: SessionProblem(SessionProblemKind.removed, 'This agent was removed'),
+    );
+    await tester.pumpWidget(testApp(_banner(view)));
+
+    expect(
+      find.text("This agent was removed. The chat's history stays; it cannot continue."),
+      findsOneWidget,
+    );
+    expect(find.text('Retry'), findsNothing);
   });
 
   testWidgets('a prompt held by the bypass gate is not offered for repeating', (tester) async {

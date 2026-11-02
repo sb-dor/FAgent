@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/localization/generated/generated_l
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
 import 'package:flutter_code_agent/src/feature/session_config/widgets/bypass_confirm_dialog.dart';
@@ -19,12 +20,15 @@ class ComposerToolbar extends StatelessWidget {
   /// {@macro composer_toolbar}
   const ComposerToolbar({
     required this.agentName,
+    required this.agentId,
+    required this.agents,
     required this.agentLocked,
     required this.options,
     required this.enabled,
     required this.onChanged,
     required this.onAttach,
     required this.onMakeDefault,
+    this.onAgentSelected,
     this.chatSkills = ChatSkills.empty,
     this.chatSkillStates = const <String, bool>{},
     this.onToggleChatSkill,
@@ -35,7 +39,17 @@ class ComposerToolbar extends StatelessWidget {
   /// Name of the chat's agent.
   final String agentName;
 
-  /// The chat has a message already, so its agent can no longer be changed.
+  /// Id of the chat's agent.
+  final String agentId;
+
+  /// Every agent the app knows, with where it stands: the chip lists them.
+  final List<AgentInfo> agents;
+
+  /// An agent was picked from the chip (before the first message); `null` leaves the chip without
+  /// effect.
+  final ValueChanged<String>? onAgentSelected;
+
+  /// The chat's agent cannot be changed (any more): a message was sent or is on its way.
   final bool agentLocked;
 
   /// Settings to show; empty until the agent has started.
@@ -111,29 +125,49 @@ class ComposerToolbar extends StatelessWidget {
   Widget _agentChip(GeneratedLocalization localization) => SelectorChip<String>(
     label: agentName,
     icon: Icons.smart_toy_outlined,
-    tooltip: localization.agentLabel,
-    sections: <AppMenuSection<String>>[
-      AppMenuSection<String>(
-        title: localization.agentLabel,
-        items: <AppMenuItem<String>>[
-          AppMenuItem<String>(
-            value: agentName,
-            title: agentName,
-            icon: Icons.smart_toy_outlined,
-            selected: true,
-            enabled: !agentLocked,
-          ),
-          for (final other in const <String>['Codex', 'Gemini CLI'])
-            AppMenuItem<String>(
-              value: other,
-              title: other,
-              subtitle: localization.comingInMilestone('M5'),
-              enabled: false,
+    tooltip: agentLocked ? localization.agentLockedHint : localization.agentLabel,
+    sections: agentLocked
+        ? null
+        : <AppMenuSection<String>>[
+            AppMenuSection<String>(
+              title: localization.agentLabel,
+              items: <AppMenuItem<String>>[
+                // The chat's own agent stays on the list even when it is no longer configured.
+                if (!agents.any((agent) => agent.id == agentId))
+                  AppMenuItem<String>(
+                    value: agentId,
+                    title: agentName,
+                    icon: Icons.smart_toy_outlined,
+                    selected: true,
+                  ),
+                for (final agent in agents) _agentItem(localization, agent),
+              ],
             ),
-        ],
-      ),
-    ],
+          ],
+    onSelected: (id) {
+      if (id != agentId) onAgentSelected?.call(id);
+    },
   );
+
+  /// A ready, signed-out or still checked agent can be picked; one that is missing or failed is
+  /// grey and says why.
+  AppMenuItem<String> _agentItem(GeneratedLocalization localization, AgentInfo agent) {
+    final subtitle = switch (agent.status) {
+      AgentStatus.ready => null,
+      AgentStatus.checking => localization.agentStatusChecking,
+      AgentStatus.needsLogin => localization.agentStatusNeedsLogin,
+      AgentStatus.notInstalled => agent.problem ?? localization.agentStatusNotInstalled,
+      AgentStatus.failed => agent.problem ?? localization.agentStatusFailed,
+    };
+    return AppMenuItem<String>(
+      value: agent.id,
+      title: agent.name,
+      subtitle: subtitle,
+      icon: Icons.smart_toy_outlined,
+      selected: agent.id == agentId,
+      enabled: agent.canStartChats,
+    );
+  }
 
   Widget _modelChip(
     GeneratedLocalization localization,

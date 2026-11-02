@@ -42,12 +42,17 @@ List<KnowledgeItem> promptRules(SkillLibrary library, {required bool agentReadsP
 
 /// Builds the [SessionContext] of a chat.
 abstract interface class ISessionContextRepository {
-  /// The servers and the `_meta` for a new or loaded agent session of the chat [sessionId], which
-  /// runs [agent]. The project comes from the chat's `sessions` row; a chat without one throws a
-  /// [StateError].
+  /// The servers and the rules for a new or loaded agent session of the chat [sessionId], which
+  /// runs [agent]; [initializeResult] is the agent's raw `initialize` result, whose
+  /// `agentCapabilities.mcpCapabilities` say which server transports it takes. The project comes
+  /// from the chat's `sessions` row; a chat without one throws a [StateError].
   ///
   /// Each call issues the chat a new token for the app's server, so the previous one stops working.
-  Future<SessionContext> forSession({required int sessionId, required AgentDefinition agent});
+  Future<SessionContext> forSession({
+    required int sessionId,
+    required AgentDefinition agent,
+    required Map<String, Object?> initializeResult,
+  });
 }
 
 /// {@template session_context_repository}
@@ -57,12 +62,17 @@ abstract interface class ISessionContextRepository {
 /// Servers, in this order: the app's server (an `http` entry with the chat's bearer token) unless
 /// it did not start or is off in the project; Dart MCP on the project's Flutter SDK unless there is
 /// none or it is off in the project; then the user's servers that are on for the project, `stdio`
-/// ones with the login shell's `PATH` added to their `env`.
+/// ones with the login shell's `PATH` added to their `env`. `http` servers go only to an agent
+/// whose `initialize` reported `mcpCapabilities.http` (`sse` ones would need `.sse`; the app has
+/// none yet); the names of the others are [SessionContext.skippedServers].
+/// [SessionContext.withAppServer] says whether the app's server is among them.
 ///
-/// Only for an agent with [AgentDefinition.acceptsClaudeMeta], the `_meta`:
-/// * `systemPrompt.append` — [buildRulesPrompt] of [promptRules] (the project's rules are left
-///   out: Claude Code reads `.claude/rules` itself), the project's `AGENTS.md` and the app's skills
-///   that are on for the chat, one per name (none without the app's server);
+/// The rules are [buildRulesPrompt] of [promptRules], the project's `AGENTS.md` and the app's
+/// skills that are on for the chat, one per name (none without the app's server), without what
+/// the agent reads itself: Claude Code reads `.claude/rules`, Codex reads `AGENTS.md`. They go
+/// on the agent's [AgentDefinition.rulesChannel]: [SessionContext.systemPrompt],
+/// [SessionContext.firstMessageRules], or for [RulesChannel.claudeMeta] the `_meta`:
+/// * `systemPrompt.append` — the rules;
 /// * `claudeCode.options.allowedTools` — the app's server, whose tools then never ask;
 /// * `claudeCode.options.skills` — only while a project skill (`.claude/skills`) is off for the
 ///   project or the chat: the project's skills that are on. The key is an allowlist, so while it
@@ -100,13 +110,22 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
   Future<SessionContext> forSession({
     required int sessionId,
     required AgentDefinition agent,
+    required Map<String, Object?> initializeResult,
   }) async {
     final (:projectId, :projectRoot) = await _projectOf(sessionId);
     final servers = await _mcpServers.watchServers().first;
     bool onHere(String id) => servers.any((s) => s.id == id && !s.disabledIn.contains(projectId));
 
+    final mcp = switch (initializeResult['agentCapabilities']) {
+      {'mcpCapabilities': final Map<Object?, Object?> mcp} => mcp,
+      _ => const <Object?, Object?>{},
+    };
+    final takesHttp = mcp['http'] == true;
+    final skipped = <String>[];
     final appUrl = _appServer.url;
-    final withApp = appUrl != null && onHere(_appServerId);
+    final appOn = appUrl != null && onHere(_appServerId);
+    if (appOn && !takesHttp) skipped.add(appMcpServerName);
+    final withApp = appOn && takesHttp;
     final dart = onHere(_dartServerId) ? _dartServer(projectRoot) : null;
     final entries = <acp.McpServer>[
       if (withApp)
@@ -123,29 +142,52 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
           ),
         ),
       ?dart,
-      for (final server in servers)
-        if (!server.builtin && server.enabled && !server.disabledIn.contains(projectId))
-          ?_userServer(server),
     ];
-    if (!agent.acceptsClaudeMeta) return SessionContext(servers: entries);
+    for (final server in servers) {
+      if (server.builtin || !server.enabled || server.disabledIn.contains(projectId)) continue;
+      if (server.transport == McpTransport.http && !takesHttp) {
+        skipped.add(server.name);
+      } else if (_userServer(server) case final entry?) {
+        entries.add(entry);
+      }
+    }
 
     final library = await _skills.watch(projectId: projectId, projectRoot: projectRoot).first;
     final chatStates = await _chatSkills.current(sessionId);
+    final claude = agent.rulesChannel == RulesChannel.claudeMeta;
     final prompt = buildRulesPrompt(
       // Claude Code loads `.claude/rules` itself (the adapter passes the project setting source).
-      rules: await _enabledRules(
-        library,
-        projectRoot,
-        agentReadsProjectRules: agent.acceptsClaudeMeta,
-      ),
+      rules: await _enabledRules(library, projectRoot, agentReadsProjectRules: claude),
       skills: [
         if (withApp)
           for (final skill in appSkillsByName(library, chatStates))
             (name: skill.name, description: skill.description),
       ],
-      agentsMd: await _readOrNull(p.join(projectRoot, 'AGENTS.md')),
-      claudeMd: await _readOrNull(p.join(projectRoot, 'CLAUDE.md')),
+      // Codex reads `AGENTS.md` itself.
+      agentsMd: agent.id == AgentDefinition.codex.id
+          ? null
+          : await _readOrNull(p.join(projectRoot, 'AGENTS.md')),
+      // Only Claude Code follows an `@AGENTS.md` import of `CLAUDE.md`.
+      claudeMd: claude ? await _readOrNull(p.join(projectRoot, 'CLAUDE.md')) : null,
     );
+    switch (agent.rulesChannel) {
+      case RulesChannel.systemPrompt:
+        return SessionContext(
+          servers: entries,
+          systemPrompt: prompt,
+          skippedServers: skipped,
+          withAppServer: withApp,
+        );
+      case RulesChannel.firstMessage:
+        return SessionContext(
+          servers: entries,
+          firstMessageRules: prompt,
+          skippedServers: skipped,
+          withAppServer: withApp,
+        );
+      case RulesChannel.claudeMeta:
+        break;
+    }
     final projectSkills = [
       for (final skill in library.skills)
         if (skill.source == SkillSource.project) skill,
@@ -153,6 +195,8 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
     final onForChat = {for (final skill in skillsForChat(library, chatStates)) skill.id};
     return SessionContext(
       servers: entries,
+      skippedServers: skipped,
+      withAppServer: withApp,
       meta: <String, Object?>{
         'systemPrompt': <String, Object?>{'append': prompt},
         'claudeCode': <String, Object?>{

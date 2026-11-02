@@ -1,8 +1,11 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
@@ -25,6 +28,8 @@ import 'package:flutter_code_agent/src/feature/session_config/controller/session
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_roles.dart';
+import 'package:flutter_code_agent/src/feature/sessions/controller/session_agent_controller.dart';
+import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/chat_skill_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/chat_skills_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_text_controller.dart';
@@ -111,7 +116,10 @@ class ChatConfigWidget extends StatefulWidget {
 
 class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final ChatController chatController;
+  late final AgentsController agentsController;
+  late final SessionAgentController sessionAgentController;
   late final ChatRecoveryController recoveryController;
+  late final ChatLoginMethodsController loginMethodsController;
   late final PromptSendingController promptController;
   late final PermissionAnswerController permissionController;
   late final SessionConfigController configController;
@@ -140,10 +148,18 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.initState();
     final dependencies = Dependencies.of(context);
     final hub = dependencies.agentHub;
-    chatController = ChatController(repository: ChatRepositoryImpl(hub: hub))
+    chatController = ChatController(
+      repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
+    )
       ..addListener(_schedulePublish)
       ..open(sessionId);
-    recoveryController = ChatRecoveryController(repository: ChatRepositoryImpl(hub: hub));
+    final chatRepository = ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository);
+    agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
+    sessionAgentController = SessionAgentController(
+      repository: SessionsRepositoryImpl(database: dependencies.database, hub: hub),
+    )..addListener(_onAgentChanged);
+    recoveryController = ChatRecoveryController(repository: chatRepository);
+    loginMethodsController = ChatLoginMethodsController(repository: chatRepository)..watch();
     promptController = PromptSendingController(repository: PromptSendingRepositoryImpl(hub: hub));
     permissionController = PermissionAnswerController(
       repository: PermissionAnswerRepositoryImpl(hub: hub),
@@ -172,6 +188,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       ..removeListener(_schedulePublish)
       ..dispose();
     recoveryController.dispose();
+    agentsController.dispose();
+    sessionAgentController
+      ..removeListener(_onAgentChanged)
+      ..dispose();
+    loginMethodsController.dispose();
     promptController.dispose();
     permissionController.dispose();
     configController.dispose();
@@ -193,6 +214,23 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     chatSkills.value = widget.chatSkills;
     if (canOpenSkills) chatSkillsController.watch(sessionId);
   }
+
+  /// The chat's agent was changed: the hub forgot the chat's runtime state, so it is loaded again;
+  /// a refused change is told to the user.
+  void _onAgentChanged() {
+    switch (sessionAgentController.state) {
+      case SessionAgent$CompletedState(:final sessionId) when sessionId == this.sessionId:
+        chatController.open(sessionId, keepView: true);
+      case SessionAgent$ErrorState(:final error):
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(Localization.of(context).agentActionFailed('$error'))),
+        );
+      case _:
+    }
+  }
+
+  /// Makes [agentId] run this chat; only possible before the first message.
+  void setAgent(String agentId) => sessionAgentController.set(sessionId, agentId);
 
   /// Whether the skill library can be shown from the chat.
   bool get canOpenSkills => widget.onOpenSkills != null;
@@ -381,9 +419,21 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     }
   }
 
-  List<String> loginMethods(String agentId) => recoveryController.loginMethods(agentId);
+  /// Signs [agentId] in with [methodId]; a browser or key sign-in can be cancelled.
+  void login(String agentId, String methodId) {
+    final method = loginMethodsController
+        .methodsOf(agentId)
+        .where((m) => m.id == methodId)
+        .firstOrNull;
+    recoveryController.login(
+      agentId,
+      methodId,
+      cancellable: method != null && method.kind != AgentLoginKind.terminal,
+    );
+  }
 
-  void login(String agentId, String methodId) => recoveryController.login(agentId, methodId);
+  /// Stops the running browser or key sign-in of [agentId].
+  void cancelLogin(String agentId) => recoveryController.cancelLogin(agentId);
 
   /// Destructive; asks first.
   Future<void> startNewAgentSession() async {

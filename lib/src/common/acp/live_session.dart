@@ -41,6 +41,9 @@ enum SessionProblemKind {
 
   /// The turn does not end after Stop.
   stuck,
+
+  /// The chat's agent is no longer configured; nothing can be retried.
+  removed,
 }
 
 /// {@template session_problem}
@@ -144,6 +147,14 @@ final class LiveSession {
 
   /// Content of the last prompt, for "repeat after login".
   List<Map<String, Object?>>? lastPrompt;
+
+  /// The agent session was set up with the app's MCP server; only then are
+  /// the app's tools allowed without asking.
+  bool hasAppServer = false;
+
+  /// Rules for the first prompt of the agent session this run created (the
+  /// first-message channel); cleared once a prompt carrying them is sent.
+  String? firstMessageRules;
 
   /// While `session/load` replays history, frames are not journaled.
   bool replaying = false;

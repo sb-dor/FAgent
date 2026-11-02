@@ -1,9 +1,11 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
@@ -77,6 +79,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectCreationController projectCreation;
   late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
+
+  /// The agents and where they stand: the sidebar names the agent of a chat after them.
+  late final AgentsController agentsController;
   late final SessionCreationController sessionCreationController;
   late final DevicesController devicesController;
   late final RunController runController;
@@ -142,6 +147,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
         hub: dependencies.agentHub,
       ),
     );
+    agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionCreationController = SessionCreationController(
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
     )..addListener(_onSessionCreated);
@@ -211,6 +217,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..dispose();
     projectsController.dispose();
     sessionsController.dispose();
+    agentsController.dispose();
     super.dispose();
   }
 
@@ -422,6 +429,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void createChat({int? projectId, String? draft}) {
     final project = projectId ?? newChatProjectId;
     if (project == null) return;
+    final agentId = _agentForNewChat();
     dataController.whenMayLeave(() {
       dataController.selectProject(project);
       if (dataController.view != WorkspaceView.chat) dataController.backToChat();
@@ -429,11 +437,16 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       if (sessionCreationController.state is! SessionCreation$InProgressState) {
         _draft.expect(draft);
       }
-      sessionCreationController.create(
-        projectId: project,
-        agentId: settingsController.settings.defaultAgentId,
-      );
+      sessionCreationController.create(projectId: project, agentId: agentId);
     });
+  }
+
+  /// The agent a new chat starts with: the default agent while it is known and can start chats
+  /// (one that still has to sign in, or is still being checked, can), else Claude.
+  String _agentForNewChat() {
+    final defaultId = settingsController.settings.defaultAgentId;
+    final agent = agentsController.agents.where((agent) => agent.id == defaultId).firstOrNull;
+    return agent != null && agent.canStartChats ? defaultId : AgentDefinition.claude.id;
   }
 
   /// Opens the project that the New project wizard has just created: it becomes selected and the

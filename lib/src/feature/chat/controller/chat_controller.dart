@@ -48,9 +48,11 @@ final class ChatController extends StateController<ChatState> with SequentialCon
   List<Map<String, Object?>>? _rawCommands;
   List<SlashCommand> _commands = const <SlashCommand>[];
 
-  void open(int sessionId) => handle(() async {
+  /// Shows chat [sessionId]. With [keepView] the screen stays as it is until the chat is
+  /// loaded again (its runtime state was replaced, for example after a change of its agent).
+  void open(int sessionId, {bool keepView = false}) => handle(() async {
     _detach();
-    setState(const ChatState.inProgress());
+    if (!keepView) setState(const ChatState.inProgress());
     final session = _session = await _repository.open(sessionId);
     _events = session.store.added.listen((_) => _scheduleRefold());
     for (final notifier in _notifiers(session)) {

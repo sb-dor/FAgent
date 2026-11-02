@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:control/control.dart';
+import 'package:dart_acp_sdk/dart_acp_sdk.dart' show CancellationException;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
-import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'agent_actions_controller.freezed.dart';
@@ -11,22 +15,23 @@ part 'agent_actions_controller.freezed.dart';
 @freezed
 abstract class AgentActionsState with _$AgentActionsState {
   const factory AgentActionsState({
-    /// The output lines of the latest login of each agent (agent id → lines).
+    /// The output lines of the latest terminal login of each agent (agent id → lines).
     @Default(<String, List<String>>{}) Map<String, List<String>> output,
 
-    /// The milestone that ships the thing the last action asked for, when that is still a preview.
-    String? previewMilestone,
+    /// Agents with an ACP sign-in (browser or API key) in flight.
+    @Default(<String>{}) Set<String> signingIn,
 
-    /// The last action failed with this; never an `AgentPreviewException`.
+    /// The last action failed with this; never a cancelled sign-in.
     Object? error,
   }) = _AgentActionsState;
 }
 
-/// The buttons of the agent cards: login, logout, install and opening the settings.
+/// The buttons of the agent cards: sign-in and sign-out, the settings, and the custom agents.
 ///
-/// One action at a time: a tap during another one is dropped. A login only starts here; it goes on
-/// by itself, and its output arrives in [AgentActionsState.output]. The new status shows up in the
-/// agents observed through `AgentsController`.
+/// One action at a time: a tap during another one is dropped. A sign-in only starts here and goes on
+/// by itself: a terminal login's output arrives in [AgentActionsState.output], a browser or key
+/// sign-in is in [AgentActionsState.signingIn] until it ends, without holding other actions back.
+/// The new status shows up in the agents observed through `AgentsController`.
 final class AgentActionsController extends StateController<AgentActionsState>
     with DroppableControllerHandler {
   AgentActionsController({
@@ -37,11 +42,49 @@ final class AgentActionsController extends StateController<AgentActionsState>
   final IAgentsRepository _repository;
   final Map<String, (AgentLogin, VoidCallback)> _logins = <String, (AgentLogin, VoidCallback)>{};
 
-  /// Signs [agentId] in with the method [methodId].
-  void login(String agentId, String methodId) => _run(() async {
-    final login = await _repository.login(agentId, methodId);
-    if (!isDisposed) _follow(agentId, login);
-  });
+  /// Signs [agentId] in with [method].
+  ///
+  /// A browser or key sign-in is in [AgentActionsState.signingIn] as soon as this returns; a second
+  /// one of the same agent while it runs is dropped.
+  void login(String agentId, AgentLoginMethod method) {
+    if (method.kind == AgentLoginKind.terminal) {
+      _run(() async {
+        final login = await _repository.login(agentId, method.id);
+        if (!isDisposed && login != null) _follow(agentId, login);
+      });
+      return;
+    }
+    if (isDisposed || state.signingIn.contains(agentId)) return;
+    _setSigningIn(agentId, signingIn: true);
+    // The user may take minutes in the browser, so this holds no other action back.
+    unawaited(
+      _repository
+          .login(agentId, method.id)
+          .then<void>(
+            (_) {},
+            onError: (Object error, StackTrace stackTrace) {
+              if (isDisposed || error is CancellationException) return;
+              setState(state.copyWith(error: error));
+            },
+          )
+          .whenComplete(() {
+            if (!isDisposed) _setSigningIn(agentId, signingIn: false);
+          }),
+    );
+  }
+
+  /// Stops the running browser or key sign-in of [agentId].
+  ///
+  /// Like the sign-in itself it runs outside the one-action-at-a-time handler, so another action
+  /// in flight never drops it.
+  void cancelLogin(String agentId) {
+    if (isDisposed) return;
+    unawaited(
+      _repository.cancelLogin(agentId).catchError((Object error, StackTrace stackTrace) {
+        if (!isDisposed) setState(state.copyWith(error: error));
+      }),
+    );
+  }
 
   /// Signs [agentId] out.
   void logout(String agentId) => _run(() async {
@@ -51,27 +94,39 @@ final class AgentActionsController extends StateController<AgentActionsState>
     _setOutput(agentId, null);
   });
 
-  /// Installs [agentId].
-  void install(String agentId) => _run(() => _repository.install(agentId));
+  /// Whether a chat of [agentId] is working, so signing it out or removing it would stop the chat.
+  Future<bool> hasBusyChats(String agentId) => _repository.hasBusyChats(agentId);
 
   /// Opens the settings of [agentId].
   void openSettings(String agentId) => _run(() => _repository.openSettings(agentId));
 
+  /// Adds the custom agent of [draft].
+  void addCustom(CustomAgentDraft draft) => _run(() => _repository.addCustom(draft));
+
+  /// Replaces the custom agent [id] with [draft].
+  void updateCustom(String id, CustomAgentDraft draft) =>
+      _run(() => _repository.updateCustom(id, draft));
+
+  /// Removes the custom agent [id].
+  void removeCustom(String id) => _run(() => _repository.removeCustom(id));
+
   /// The widget has told the user about the last action's result.
   void acknowledge() {
-    if (state.previewMilestone == null && state.error == null) return;
-    setState(AgentActionsState(output: state.output));
+    if (state.error == null) return;
+    setState(state.copyWith(error: null));
   }
 
   void _run(Future<void> Function() action) => handle(() async {
     await action();
-  }, error: (error, stackTrace) async {
-    if (error is AgentPreviewException) {
-      setState(AgentActionsState(output: state.output, previewMilestone: error.milestone));
-    } else {
-      setState(AgentActionsState(output: state.output, error: error));
-    }
-  });
+  }, error: (error, stackTrace) async => setState(state.copyWith(error: error)));
+
+  void _setSigningIn(String agentId, {required bool signingIn}) => setState(
+    state.copyWith(
+      signingIn: signingIn
+          ? <String>{...state.signingIn, agentId}
+          : <String>{...state.signingIn}.difference(<String>{agentId}),
+    ),
+  );
 
   void _follow(String agentId, AgentLogin login) {
     _unfollow(agentId);

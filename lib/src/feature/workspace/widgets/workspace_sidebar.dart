@@ -94,6 +94,7 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
                   _scope.projectsController,
                   _scope.sessionsController,
                   _scope.dataController,
+                  _scope.agentsController,
                 ]),
                 builder: _buildList,
               ),
@@ -150,6 +151,11 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
         _ChatItem(:final session) => WorkspaceChatTile(
           key: ValueKey<String>('chat-${session.id}'),
           session: session,
+          agentName: agentDisplayName(
+            session.agentId,
+            _scope.agentsController.agents,
+            Localization.of(context),
+          ),
           selected: session.id == selectedSession,
           status: _scope.sessionsController.statusOf(session.id),
           onTap: () => _scope.dataController

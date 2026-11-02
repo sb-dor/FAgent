@@ -48,6 +48,17 @@ final class AgentsController extends StateController<AgentsState> with Sequentia
     _subscription = _subscribe();
   }, error: (error, stackTrace) async => setState(AgentsState.error(error: error, agents: _agents)));
 
+  /// Checks [agentId] again; the result arrives with the agents.
+  void refresh(String agentId) => handle(() async {
+    // A check can take a minute (`npx` may download the agent); watching goes on meanwhile.
+    unawaited(_repository.refresh(agentId));
+  });
+
+  /// Checks every agent again, as the agents section does when it opens.
+  void refreshAll() => handle(() async {
+    unawaited(_repository.refreshAll());
+  });
+
   StreamSubscription<List<AgentInfo>> _subscribe() => _repository.watchAgents().listen(
     (agents) => setState(AgentsState.completed(agents: _agents = agents)),
     onError: (Object error) => setState(AgentsState.error(error: error, agents: _agents)),

@@ -158,7 +158,7 @@ Deferred from the reviews of docs/superpowers/plans/2026-10-31-ui-stage6-setting
   - `mcp_servers` has no `projectId`; `mcp_server_states` holds the per-project "off" switches (a row exists only while the server is off there); built-in servers can only be switched per project
   - Permissions read and edit only `permissions.allow` of `<project>/.claude/settings.local.json`; the shared `.claude/settings.json` is never touched
   - `MemoryAgentsRepository` and a real `McpServersRepositoryImpl` on an in-memory database are the defaults of `testDependencies`; real process and file repositories are tested in plain `test` with temp dirs
-  - Preview until a milestone: Codex, Gemini and custom ACP agents (M5), Flutter version and `flutter doctor` (M4), the `git` project template (M4), in-app DevTools (M2), MCP status, tool counts and delivery to the agent (M3)
+  - Preview until a milestone: Flutter version and `flutter doctor` (M4), the `git` project template (M4), in-app DevTools (M2), MCP status, tool counts and delivery to the agent (M3)
 
 ## Stage 7 follow-ups
 
@@ -277,7 +277,6 @@ Deferred from the reviews of the M3 plan (docs/superpowers/plans/2026-11-01-m3-a
   - Menu F: keep the skills menu open across picks; unit tests for `ChatSkillsController` and `ChatSkillActionsController` (`feature/skills/widgets/chat_skills_chip.dart`, `feature/skills/controller/`)
   - App MCP server: a test for a re-issued token of the same chat inside its existing MCP session; document in the class doc that a session is bound by the first valid token after `initialize`; two expected warning lines in the test output (`common/app_mcp/app_mcp_server.dart`)
   - App MCP tools: the `projectRoot` drift query is duplicated in the dependency wiring (`feature/initialization/data/initialize_dependencies.dart`)
-  - Session context: gate the app's HTTP entry on the agent's `mcpCapabilities.http` (needed in M5) (`feature/session_context/data/session_context_repository.dart`)
   - Session context: tests for the default fvm-aware `flutterExecutableFor` closure and `flutterSdkRootOf`; a stray blank import line in `test/common/acp/agent_hub_test.dart` (`common/flutter_daemon/flutter_executable.dart`)
   - MCP status: the Dart MCP server is probed with the SDK of the Flutter settings while sessions run it with the project's SDK (documented) (`feature/mcp_servers/data/mcp_servers_repository.dart`)
   - Skills in the composer: the transcript ignores resource blocks, so the feed and the history do not show which skill ran (`feature/chat/models/chat_transcript.dart`)
@@ -309,3 +308,31 @@ Deferred from the reviews of the M4 plan (docs/superpowers/plans/2026-11-02-m4-n
   - Skeleton: the asset test does not catch a template file missing from `projectTemplateFiles` (`test/feature/project_creation/project_template_test.dart`)
   - Creation repository: no tests for stop or cancel between commands, between steps, or while a process starts; the opt-in test prints the whole step report on success (`test/feature/project_creation/`, `test/integration/new_project_test.dart`)
   - Wizard: the open-created-project test does not assert an empty composer; the memory stub's `failAt` silently ignores a kind that is not in the run; hand-rolled test stubs repeat no-op `stop` / `dispose` (`test/feature/project_creation/`, `test/support/memory_project_creation_repository.dart`)
+
+## M5 follow-ups
+
+Deferred from the reviews of the M5 plan (docs/superpowers/plans/2026-11-02-m5-agent-choice.md). Paths are under `lib/src/` unless they start with `test/` or name a root file.
+
+- **Bugs and risks:**
+  - Hub: `authenticate` is not single-flight per agent — only the repository joins sign-ins (`common/acp/agent_hub.dart`, `feature/agents/data/agents_repository.dart`)
+  - Hub: after `authenticate` a chat whose prompt was interrupted goes cold, so the kept connection gets a needless `session/load` (`common/acp/agent_hub.dart`)
+  - Hub: the removed state stays on opened chats after their agent is re-added, or after the 5 s first-emission wait times out (`common/acp/agent_hub.dart`)
+  - Hub: `$disposeApp` does not cancel the custom-agents subscription (`feature/initialization/data/initialize_dependencies.dart`)
+  - Rules: first-message rules live only in memory — a session created by `startNewAgentSession`, retry or the post-login re-setup and loaded again after a restart never gets them (`common/acp/agent_hub.dart`, `common/acp/live_session.dart`)
+  - Gemini: app tools always ask — its titles can come from a `command` argument; auto-allow needs a signal not built from arguments (verify with a real Gemini turn) (`common/acp/agent_hub.dart`, `test/integration/agents_test.dart`)
+  - Auto-allow: only Codex's form counts, so a custom agent's app-tool calls always ask; the resolution is journaled with origin `user` (`common/acp/agent_hub.dart`)
+  - Auto-allow: a user MCP server named `flutter_code_agent` imported from `.mcp.json` would pass the Codex form — reject the reserved name on import (add already rejects it) (`feature/mcp_servers/data/mcp_servers_repository.dart`)
+  - Session context: custom agents get the rules resource block without an `embeddedContext` check; the skipped-servers notice repeats on every load (`feature/session_context/data/session_context_repository.dart`)
+  - Probe: 60 s is not a true bound (the Node check and the auth wait come on top) and the timeout is detected by elapsed time; raw incoming frames still carry the Codex account object — keep it out of any journal (`feature/agents/data/agent_probe.dart`, `common/acp/agent_connection.dart`)
+  - Custom agents: an unknown stored `rulesChannel` falls back to `firstMessage` without a log line; the broken-row warning repeats on every emission; update or remove of a missing id is an undocumented silent no-op (`feature/agents/data/custom_agents_repository.dart`)
+  - Agents repository: a login before the first check cannot classify an unsupported method id; `late final outcome` would stay unassigned if `authenticate` ever threw synchronously; busy state is per chat (`feature/agents/data/agents_repository.dart`)
+  - Agent chip: switching away from `needsAuth` drops the unsent first prompt; `createChat` falls back to Claude silently when the default is missing (as the spec says) (`feature/chat/widgets/chat_config_widget.dart`, `feature/sessions/controller/session_agent_controller.dart`)
+- **Next steps:**
+  - Hub: split slot lifecycle and sign-in out of `agent_hub.dart` (~1.5k lines) early in M6; the constructor map key vs `definition.id`; `_closing` naming (`common/acp/agent_hub.dart`)
+  - Gemini: run a hands-on browser sign-in before calling Gemini real in release notes
+  - Hub tests: no tests for an edit during `slot.starting`, a remove with a pending permission, or `signIns` holding a restart; `throwsA(anything)` (`test/common/acp/agent_hub_agents_test.dart`)
+  - Auto-allow: `announcedToolCall` scans the chat's whole event list per permission request (`common/acp/agent_hub.dart`)
+  - Custom agents tests: the "skipped with a warning" test asserts no warning; wrong-shape JSON (`environment` `'[]'`) is untested; the equality test varies only `displayName` and `keyVariables` (`test/feature/agents/custom_agents_repository_test.dart`, `test/common/acp/agent_definition_test.dart`)
+  - Probe tests: weak account-drop assertion; the early-capture rationale is untested; the `_authStatusOf` closure (`test/feature/agents/agent_probe_test.dart`, `common/acp/agent_connection.dart`)
+  - Agents repository: `hasBusyChats` returns a Future from the controller; 545 lines — split the Claude CLI check out; the sign-out Cancel path is untested; the custom hint is a getter instead of a field (`feature/agents/data/agents_repository.dart`, `feature/agents/controller/`)
+  - Agent chip: the revert-path comment overstates consistency and is untested (`feature/chat/widgets/chat_config_widget.dart`)

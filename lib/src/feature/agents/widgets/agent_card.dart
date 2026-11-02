@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
@@ -9,7 +10,6 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_card.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
-import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_code_agent/src/common/widget/status.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
@@ -19,8 +19,9 @@ import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings
 
 /// {@template agent_card}
 /// One agent on the Settings screen: its name, version and runtime, where it stands (checking,
-/// signed in, needs login, not installed), the action that fits (sign out, sign in, install), the
-/// output of a login, and, for an agent that can start chats, the defaults a new chat starts with.
+/// signed in, needs a sign-in, not installed, failed), the sign-in methods by kind, sign-out, the
+/// output of a terminal login, Edit and Remove for a custom agent, and, for an agent that can start
+/// chats, the defaults a new chat starts with.
 /// {@endtemplate}
 class AgentCard extends StatelessWidget {
   /// {@macro agent_card}
@@ -39,19 +40,22 @@ class AgentCard extends StatelessWidget {
     final scope = AgentsConfigInhWidget.of(context);
     final settings = AppSettingsConfigInhWidget.of(context).controller;
     final details = <String>[?agent.version, ?agent.runtime].join(' · ');
+    final noteStyle = Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted);
     return ListenableBuilder(
       listenable: Listenable.merge(<Listenable>[settings, scope.actions]),
       builder: (context, _) {
         final output = scope.actions.state.output[agent.id] ?? const <String>[];
-        final problem = agent.status == AgentStatus.notInstalled
-            ? <String>[?agent.problem, ?agent.hint]
-            : const <String>[];
+        final notes = <String>[
+          if (agent.status == AgentStatus.notInstalled || agent.status == AgentStatus.failed)
+            ...<String>[?agent.problem, ?agent.hint],
+          if (settings.settings.defaultAgentId == agent.id && !agent.canStartChats)
+            localization.agentDefaultUnavailable,
+          if (agent.status == AgentStatus.needsLogin)
+            for (final method in agent.methods) ?_methodNote(localization, method),
+          if (agent.signInCheckedInChat) localization.agentCustomSignInHint,
+        ];
         final bodyParts = <Widget>[
-          for (final line in problem)
-            Text(
-              line,
-              style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
-            ),
+          for (final line in notes) Text(line, style: noteStyle),
           if (output.isNotEmpty) _LoginOutput(lines: output),
           if (agent.canStartChats) _Defaults(agent: agent),
         ];
@@ -65,7 +69,6 @@ class AgentCard extends StatelessWidget {
               Text(agent.name),
               if (settings.settings.defaultAgentId == agent.id)
                 StatusPill(label: localization.agentDefaultBadge, tone: AppStatusTone.active),
-              if (agent.isPreview) const PreviewBadge(),
             ],
           ),
           subtitle: details.isEmpty
@@ -76,7 +79,17 @@ class AgentCard extends StatelessWidget {
                 ),
           trailing: <Widget>[
             _StatusLabel(agent: agent),
-            ..._actions(context, localization, scope),
+            ..._actions(localization, scope),
+            if (agent.source == AgentSource.custom) ...<Widget>[
+              CompactButton(
+                label: localization.agentEdit,
+                onPressed: () => scope.editCustomAgent(agent),
+              ),
+              CompactButton(
+                label: localization.remove,
+                onPressed: () => scope.removeCustomAgent(agent),
+              ),
+            ],
           ],
           body: bodyParts.isEmpty
               ? null
@@ -95,53 +108,80 @@ class AgentCard extends StatelessWidget {
     );
   }
 
-  List<Widget> _actions(
-    BuildContext context,
-    GeneratedLocalization localization,
-    AgentsConfigWidgetState scope,
-  ) => switch (agent.status) {
-    AgentStatus.ready => <Widget>[
-      CompactButton(
-        label: localization.agentSignOut,
-        onPressed: () => scope.actions.logout(agent.id),
-      ),
-    ],
-    AgentStatus.needsLogin when agent.loginMethods.length == 1 => <Widget>[
-      CompactButton(
-        label: _methodLabel(localization, agent.loginMethods.single),
-        onPressed: () => scope.actions.login(agent.id, agent.loginMethods.single),
-      ),
-    ],
-    AgentStatus.needsLogin when agent.loginMethods.isNotEmpty => <Widget>[
-      SelectorChip<String>(
-        label: localization.agentSignIn,
-        sections: <AppMenuSection<String>>[
-          AppMenuSection<String>(
-            items: <AppMenuItem<String>>[
-              for (final method in agent.loginMethods)
-                AppMenuItem<String>(value: method, title: _methodLabel(localization, method)),
-            ],
+  List<Widget> _actions(GeneratedLocalization localization, AgentsConfigWidgetState scope) {
+    switch (agent.status) {
+      case AgentStatus.ready when agent.canSignOut:
+        return <Widget>[
+          CompactButton(label: localization.agentSignOut, onPressed: () => scope.signOut(agent)),
+        ];
+      case AgentStatus.needsLogin:
+        final terminal = <AgentLoginMethod>[
+          for (final method in agent.methods)
+            if (method.kind == AgentLoginKind.terminal) method,
+        ];
+        return <Widget>[
+          if (terminal.length == 1)
+            CompactButton(
+              label: _methodLabel(localization, terminal.single),
+              onPressed: () => scope.signIn(agent, terminal.single),
+            )
+          else if (terminal.isNotEmpty)
+            SelectorChip<AgentLoginMethod>(
+              label: localization.agentSignIn,
+              sections: <AppMenuSection<AgentLoginMethod>>[
+                AppMenuSection<AgentLoginMethod>(
+                  items: <AppMenuItem<AgentLoginMethod>>[
+                    for (final method in terminal)
+                      AppMenuItem<AgentLoginMethod>(
+                        value: method,
+                        title: _methodLabel(localization, method),
+                      ),
+                  ],
+                ),
+              ],
+              onSelected: (method) => scope.signIn(agent, method),
+            ),
+          for (final method in agent.methods)
+            if (method.kind == AgentLoginKind.browser ||
+                (method.kind == AgentLoginKind.apiKey && method.keyPresent))
+              CompactButton(
+                label: _methodLabel(localization, method),
+                onPressed: () => scope.signIn(agent, method),
+              ),
+        ];
+      case AgentStatus.notInstalled || AgentStatus.failed:
+        return <Widget>[
+          CompactButton(
+            label: localization.agentRecheck,
+            onPressed: () => scope.agents.refresh(agent.id),
           ),
-        ],
-        onSelected: (method) => scope.actions.login(agent.id, method),
-      ),
-    ],
-    AgentStatus.notInstalled => <Widget>[
-      CompactButton(
-        label: localization.agentInstall,
-        primary: true,
-        onPressed: () => scope.actions.install(agent.id),
-      ),
-    ],
-    _ => const <Widget>[],
-  };
+        ];
+      case _:
+        return const <Widget>[];
+    }
+  }
 
-  static String _methodLabel(GeneratedLocalization localization, String method) => switch (method) {
-    'claude-ai-login' => localization.agentLoginClaudeAi,
-    'console-login' => localization.agentLoginConsole,
-    'google' => localization.agentLoginGoogle,
-    _ => method,
-  };
+  /// The button text of [method]: Claude's terminal methods by the app, a key "Use API key", the
+  /// others by the agent's own name.
+  static String _methodLabel(GeneratedLocalization localization, AgentLoginMethod method) =>
+      switch (method) {
+        AgentLoginMethod(id: 'claude-ai-login', kind: AgentLoginKind.terminal) =>
+          localization.agentLoginClaudeAi,
+        AgentLoginMethod(id: 'console-login', kind: AgentLoginKind.terminal) =>
+          localization.agentLoginConsole,
+        AgentLoginMethod(kind: AgentLoginKind.apiKey) => localization.agentUseApiKey,
+        _ => method.name,
+      };
+
+  /// What the card says about [method] instead of a button, if anything.
+  static String? _methodNote(GeneratedLocalization localization, AgentLoginMethod method) =>
+      switch (method.kind) {
+        AgentLoginKind.apiKey when !method.keyPresent => localization.agentApiKeyMissing(
+          method.keyVariables.join(' ${localization.agentOr} '),
+        ),
+        AgentLoginKind.unsupported => localization.agentMethodUnsupported(method.name),
+        _ => null,
+      };
 }
 
 class _Logo extends StatelessWidget {
@@ -191,7 +231,7 @@ class _StatusLabel extends StatelessWidget {
       ),
       AgentStatus.needsLogin => (localization.agentStatusNeedsLogin, AppStatusTone.warn),
       AgentStatus.notInstalled => (localization.agentStatusNotInstalled, AppStatusTone.none),
-      AgentStatus.installing => (localization.agentStatusInstalling, AppStatusTone.active),
+      AgentStatus.failed => (localization.agentStatusFailed, AppStatusTone.danger),
     };
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 360),

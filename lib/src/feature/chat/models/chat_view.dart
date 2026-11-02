@@ -73,4 +73,19 @@ class ChatView {
 
   /// The chat already has a message of the user, so its agent can no longer be changed.
   bool get agentLocked => items.any((item) => item is UserMessageItem);
+
+  /// The chat's agent can still be changed: no message was sent, and the chat is not starting,
+  /// creating its agent session or running (a first message may be on its way before it is
+  /// journaled). A chat that failed to set up (`error`, `setupFailed`) can too: a chat with a
+  /// message is locked by [agentLocked], and the hub refuses one that has an agent session.
+  bool get agentChangeable =>
+      !agentLocked &&
+      switch (status) {
+        SessionStatus.cold ||
+        SessionStatus.idle ||
+        SessionStatus.needsAuth ||
+        SessionStatus.error ||
+        SessionStatus.setupFailed => true,
+        _ => false,
+      };
 }
