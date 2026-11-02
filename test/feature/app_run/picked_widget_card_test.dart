@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
@@ -45,21 +47,22 @@ void main() {
 
   setUp(() => calls = <String>[]);
 
-  Future<void> pumpCard(WidgetTester tester, RunPickState pick) => tester.pumpWidget(
-    testApp(
-      SizedBox(
-        width: 340,
-        child: PickedWidgetCard(
-          pick: pick,
-          projectRoot: '/p',
-          onCancel: () => calls.add('cancel'),
-          onSelect: (id) => calls.add('select $id'),
-          onAddToMessage: (widget) => calls.add('add ${widget.name}'),
-          onOpenFile: (file, line) => calls.add('open $file:$line'),
+  Future<void> pumpCard(WidgetTester tester, RunPickState pick, {String? root = '/p'}) =>
+      tester.pumpWidget(
+        testApp(
+          SizedBox(
+            width: 340,
+            child: PickedWidgetCard(
+              pick: pick,
+              projectRoot: root,
+              onCancel: () => calls.add('cancel'),
+              onSelect: (id) => calls.add('select $id'),
+              onAddToMessage: (widget) => calls.add('add ${widget.name}'),
+              onOpenFile: (file, line) => calls.add('open $file:$line'),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      );
 
   Finder button(String label) => find.ancestor(
     of: find.text(label),
@@ -124,14 +127,58 @@ void main() {
     expect(calls, <String>['select inspector-list'], reason: 'the current one does nothing');
   });
 
-  testWidgets('the thumbnail shows when a screenshot exists', (tester) async {
-    await pumpCard(tester, _picked(_withShot(_card)));
+  group('the thumbnail', () {
+    late Directory root;
 
-    final image = tester.widget<Image>(find.byType(Image));
-    final provider = image.image;
-    final file = (provider is ResizeImage ? provider.imageProvider : provider) as FileImage;
-    expect(file.file.path, '/p/$_shot');
-    expect(find.text('No snapshot of this widget'), findsNothing);
+    setUp(() async {
+      root = await Directory.systemTemp.createTemp('picked_widget_card_test');
+      await File('${root.path}/$_shot').create(recursive: true);
+    });
+
+    tearDown(() => root.delete(recursive: true));
+
+    /// Writes [bytes] as the PNG of the shot, pumps the card for [pick] and lets the read finish.
+    Future<void> show(WidgetTester tester, RunPickState pick, List<int> bytes) async {
+      await tester.runAsync(() => File('${root.path}/$_shot').writeAsBytes(bytes));
+      await pumpCard(tester, pick, root: root.path);
+      // The read goes back and forth between the real file system and the test's fake time.
+      for (var i = 0; i < 10; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+        await tester.pump();
+      }
+    }
+
+    List<int> shown(WidgetTester tester) {
+      final provider = tester.widget<Image>(find.byType(Image)).image;
+      return ((provider is ResizeImage ? provider.imageProvider : provider) as MemoryImage).bytes;
+    }
+
+    testWidgets('shows the PNG of the project when a screenshot exists', (tester) async {
+      await show(tester, _picked(_withShot(_card)), <int>[1, 2, 3]);
+
+      expect(shown(tester), <int>[1, 2, 3]);
+      expect(find.text('No snapshot of this widget'), findsNothing);
+    });
+
+    testWidgets('a new pick with the same path shows the new bytes, not a cached image', (
+      tester,
+    ) async {
+      await show(tester, _picked(_withShot(_card)), <int>[1, 2, 3]);
+      expect(shown(tester), <int>[1, 2, 3]);
+
+      await show(tester, _picked(_withShot(_card)), <int>[4, 5, 6]);
+
+      expect(shown(tester), <int>[4, 5, 6]);
+    });
+  });
+
+  testWidgets('without the project folder the thumbnail is skipped and the note shows', (
+    tester,
+  ) async {
+    await pumpCard(tester, _picked(_withShot(_card)), root: null);
+
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('No snapshot of this widget'), findsOneWidget);
   });
 
   testWidgets('without a screenshot a small note says so', (tester) async {

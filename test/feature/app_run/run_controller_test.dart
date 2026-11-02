@@ -693,13 +693,22 @@ void main() {
         expect(actions.pick.value.current, 0);
       });
 
-      test('dispose cancels a waiting pick', () async {
+      test('dispose cancels a waiting pick; a result after it changes nothing', () async {
         RunActionsController(runRepository: repository, pickerRepository: picker)
           ..pickWidget(3)
           ..dispose();
         await pumpEventQueue();
-
         expect(picker.cancels, <int>[3]);
+
+        // A picker that answers late, after the controller is gone (cancel does not end its pick).
+        final latePicker = _LatePicker();
+        RunActionsController(runRepository: repository, pickerRepository: latePicker)
+          ..pickWidget(4)
+          ..dispose();
+        expect(latePicker.cancels, <int>[4]);
+        latePicker.pending.complete(const PickPicked(ScriptedWidgetPickerRepository.bookingCard));
+        await pumpEventQueue();
+        // Reaching here without an uncaught error means the disposed notifier was not touched.
       });
     });
 
@@ -769,6 +778,24 @@ final class _ThrowingPicker implements IWidgetPickerRepository {
 
   @override
   Future<PickResult> select(int projectId, String id) async => throw StateError('broken');
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// A picker whose pick ends only when the test completes [pending]; `cancel` is only recorded.
+final class _LatePicker implements IWidgetPickerRepository {
+  final Completer<PickResult> pending = Completer<PickResult>();
+  final List<int> cancels = <int>[];
+
+  @override
+  Future<PickResult> pick(int projectId) => pending.future;
+
+  @override
+  Future<void> cancel(int projectId) async => cancels.add(projectId);
+
+  @override
+  Future<PickResult> select(int projectId, String id) async => const PickGone();
 
   @override
   Future<void> dispose() async {}

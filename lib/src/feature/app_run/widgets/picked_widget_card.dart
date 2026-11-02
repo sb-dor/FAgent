@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
@@ -136,14 +137,12 @@ class PickedWidgetCard extends StatelessWidget {
 }
 
 /// The thumbnail, the name and the place of [widget]; a note instead of the thumbnail when there
-/// is no screenshot.
+/// is no screenshot (or no project folder to find it in).
 class _Summary extends StatelessWidget {
   const _Summary({required this.widget, required this.projectRoot});
 
   final PickedWidget widget;
   final String? projectRoot;
-
-  static const double _thumbnail = 64;
 
   @override
   Widget build(BuildContext context) {
@@ -152,30 +151,13 @@ class _Summary extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final screenshot = widget.screenshot;
     final root = projectRoot;
-    final note = Text(
-      localization.pickNoScreenshot,
-      style: textTheme.bodySmall!.copyWith(color: colors.muted, fontSize: 11),
-    );
+    final shot = screenshot == null || root == null ? null : p.join(root, screenshot);
     final column = widget.column > 0 ? ':${widget.column}' : '';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        if (screenshot != null) ...<Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.small),
-            child: DecoratedBox(
-              decoration: BoxDecoration(color: colors.surfaceAlt),
-              child: Image.file(
-                File(root == null ? screenshot : p.join(root, screenshot)),
-                width: _thumbnail,
-                height: _thumbnail,
-                fit: BoxFit.contain,
-                cacheWidth: (_thumbnail * 2).round(),
-                errorBuilder: (context, error, stackTrace) =>
-                    const SizedBox.square(dimension: _thumbnail),
-              ),
-            ),
-          ),
+        if (shot != null) ...<Widget>[
+          _Thumbnail(picked: widget, path: shot),
           const SizedBox(width: 8),
         ],
         Expanded(
@@ -190,11 +172,88 @@ class _Summary extends StatelessWidget {
                   style: AppText.mono(context, size: 11).copyWith(color: colors.muted),
                 ),
               ),
-              if (screenshot == null) ...<Widget>[const SizedBox(height: 2), note],
+              if (shot == null) ...<Widget>[
+                const SizedBox(height: 2),
+                Text(
+                  localization.pickNoScreenshot,
+                  style: textTheme.bodySmall!.copyWith(color: colors.muted, fontSize: 11),
+                ),
+              ],
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The PNG at [path] (absolute) of [picked].
+///
+/// The bytes are read once per picked widget (and per path) and shown from memory: a `FileImage`
+/// is cached by its path, and a later screenshot may reuse the name of one that was pruned, so the
+/// cache would show the old picture.
+class _Thumbnail extends StatefulWidget {
+  const _Thumbnail({required this.picked, required this.path});
+
+  final PickedWidget picked;
+  final String path;
+
+  static const double size = 64;
+
+  @override
+  State<_Thumbnail> createState() => _ThumbnailState();
+}
+
+class _ThumbnailState extends State<_Thumbnail> {
+  Uint8List? _bytes;
+
+  /// Changes with every read, so a slow read never replaces a newer one.
+  int _reads = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  @override
+  void didUpdateWidget(_Thumbnail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.picked, widget.picked) || oldWidget.path != widget.path) _read();
+  }
+
+  Future<void> _read() async {
+    final read = ++_reads;
+    Uint8List? bytes;
+    try {
+      bytes = await File(widget.path).readAsBytes();
+    } on FileSystemException {
+      bytes = null;
+    }
+    if (!mounted || read != _reads) return;
+    setState(() => _bytes = bytes);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _bytes;
+    const placeholder = SizedBox.square(dimension: _Thumbnail.size);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.small),
+      child: DecoratedBox(
+        decoration: BoxDecoration(color: context.colors.surfaceAlt),
+        child: bytes == null
+            ? placeholder
+            : Image.memory(
+                bytes,
+                width: _Thumbnail.size,
+                height: _Thumbnail.size,
+                fit: BoxFit.contain,
+                cacheWidth: (_Thumbnail.size * 2).round(),
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) => placeholder,
+              ),
+      ),
     );
   }
 }

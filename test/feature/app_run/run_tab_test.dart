@@ -621,7 +621,7 @@ void main() {
         await disposeTestApp(tester, dependencies);
       });
 
-      testWidgets('cancel ends the pick and shows the hint again', (tester) async {
+      testWidgets('cancel ends the pick; the next pick shows the hint', (tester) async {
         await pumpTab(tester);
         await startAndPick(tester);
 
