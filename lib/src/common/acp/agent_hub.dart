@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_sign_in.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_slot_registry.dart';
 import 'package:flutter_code_agent/src/common/acp/app_tool_permission.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
@@ -76,6 +77,12 @@ final class AgentHub {
       onFrame: _route,
       onExit: _onExit,
     );
+    _signIn = AgentSignIn(
+      registry: _registry,
+      auth: this.auth,
+      isDisposing: () => _disposing,
+      continueAfterSignIn: _continueAfterSignIn,
+    );
   }
 
   static const Map<String, AgentDefinition> _defaultAgents = <String, AgentDefinition>{
@@ -94,6 +101,7 @@ final class AgentHub {
   final Future<Map<String, String>> Function(String agentId)? _sessionDefaults;
   final void Function(String agentId, List<Map<String, Object?>> options)? _onConfigOptions;
   late final AgentSlotRegistry _registry;
+  late final AgentSignIn _signIn;
 
   /// Login runner shared by all chats.
   final AgentAuth auth;
@@ -112,7 +120,6 @@ final class AgentHub {
   final Map<int, Future<void>> _setupLanes = <int, Future<void>>{};
   final StreamController<HubNotice> _notices = StreamController<HubNotice>.broadcast();
   bool _disposing = false;
-  final Set<AgentLogin> _restartAfter = <AgentLogin>{};
 
   /// Setup-lane operations queued or running per chat: a chat with one is busy
   /// for a restart even between statuses (prepared, about to run its turn).
@@ -537,28 +544,7 @@ final class AgentHub {
 
   /// Runs [methodId] for [agentId]; after success the agent restarts and the
   /// chats waiting for a login continue.
-  Future<AgentLogin> login(String agentId, String methodId) async {
-    _checkNotDisposed();
-    final slot = _registry.slotOf(agentId);
-    final login = auth.login(slot.definition, methodId);
-    // Repeated calls return the running login; restart only once for it.
-    if (_restartAfter.add(login)) {
-      unawaited(
-        login.succeeded
-            .then((ok) async {
-              if (!ok || _disposing) return;
-              // The adapter caches its auth state; a new process picks up the login.
-              await _registry.closeConnection(slot, reason: 'Agent restarted after login');
-              await _continueAfterSignIn(agentId);
-            })
-            .catchError((Object error, StackTrace stackTrace) {
-              l.w('AgentHub | restart after login failed: $error', stackTrace);
-            })
-            .whenComplete(() => _restartAfter.remove(login)),
-      );
-    }
-    return login;
-  }
+  Future<AgentLogin> login(String agentId, String methodId) => _signIn.login(agentId, methodId);
 
   /// Signs [agentId] in with ACP `authenticate` and method [methodId] (a
   /// browser sign-in, or an API key the agent reads from its environment),
@@ -569,53 +555,12 @@ final class AgentHub {
   /// Cancelling [cancel] closes the agent's connection (reason
   /// `Sign-in cancelled`; chats waiting for a login keep waiting) and the call
   /// throws a [CancellationException]. Other errors propagate.
-  Future<void> authenticate(String agentId, String methodId, {CancellationToken? cancel}) async {
-    _checkNotDisposed();
-    final slot = _registry.slotOf(agentId)..signIns += 1;
-    try {
-      cancel?.throwIfCancelled();
-      final connection = await _registry.connect(slot);
-      final generation = slot.generation;
-      // Runs at once when cancelled during the start.
-      final registration = cancel?.register((_) {
-        if (slot.generation == generation) {
-          _registry.track(_registry.closeConnection(slot, reason: 'Sign-in cancelled'));
-        }
-      });
-      try {
-        await connection.agent.authenticate(
-          AuthenticateRequest(methodId: AuthMethodId(methodId)),
-          cancellationToken: cancel,
-        );
-      } on Object {
-        // The closed connection fails the request with its own error.
-        if (cancel != null && cancel.isCancelled) throw CancellationException(cancel.reason);
-        rethrow;
-      } finally {
-        registration?.dispose();
-      }
-    } finally {
-      slot.signIns -= 1;
-      _registry.scheduleRestartCheck(agentId);
-    }
-    if (_disposing) return;
-    await _continueAfterSignIn(agentId);
-  }
+  Future<void> authenticate(String agentId, String methodId, {CancellationToken? cancel}) =>
+      _signIn.authenticate(agentId, methodId, cancel: cancel);
 
   /// Signs [agentId] out with ACP `logout` (starting the agent if needed),
   /// then closes its connection.
-  Future<void> logout(String agentId) async {
-    _checkNotDisposed();
-    final slot = _registry.slotOf(agentId)..signIns += 1;
-    try {
-      final connection = await _registry.connect(slot);
-      await connection.agent.logout(LogoutRequest());
-    } finally {
-      slot.signIns -= 1;
-      _registry.scheduleRestartCheck(agentId);
-    }
-    await _registry.closeConnection(slot, reason: 'Signed out');
-  }
+  Future<void> logout(String agentId) => _signIn.logout(agentId);
 
   /// After a login or `authenticate`: every chat of [agentId] waiting for it
   /// continues — an interrupted prompt can be repeated, a setup runs again.
