@@ -486,7 +486,7 @@
   "@newProjectFailed": {"placeholders": {"name": {"type": "String"}}},
   "newProjectStepFlutterCreate": "flutter create",
   "newProjectStepGitInit": "git init",
-  "newProjectStepAgentSetup": "Агент раскладывает архитектуру",
+  "newProjectStepSkeleton": "Скелет архитектуры",
   "newProjectStepAnalyze": "flutter analyze",
   "newProjectStepFirstCommit": "Первый коммит",
   "newProjectStepTook": "{seconds} с",

@@ -55,12 +55,20 @@ final class _ChattyRepository implements IProjectCreationRepository {
   Future<TargetProblem?> checkTarget(String parent, String name) async => null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) async* {
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) async* {
     final kinds = creationStepsFor(request);
-    yield <CreationStep>[
-      CreationStep(kind: kinds.first, status: CreationStepStatus.running, output: lines),
-      for (final kind in kinds.skip(1)) CreationStep(kind: kind),
-    ];
+    yield CreationRun(
+      steps: <CreationStep>[
+        CreationStep(kind: kinds.first, status: CreationStepStatus.running, output: lines),
+        for (final kind in kinds.skip(1)) CreationStep(kind: kind),
+      ],
+    );
     // Stays running until the controller is disposed.
     await Completer<void>().future;
   }
@@ -170,10 +178,7 @@ void main() {
     expect(find.text('avera_booking: done (Preview)'), findsOneWidget);
     expect(inProgress(find.text('✓')), findsNWidgets(5));
     expect(inProgress(find.byType(CircularProgressIndicator)), findsNothing);
-    expect(
-      inProgress(find.text('The agent lays out the architecture · Claude Code')),
-      findsOneWidget,
-    );
+    expect(inProgress(find.text('Architecture skeleton · Claude Code')), findsOneWidget);
     expect(find.text('✎ lib/src/common/localization/intl_en.arb'), findsOneWidget);
     expect(find.text('⌁ dart run build_runner build'), findsOneWidget);
     expect(find.text('No issues found!'), findsOneWidget);
@@ -446,12 +451,20 @@ final class _FailingRepository implements IProjectCreationRepository {
   Future<TargetProblem?> checkTarget(String parent, String name) async => null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) async* {
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) async* {
     final kinds = creationStepsFor(request);
-    yield <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
-    yield <CreationStep>[
-      CreationStep(kind: kinds.first, status: CreationStepStatus.failed),
-      for (final kind in kinds.skip(1)) CreationStep(kind: kind),
-    ];
+    yield CreationRun(steps: <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)]);
+    yield CreationRun(
+      steps: <CreationStep>[
+        CreationStep(kind: kinds.first, status: CreationStepStatus.failed),
+        for (final kind in kinds.skip(1)) CreationStep(kind: kind),
+      ],
+    );
   }
 }

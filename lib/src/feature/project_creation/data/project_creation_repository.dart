@@ -22,7 +22,14 @@ abstract interface class IProjectCreationRepository {
   /// Whether `<parent>/<name>` can be created; `null` when it can.
   Future<TargetProblem?> checkTarget(String parent, String name);
 
-  /// Creates the project of [request]. Emits the snapshot of all steps whenever one changes and
-  /// closes after the last step. Cancel the subscription to stop.
-  Stream<List<CreationStep>> create(NewProjectRequest request);
+  /// Creates the project of [request]. Emits the snapshot of the run whenever a step changes and
+  /// closes after the last step. Cancel the subscription to stop listening.
+  Stream<CreationRun> create(NewProjectRequest request);
+
+  /// Kills the command that is running now. The stream of [create] then ends as a failure: the
+  /// step that was running is `failed`.
+  Future<void> stop();
+
+  /// Kills whatever is still running and releases the repository.
+  Future<void> dispose();
 }

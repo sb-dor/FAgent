@@ -108,13 +108,13 @@ void main() {
     );
 
     test('runs the steps in order', () async {
-      final snapshots = await repository.create(request()).toList();
+      final snapshots = (await repository.create(request()).toList()).map((r) => r.steps).toList();
       expect(snapshots.first.map((s) => s.status), everyElement(CreationStepStatus.pending));
       final last = snapshots.last;
       expect(last.map((s) => s.kind), [
         CreationStepKind.flutterCreate,
         CreationStepKind.gitInit,
-        CreationStepKind.agentSetup,
+        CreationStepKind.skeleton,
         CreationStepKind.analyze,
         CreationStepKind.firstCommit,
       ]);
@@ -132,9 +132,12 @@ void main() {
     });
 
     test('plain template without git skips steps', () async {
-      final snapshots = await repository
-          .create(request(template: NewProjectTemplate.plain, gitInit: false))
-          .toList();
+      final snapshots =
+          (await repository
+                  .create(request(template: NewProjectTemplate.plain, gitInit: false))
+                  .toList())
+              .map((r) => r.steps)
+              .toList();
       expect(snapshots.last.map((s) => s.kind), [
         CreationStepKind.flutterCreate,
         CreationStepKind.analyze,

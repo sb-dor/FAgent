@@ -47,7 +47,12 @@ final class _SlowTargets implements IProjectCreationRepository {
       (answers[name] = Completer<TargetProblem?>()).future;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 /// A repository whose default folder arrives when the test says so.
@@ -64,7 +69,12 @@ final class _SlowParent implements IProjectCreationRepository {
   Future<TargetProblem?> checkTarget(String parent, String name) async => null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 /// A repository whose folder questions fail like an unreadable (protected) parent does:
@@ -90,7 +100,12 @@ final class _FailingFolders implements IProjectCreationRepository {
   }
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) => const Stream.empty();
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream.empty();
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 void main() {

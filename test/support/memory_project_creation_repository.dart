@@ -10,7 +10,8 @@ import 'package:flutter_code_agent/src/feature/project_creation/models/new_proje
 ///
 /// [existing] are the full paths [checkTarget] reports as taken. [create] plays the same run as the
 /// fake repository (first all pending, then each step of [creationStepsFor] with its output and
-/// duration) and records the request in [requests].
+/// duration) and records the request in [requests]. Every snapshot after the first carries [completedProjectId];
+/// with [failAt] set, that step fails and the run ends there. [stop] only counts in [stopCalls].
 final class MemoryProjectCreationRepository implements IProjectCreationRepository {
   /// Creates the repository.
   MemoryProjectCreationRepository({
@@ -27,6 +28,15 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
 
   final Set<String> _existing;
 
+  /// The project id every snapshot of [create] carries after the first.
+  int? completedProjectId = 1;
+
+  /// The step that fails; the run ends with it. `null` for a run that succeeds.
+  CreationStepKind? failAt;
+
+  /// How many times [stop] was called.
+  int stopCalls = 0;
+
   /// The requests [create] was called with.
   final List<NewProjectRequest> requests = <NewProjectRequest>[];
 
@@ -41,9 +51,15 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
       _existing.contains('$parent/$name') ? TargetProblem.exists : null;
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) {
+  Future<void> stop() async => stopCalls++;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) {
     requests.add(request);
-    final controller = StreamController<List<CreationStep>>();
+    final controller = StreamController<CreationRun>();
     Timer? timer;
     controller
       ..onListen = () {
@@ -51,15 +67,19 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
         // Like the fake repository: all pending first, then each step starts, prints its lines
         // one by one and finishes.
         var steps = <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
-        final snapshots = <List<CreationStep>>[];
+        final snapshots = <CreationRun>[];
         void change(int index, CreationStep Function(CreationStep) apply) {
           steps = List<CreationStep>.of(steps)..[index] = apply(steps[index]);
-          snapshots.add(steps);
+          snapshots.add(CreationRun(steps: steps, projectId: completedProjectId));
         }
 
         for (var i = 0; i < kinds.length; i++) {
           final output = fakeStepOutput(kinds[i], request.name);
           change(i, (step) => step.copyWith(status: CreationStepStatus.running));
+          if (kinds[i] == failAt) {
+            change(i, (step) => step.copyWith(status: CreationStepStatus.failed));
+            break;
+          }
           for (var line = 1; line <= output.length; line++) {
             change(i, (step) => step.copyWith(output: output.sublist(0, line)));
           }
@@ -69,7 +89,9 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
                 step.copyWith(status: CreationStepStatus.done, took: kFakeStepDurations[step.kind]),
           );
         }
-        controller.add(<CreationStep>[for (final kind in kinds) CreationStep(kind: kind)]);
+        controller.add(
+          CreationRun(steps: <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)]),
+        );
         var next = 0;
         void emit() {
           timer = Timer(step, () {

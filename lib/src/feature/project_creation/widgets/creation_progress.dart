@@ -195,7 +195,7 @@ class _StepRow extends StatelessWidget {
   static String _label(BuildContext context, CreationStepKind kind) => switch (kind) {
     CreationStepKind.flutterCreate => Localization.of(context).newProjectStepFlutterCreate,
     CreationStepKind.gitInit => Localization.of(context).newProjectStepGitInit,
-    CreationStepKind.agentSetup => Localization.of(context).newProjectStepAgentSetup,
+    CreationStepKind.skeleton => Localization.of(context).newProjectStepSkeleton,
     CreationStepKind.analyze => Localization.of(context).newProjectStepAnalyze,
     CreationStepKind.firstCommit => Localization.of(context).newProjectStepFirstCommit,
   };
@@ -228,7 +228,7 @@ class _StepRow extends StatelessWidget {
                         text: _label(context, step.kind),
                         style: active ? const TextStyle(fontWeight: FontWeight.w600) : null,
                       ),
-                      if (step.kind == CreationStepKind.agentSetup)
+                      if (step.kind == CreationStepKind.skeleton)
                         TextSpan(
                           text: ' · ${localization.newProjectAgentName}',
                           style: TextStyle(color: colors.muted),

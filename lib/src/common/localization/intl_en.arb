@@ -527,7 +527,7 @@
   "@newProjectFailed": {"placeholders": {"name": {"type": "String"}}},
   "newProjectStepFlutterCreate": "flutter create",
   "newProjectStepGitInit": "git init",
-  "newProjectStepAgentSetup": "The agent lays out the architecture",
+  "newProjectStepSkeleton": "Architecture skeleton",
   "newProjectStepAnalyze": "flutter analyze",
   "newProjectStepFirstCommit": "First commit",
   "newProjectStepTook": "{seconds} s",

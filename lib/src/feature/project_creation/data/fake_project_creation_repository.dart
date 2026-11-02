@@ -13,7 +13,7 @@ import 'package:path/path.dart' as p;
 const Map<CreationStepKind, Duration> kFakeStepDurations = <CreationStepKind, Duration>{
   CreationStepKind.flutterCreate: Duration(seconds: 6),
   CreationStepKind.gitInit: Duration(seconds: 1),
-  CreationStepKind.agentSetup: Duration(seconds: 3),
+  CreationStepKind.skeleton: Duration(seconds: 3),
   CreationStepKind.analyze: Duration(seconds: 2),
   CreationStepKind.firstCommit: Duration(seconds: 1),
 };
@@ -21,7 +21,7 @@ const Map<CreationStepKind, Duration> kFakeStepDurations = <CreationStepKind, Du
 /// The lines a made-up step of the project [name] prints.
 List<String> fakeStepOutput(CreationStepKind kind, String name) => switch (kind) {
   CreationStepKind.flutterCreate => <String>['Creating project $name...', 'Wrote 130 files.'],
-  CreationStepKind.agentSetup => const <String>[
+  CreationStepKind.skeleton => const <String>[
     '✎ lib/src/common/localization/intl_en.arb',
     '✎ lib/src/feature/initialization/…',
     '⌁ flutter pub add control drift freezed_annotation…',
@@ -47,6 +47,9 @@ final class FakeProjectCreationRepositoryImpl implements IProjectCreationReposit
 
   /// The time between two changes of a made-up run.
   final Duration step;
+
+  Timer? _timer;
+  StreamController<CreationRun>? _controller;
 
   @override
   bool get isPreview => true;
@@ -80,9 +83,8 @@ final class FakeProjectCreationRepositoryImpl implements IProjectCreationReposit
   }
 
   @override
-  Stream<List<CreationStep>> create(NewProjectRequest request) {
-    final controller = StreamController<List<CreationStep>>();
-    Timer? timer;
+  Stream<CreationRun> create(NewProjectRequest request) {
+    final controller = _controller = StreamController<CreationRun>();
     controller
       ..onListen = () {
         var steps = <CreationStep>[
@@ -90,13 +92,13 @@ final class FakeProjectCreationRepositoryImpl implements IProjectCreationReposit
         ];
         final changes = _changes(steps, request.name).toList();
         var next = 0;
-        controller.add(steps);
+        controller.add(CreationRun(steps: steps));
         void schedule() {
-          timer = Timer(step, () {
+          _timer = Timer(step, () {
             if (controller.isClosed) return;
             final (index, change) = changes[next++];
             steps = List<CreationStep>.of(steps)..[index] = change(steps[index]);
-            controller.add(steps);
+            controller.add(CreationRun(steps: steps));
             if (next == changes.length) {
               controller.close();
             } else {
@@ -108,10 +110,23 @@ final class FakeProjectCreationRepositoryImpl implements IProjectCreationReposit
         schedule();
       }
       ..onCancel = () {
-        timer?.cancel();
+        _timer?.cancel();
         if (!controller.isClosed) controller.close();
       };
     return controller.stream;
+  }
+
+  @override
+  Future<void> stop() async {
+    _timer?.cancel();
+    final controller = _controller;
+    if (controller != null && !controller.isClosed) await controller.close();
+  }
+
+  @override
+  Future<void> dispose() async {
+    _timer?.cancel();
+    await _controller?.close();
   }
 
   /// The changes of a run, one per snapshot: a step starts, prints its lines one by one, finishes.

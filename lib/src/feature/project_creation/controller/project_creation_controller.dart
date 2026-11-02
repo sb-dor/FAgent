@@ -19,17 +19,20 @@ sealed class ProjectCreationState with _$ProjectCreationState {
     required List<CreationStep> steps,
   }) = ProjectCreation$RunningState;
 
-  /// The project of [request] was created.
+  /// The project of [request] was created; [projectId] is its id in the app's database.
   const factory ProjectCreationState.completed({
     required NewProjectRequest request,
     required List<CreationStep> steps,
+    int? projectId,
   }) = ProjectCreation$CompletedState;
 
   /// Creating the project of [request] failed with [error]; [steps] are the stages as they were.
+  /// [projectId] is set if the project was already registered.
   const factory ProjectCreationState.failed({
     required NewProjectRequest request,
     required List<CreationStep> steps,
     required Object error,
+    int? projectId,
   }) = ProjectCreation$FailedState;
 }
 
@@ -46,7 +49,7 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
 
   final IProjectCreationRepository _repository;
 
-  StreamSubscription<List<CreationStep>>? _subscription;
+  StreamSubscription<CreationRun>? _subscription;
   Completer<void>? _finished;
 
   /// Whether the creation is a made-up run that writes nothing (until milestone M4).
@@ -67,12 +70,14 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     ];
     setState(ProjectCreationState.running(request: request, steps: steps));
     final finished = _finished = Completer<void>();
+    int? projectId;
     Object? failure;
     _subscription = _repository
         .create(request)
         .listen(
           (snapshot) {
-            steps = snapshot;
+            steps = snapshot.steps;
+            projectId = snapshot.projectId ?? projectId;
             if (!isDisposed) {
               setState(ProjectCreationState.running(request: request, steps: steps));
             }
@@ -94,10 +99,21 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     final error = failure ?? (failedStep == null ? null : CreationStepFailed(failedStep.kind));
     setState(
       error == null
-          ? ProjectCreationState.completed(request: request, steps: steps)
-          : ProjectCreationState.failed(request: request, steps: steps, error: error),
+          ? ProjectCreationState.completed(request: request, steps: steps, projectId: projectId)
+          : ProjectCreationState.failed(
+              request: request,
+              steps: steps,
+              error: error,
+              projectId: projectId,
+            ),
     );
   }, error: (error, stackTrace) async => _failWith(error));
+
+  /// Kills the command that is running now; the creation then ends as failed. Does nothing unless
+  /// a creation is running.
+  void stop() {
+    if (state is ProjectCreation$RunningState) _repository.stop().ignore();
+  }
 
   /// Goes from a finished (completed or failed) creation back to idle; does nothing otherwise.
   void reset() {
