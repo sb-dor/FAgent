@@ -6,6 +6,11 @@
 //                 ask for permission n times (default 1) for a tool call titled <t>
 //                 (default: Run `rm -rf build`), reply with each selected option id
 //                 or `cancelled`
+//   mcp-call <codex|gemini> <server> <tool>
+//                 announce a call of MCP tool <tool> of <server> with a tool_call update and
+//                 ask for permission for it, both as that agent sends them (codex-acp 2.5.0:
+//                 identity only in the update, the request names just the call; Gemini CLI
+//                 0.66.0: `<tool> (<server> MCP Server)` in both); reply like `permission`
 //   hang          never finish until the client sends session/cancel
 //   spawn         start a background process re-parented to launchd; its pid goes
 //                 to the file named by FAKE_AGENT_PID_FILE
@@ -274,6 +279,60 @@ Future<void> main(List<String> arguments) async {
                     _ => 'cancelled',
                   });
                 }
+              case 'mcp-call':
+                final [style, server, tool] = rest.split(' ');
+                final announced = switch (style) {
+                  'codex' => <String, Object?>{
+                    'toolCallId': 'exec-1',
+                    'kind': 'execute',
+                    'title': 'mcp.$server.$tool',
+                    'status': 'in_progress',
+                    'rawInput': <String, Object?>{
+                      'server': server,
+                      'tool': tool,
+                      'arguments': <String, Object?>{},
+                    },
+                    '_meta': <String, Object?>{'is_mcp_tool_call': true},
+                  },
+                  _ => <String, Object?>{
+                    'toolCallId': '$tool-1',
+                    'status': 'pending',
+                    'title': '$tool ($server MCP Server)',
+                    'content': <Object?>[],
+                    'locations': <Object?>[],
+                    'kind': 'other',
+                  },
+                };
+                await context.client.updateSession(
+                  SessionNotification.fromJson(<String, Object?>{
+                    'sessionId': session.value,
+                    'update': <String, Object?>{'sessionUpdate': 'tool_call', ...announced},
+                  }),
+                );
+                final response = await context.client.requestPermission(
+                  RequestPermissionRequest.fromJson(<String, Object?>{
+                    'sessionId': session.value,
+                    'toolCall': style == 'codex'
+                        ? <String, Object?>{
+                            'toolCallId': 'exec-1',
+                            'kind': 'execute',
+                            'status': 'pending',
+                          }
+                        : announced,
+                    'options': <Object?>[
+                      <String, Object?>{'optionId': 'allow', 'name': 'Allow', 'kind': 'allow_once'},
+                      <String, Object?>{
+                        'optionId': 'reject',
+                        'name': 'Reject',
+                        'kind': 'reject_once',
+                      },
+                    ],
+                  }),
+                );
+                await say(context.client, session, switch (response.outcome) {
+                  RequestPermissionOutcomeSelected(:final value) => value.optionId.value,
+                  _ => 'cancelled',
+                });
               case 'hang':
                 final cancelled = Completer<void>();
                 cancels[session.value] = cancelled;

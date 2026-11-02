@@ -130,8 +130,11 @@ final class AgentHub {
     'claude': AgentDefinition.claude,
   };
 
-  static Future<SessionContext> _noContext(int _, AgentDefinition _, Map<String, Object?> _) async =>
-      SessionContext.empty;
+  static Future<SessionContext> _noContext(
+    int _,
+    AgentDefinition _,
+    Map<String, Object?> _,
+  ) async => SessionContext.empty;
 
   final AppDatabase _database;
   final SessionContextProvider _sessionContext;
@@ -1095,11 +1098,18 @@ final class AgentHub {
     final params = raw?.params ?? _plain(context.params.toJson());
     // Claude allows the app's tools through `allowedTools`; other agents ask,
     // and the app answers for the user — only in a session that got the app's
-    // server, so no other server can pose as it.
+    // server, so no other server can pose as it. Codex names the server only in
+    // the `tool_call` update that announced the call.
     final autoAllow =
         slot.definition.rulesChannel != RulesChannel.claudeMeta &&
             live.hasAppServer &&
-            isAppToolPermission(params)
+            isAppToolPermission(
+              params,
+              announced: announcedToolCall(
+                live.store.events,
+                _object(params['toolCall'])?['toolCallId'],
+              ),
+            )
         ? _allowOption(context.params.options)
         : null;
     final decided = permissions.wait(requestId, sessionId: live.id);
@@ -1434,46 +1444,83 @@ final class AgentHub {
 }
 
 /// The forms of a tool call title (regular expressions) that name a tool of
-/// the app's own MCP server: the bare server name, `<server>.tool`,
-/// `<server>__tool`, `<server>:tool`, `mcp__<server>__tool`, and Gemini's
-/// `tool (<server> MCP Server)` / `… <server> MCP …`. The name is always
-/// token-bounded, so `my_flutter_code_agent` or `flutter_code_agent_rm` do not
-/// match.
+/// the app's own MCP server, as the agents really send them; group 1 is the
+/// tool:
+///
+/// * codex-acp 2.5.0: `mcp.<server>.<tool>`, in the `tool_call` update that
+///   announces the call (its permission request has no title). It counts only
+///   together with `rawInput` `{server, tool}` and `_meta.is_mcp_tool_call`
+///   ([isAppToolPermission]): a shell command can have any title.
+/// * Gemini CLI 0.66.0: `<tool> (<server> MCP Server)` for a call without
+///   arguments. With arguments Gemini titles it `<tool>(arg: value)`, which
+///   names no server: such calls ask.
+///
+/// The whole title must match, so `x (other MCP Server)` or
+/// `mcp.my_flutter_code_agent.x` never do.
 const List<String> appToolTitleForms = <String>[
-  '^$appMcpServerName\$',
-  '^$appMcpServerName[.:]',
-  '^${appMcpServerName}__',
-  '^mcp__${appMcpServerName}__',
-  '\\($appMcpServerName MCP Server\\)',
-  '(^|\\s)$appMcpServerName MCP\\b',
+  '^mcp\\.$appMcpServerName\\.([A-Za-z0-9_-]+)\$',
+  '^([A-Za-z0-9_-]+) \\($appMcpServerName MCP Server\\)\$',
 ];
-
-/// Keys of `toolCall.rawInput` and `toolCall._meta` that name the server of an
-/// MCP tool call; only their exact value counts.
-const List<String> _serverKeys = <String>['server', 'serverName'];
 
 /// Whether the `session/request_permission` [params] (raw JSON) ask for a tool
 /// of the app's own MCP server ([appMcpServerName]), which the app allows
 /// without asking the user.
 ///
-/// Only the server's identity counts: the title in one of [appToolTitleForms],
-/// or a `server`/`serverName` field of `rawInput` or `_meta` equal to the
-/// name. Argument values, `content`, `locations` and the call id are never
-/// read (they can mention the name without being the app's tool). Calls of
-/// kind `execute`, `edit`, `delete` and `move` never qualify.
-bool isAppToolPermission(Map<String, Object?> params) {
-  final toolCall = params['toolCall'];
-  if (toolCall is! Map<Object?, Object?>) return false;
+/// [announced] is the call as the agent's earlier `tool_call` updates
+/// described it ([announcedToolCall]); the request's own fields win over it,
+/// as an ACP `ToolCallUpdate` does.
+///
+/// Only the server's identity counts — the title in one of
+/// [appToolTitleForms]:
+///
+/// * Codex's form also needs `rawInput.server` equal to the name,
+///   `rawInput.tool` equal to the titled tool and `_meta.is_mcp_tool_call`
+///   `true` (codex-acp reports every MCP call as kind `execute`).
+/// * Gemini's form never qualifies for kind `execute`, `edit`, `delete` or
+///   `move`.
+///
+/// Argument values, `content`, `locations` and the call id are never read
+/// (they can mention the name without being the app's tool).
+bool isAppToolPermission(Map<String, Object?> params, {Map<String, Object?>? announced}) {
+  final own = params['toolCall'];
+  if (own is! Map<Object?, Object?>) return false;
+  final toolCall = <Object?, Object?>{...?announced, ...own};
+  final title = toolCall['title'];
+  if (title is! String) return false;
+  final codex = RegExp(appToolTitleForms[0]).firstMatch(title);
+  if (codex != null) {
+    final rawInput = toolCall['rawInput'];
+    final meta = toolCall['_meta'];
+    return rawInput is Map<Object?, Object?> &&
+        rawInput['server'] == appMcpServerName &&
+        rawInput['tool'] == codex.group(1) &&
+        meta is Map<Object?, Object?> &&
+        meta['is_mcp_tool_call'] == true;
+  }
   if (const <String>{'execute', 'edit', 'delete', 'move'}.contains(toolCall['kind'])) return false;
-  if (toolCall['title'] case final String title
-      when appToolTitleForms.any((form) => RegExp(form).hasMatch(title.trim()))) {
-    return true;
+  return RegExp(appToolTitleForms[1]).hasMatch(title);
+}
+
+/// The tool call [toolCallId] as the agent's `tool_call` and
+/// `tool_call_update` frames among [events] describe it, merged in order
+/// (later fields win); `null` when the agent announced no such call or
+/// [toolCallId] is `null`.
+Map<String, Object?>? announcedToolCall(Iterable<SessionEvent> events, Object? toolCallId) {
+  if (toolCallId == null) return null;
+  Map<String, Object?>? merged;
+  for (final event in events) {
+    if (event.origin != SessionEventOrigin.agent) continue;
+    if (event.kind != 'tool_call' && event.kind != 'tool_call_update') continue;
+    if (event.payload case {'params': {'update': final Map<Object?, Object?> update}}
+        when update['toolCallId'] == toolCallId) {
+      merged = <String, Object?>{
+        ...?merged,
+        for (final MapEntry(:key, :value) in update.entries)
+          if (key is String && key != 'sessionUpdate') key: value,
+      };
+    }
   }
-  for (final field in <Object?>[toolCall['rawInput'], toolCall['_meta']]) {
-    if (field is! Map<Object?, Object?>) continue;
-    if (_serverKeys.any((key) => field[key] == appMcpServerName)) return true;
-  }
-  return false;
+  return merged;
 }
 
 /// A chat of an agent that is no longer configured cannot start (its problem

@@ -328,7 +328,7 @@ void main() {
       final statuses = <SessionStatus>[];
       live.status.addListener(() => statuses.add(live.status.value));
 
-      await hub.prompt(chat, 'permission title=flutter_code_agent.list_skills');
+      await hub.prompt(chat, 'mcp-call codex flutter_code_agent list_skills');
 
       expect(statuses, isNot(contains(SessionStatus.awaitingPermission)));
       expect(_agentText(live), <String>['allow']);
@@ -352,7 +352,7 @@ void main() {
       final chat = await newChat();
       final live = await hub.session(chat);
 
-      final turn = hub.prompt(chat, 'permission title=flutter_code_agent.list_skills');
+      final turn = hub.prompt(chat, 'mcp-call codex flutter_code_agent list_skills');
       await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
       final request = live.store.events.singleWhere(
         (e) => e.kind == SessionEventKind.permissionRequest,
@@ -385,12 +385,41 @@ void main() {
       expect(_agentText(live), <String>['reject']);
     });
 
+    test('a Gemini-style app tool permission is auto-allowed', () async {
+      final hub = newHub(sessionContext: withApp);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      await hub.prompt(chat, 'mcp-call gemini flutter_code_agent list_skills');
+
+      expect(_agentText(live), <String>['allow']);
+    });
+
+    test('a Codex-style call of another server still asks', () async {
+      final hub = newHub(sessionContext: withApp);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      final turn = hub.prompt(chat, 'mcp-call codex other list_skills');
+      await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
+      final request = live.store.events.singleWhere(
+        (e) => e.kind == SessionEventKind.permissionRequest,
+      );
+      expect(
+        hub.resolvePermission(chat, request.payload['requestId']! as String, 'reject'),
+        isTrue,
+      );
+      await turn;
+
+      expect(_agentText(live), <String>['reject']);
+    });
+
     test('app tool permission still asks for Claude, which allows it with allowedTools', () async {
       final hub = newHub(sessionContext: withApp, rulesChannel: RulesChannel.claudeMeta);
       final chat = await newChat();
       final live = await hub.session(chat);
 
-      final turn = hub.prompt(chat, 'permission title=flutter_code_agent.list_skills');
+      final turn = hub.prompt(chat, 'mcp-call codex flutter_code_agent list_skills');
       await _until(live.status, (s) => s == SessionStatus.awaitingPermission);
       final request = live.store.events.singleWhere(
         (e) => e.kind == SessionEventKind.permissionRequest,
@@ -407,53 +436,97 @@ void main() {
       'options': const <Object?>[],
     };
 
-    test('the app server named in the title', () {
-      for (final title in <String>[
-        'flutter_code_agent',
-        'flutter_code_agent.list_skills',
-        'flutter_code_agent__list_skills',
-        'flutter_code_agent:list_skills',
-        'mcp__flutter_code_agent__list_skills',
-        'list_skills (flutter_code_agent MCP Server)',
-        'Tool list_skills from flutter_code_agent MCP',
+    // As codex-acp 2.5.0 sent them (opt-in run, workspace-write mode): the identity is only in
+    // the announcing `tool_call` update; the permission request names just the call.
+    const codexCallId = 'exec-53fb5580-7efe-4888-92b0-66f183e71513';
+    final codexAnnounced = jsonDecode('''
+      {"toolCallId": "$codexCallId", "kind": "execute",
+       "title": "mcp.flutter_code_agent.list_skills", "status": "in_progress",
+       "rawInput": {"server": "flutter_code_agent", "tool": "list_skills", "arguments": {}},
+       "_meta": {"is_mcp_tool_call": true}}
+    ''') as Map<String, Object?>;
+    final codexRequest = jsonDecode('''
+      {"sessionId": "01a19b73-b14d-75e2-8f94-f06f4b5bf422",
+       "toolCall": {"toolCallId": "$codexCallId", "kind": "execute", "status": "pending"},
+       "options": [{"optionId": "allow_once", "name": "Allow", "kind": "allow_once"},
+                   {"optionId": "allow_session", "name": "Allow for this session",
+                    "kind": "allow_always"},
+                   {"optionId": "allow_always", "name": "Always allow", "kind": "allow_always"},
+                   {"optionId": "cancel", "name": "Cancel", "kind": "reject_once"}]}
+    ''') as Map<String, Object?>;
+    // As Gemini CLI 0.66.0 builds it for an MCP tool called without arguments.
+    final geminiRequest = jsonDecode('''
+      {"sessionId": "s",
+       "toolCall": {"toolCallId": "list_skills-1793609305463", "status": "pending",
+                    "title": "list_skills (flutter_code_agent MCP Server)",
+                    "content": [], "locations": [], "kind": "other"},
+       "options": [{"optionId": "proceed_always_server",
+                    "name": "Allow all server tools for this session", "kind": "allow_always"}]}
+    ''') as Map<String, Object?>;
+
+    Map<String, Object?> withField(Map<String, Object?> json, String key, Object? value) =>
+        <String, Object?>{...json, key: value};
+
+    test("Codex's request with its announced call", () {
+      expect(isAppToolPermission(codexRequest, announced: codexAnnounced), isTrue);
+    });
+
+    test("Codex's request alone names no server", () {
+      expect(isAppToolPermission(codexRequest), isFalse);
+    });
+
+    test('a Codex-style call needs the title, rawInput and the MCP marker to agree', () {
+      for (final announced in <Map<String, Object?>>[
+        // Another server, or a tool name with something after it.
+        withField(codexAnnounced, 'title', 'mcp.other.list_skills'),
+        withField(codexAnnounced, 'title', 'mcp.flutter_code_agent.list_skills --rm'),
+        withField(codexAnnounced, 'title', 'mcp.my_flutter_code_agent.list_skills'),
+        // A shell command named like the tool.
+        withField(codexAnnounced, 'rawInput', <String, Object?>{
+          'command': <String>['mcp.flutter_code_agent.list_skills'],
+        }),
+        withField(codexAnnounced, 'rawInput', <String, Object?>{
+          'server': 'other',
+          'tool': 'list_skills',
+        }),
+        withField(codexAnnounced, 'rawInput', <String, Object?>{
+          'server': 'flutter_code_agent',
+          'tool': 'rm',
+        }),
+        withField(codexAnnounced, '_meta', null),
+        withField(codexAnnounced, '_meta', <String, Object?>{'is_mcp_tool_call': 'true'}),
       ]) {
         expect(
-          isAppToolPermission(request({'title': title, 'kind': 'other'})),
-          isTrue,
-          reason: title,
+          isAppToolPermission(codexRequest, announced: announced),
+          isFalse,
+          reason: jsonEncode(announced),
         );
       }
     });
 
-    test('the app server in a server field of rawInput or _meta', () {
+    test("the request's own fields win over the announced call", () {
       expect(
         isAppToolPermission(
-          request({
-            'title': 'list_skills',
-            'rawInput': {'server': 'flutter_code_agent', 'tool': 'list_skills'},
-          }),
+          request({'toolCallId': codexCallId, 'kind': 'execute', 'title': 'rm -rf build'}),
+          announced: codexAnnounced,
         ),
-        isTrue,
-      );
-      expect(
-        isAppToolPermission(
-          request({
-            'title': 'list_skills',
-            '_meta': {'serverName': 'flutter_code_agent'},
-          }),
-        ),
-        isTrue,
+        isFalse,
       );
     });
 
-    test('a name that only contains the server name is not the app server', () {
+    test("Gemini's request for a tool without arguments", () {
+      expect(isAppToolPermission(geminiRequest), isTrue);
+    });
+
+    test('a Gemini-style title must name the app server as the whole suffix', () {
       for (final title in <String>[
-        'my_flutter_code_agent.list_skills',
-        'flutter_code_agent_rm',
-        'mcp__my_flutter_code_agent__x',
-        'Fetch https://github.com/x/flutter_code_agent',
-        'Read package:flutter_code_agent/src/main.dart',
-        'run (my_flutter_code_agent MCP Server)',
+        'flutter_code_agent.x (other MCP Server)',
+        'x (other MCP Server)',
+        'foo (flutter_code_agent MCP Server) (evil MCP Server)',
+        'list_skills (my_flutter_code_agent MCP Server)',
+        'rm -rf / (flutter_code_agent MCP Server)',
+        // With arguments Gemini titles the call `tool(arg: value)` without the server.
+        'load_skill(name: flutter-testing)',
       ]) {
         expect(
           isAppToolPermission(request({'title': title, 'kind': 'other'})),
@@ -463,16 +536,49 @@ void main() {
       }
       expect(
         isAppToolPermission(
+          request({'title': 'list_skills (flutter_code_agent MCP Server)', 'kind': 'execute'}),
+        ),
+        isFalse,
+      );
+    });
+
+    test('forms no agent sends do not count', () {
+      for (final title in <String>[
+        'flutter_code_agent',
+        'flutter_code_agent.list_skills',
+        'flutter_code_agent__list_skills',
+        'flutter_code_agent:list_skills',
+        'mcp__flutter_code_agent__list_skills',
+        'Tool list_skills from flutter_code_agent MCP',
+      ]) {
+        expect(
+          isAppToolPermission(request({'title': title, 'kind': 'other'})),
+          isFalse,
+          reason: title,
+        );
+      }
+      // A server field without Codex's title and marker.
+      expect(
+        isAppToolPermission(
           request({
-            'title': 'x',
-            'rawInput': {'server': 'my_flutter_code_agent'},
+            'title': 'list_skills',
+            'rawInput': {'server': 'flutter_code_agent', 'tool': 'list_skills'},
+          }),
+        ),
+        isFalse,
+      );
+      expect(
+        isAppToolPermission(
+          request({
+            'title': 'list_skills',
+            '_meta': {'serverName': 'flutter_code_agent'},
           }),
         ),
         isFalse,
       );
     });
 
-    test('argument values that mention the server are not the app server', () {
+    test('argument values, contents and locations that mention the server are not', () {
       expect(
         isAppToolPermission(
           request({
@@ -485,32 +591,7 @@ void main() {
       );
       expect(
         isAppToolPermission(
-          request({
-            'title': 'Fetch',
-            'kind': 'fetch',
-            'rawInput': {'url': 'https://github.com/x/flutter_code_agent'},
-          }),
-        ),
-        isFalse,
-      );
-    });
-
-    test('other tools are not', () {
-      expect(isAppToolPermission(request({'title': 'Run `rm -rf build`'})), isFalse);
-      expect(isAppToolPermission(request({'title': 'dart (MCP Server)'})), isFalse);
-      expect(isAppToolPermission(<String, Object?>{'sessionId': 's'}), isFalse);
-    });
-
-    test('commands, edits and file contents that mention the server are not', () {
-      expect(
-        isAppToolPermission(
           request({'title': 'grep -r flutter_code_agent lib', 'kind': 'execute'}),
-        ),
-        isFalse,
-      );
-      expect(
-        isAppToolPermission(
-          request({'title': 'flutter_code_agent.list_skills', 'kind': 'execute'}),
         ),
         isFalse,
       );
@@ -541,6 +622,60 @@ void main() {
           }),
         ),
         isFalse,
+      );
+      expect(isAppToolPermission(request({'title': 'dart (MCP Server)'})), isFalse);
+      expect(isAppToolPermission(<String, Object?>{'sessionId': 's'}), isFalse);
+    });
+  });
+
+  group('announcedToolCall', () {
+    var seq = 0;
+    SessionEvent frame(String kind, Map<String, Object?> update, {SessionEventOrigin? origin}) =>
+        SessionEvent(
+          seq: seq++,
+          origin: origin ?? SessionEventOrigin.agent,
+          kind: kind,
+          payload: <String, Object?>{
+            'jsonrpc': '2.0',
+            'method': 'session/update',
+            'params': <String, Object?>{
+              'sessionId': 's',
+              'update': <String, Object?>{'sessionUpdate': kind, ...update},
+            },
+          },
+          createdAt: DateTime(2026),
+        );
+
+    test('merges the tool_call and its updates in order', () {
+      final events = <SessionEvent>[
+        frame('tool_call', {'toolCallId': 'a', 'title': 'one', 'kind': 'execute'}),
+        frame('tool_call', {'toolCallId': 'b', 'title': 'other call'}),
+        frame('tool_call_update', {'toolCallId': 'a', 'title': 'two', 'status': 'in_progress'}),
+      ];
+
+      expect(announcedToolCall(events, 'a'), <String, Object?>{
+        'toolCallId': 'a',
+        'title': 'two',
+        'kind': 'execute',
+        'status': 'in_progress',
+      });
+    });
+
+    test('null without an agent frame of that call', () {
+      expect(announcedToolCall(const <SessionEvent>[], 'a'), isNull);
+      // A request without a call id matches no frame, not the frames without one.
+      expect(
+        announcedToolCall(<SessionEvent>[
+          frame('tool_call', {'title': 'mcp.flutter_code_agent.list_skills'}),
+        ], null),
+        isNull,
+      );
+      expect(
+        announcedToolCall(<SessionEvent>[
+          frame('tool_call', {'toolCallId': 'a'}, origin: SessionEventOrigin.user),
+          frame('tool_call', {'toolCallId': 'b'}),
+        ], 'a'),
+        isNull,
       );
     });
   });
