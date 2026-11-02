@@ -49,7 +49,7 @@ class ComposerToolbar extends StatelessWidget {
   /// effect.
   final ValueChanged<String>? onAgentSelected;
 
-  /// The chat has a message already, so its agent can no longer be changed.
+  /// The chat's agent cannot be changed (any more): a message was sent or is on its way.
   final bool agentLocked;
 
   /// Settings to show; empty until the agent has started.

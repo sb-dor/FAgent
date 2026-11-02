@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
@@ -49,9 +50,61 @@ void main() {
       )..where((s) => s.id.equals(sessionId))).getSingle(),
     ))!;
     expect(row.agentId, 'codex');
+    // Model and mode are the agent's own and only known once it has started, for either agent.
+    expect(find.byTooltip('Available after the agent starts'), findsNWidgets(2));
     // The chat was loaded again for the new agent: the chip names it.
     expect(find.text('Codex'), findsOneWidget);
     expect(find.text('Claude Code'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('the agent chip is locked while the chat is starting its agent', (tester) async {
+    useDesktopView(tester);
+    final dependencies = testDependencies();
+    addTearDown(dependencies.database.close);
+    final database = dependencies.database;
+    final projectId = (await tester.runAsync(
+      () => database
+          .into(database.projectsTable)
+          .insert(ProjectsTableCompanion.insert(path: '/tmp', name: 'p')),
+    ))!;
+    final sessionId = (await tester.runAsync(
+      () => database
+          .into(database.sessionsTable)
+          .insert(SessionsTableCompanion.insert(projectId: projectId, agentId: 'claude')),
+    ))!;
+    await tester.pumpWidget(
+      testApp(
+        dependencies: dependencies,
+        ChatConfigWidget(
+          sessionId: sessionId,
+          project: Project(id: projectId, path: '/tmp', name: 'p', isFlutter: false),
+        ),
+      ),
+    );
+    final live = (await tester.runAsync(() => dependencies.agentHub.session(sessionId)))!;
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byTooltip('Agent'), findsOneWidget);
+
+    // The first message is on its way: nothing is journaled yet, the agent is starting.
+    live.status.value = SessionStatus.starting;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byTooltip("The agent can't be changed after the first message"), findsOneWidget);
+    await tester.tap(find.text('Claude Code'));
+    // The status line animates while the agent starts: no settling.
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Codex'), findsNothing);
+
+    // A chat that waits for a sign-in can still change its agent.
+    live.status.value = SessionStatus.needsAuth;
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byTooltip('Agent'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));

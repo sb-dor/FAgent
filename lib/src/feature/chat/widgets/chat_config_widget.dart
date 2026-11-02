@@ -148,12 +148,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.initState();
     final dependencies = Dependencies.of(context);
     final hub = dependencies.agentHub;
-    chatController =
-        ChatController(
-            repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
-          )
-          ..addListener(_schedulePublish)
-          ..open(sessionId);
+    chatController = ChatController(
+      repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
+    )
+      ..addListener(_schedulePublish)
+      ..open(sessionId);
     final chatRepository = ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository);
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionAgentController = SessionAgentController(

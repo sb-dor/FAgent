@@ -155,6 +155,58 @@ void main() {
     await prompt.catchError((Object _) {});
   });
 
+  test('setAgent refuses while the first prompt is starting the agent', () async {
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    var changeableWhileStarting = true;
+    live.status.addListener(() {
+      if (live.status.value == SessionStatus.starting) {
+        changeableWhileStarting = hub.canChangeAgent(chat);
+      }
+    });
+    final prompt = hub.prompt(chat, 'hang');
+    await _untilStatus(live, SessionStatus.running);
+
+    // The row has no agent session in the first moments, only the hub knows the chat is busy.
+    expect(changeableWhileStarting, isFalse);
+    await expectLater(repository.setAgent(chat, 'second'), throwsStateError);
+
+    expect(await agentOf(chat), 'first');
+    expect(hub.opened(chat), same(live));
+    expect(_methods(secondRequests), isEmpty);
+    await hub.cancel(chat);
+    await prompt.catchError((Object _) {});
+  });
+
+  test('setAgent refuses while the agent session is being created', () async {
+    final chat = await newChat();
+    await hub.session(chat);
+    final prompt = hub.prompt(chat, 'echo hi');
+    // The prompt is in its setup lane before the agent has started.
+    await Future<void>.delayed(Duration.zero);
+    expect(hub.canChangeAgent(chat), isFalse);
+
+    await expectLater(repository.setAgent(chat, 'second'), throwsStateError);
+    await prompt;
+
+    expect(await agentOf(chat), 'first');
+    expect(_methods(secondRequests), isEmpty);
+    expect(_methods(firstRequests), <String>['session/new']);
+  });
+
+  test('a chat waiting for a sign-in can change its agent', () async {
+    final chat = await newChat();
+    final live = await hub.session(chat);
+    live
+      ..problem.value = const SessionProblem(SessionProblemKind.auth, 'Authentication required')
+      ..status.value = SessionStatus.needsAuth;
+
+    await repository.setAgent(chat, 'second');
+
+    expect(await agentOf(chat), 'second');
+    expect(hub.opened(chat), isNull);
+  });
+
   test('a chat of a removed agent can be moved to a live one', () async {
     final chat = await newChat(agentId: 'gone');
     final live = await hub.session(chat);

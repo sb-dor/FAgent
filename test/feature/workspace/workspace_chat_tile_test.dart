@@ -1,4 +1,6 @@
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_chat_tile.dart';
@@ -8,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/test_app.dart';
 
 void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
   test('an agent is named after the list, else by its id', () {
     const agents = <AgentInfo>[
       AgentInfo(id: 'claude', name: 'Claude Code'),
@@ -20,13 +24,17 @@ void main() {
     expect(agentDisplayName('claude', const <AgentInfo>[]), 'claude');
   });
 
-  Widget tile({required String agentId, String agentName = 'Codex'}) => testApp(
+  Widget tile({
+    required String agentId,
+    String agentName = 'Codex',
+    String title = 'Booking screen',
+  }) => testApp(
     WorkspaceChatTile(
       session: ChatSession(
         id: 1,
         projectId: 1,
         agentId: agentId,
-        title: 'Booking screen',
+        title: title,
         updatedAt: DateTime(2026, 11),
       ),
       agentName: agentName,
@@ -50,13 +58,23 @@ void main() {
     expect(find.text('Claude Code'), findsNothing);
   });
 
-  testWidgets('a long title still ends with an ellipsis next to the label', (tester) async {
+  testWidgets('a long title ends with an ellipsis and the label keeps its place', (tester) async {
     tester.view
       ..physicalSize = const Size(240, 200)
       ..devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(tile(agentId: 'custom:3', agentName: 'My very own agent'));
+    const title = 'A very long chat title that cannot possibly fit into the narrow sidebar tile';
+    await tester.pumpWidget(
+      tile(agentId: 'custom:3', agentName: 'My very own agent', title: title),
+    );
 
     expect(tester.takeException(), isNull);
+    final titleText = tester.widget<Text>(find.text(title));
+    expect(titleText.overflow, TextOverflow.ellipsis);
+    expect(titleText.maxLines, 1);
+    expect(tester.renderObject<RenderParagraph>(find.text(title)).didExceedMaxLines, isTrue);
+    final label = tester.widget<Text>(find.text('My very own agent'));
+    expect(label.overflow, TextOverflow.ellipsis);
+    expect(tester.getSize(find.text('My very own agent')).width, lessThanOrEqualTo(72));
   });
 }

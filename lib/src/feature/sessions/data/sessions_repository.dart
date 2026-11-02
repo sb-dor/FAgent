@@ -56,16 +56,32 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
 
   @override
   Future<void> setAgent(int sessionId, String agentId) async {
-    final row = await (_database.select(
-      _database.sessionsTable,
-    )..where((s) => s.id.equals(sessionId))).getSingle();
+    final sessions = _database.sessionsTable;
+    final row = await (_database.select(sessions)..where((s) => s.id.equals(sessionId))).getSingle();
     if (row.acpSessionId != null) {
       throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
     }
     if (row.agentId == agentId) return;
-    await (_database.update(_database.sessionsTable)..where((s) => s.id.equals(sessionId))).write(
+    // The first message may already be on its way (the agent session is not stored yet while the
+    // agent starts): the hub knows.
+    if (!_hub.canChangeAgent(sessionId)) {
+      throw StateError('Chat $sessionId is starting; its agent cannot change');
+    }
+    // Only while the chat still has no agent session, so the new agent never meets the old one's.
+    final changed = await (_database.update(
+      sessions,
+    )..where((s) => s.id.equals(sessionId) & s.acpSessionId.isNull())).write(
       SessionsTableCompanion(agentId: Value<String>(agentId)),
     );
-    await _hub.forget(sessionId);
+    if (changed == 0) {
+      throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
+    }
+    if (!await _hub.forget(sessionId)) {
+      // A prompt got in between: put the agent back unless its session was stored meanwhile.
+      await (_database.update(sessions)
+            ..where((s) => s.id.equals(sessionId) & s.acpSessionId.isNull()))
+          .write(SessionsTableCompanion(agentId: Value<String>(row.agentId)));
+      throw StateError('Chat $sessionId is starting; its agent cannot change');
+    }
   }
 }

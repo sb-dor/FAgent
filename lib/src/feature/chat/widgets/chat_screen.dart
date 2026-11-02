@@ -146,7 +146,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               agentId: view.agentId,
                               agents: _scope.agentsController.agents,
                               onAgentSelected: _scope.setAgent,
-                              agentLocked: view.agentLocked,
+                              agentLocked: !view.agentChangeable,
                               options: view.configOptions,
                               enabled: view.canChangeConfig,
                               onChanged: _scope.setConfig,

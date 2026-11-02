@@ -130,11 +130,8 @@ final class AgentHub {
     'claude': AgentDefinition.claude,
   };
 
-  static Future<SessionContext> _noContext(
-    int _,
-    AgentDefinition _,
-    Map<String, Object?> _,
-  ) async => SessionContext.empty;
+  static Future<SessionContext> _noContext(int _, AgentDefinition _, Map<String, Object?> _) async =>
+      SessionContext.empty;
 
   final AppDatabase _database;
   final SessionContextProvider _sessionContext;
@@ -248,35 +245,49 @@ final class AgentHub {
         });
   }
 
+  /// Whether the agent of chat [sessionId] can still change: the chat has no agent session, no
+  /// setup or turn is queued or running for it, and it is cold, idle, waiting for a sign-in, or
+  /// (its agent removed) in error. A chat that was not opened in this run can.
+  bool canChangeAgent(int sessionId) {
+    if (_disposing) return false;
+    final live = _opened[sessionId];
+    return live == null || _agentChangeable(live);
+  }
+
+  bool _agentChangeable(LiveSession live) =>
+      live.acpSessionId == null &&
+      !_lanesInFlight.containsKey(live.id) &&
+      switch (live.status.value) {
+        SessionStatus.cold || SessionStatus.idle || SessionStatus.needsAuth => true,
+        SessionStatus.error => live.problem.value?.kind == SessionProblemKind.removed,
+        _ => false,
+      };
+
   /// Drops the cached runtime state of chat [sessionId], so the next [session] reads the chat's
-  /// agent from the database again (the user changed it before the first message).
+  /// agent from the database again (the user changed it before the first message). `true` when
+  /// the state was dropped or nothing was cached; `false` when the chat can no longer change its
+  /// agent ([canChangeAgent]) and stays as it is.
   ///
-  /// Only a chat that has no agent session, is idle, cold or (its agent removed) in error, and has
-  /// nothing queued is dropped; anything else stays as it is. A listener that still follows the
-  /// dropped state has to open the chat again.
-  Future<void> forget(int sessionId) async {
-    if (_disposing) return;
+  /// A listener that still follows the dropped state has to open the chat again.
+  Future<bool> forget(int sessionId) async {
+    if (_disposing) return false;
     final LiveSession live;
     try {
       final opening = _sessions[sessionId];
-      if (opening == null) return;
+      if (opening == null) return true;
       live = await opening;
     } on Object {
       // The chat never opened: nothing is cached.
-      return;
+      return true;
     }
     // Another caller may have dropped or replaced it while the open was awaited.
-    if (!identical(_opened[sessionId], live) || _lanesInFlight.containsKey(sessionId)) return;
-    final status = live.status.value;
-    final settled =
-        status == SessionStatus.cold ||
-        status == SessionStatus.idle ||
-        (status == SessionStatus.error && live.problem.value?.kind == SessionProblemKind.removed);
-    if (live.acpSessionId != null || !settled) return;
+    if (!identical(_opened[sessionId], live)) return !_opened.containsKey(sessionId);
+    if (!_agentChangeable(live)) return false;
     _sessions.remove(sessionId);
     _opened.remove(sessionId);
     _setupLanes.remove(sessionId);
     await live.store.close();
+    return true;
   }
 
   Future<LiveSession> _open(int sessionId) async {

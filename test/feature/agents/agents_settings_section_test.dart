@@ -201,12 +201,7 @@ void main() {
 
     expect(
       agents.calls.where((call) => call.startsWith('refresh:')),
-      unorderedEquals(<String>[
-        'refresh:claude',
-        'refresh:codex',
-        'refresh:gemini',
-        'refresh:custom:1',
-      ]),
+      unorderedEquals(<String>['refresh:claude', 'refresh:codex', 'refresh:gemini', 'refresh:custom:1']),
     );
     await disposeTestApp(tester, dependencies);
   });
@@ -475,7 +470,10 @@ void main() {
       final gemini = memoryGeminiAgent.copyWith(
         methods: <AgentLoginMethod>[
           for (final method in memoryGeminiAgent.methods)
-            if (method.kind == AgentLoginKind.apiKey) method.copyWith(keyPresent: true) else method,
+            if (method.kind == AgentLoginKind.apiKey)
+              method.copyWith(keyPresent: true)
+            else
+              method,
         ],
       );
       final agents = MemoryAgentsRepository(
@@ -762,16 +760,26 @@ void main() {
       for (final size in const <Size>[Size(900, 600), Size(1280, 800)]) {
         for (final locale in const <Locale>[Locale('en'), Locale('ru')]) {
           for (final dark in const <bool>[false, true]) {
-            testWidgets('$section fits ${size.width.toInt()}×${size.height.toInt()} in '
-                '${locale.languageCode}, ${dark ? 'dark' : 'light'}', (tester) async {
-              final agents = _repository(
-                claude: _claude(account: 'a.very.long.account.name@example-organization.com'),
-              );
-              await openSettings(tester, section, agents, locale: locale, dark: dark, size: size);
-              expect(_pageContent(), findsOneWidget);
-              expect(tester.takeException(), isNull);
-              await disposeTestApp(tester, dependencies);
-            });
+            testWidgets(
+              '$section fits ${size.width.toInt()}×${size.height.toInt()} in '
+              '${locale.languageCode}, ${dark ? 'dark' : 'light'}',
+              (tester) async {
+                final agents = _repository(
+                  claude: _claude(account: 'a.very.long.account.name@example-organization.com'),
+                );
+                await openSettings(
+                  tester,
+                  section,
+                  agents,
+                  locale: locale,
+                  dark: dark,
+                  size: size,
+                );
+                expect(_pageContent(), findsOneWidget);
+                expect(tester.takeException(), isNull);
+                await disposeTestApp(tester, dependencies);
+              },
+            );
           }
         }
       }
