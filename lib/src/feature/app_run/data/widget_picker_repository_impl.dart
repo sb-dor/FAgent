@@ -18,6 +18,14 @@ const int kPickedAncestorLimit = 8;
 /// gone already).
 const Duration _selectModeOffTimeout = Duration(seconds: 2);
 
+/// How long a pick may take to end once it was ended from outside before its connection is closed
+/// under it: an app paused at a breakpoint answers no call.
+const Duration kPickEndTimeout = Duration(seconds: 4);
+
+/// How long a pick whose connection dropped waits for the run to end: a stop closes the VM
+/// service before `flutter run` reports it.
+const Duration kPickRunEndTimeout = Duration(seconds: 2);
+
 /// {@template widget_picker_repository_impl}
 /// Picks widgets in a debug app through its widget inspector, over a [WidgetInspectorClient] of its
 /// own (not DevTools, the Dart MCP server or the run's connection).
@@ -29,23 +37,31 @@ const Duration _selectModeOffTimeout = Duration(seconds: 2);
 ///
 /// A pick releases the inspector ids of the one before (the object group), turns the select mode
 /// on and waits for the tap; the user leaving the select mode in the app, [cancel], a hot restart
-/// and the end of the run end it as [PickCancelled]. The select mode is always turned off again.
+/// and the end of the run end it as [PickCancelled]. The select mode is always turned off again
+/// while the app answers; ending a pick from outside ([cancel], a stop, [dispose]) waits for that
+/// at most [kPickEndTimeout] and then closes the connection, so an app that answers nothing
+/// cannot hold it up.
 /// {@endtemplate}
 final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
   /// {@macro widget_picker_repository_impl}
   ///
   /// [projectRoot] gives the folder of a project (`null` when it is unknown): files are made
   /// relative to it and the widget's PNG goes into it. [connect] opens the client for a VM
-  /// service address.
+  /// service address. [endTimeout] and [runEndTimeout] are [kPickEndTimeout] and
+  /// [kPickRunEndTimeout] unless a test shortens them.
   WidgetPickerRepositoryImpl({
     required this._runs,
     required this._projectRoot,
     this._connect = WidgetInspectorClient.connect,
+    this._endTimeout = kPickEndTimeout,
+    this._runEndTimeout = kPickRunEndTimeout,
   });
 
   final IAppRunRepository _runs;
   final Future<String?> Function(int projectId) _projectRoot;
   final Future<WidgetInspectorClient> Function(Uri vmServiceUri) _connect;
+  final Duration _endTimeout;
+  final Duration _runEndTimeout;
 
   final Map<int, _ProjectPicker> _projects = <int, _ProjectPicker>{};
   bool _disposed = false;
@@ -60,8 +76,9 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     // One pick at a time: a new one ends the one that waits, and starts once that turned the
     // select mode off.
     for (var previous = project.pick; previous != null; previous = project.pick) {
-      previous.cancel();
-      await previous.done;
+      await _endPick(project, previous);
+      // It hangs on something else than the app: it is left to itself.
+      if (identical(project.pick, previous)) project.pick = null;
     }
     if (_disposed) return const PickCancelled();
     final pick = _Pick();
@@ -77,20 +94,23 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
   Future<PickResult> _runPick(_ProjectPicker project, _Pick pick) async {
     final run = _runs.currentRun(project.projectId);
     final uri = run is RunRunning && run.mode == BuildMode.debug ? run.vmServiceUri : null;
-    if (uri == null) return const PickFailed(PickFailed.notDebug);
+    if (uri == null) return const PickFailed(PickFailure.notDebug);
     final WidgetInspectorClient client;
     try {
       client = await _client(project, uri);
     } on Object catch (error, stackTrace) {
       if (pick.cancelled) return const PickCancelled();
       l.w('WidgetPicker | cannot connect to the app of ${project.projectId}: $error', stackTrace);
-      return const PickFailed(PickFailed.connectionLost);
+      return const PickFailed(PickFailure.connectionLost);
     }
     if (pick.cancelled) return const PickCancelled();
     String? isolateId;
     try {
       isolateId = await client.inspectorIsolate();
-      if (isolateId == null) return const PickFailed(PickFailed.inspectorUnavailable);
+      if (isolateId == null) {
+        l.i('WidgetPicker | the widget inspector is not available in the app');
+        return const PickFailed(PickFailure.inspectorUnavailable);
+      }
       pick.isolateId = isolateId;
       // The ids of the last pick go with the group.
       project.chain = null;
@@ -102,25 +122,37 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
       pick.armed = true;
       await pick.tapped;
       pick.armed = false;
-      if (pick.lost) return const PickFailed(PickFailed.connectionLost);
+      if (pick.disconnected) return await _lost(project.projectId, uri);
       if (pick.cancelled) return const PickCancelled();
       final node = await client.selectedWidget(isolateId);
       if (node == null || !node.local || node.fileUri == null) return const PickNoProjectWidget();
       return PickPicked(await _read(project, client, isolateId, node));
     } on Object catch (error, stackTrace) {
-      return _failure(project, pick, error, stackTrace);
+      return await _failure(project, pick, uri, error, stackTrace);
     } finally {
       pick.armed = false;
-      if (isolateId != null && !pick.lost) await _selectModeOff(client, isolateId);
+      if (isolateId != null && !pick.disconnected) await _selectModeOff(client, isolateId);
     }
   }
 
   @override
   Future<void> cancel(int projectId) async {
-    final pick = _projects[projectId]?.pick;
-    if (pick == null) return;
+    final project = _projects[projectId];
+    final pick = project?.pick;
+    if (project == null || pick == null) return;
+    await _endPick(project, pick);
+  }
+
+  /// Ends [pick] and waits until it returned. An app that answers nothing leaves the pick hanging
+  /// on a call: after [_endTimeout] the project's connection is closed, which fails that call.
+  Future<void> _endPick(_ProjectPicker project, _Pick pick) async {
     pick.cancel();
-    await pick.done;
+    var ended = true;
+    await pick.done.timeout(_endTimeout, onTimeout: () => ended = false);
+    if (ended) return;
+    l.w('WidgetPicker | the app of ${project.projectId} does not answer; closing the connection');
+    await _close(project, endPick: false);
+    await pick.done.timeout(_endTimeout, onTimeout: () {});
   }
 
   @override
@@ -141,11 +173,14 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     } on RPCError catch (error) {
       // The app no longer knows the id; or it is gone altogether.
       return _isConnectionLoss(error)
-          ? const PickFailed(PickFailed.connectionLost)
+          ? const PickFailed(PickFailure.connectionLost)
           : const PickGone();
+    } on io.IOException catch (error) {
+      l.w('WidgetPicker | lost the app of $projectId: $error');
+      return const PickFailed(PickFailure.connectionLost);
     } on Object catch (error, stackTrace) {
       l.w('WidgetPicker | cannot select $id in the app of $projectId: $error', stackTrace);
-      return const PickFailed(PickFailed.connectionLost);
+      return PickFailed(PickFailure.inspectorError, detail: '$error');
     }
   }
 
@@ -180,7 +215,14 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
         for (final ancestor in ancestors) ancestor.id,
       },
     );
-    final png = await client.screenshot(isolateId, node.id);
+    List<int>? png;
+    try {
+      png = await client.screenshot(isolateId, node.id);
+    } on RPCError catch (error, stackTrace) {
+      // The widget is worth having without its picture; a lost connection is not.
+      if (_isConnectionLoss(error)) rethrow;
+      l.w('WidgetPicker | no PNG of ${node.name}: $error', stackTrace);
+    }
     String? screenshot;
     if (png != null && root != null) {
       try {
@@ -200,17 +242,56 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     );
   }
 
-  PickResult _failure(_ProjectPicker project, _Pick pick, Object error, StackTrace stackTrace) {
-    if (pick.lost) return const PickFailed(PickFailed.connectionLost);
-    // A pick ended from outside (cancel, a stop, a restart) may fail on the way out.
+  Future<PickResult> _failure(
+    _ProjectPicker project,
+    _Pick pick,
+    Uri uri,
+    Object error,
+    StackTrace stackTrace,
+  ) async {
+    if (pick.disconnected) return _lost(project.projectId, uri);
+    // A pick ended from outside (cancel, a stop, a restart) may fail on the way out, also when its
+    // connection was closed under it.
     if (pick.cancelled) return const PickCancelled();
     if (error is SentinelException) return const PickCancelled(); // The isolate exited.
-    if (error is! RPCError || _isConnectionLoss(error)) {
+    if (error is io.IOException || error is RPCError && _isConnectionLoss(error)) {
       l.w('WidgetPicker | lost the app of ${project.projectId}: $error', stackTrace);
-      return const PickFailed(PickFailed.connectionLost);
+      return _lost(project.projectId, uri);
     }
-    l.w('WidgetPicker | the inspector of ${project.projectId} failed: $error', stackTrace);
-    return PickFailed('The widget inspector failed: ${error.message}');
+    l.w('WidgetPicker | the pick in the app of ${project.projectId} failed: $error', stackTrace);
+    return PickFailed(
+      PickFailure.inspectorError,
+      detail: error is RPCError ? error.message : '$error',
+    );
+  }
+
+  /// The result of a pick whose connection to the app at [uri] went away: [PickCancelled] when the
+  /// run ends or moves on within [_runEndTimeout] (a stop closes the VM service before
+  /// `flutter run` reports it), [PickFailure.connectionLost] when it keeps running.
+  Future<PickResult> _lost(int projectId, Uri uri) async {
+    final ended = Completer<bool>();
+    final subscription = _runs
+        .watchRun(projectId)
+        .listen(
+          (state) {
+            if (!(state is RunRunning && state.vmServiceUri == uri) && !ended.isCompleted) {
+              ended.complete(true);
+            }
+          },
+          onError: (Object error) {},
+          // The repository went away: the run with it.
+          onDone: () {
+            if (!ended.isCompleted) ended.complete(true);
+          },
+        );
+    try {
+      final stopped = await ended.future.timeout(_runEndTimeout, onTimeout: () => false);
+      if (stopped) return const PickCancelled();
+      l.w('WidgetPicker | lost the connection to the app of $projectId');
+      return const PickFailed(PickFailure.connectionLost);
+    } finally {
+      await subscription.cancel();
+    }
   }
 
   /// Turns the select mode of [isolateId] off, if the app still answers.
@@ -265,18 +346,10 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
   }
 
   /// The connection of [client] went away from the app's side ([_close] forgets the client first).
-  /// When the run ended with it, a pick is cancelled as for a stop; otherwise it failed.
+  /// The pick tells a stop from a drop ([_lost]).
   void _onConnectionDone(_ProjectPicker project, WidgetInspectorClient client) {
     if (!identical(project.client, client)) return;
-    final run = _runs.currentRun(project.projectId);
-    final pick = project.pick;
-    if (pick != null) {
-      if (run is RunRunning && run.vmServiceUri == project.uri) {
-        pick.connectionLost();
-      } else {
-        pick.cancel();
-      }
-    }
+    project.pick?.disconnect();
     unawaited(_close(project));
   }
 
@@ -299,7 +372,8 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     if (endPick) {
       if (project.pick case final pick?) {
         pick.cancel();
-        await pick.done;
+        // An app that answers nothing: closing the connection below fails the hanging call.
+        await pick.done.timeout(_endTimeout, onTimeout: () {});
       }
     }
     await stopped;
@@ -353,8 +427,8 @@ final class _Pick {
   /// restart, the end of the run.
   bool cancelled = false;
 
-  /// Whether the connection to the app went away during the pick.
-  bool lost = false;
+  /// Whether the connection to the app went away from the app's side during the pick.
+  bool disconnected = false;
 
   /// Completes when the user tapped a widget or the pick was ended from outside.
   Future<void> get tapped => _tap.future;
@@ -371,9 +445,9 @@ final class _Pick {
     if (!_tap.isCompleted) _tap.complete();
   }
 
-  void connectionLost() {
-    lost = true;
-    cancel();
+  void disconnect() {
+    disconnected = true;
+    if (!_tap.isCompleted) _tap.complete();
   }
 
   void finish() {

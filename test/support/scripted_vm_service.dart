@@ -51,6 +51,12 @@ final class ScriptedVmService {
   /// When set, every widget inspector extension answers with this error code.
   int? inspectorErrorCode;
 
+  /// The methods that answer with an error (code -32000), as an extension that throws does.
+  final Set<String> failing = <String>{};
+
+  /// The methods that are recorded but never answered, as in an app paused at a breakpoint.
+  final Set<String> unanswered = <String>{};
+
   /// What `getSelectedSummaryWidget` answers as `result`: a node as the inspector serializes it, or
   /// `null` when nothing is selected (see [inspectorNode]).
   Map<String, Object?>? selectedSummaryWidget;
@@ -87,6 +93,14 @@ final class ScriptedVmService {
       request['params'] as Map? ?? const <String, Object?>{},
     );
     requests.add((method: method, params: params));
+    if (unanswered.contains(method)) return;
+    if (failing.contains(method)) {
+      return _send(<String, Object?>{
+        'jsonrpc': '2.0',
+        'id': id,
+        'error': <String, Object?>{'code': -32000, 'message': 'Extension failed'},
+      });
+    }
     switch (method) {
       case 'streamListen':
         _respond(id, <String, Object?>{'type': 'Success'});

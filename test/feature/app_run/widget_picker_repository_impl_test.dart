@@ -24,6 +24,9 @@ const Device _macos = Device(
 
 const List<int> _png = <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3];
 
+const Duration _endTimeout = Duration(milliseconds: 300);
+const Duration _runEndTimeout = Duration(milliseconds: 200);
+
 const String _show = inspectorShowExtension;
 const String _selected = 'ext.flutter.inspector.getSelectedSummaryWidget';
 const String _chain = 'ext.flutter.inspector.getParentChain';
@@ -109,6 +112,21 @@ void main() {
       ..screenshotResult = base64Encode(_png);
   }
 
+  /// A picker over [runs] and the VM services of [nextVm], with short waits for an app that answers
+  /// nothing ([_endTimeout]) and for a run to end after its connection dropped ([_runEndTimeout]).
+  WidgetPickerRepositoryImpl newPicker({Future<String?> Function(int projectId)? projectRoot}) =>
+      WidgetPickerRepositoryImpl(
+        runs: runs,
+        projectRoot: projectRoot ?? (projectId) async => roots[projectId],
+        connect: (uri) async {
+          final vm = nextVm(uri);
+          connections.add((uri: uri, vm: vm));
+          return WidgetInspectorClient.attach(vm.service);
+        },
+        endTimeout: _endTimeout,
+        runEndTimeout: _runEndTimeout,
+      );
+
   setUp(() {
     temp = io.Directory.systemTemp.createTempSync('widget_picker_test_');
     roots = <int, String>{
@@ -119,15 +137,7 @@ void main() {
       ..setRunState(1, _running(uri1));
     connections = <({Uri uri, ScriptedVmService vm})>[];
     nextVm = (_) => bookingApp();
-    picker = WidgetPickerRepositoryImpl(
-      runs: runs,
-      projectRoot: (projectId) async => roots[projectId],
-      connect: (uri) async {
-        final vm = nextVm(uri);
-        connections.add((uri: uri, vm: vm));
-        return WidgetInspectorClient.attach(vm.service);
-      },
-    );
+    picker = newPicker();
   });
 
   tearDown(() async {
@@ -314,7 +324,10 @@ void main() {
       vm()
         ..inspectorErrorCode = -32000
         ..emitNavigate();
-      expect(await failed, isA<PickFailed>());
+      expect(
+        await failed,
+        const PickFailed(PickFailure.inspectorError, detail: 'Extension failed'),
+      );
       expect(shows(vm()), <Object?>['true', 'false', 'true', 'false', 'true', 'false']);
     });
 
@@ -435,7 +448,7 @@ void main() {
 
       final result = await picker.pick(1);
 
-      expect(result, const PickFailed('The widget inspector is not available in this app'));
+      expect(result, const PickFailed(PickFailure.inspectorUnavailable));
     });
 
     test(
@@ -448,31 +461,120 @@ void main() {
         ]) {
           runs.setRunState(1, state);
 
-          expect(await picker.pick(1), const PickFailed('The app is not running in debug'));
+          expect(await picker.pick(1), const PickFailed(PickFailure.notDebug));
         }
         expect(connections, isEmpty);
       },
     );
 
-    test('a dropped VM service connection fails with "Lost the connection to the app" and the next '
-        'pick connects again', () async {
+    test('a dropped VM service connection, the run still running, fails as connectionLost after '
+        'the wait and the next pick connects again', () async {
       final result = picker.pick(1);
       await untilWaiting();
+      final stopwatch = Stopwatch()..start();
 
       await vm().disconnect();
 
-      expect(await result, const PickFailed('Lost the connection to the app'));
+      expect(await result, const PickFailed(PickFailure.connectionLost));
+      expect(stopwatch.elapsed, greaterThanOrEqualTo(_runEndTimeout));
+      // No show(false) to a connection that is gone.
+      expect(shows(vm()), <Object?>['true']);
       final next = await pickAndTap(index: 1);
       expect(next, isA<PickPicked>());
       expect(connections, hasLength(2));
     });
+
+    test('a stop that closes the connection before the run reports it cancels', () async {
+      final result = picker.pick(1);
+      await untilWaiting();
+
+      await vm().disconnect();
+      await pumpEventQueue();
+      runs.setRunState(1, const RunStopped());
+
+      expect(await result, isA<PickCancelled>());
+      expect(shows(vm()), <Object?>['true']);
+    });
+
+    for (final (what, method) in <(String, String)>[
+      ('the screenshot', _screenshot),
+      ('show(true)', _show),
+    ]) {
+      test('dispose while the app never answers $what ends within the bound, closes and '
+          'cancels', () async {
+        nextVm = (_) => bookingApp()..unanswered.add(method);
+        final result = picker.pick(1);
+        await untilWaiting();
+        if (method == _screenshot) {
+          vm().emitNavigate();
+          for (var i = 0; i < 20 && vm().requestsTo(_screenshot).isEmpty; i++) {
+            await pumpEventQueue();
+          }
+          expect(vm().requestsTo(_screenshot), hasLength(1));
+        }
+        final stopwatch = Stopwatch()..start();
+
+        await picker.dispose().timeout(_endTimeout * 3);
+
+        expect(stopwatch.elapsed, lessThan(_endTimeout * 3));
+        expect(vm().disposed, isTrue);
+        expect(await result.timeout(_endTimeout), isA<PickCancelled>());
+      });
+    }
+
+    test(
+      'cancel while the app never answers ends within the bound and closes the connection',
+      () async {
+        nextVm = (_) => bookingApp()..unanswered.add(_screenshot);
+        final result = picker.pick(1);
+        await untilWaiting();
+        vm().emitNavigate();
+        for (var i = 0; i < 20 && vm().requestsTo(_screenshot).isEmpty; i++) {
+          await pumpEventQueue();
+        }
+
+        await picker.cancel(1).timeout(_endTimeout * 4);
+
+        expect(vm().disposed, isTrue);
+        expect(await result.timeout(_endTimeout), isA<PickCancelled>());
+        // The next pick connects again.
+        vm().unanswered.clear();
+        nextVm = (_) => bookingApp();
+        expect(await pickAndTap(index: 1), isA<PickPicked>());
+      },
+    );
+
+    test('a screenshot that fails keeps the widget without a screenshot', () async {
+      nextVm = (_) => bookingApp()..failing.add(_screenshot);
+
+      final widget = picked(await pickAndTap());
+
+      expect(widget.name, 'BookingCard');
+      expect(widget.screenshot, isNull);
+    });
+
+    test(
+      'an error of the picker itself fails as inspectorError, not as a lost connection',
+      () async {
+        await picker.dispose();
+        picker = newPicker(projectRoot: (_) async => throw StateError('the database is closed'));
+
+        final result = await pickAndTap();
+
+        expect(
+          result,
+          const PickFailed(PickFailure.inspectorError, detail: 'Bad state: the database is closed'),
+        );
+        expect(shows(vm()).last, 'false');
+      },
+    );
 
     test(
       'a connection that cannot be opened fails with "Lost the connection to the app"',
       () async {
         nextVm = (_) => throw const io.SocketException('refused');
 
-        expect(await picker.pick(1), const PickFailed('Lost the connection to the app'));
+        expect(await picker.pick(1), const PickFailed(PickFailure.connectionLost));
       },
     );
 

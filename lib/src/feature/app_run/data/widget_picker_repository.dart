@@ -90,29 +90,40 @@ final class PickGone extends PickResult {
   String toString() => 'PickGone';
 }
 
-/// The pick could not be made; [message] says why in one line.
-final class PickFailed extends PickResult {
-  /// Creates the result.
-  const PickFailed(this.message);
-
+/// Why a pick could not be made.
+enum PickFailure {
   /// The app has no isolate with the widget inspector.
-  static const String inspectorUnavailable = 'The widget inspector is not available in this app';
+  inspectorUnavailable,
 
   /// The app is not running, not in debug or has no VM service yet.
-  static const String notDebug = 'The app is not running in debug';
+  notDebug,
 
   /// The VM service of the app could not be reached or went away.
-  static const String connectionLost = 'Lost the connection to the app';
+  connectionLost,
 
-  /// Why the pick failed, for the user.
-  final String message;
+  /// The inspector, or the picker itself, failed a call; [PickFailed.detail] says how.
+  inspectorError,
+}
+
+/// The pick could not be made, for the reason [kind].
+final class PickFailed extends PickResult {
+  /// Creates the result.
+  const PickFailed(this.kind, {this.detail});
+
+  /// Why the pick failed.
+  final PickFailure kind;
+
+  /// The error behind a [PickFailure.inspectorError], as the app or the picker reported it (not for
+  /// the user as it is); `null` for the other kinds.
+  final String? detail;
 
   @override
-  bool operator ==(Object other) => other is PickFailed && other.message == message;
+  bool operator ==(Object other) =>
+      other is PickFailed && other.kind == kind && other.detail == detail;
 
   @override
-  int get hashCode => Object.hash(PickFailed, message);
+  int get hashCode => Object.hash(PickFailed, kind, detail);
 
   @override
-  String toString() => 'PickFailed($message)';
+  String toString() => 'PickFailed(${kind.name}${detail == null ? '' : ', $detail'})';
 }

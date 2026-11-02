@@ -533,7 +533,7 @@ void main() {
         const PickCancelled(),
         const PickNoProjectWidget(),
         const PickGone(),
-        const PickFailed(PickFailed.connectionLost),
+        const PickFailed(PickFailure.connectionLost),
       ]) {
         picker.result = result;
         actions.pickWidget(1);

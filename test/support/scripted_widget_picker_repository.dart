@@ -60,6 +60,7 @@ class ScriptedWidgetPickerRepository implements IWidgetPickerRepository {
   bool disposed = false;
 
   final Map<int, Completer<PickResult>> _pending = <int, Completer<PickResult>>{};
+  final Map<int, Timer> _timers = <int, Timer>{};
 
   /// Whether a pick of [projectId] waits.
   bool isPicking(int projectId) => _pending.containsKey(projectId);
@@ -67,12 +68,14 @@ class ScriptedWidgetPickerRepository implements IWidgetPickerRepository {
   @override
   Future<PickResult> pick(int projectId) {
     picks.add(projectId);
+    _timers.remove(projectId)?.cancel();
     _pending.remove(projectId)?.complete(const PickCancelled());
     final completer = Completer<PickResult>();
     _pending[projectId] = completer;
-    Timer(step, () {
-      if (identical(_pending[projectId], completer)) _pending.remove(projectId);
-      if (!completer.isCompleted) completer.complete(result);
+    _timers[projectId] = Timer(step, () {
+      _timers.remove(projectId);
+      _pending.remove(projectId);
+      completer.complete(result);
     });
     return completer.future;
   }
@@ -80,6 +83,7 @@ class ScriptedWidgetPickerRepository implements IWidgetPickerRepository {
   @override
   Future<void> cancel(int projectId) async {
     cancels.add(projectId);
+    _timers.remove(projectId)?.cancel();
     final completer = _pending.remove(projectId);
     if (completer != null && !completer.isCompleted) completer.complete(const PickCancelled());
   }
@@ -93,6 +97,10 @@ class ScriptedWidgetPickerRepository implements IWidgetPickerRepository {
   @override
   Future<void> dispose() async {
     disposed = true;
+    for (final timer in _timers.values) {
+      timer.cancel();
+    }
+    _timers.clear();
     for (final completer in _pending.values) {
       if (!completer.isCompleted) completer.complete(const PickCancelled());
     }
