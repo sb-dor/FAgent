@@ -194,6 +194,25 @@ void main() {
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
     });
 
+    test('stops following the agent list before the agents stop', () async {
+      hub.notices.listen(null, onDone: () => events.add('hub:disposed'));
+      repository = AppCloseRepositoryImpl(
+        hub: hub,
+        database: database,
+        settings: AppSettingsRepositoryImpl(database: database),
+        appRun: run,
+        devices: devices,
+        appMcpServer: _RecordingAppMcpServer(events, database),
+        mcpProbe: _RecordingProbe(events, database),
+        projectCreation: _RecordingCreation(creationEvents),
+        stopAgentList: () async => events.add('agents:stop'),
+      );
+
+      await repository.shutdown();
+
+      expect(events, containsAllInOrder(<String>['agents:stop', 'hub:disposed']));
+    });
+
     test(
       'a run that fails to stop does not keep the devices daemon or the database open',
       () async {

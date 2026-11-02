@@ -41,6 +41,9 @@ enum SessionProblemKind {
 
   /// The turn does not end after Stop.
   stuck,
+
+  /// The chat's agent is no longer configured; nothing can be retried.
+  removed,
 }
 
 /// {@template session_problem}

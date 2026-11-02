@@ -42,6 +42,7 @@
   "problemTitle": "The agent cannot continue",
   "problemNeedsAuth": "Claude needs you to log in.",
   "problemNotFound": "The agent no longer has this chat's session.",
+  "problemAgentRemoved": "This agent was removed. The chat's history stays; it cannot continue.",
   "trustTitle": "Trust this folder?",
   "trustBody": "The agent will run in {path} and execute the folder's own Claude settings and hooks.",
   "@trustBody": {

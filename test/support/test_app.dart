@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
@@ -96,7 +97,9 @@ Dependencies testDependencies({
     ..database = database
     ..shellEnvironment = environment
     ..agentOptionsCatalog = AgentOptionsCatalogImpl(database: database)
+    ..customAgentsRepository = CustomAgentsRepositoryImpl(database: database)
     ..agentHub = AgentHub(database: database, environment: environment)
+    ..stopFollowingCustomAgents = () async {}
     ..agentsRepository = agentsRepository ?? MemoryAgentsRepository()
     ..devicesRepository = devicesRepository ?? MemoryDevicesRepository(step: step, isPreview: true)
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)

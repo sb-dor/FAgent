@@ -55,7 +55,9 @@ class ChatProblemBanner extends StatelessWidget {
     final problem = view.problem;
     final status = view.status;
     final actions = <Widget>[
-      if (status == SessionStatus.setupFailed || status == SessionStatus.error)
+      // A chat of a removed agent cannot continue.
+      if ((status == SessionStatus.setupFailed || status == SessionStatus.error) &&
+          problem?.kind != SessionProblemKind.removed)
         FilledButton.tonal(onPressed: busy ? null : onRetry, child: Text(localization.retry)),
       if (status == SessionStatus.setupFailed && problem?.kind == SessionProblemKind.notFound)
         OutlinedButton(
@@ -78,7 +80,8 @@ class ChatProblemBanner extends StatelessWidget {
       if (view.canRetryPrompt && !view.bypassBlocked)
         FilledButton.tonal(onPressed: onRepeatPrompt, child: Text(localization.repeatPrompt)),
     ];
-    if (actions.isEmpty) return const SizedBox.shrink();
+    final removed = problem?.kind == SessionProblemKind.removed;
+    if (actions.isEmpty && !removed) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
     final message = switch (status) {
@@ -86,6 +89,7 @@ class ChatProblemBanner extends StatelessWidget {
       SessionStatus.needsAuth when loginFailed => localization.loginFailed,
       SessionStatus.needsAuth => localization.problemNeedsAuth,
       _ when problem?.kind == SessionProblemKind.notFound => localization.problemNotFound,
+      _ when removed => localization.problemAgentRemoved,
       _ => problem?.message ?? localization.problemTitle,
     };
     final details = <String>[?problem?.hint, ...?problem?.details];
@@ -132,8 +136,10 @@ class ChatProblemBanner extends StatelessWidget {
                       ),
                     ),
                   ],
-                  const SizedBox(height: 8),
-                  Wrap(spacing: 8, runSpacing: 8, children: actions),
+                  if (actions.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 8),
+                    Wrap(spacing: 8, runSpacing: 8, children: actions),
+                  ],
                 ],
               ),
             ),

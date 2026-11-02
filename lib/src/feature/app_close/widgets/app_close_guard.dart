@@ -44,6 +44,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             appMcpServer: dependencies.appMcpServer,
             mcpProbe: dependencies.mcpProbe,
             projectCreation: dependencies.projectCreationRepository,
+            stopAgentList: dependencies.stopFollowingCustomAgents,
           ),
     )..watch();
   }

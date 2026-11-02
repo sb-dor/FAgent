@@ -26,8 +26,8 @@ abstract interface class IAppCloseRepository {
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
-  /// Stops the runs, the devices daemon, a project creation, the agents, the app's MCP server and
-  /// the MCP status probes, then closes the database.
+  /// Stops the runs, the devices daemon, a project creation, the agent list, the agents, the app's
+  /// MCP server and the MCP status probes, then closes the database.
   Future<void> shutdown();
 
   /// Quits the app (answering a pending ⌘Q or logout on macOS).
@@ -49,6 +49,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._appMcpServer,
     required this._mcpProbe,
     required this._projectCreation,
+    this._stopAgentList,
   });
 
   final AgentHub _hub;
@@ -59,6 +60,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IAppMcpServer _appMcpServer;
   final IMcpProbe _mcpProbe;
   final IProjectCreationRepository _projectCreation;
+
+  /// Stops feeding the agent list into the hub; called before the hub is disposed.
+  final Future<void> Function()? _stopAgentList;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -100,6 +104,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
       _stopQuietly('devices', _devices.dispose),
       _stopQuietly('project creation', _projectCreation.dispose),
     ]);
+    // No agent list change may start or close an agent while the hub stops.
+    if (_stopAgentList case final stop?) await _stopQuietly('agent list', stop);
     await _hub.dispose();
     // After the agents, so none of them is cut off mid-call; before the database its tools read.
     await _stopQuietly('app MCP server', _appMcpServer.close);

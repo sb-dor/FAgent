@@ -7,7 +7,8 @@
 //   hang          never finish until the client sends session/cancel
 //   spawn         start a background process re-parented to launchd; its pid goes
 //                 to the file named by FAKE_AGENT_PID_FILE
-//   auth          fail with authRequired (-32000)
+//   auth          fail with authRequired (-32000) until `authenticate` succeeded, then
+//                 reply `authenticated`
 //   stderr <text> write <text> to stderr, then reply `ok`
 //   crash         exit the process with code 3
 //   say-crash <t> reply with <t>, then exit with code 3
@@ -21,8 +22,14 @@
 // `slow` is never answered, `cmd` first sends an available_commands_update.
 // A loaded session whose id starts with `bypass` is in bypassPermissions mode
 // (as a session saved in it).
-// With FAKE_AGENT_REQUESTS_FILE set, the params of every session/new and
-// session/load are appended to that file as JSON lines {"method", "params"}.
+// With FAKE_AGENT_REQUESTS_FILE set, the params of every session/new,
+// session/load, authenticate and logout are appended to that file as JSON lines
+// {"method", "params"}; `authenticate` also appends the client's capabilities as
+// {"method": "client/capabilities", "params"}.
+// Sign-in: the agent offers `browser-login` and `api-key` (with
+// `_meta.api-key.provider: fake`) and can log out. `authenticate` succeeds, or
+// fails with FAKE_AGENT_AUTH_FAIL=1, or never answers with FAKE_AGENT_AUTH_HANG=1.
+// `logout` forgets a successful `authenticate`.
 
 import 'dart:async';
 import 'dart:convert';
@@ -41,6 +48,7 @@ Future<void> main(List<String> arguments) async {
   final modes = <String, String>{};
   final models = <String, String>{};
   final efforts = <String, String>{};
+  var authenticated = false;
 
   Map<String, Object?> select(String id, String current, List<String> values) => <String, Object?>{
     'id': id,
@@ -104,9 +112,44 @@ Future<void> main(List<String> arguments) async {
               ),
               mcpCapabilities: McpCapabilities(http: false, sse: false),
               sessionCapabilities: SessionCapabilities(),
-              auth: AgentAuthCapabilities(),
+              auth: AgentAuthCapabilities(logout: LogoutCapabilities()),
             ),
+            authMethods: <AuthMethod>[
+              AuthMethodAgentVariant(
+                AuthMethodAgent(id: AuthMethodId('browser-login'), name: 'Browser login'),
+              ),
+              AuthMethodAgentVariant(
+                AuthMethodAgent(
+                  id: AuthMethodId('api-key'),
+                  name: 'API key',
+                  meta: AcpJsonObject.fromObject(<String, Object?>{
+                    'api-key': <String, Object?>{'provider': 'fake'},
+                  }),
+                ),
+              ),
+            ],
           )
+          .onAuthenticate((context) async {
+            record('authenticate', context.params.toJson());
+            record('client/capabilities', <String, Object?>{
+              'capabilities': context.client.lifecycle.peerCapabilities.value.toObject(),
+            });
+            if (Platform.environment['FAKE_AGENT_AUTH_HANG'] == '1') {
+              await Completer<void>().future;
+            }
+            if (Platform.environment['FAKE_AGENT_AUTH_FAIL'] == '1') {
+              throw JsonRpcRequestException(
+                JsonRpcErrorObject(code: -32000, message: 'Sign-in failed'),
+              );
+            }
+            authenticated = true;
+            return AuthenticateResponse();
+          })
+          .onLogout((context) {
+            record('logout', context.params.toJson());
+            authenticated = false;
+            return LogoutResponse();
+          })
           .onNewSession((context) {
             record('session/new', context.params.toJson());
             final session = 's${nextSession++}';
@@ -227,6 +270,8 @@ Future<void> main(List<String> arguments) async {
                   '( sleep 300 >/dev/null 2>&1 & echo \$! > "$pidFile" )',
                 ]);
                 await say(context.client, session, 'spawned');
+              case 'auth' when authenticated:
+                await say(context.client, session, 'authenticated');
               case 'auth':
                 throw JsonRpcRequestException(
                   JsonRpcErrorObject(code: -32000, message: 'Authentication required'),

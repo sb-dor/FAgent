@@ -102,7 +102,12 @@ final class AgentConnection {
                 terminal: false,
                 // The adapter advertises its login methods only to clients that
                 // can run terminal auth; ClientCapabilities has no `auth` field.
-                meta: AcpJsonObject.fromObject(<String, Object?>{'terminal-auth': true}),
+                // `authStatus` makes codex-acp push `_auth/status_update` after
+                // `initialize`.
+                meta: AcpJsonObject.fromObject(<String, Object?>{
+                  'terminal-auth': true,
+                  'authStatus': <String, Object?>{},
+                }),
               ),
             )
             .onRequestPermission(onPermissionRequest)

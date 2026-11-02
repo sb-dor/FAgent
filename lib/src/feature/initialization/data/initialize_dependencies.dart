@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:control/control.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
@@ -12,6 +13,7 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/run_tools.dart';
 import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/skill_tools.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
@@ -89,9 +91,15 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   // Remembers the settings every agent reports, for the Settings screen.
   'Create agent options catalog': (dependencies) =>
       dependencies.agentOptionsCatalog = AgentOptionsCatalogImpl(database: dependencies.database),
+  // The ACP agents the user added; the hub follows them.
+  'Create custom agents repository': (dependencies) => dependencies.customAgentsRepository =
+      CustomAgentsRepositoryImpl(database: dependencies.database),
   'Create agent hub': (dependencies) => dependencies.agentHub = AgentHub(
     database: dependencies.database,
     environment: dependencies.shellEnvironment,
+    agents: <String, AgentDefinition>{
+      for (final agent in AgentDefinition.builtins) agent.id: agent,
+    },
     observers: <TurnObserver>[GitTurnFilesObserver(environment: dependencies.shellEnvironment)],
     // Read when a chat starts its agent session, after initialization has finished.
     sessionContext: (sessionId, agent) =>
@@ -108,6 +116,23 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
               l.w('Agent options | could not save the options of $agentId: $error', stackTrace),
         ),
   ),
+  // Waits for the first list, so a chat of a custom agent opened at startup finds its agent.
+  'Follow custom agents': (dependencies) async {
+    final hub = dependencies.agentHub;
+    final first = Completer<void>();
+    final subscription = dependencies.customAgentsRepository.watch().listen(
+      (custom) {
+        hub.setAgents(<AgentDefinition>[...AgentDefinition.builtins, ...custom]);
+        if (!first.isCompleted) first.complete();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        l.w('Custom agents | could not read them: $error', stackTrace);
+        if (!first.isCompleted) first.complete();
+      },
+    );
+    dependencies.stopFollowingCustomAgents = subscription.cancel;
+    await first.future.timeout(const Duration(seconds: 5), onTimeout: () {});
+  },
   'Create agents repository': (dependencies) =>
       dependencies.agentsRepository = AgentsRepositoryImpl(
         hub: dependencies.agentHub,

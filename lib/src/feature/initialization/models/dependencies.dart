@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
@@ -45,8 +46,15 @@ class Dependencies {
   /// The settings (model, mode, …) the agents reported, kept between runs.
   late final IAgentOptionsCatalog agentOptionsCatalog;
 
+  /// The ACP agents the user added.
+  late final ICustomAgentsRepository customAgentsRepository;
+
   /// Agent processes and the runtime state of every chat.
   late final AgentHub agentHub;
+
+  /// Stops feeding the built-in and custom agents into [agentHub]; called before the hub is
+  /// disposed.
+  late final Future<void> Function() stopFollowingCustomAgents;
 
   /// The agents, their state on this machine, and sign-in, sign-out and settings actions.
   late final IAgentsRepository agentsRepository;

@@ -71,6 +71,23 @@ void main() {
     );
   });
 
+  testWidgets('a chat of a removed agent says so and offers no retry', (tester) async {
+    const view = ChatView(
+      sessionId: 1,
+      agentId: 'custom:1',
+      items: <ChatItem>[],
+      status: SessionStatus.error,
+      problem: SessionProblem(SessionProblemKind.removed, 'This agent was removed'),
+    );
+    await tester.pumpWidget(testApp(_banner(view)));
+
+    expect(
+      find.text("This agent was removed. The chat's history stays; it cannot continue."),
+      findsOneWidget,
+    );
+    expect(find.text('Retry'), findsNothing);
+  });
+
   testWidgets('a prompt held by the bypass gate is not offered for repeating', (tester) async {
     await tester.pumpWidget(
       testApp(_banner(_view(SessionStatus.idle, canRetryPrompt: true, bypassBlocked: true))),

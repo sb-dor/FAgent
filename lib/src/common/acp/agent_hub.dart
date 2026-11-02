@@ -53,13 +53,32 @@ const int kAcpAuthRequiredCode = -32000;
 /// JSON-RPC error code of "resource not found" (unknown session on load).
 const int kAcpResourceNotFoundCode = -32002;
 
-final class _AgentSlot {
-  _AgentSlot(this.definition);
+/// What a chat of an agent that is no longer configured shows.
+const SessionProblem _removedProblem = SessionProblem(
+  SessionProblemKind.removed,
+  'This agent was removed',
+);
 
-  final AgentDefinition definition;
+final class _AgentSlot {
+  _AgentSlot(this.id, this.definition);
+
+  /// The key chats use (`sessions.agentId`).
+  final String id;
+
+  /// Replaced when the user edits the agent; the next start uses it.
+  AgentDefinition definition;
   AgentConnection? connection;
   Future<AgentConnection>? starting;
   int generation = 0;
+
+  /// The definition changed: restart once no chat of the agent is busy.
+  bool restartPending = false;
+
+  /// The agent was removed; nothing starts for it any more.
+  bool retired = false;
+
+  /// `authenticate` / `logout` calls in flight (they hold off a restart).
+  int signIns = 0;
   final Map<String, LiveSession> byAcpId = <String, LiveSession>{};
   final Map<String, RawAcpMessage> rawRequests = <String, RawAcpMessage>{};
 }
@@ -81,6 +100,7 @@ final class AgentHub {
   AgentHub({
     required this._database,
     required ShellEnvironment environment,
+    // The initial agents by id; [setAgents] replaces them.
     Map<String, AgentDefinition>? agents,
     AgentConnector? connector,
     AgentAuth? auth,
@@ -94,7 +114,7 @@ final class AgentHub {
        _sessionContext = sessionContext ?? _noContext,
        _slots = <String, _AgentSlot>{
          for (final MapEntry(:key, :value) in (agents ?? _defaultAgents).entries)
-           key: _AgentSlot(value),
+           key: _AgentSlot(key, value),
        } {
     _connector =
         connector ??
@@ -109,8 +129,7 @@ final class AgentHub {
     'claude': AgentDefinition.claude,
   };
 
-  static Future<SessionContext> _noContext(int _, AgentDefinition _) async =>
-      SessionContext.empty;
+  static Future<SessionContext> _noContext(int _, AgentDefinition _) async => SessionContext.empty;
 
   final AppDatabase _database;
   final SessionContextProvider _sessionContext;
@@ -139,11 +158,62 @@ final class AgentHub {
   bool _disposing = false;
   final Set<AgentLogin> _restartAfter = <AgentLogin>{};
 
+  /// Setup-lane operations queued or running per chat: a chat with one is busy
+  /// for a restart even between statuses (prepared, about to run its turn).
+  final Map<int, int> _lanesInFlight = <int, int>{};
+
+  /// Work nobody awaits (closing a removed or edited agent, marking the chats
+  /// of a removed one); [dispose] waits for it.
+  final Set<Future<void>> _closing = <Future<void>>{};
+
   /// Errors that cannot go to a journal.
   Stream<HubNotice> get notices => _notices.stream;
 
   /// Agents the hub can run.
   Iterable<AgentDefinition> get agents => _slots.values.map((s) => s.definition);
+
+  /// Replaces the agents the hub can run (the built-ins and the user's own).
+  ///
+  /// * A new id gets a slot; an equal definition changes nothing.
+  /// * A changed definition is used by the next start: the agent's process is
+  ///   closed now when no chat of it is busy, else as soon as the last busy
+  ///   one becomes idle (reason `Agent settings changed`).
+  /// * A missing id is removed: its process is closed and its chats go to
+  ///   `error` with a [SessionProblemKind.removed] problem.
+  void setAgents(List<AgentDefinition> definitions) {
+    if (_disposing) return;
+    final next = <String, AgentDefinition>{
+      for (final definition in definitions) definition.id: definition,
+    };
+    for (final id in List<String>.of(_slots.keys)) {
+      if (next.containsKey(id)) continue;
+      final slot = _slots.remove(id)!..retired = true;
+      for (final live in List<LiveSession>.of(_opened.values)) {
+        // Synchronously in `error`: the closing connection fails nothing more.
+        if (live.agentId == id) _track(_markRemoved(live));
+      }
+      _track(_closeConnection(slot, reason: 'Agent removed'));
+    }
+    for (final definition in next.values) {
+      final slot = _slots[definition.id];
+      if (slot == null) {
+        _slots[definition.id] = _AgentSlot(definition.id, definition);
+      } else if (slot.definition != definition) {
+        slot
+          ..definition = definition
+          ..restartPending = true;
+        _restartIfIdle(slot);
+      }
+    }
+  }
+
+  /// The raw `initialize` result of [agentId]'s live connection
+  /// (`agentCapabilities`, `authMethods`, `agentInfo`); `null` when the agent
+  /// is not running.
+  Map<String, Object?>? initializeResultOf(String agentId) {
+    final connection = _slots[agentId]?.connection;
+    return connection != null && connection.isAlive ? connection.initializeResult : null;
+  }
 
   /// Chats opened so far (chats whose journal failed to open are skipped).
   Future<List<LiveSession>> get liveSessions async => <LiveSession>[
@@ -180,9 +250,6 @@ final class AgentHub {
     final project = await (_database.select(
       _database.projectsTable,
     )..where((p) => p.id.equals(record.projectId))).getSingle();
-    if (!_slots.containsKey(record.agentId)) {
-      throw StateError('Session $sessionId uses unknown agent ${record.agentId}');
-    }
     final live = LiveSession(
       id: sessionId,
       agentId: record.agentId,
@@ -190,6 +257,12 @@ final class AgentHub {
       store: await SessionEventStore.open(_database, sessionId),
       acpSessionId: record.acpSessionId,
     )..bypassAcknowledged.value = record.bypassAllowedAt != null;
+    // The history stays readable; the chat cannot continue (not journaled: it
+    // would repeat on every run).
+    if (!_slots.containsKey(record.agentId)) {
+      live.problem.value = _removedProblem;
+      _move(live, SessionStatus.error);
+    }
     _reportConfigOptions(live);
     return _opened[sessionId] = live;
   }
@@ -277,7 +350,7 @@ final class AgentHub {
       }
       // Preparation can be overtaken by Stop or by the agent stopping.
       if (live.status.value != SessionStatus.running) return;
-      final connection = _slots[live.agentId]!.connection;
+      final connection = _slots[live.agentId]?.connection;
       if (connection == null || !connection.isAlive) {
         await _failOnce(
           live,
@@ -378,7 +451,7 @@ final class AgentHub {
     if (status != SessionStatus.running && status != SessionStatus.awaitingPermission) return;
     _move(live, SessionStatus.cancelling);
     permissions.cancelSession(live.id, 'turn cancelled');
-    final connection = _slots[live.agentId]!.connection;
+    final connection = _slots[live.agentId]?.connection;
     final acpId = live.acpSessionId;
     if (connection != null && acpId != null) {
       await connection.agent.cancelSession(CancelNotification(sessionId: SessionId(acpId)));
@@ -397,7 +470,7 @@ final class AgentHub {
 
   /// Kills [agentId]'s process; its busy chats go to `error`.
   Future<void> forceStop(String agentId) =>
-      _closeConnection(_slots[agentId]!, reason: 'Stopped by you');
+      _closeConnection(_slotOf(agentId), reason: 'Stopped by you');
 
   /// Repeats the failed setup, or restarts the agent after an error.
   Future<void> retry(int sessionId) async {
@@ -430,7 +503,7 @@ final class AgentHub {
   Future<void> setConfigOption(int sessionId, String configId, Object value) async {
     final live = await session(sessionId);
     await _setupLane(live, () async {
-      final connection = _slots[live.agentId]!.connection;
+      final connection = _slots[live.agentId]?.connection;
       final acpId = live.acpSessionId;
       if (connection == null || acpId == null) throw StateError('The session is not live');
       final allowsBypass =
@@ -482,7 +555,7 @@ final class AgentHub {
   /// chats waiting for a login continue.
   Future<AgentLogin> login(String agentId, String methodId) async {
     _checkNotDisposed();
-    final slot = _slots[agentId]!;
+    final slot = _slotOf(agentId);
     final login = auth.login(slot.definition, methodId);
     // Repeated calls return the running login; restart only once for it.
     if (_restartAfter.add(login)) {
@@ -492,17 +565,7 @@ final class AgentHub {
               if (!ok || _disposing) return;
               // The adapter caches its auth state; a new process picks up the login.
               await _closeConnection(slot, reason: 'Agent restarted after login');
-              for (final live in await liveSessions) {
-                if (live.agentId != agentId || live.status.value != SessionStatus.needsAuth)
-                  continue;
-                live.problem.value = null;
-                if (live.interrupted == SessionOperation.prompt) {
-                  live.canRetryPrompt.value = true;
-                  _move(live, SessionStatus.cold);
-                } else {
-                  unawaited(_setupLane(live, () => _ensureReady(live)).catchError((Object _) {}));
-                }
-              }
+              await _continueAfterSignIn(agentId);
             })
             .catchError((Object error, StackTrace stackTrace) {
               l.w('AgentHub | restart after login failed: $error', stackTrace);
@@ -513,12 +576,93 @@ final class AgentHub {
     return login;
   }
 
+  /// Signs [agentId] in with ACP `authenticate` and method [methodId] (a
+  /// browser sign-in, or an API key the agent reads from its environment),
+  /// starting the agent if needed. There is no time limit: the agent may wait
+  /// for the user in a browser. On success the agent's chats waiting for a
+  /// login continue, on the same connection.
+  ///
+  /// Cancelling [cancel] closes the agent's connection (reason
+  /// `Sign-in cancelled`; chats waiting for a login keep waiting) and the call
+  /// throws a [CancellationException]. Other errors propagate.
+  Future<void> authenticate(String agentId, String methodId, {CancellationToken? cancel}) async {
+    _checkNotDisposed();
+    final slot = _slotOf(agentId)..signIns += 1;
+    try {
+      cancel?.throwIfCancelled();
+      final connection = await _connect(slot);
+      final generation = slot.generation;
+      // Runs at once when cancelled during the start.
+      final registration = cancel?.register((_) {
+        if (slot.generation == generation) {
+          _track(_closeConnection(slot, reason: 'Sign-in cancelled'));
+        }
+      });
+      try {
+        await connection.agent.authenticate(
+          AuthenticateRequest(methodId: AuthMethodId(methodId)),
+          cancellationToken: cancel,
+        );
+      } on Object {
+        // The closed connection fails the request with its own error.
+        if (cancel != null && cancel.isCancelled) throw CancellationException(cancel.reason);
+        rethrow;
+      } finally {
+        registration?.dispose();
+      }
+    } finally {
+      slot.signIns -= 1;
+      _scheduleRestartCheck(agentId);
+    }
+    if (_disposing) return;
+    await _continueAfterSignIn(agentId);
+  }
+
+  /// Signs [agentId] out with ACP `logout` (starting the agent if needed),
+  /// then closes its connection.
+  Future<void> logout(String agentId) async {
+    _checkNotDisposed();
+    final slot = _slotOf(agentId)..signIns += 1;
+    try {
+      final connection = await _connect(slot);
+      await connection.agent.logout(LogoutRequest());
+    } finally {
+      slot.signIns -= 1;
+      _scheduleRestartCheck(agentId);
+    }
+    await _closeConnection(slot, reason: 'Signed out');
+  }
+
+  /// After a login or `authenticate`: every chat of [agentId] waiting for it
+  /// continues — an interrupted prompt can be repeated, a setup runs again.
+  Future<void> _continueAfterSignIn(String agentId) async {
+    for (final live in await liveSessions) {
+      if (live.agentId != agentId || live.status.value != SessionStatus.needsAuth) continue;
+      live.problem.value = null;
+      if (live.interrupted == SessionOperation.prompt) {
+        live.canRetryPrompt.value = true;
+        _move(live, SessionStatus.cold);
+      } else {
+        unawaited(_setupLane(live, () => _ensureReady(live)).catchError((Object _) {}));
+      }
+    }
+  }
+
+  _AgentSlot _slotOf(String agentId) =>
+      _slots[agentId] ?? (throw StateError('Unknown agent $agentId'));
+
   // --- Setup ----------------------------------------------------------------------------
 
   Future<void> _setupLane(LiveSession live, Future<void> Function() operation) {
+    _lanesInFlight.update(live.id, (count) => count + 1, ifAbsent: () => 1);
     final previous = _setupLanes[live.id] ?? Future<void>.value();
     final next = previous.catchError((Object _) {}).then((_) => operation());
-    _setupLanes[live.id] = next.catchError((Object _) {});
+    _setupLanes[live.id] = next.catchError((Object _) {}).whenComplete(() {
+      if (_lanesInFlight.update(live.id, (count) => count - 1) == 0) {
+        _lanesInFlight.remove(live.id);
+        _scheduleRestartCheck(live.agentId);
+      }
+    });
     return next;
   }
 
@@ -533,10 +677,18 @@ final class AgentHub {
   }
 
   Future<AgentConnection> _start(LiveSession live) async {
+    final slot = _slots[live.agentId];
+    if (slot == null) {
+      await _markRemoved(live);
+      throw const AgentRemovedException();
+    }
     _move(live, SessionStatus.starting);
     live.problem.value = null;
     try {
-      return await _connect(_slots[live.agentId]!);
+      return await _connect(slot);
+    } on AgentRemovedException {
+      await _markRemoved(live);
+      rethrow;
     } on Object catch (error) {
       final problem = switch (error) {
         AgentPreflightException(:final message, :final hint) => SessionProblem(
@@ -572,9 +724,10 @@ final class AgentHub {
           slot.definition,
           (context) => _onPermission(slot, generation, context),
         );
-        if (_disposing) {
+        if (_disposing || slot.retired) {
           await started.close();
-          throw StateError('AgentHub is disposed');
+          if (_disposing) throw StateError('AgentHub is disposed');
+          throw const AgentRemovedException();
         }
         slot.connection = started;
         started.incoming.listen((message) {
@@ -600,17 +753,13 @@ final class AgentHub {
       final context = await _contextOf(live);
       final response = await connection.agent
           .createSession(
-            NewSessionRequest(
-              cwd: live.cwd,
-              mcpServers: context.servers,
-              meta: _metaOf(context),
-            ),
+            NewSessionRequest(cwd: live.cwd, mcpServers: context.servers, meta: _metaOf(context)),
           )
           .timeout(setupTimeout);
       final acpId = response.sessionId.value;
       // Registered at once: the agent may notify (commands, config) while the
       // defaults are applied, and `_route` drops what it cannot place.
-      registered = _slots[live.agentId]!..byAcpId[acpId] = live;
+      registered = _slots[live.agentId]?..byAcpId[acpId] = live;
       registeredId = acpId;
       await _database.transaction(() async {
         await (_database.update(_database.sessionsTable)..where((s) => s.id.equals(live.id))).write(
@@ -627,7 +776,7 @@ final class AgentHub {
           );
         }
       });
-      if (contextLostFrom != null) _slots[live.agentId]!.byAcpId.remove(contextLostFrom);
+      if (contextLostFrom != null) _slots[live.agentId]?.byAcpId.remove(contextLostFrom);
       live
         ..acpSessionId = acpId
         ..configOptions.value = _objects(_plain(response.toJson())['configOptions']);
@@ -706,11 +855,10 @@ final class AgentHub {
   /// The servers and `_meta` for a new or loaded session of [live]. Never throws: a provider that
   /// fails or does not answer within [setupTimeout] is logged and the session starts without them.
   Future<SessionContext> _contextOf(LiveSession live) async {
+    final slot = _slots[live.agentId];
+    if (slot == null) return SessionContext.empty;
     try {
-      return await _sessionContext(
-        live.id,
-        _slots[live.agentId]!.definition,
-      ).timeout(setupTimeout);
+      return await _sessionContext(live.id, slot.definition).timeout(setupTimeout);
     } on Object catch (error, stackTrace) {
       l.w('AgentHub | session ${live.id}: no MCP servers and rules: $error', stackTrace);
       return SessionContext.empty;
@@ -723,9 +871,13 @@ final class AgentHub {
   }
 
   Future<void> _load(LiveSession live, AgentConnection connection) async {
+    final slot = _slots[live.agentId];
+    if (slot == null) {
+      await _markRemoved(live);
+      throw const AgentRemovedException();
+    }
     _move(live, SessionStatus.loading);
     final acpId = live.acpSessionId!;
-    final slot = _slots[live.agentId]!;
     slot.byAcpId[acpId] = live;
     live.replaying = true;
     try {
@@ -995,6 +1147,7 @@ final class AgentHub {
         if (live.turn case final Future<void> turn) turn,
     ]).timeout(turnGrace, onTimeout: () => <void>[]);
     permissions.cancelAll('app closed');
+    await Future.wait<void>(List<Future<void>>.of(_closing));
     for (final slot in _slots.values) {
       final connection = slot.connection;
       slot
@@ -1033,6 +1186,52 @@ final class AgentHub {
       throw error;
     }
     live.status.value = next;
+    if (!next.isBusy) _scheduleRestartCheck(live.agentId);
+  }
+
+  /// Checks, after the current step, whether an edited agent can restart now.
+  void _scheduleRestartCheck(String agentId) {
+    final slot = _slots[agentId];
+    if (slot == null || !slot.restartPending) return;
+    scheduleMicrotask(() => _restartIfIdle(slot));
+  }
+
+  /// Closes an edited agent's connection once nothing of it is busy: no chat
+  /// with a busy status or queued setup work, no sign-in call in flight.
+  void _restartIfIdle(_AgentSlot slot) {
+    if (!slot.restartPending || slot.retired || _disposing) return;
+    if (slot.signIns > 0) return;
+    for (final live in _opened.values) {
+      if (live.agentId != slot.id || _isTerminal(live)) continue;
+      if (live.status.value.isBusy || _lanesInFlight.containsKey(live.id)) return;
+    }
+    slot.restartPending = false;
+    _track(_closeConnection(slot, reason: 'Agent settings changed'));
+  }
+
+  /// Puts a chat of a removed agent in `error` (synchronously) with the
+  /// removed problem; nothing can be retried. Idempotent.
+  Future<void> _markRemoved(LiveSession live) async {
+    if (_isTerminal(live)) return;
+    if (live.status.value == SessionStatus.error &&
+        live.problem.value?.kind == SessionProblemKind.removed) {
+      return;
+    }
+    permissions.cancelSession(live.id, 'agent removed');
+    live
+      ..cancelTimer?.cancel()
+      ..cancelTimer = null
+      ..canForceStop.value = false
+      ..canRetryPrompt.value = false;
+    await _fail(live, _removedProblem);
+  }
+
+  void _track(Future<void> work) {
+    final tracked = work.catchError((Object error, StackTrace stackTrace) {
+      l.w('AgentHub | updating an agent failed: $error', stackTrace);
+    });
+    _closing.add(tracked);
+    unawaited(tracked.whenComplete(() => _closing.remove(tracked)));
   }
 
   Future<void> _fail(LiveSession live, SessionProblem problem) async {
@@ -1095,6 +1294,16 @@ final class AgentHub {
     ],
     _ => const <Map<String, Object?>>[],
   };
+}
+
+/// A chat of an agent that is no longer configured cannot start (its problem
+/// is [SessionProblemKind.removed]).
+final class AgentRemovedException implements Exception {
+  /// Creates the exception.
+  const AgentRemovedException();
+
+  @override
+  String toString() => 'AgentRemovedException: This agent was removed';
 }
 
 /// A prompt was not sent: the chat's mode is `bypassPermissions` and the user
