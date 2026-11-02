@@ -50,9 +50,10 @@ class WorkspaceRunLink extends ChangeNotifier {
   /// Gives the time a screenshot is taken at.
   final DateTime Function() _now;
 
-  /// Every screenshot taken in this session, per project, oldest first.
-  final Map<int, List<({String path, DateTime time})>> _screenshots =
-      <int, List<({String path, DateTime time})>>{};
+  /// Every PNG remembered in this session, per project, oldest first. A widget's PNG ([widget]) is
+  /// attachable like any other, but is never offered as the last screenshot of the app.
+  final Map<int, List<({String path, DateTime time, bool widget})>> _screenshots =
+      <int, List<({String path, DateTime time, bool widget})>>{};
 
   /// Whether the run data is made up; the `@` menu says so.
   final bool isPreview;
@@ -174,7 +175,9 @@ class WorkspaceRunLink extends ChangeNotifier {
   /// `false` when no chat is selected.
   bool addWidget(PickedWidget picked) {
     final projectId = _data.projectId;
-    if (picked.screenshot case final path? when projectId != null) _remember(projectId, path);
+    if (picked.screenshot case final path? when projectId != null) {
+      _remember(projectId, path, widget: true);
+    }
     final handle = _data.chatHandle.value;
     if (handle == null) return false;
     handle.insertDraft(
@@ -201,11 +204,12 @@ class WorkspaceRunLink extends ChangeNotifier {
     return true;
   }
 
-  /// Remembers the PNG [path] (relative to the project) of [projectId] for the `@` menu.
-  void _remember(int projectId, String path) {
-    _screenshots.putIfAbsent(projectId, () => <({String path, DateTime time})>[])
+  /// Remembers the PNG [path] (relative to the project) of [projectId] for the `@` menu; [widget]
+  /// when it is the picture of a picked widget.
+  void _remember(int projectId, String path, {bool widget = false}) {
+    _screenshots.putIfAbsent(projectId, () => <({String path, DateTime time, bool widget})>[])
       ..removeWhere((shot) => shot.path == path)
-      ..add((path: path, time: _now()));
+      ..add((path: path, time: _now(), widget: widget));
     notifyListeners();
   }
 
@@ -218,16 +222,18 @@ class WorkspaceRunLink extends ChangeNotifier {
     final pick = _actions.pick.value;
     final picked = pick.projectId == state.projectId ? pick.widget : null;
     final error = state.logs.reversed.where((log) => log.error != null).firstOrNull?.error;
-    final shots = _screenshots[state.projectId] ?? const <({String path, DateTime time})>[];
+    final shots =
+        _screenshots[state.projectId] ?? const <({String path, DateTime time, bool widget})>[];
+    final last = shots.where((shot) => !shot.widget).lastOrNull;
     return RunMentions(
       isPreview: isPreview,
       canStart: _canStartNow,
       isRunning: isRunning,
       canReload: canReload,
       canScreenshot: canScreenshot,
-      screenshot: shots.isEmpty
+      screenshot: last == null
           ? null
-          : RunMention(detail: _clock(shots.last.time), text: _screenshotText(shots.last.path)),
+          : RunMention(detail: _clock(last.time), text: _screenshotText(last.path)),
       attachable: <String>{for (final shot in shots) shot.path},
       widget: picked == null
           ? null

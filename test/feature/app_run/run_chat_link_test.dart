@@ -337,6 +337,36 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    testWidgets('a widget PNG is attachable but never the Screenshot offer', (tester) async {
+      await pumpShell(tester);
+      await startRun(tester);
+      final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
+      final workspace = workspaceOf(tester);
+      const appShot = ScriptedAppRunRepository.defaultScreenshotPath;
+      const shot = '.dart_tool/flutter_code_agent/screenshots/widget-BookingCard.png';
+      const card = ScriptedWidgetPickerRepository.bookingCard;
+
+      workspace.runActionsController.screenshot(projectId);
+      await until(tester, () => chat.textController.text.isNotEmpty);
+      workspace.addRunWidgetToMessage(
+        PickedWidget(
+          name: card.name,
+          file: card.file,
+          line: card.line,
+          column: card.column,
+          id: card.id,
+          ancestors: card.ancestors,
+          screenshot: shot,
+        ),
+      );
+      await tester.pump();
+
+      final mentions = workspace.runLink.mentions!;
+      expect(mentions.screenshot!.text, '@$appShot', reason: 'still the last app screenshot');
+      expect(mentions.attachable, <String>{appShot, shot});
+      await disposeTestApp(tester, dependencies);
+    });
+
     testWidgets('without ancestors or screenshot only the widget line', (tester) async {
       await pumpShell(tester);
       final chat = tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget));
