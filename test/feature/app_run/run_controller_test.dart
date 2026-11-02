@@ -622,6 +622,19 @@ void main() {
         });
       }
 
+      test('a hot reload that does not cancel the pick leaves the waiting pick alone', () async {
+        actions.pickWidget(1);
+        await pumpEventQueue();
+
+        actions.hotReload(1, cancelPick: false);
+        await pumpEventQueue();
+
+        expect(repository.reloads, <int>[1]);
+        expect(actions.pick.value.picking, isTrue);
+        expect(picker.cancels, isEmpty);
+        actions.cancelPick(1);
+      });
+
       test('a screenshot while a pick waits leaves the pick alone', () async {
         actions
           ..pickWidget(1)

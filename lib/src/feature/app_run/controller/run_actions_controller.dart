@@ -115,10 +115,11 @@ final class RunActionsController extends StateController<RunActionsState>
     }).ignore();
   }
 
-  /// Hot-reloads the app; a pick that waits is cancelled.
-  void hotReload(int projectId) {
+  /// Hot-reloads the app; a pick that waits is cancelled unless [cancelPick] is `false` (the
+  /// reload after an agent turn: a hot reload keeps the isolate, select mode and the widget ids).
+  void hotReload(int projectId, {bool cancelPick = true}) {
     if (isProcessing) return;
-    cancelPick(projectId);
+    if (cancelPick) this.cancelPick(projectId);
     _run(projectId, () => _runRepository.hotReload(projectId));
   }
 

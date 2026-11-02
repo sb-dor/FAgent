@@ -605,6 +605,35 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    testWidgets('a waiting pick survives the reload after a turn, the Hot reload button ends it', (
+      tester,
+    ) async {
+      // A pick waits until the test ends it, like a real one waits for a tap.
+      final picker = ScriptedWidgetPickerRepository(step: const Duration(hours: 1));
+      dependencies = testDependencies(
+        appRunRepository: spy,
+        devicesRepository: devices,
+        widgetPickerRepository: picker,
+      );
+      await pumpShell(tester, reloadAfterTurn: true);
+      await startRun(tester);
+      final actions = workspaceOf(tester).runActionsController;
+      actions.pickWidget(projectId);
+      await settle(tester);
+      expect(actions.pick.value.picking, isTrue);
+
+      await publish(tester, SessionStatus.running);
+      await publish(tester, SessionStatus.idle);
+      await until(tester, () => spy.reloads == 1);
+
+      expect(actions.pick.value.picking, isTrue, reason: 'a reload keeps select mode and the ids');
+
+      workspaceOf(tester).runLink.reload();
+      await until(tester, () => spy.reloads == 2);
+      expect(actions.pick.value.picking, isFalse, reason: 'the button cancels the pick');
+      await disposeTestApp(tester, dependencies);
+    });
+
     testWidgets('does nothing when the turn ends in an error', (tester) async {
       await pumpShell(tester, reloadAfterTurn: true);
       await startRun(tester);

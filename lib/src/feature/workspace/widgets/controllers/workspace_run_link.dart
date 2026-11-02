@@ -145,9 +145,10 @@ class WorkspaceRunLink extends ChangeNotifier {
     if (_projectId case final projectId?) _actions.stop(projectId);
   }
 
-  /// Hot reloads the app; does nothing unless it runs in debug.
-  void reload() {
-    if (canReload) _actions.hotReload(_projectId!);
+  /// Hot reloads the app; does nothing unless it runs in debug. A pick that waits is cancelled,
+  /// unless [cancelPick] is `false` (the reload after an agent turn leaves it be).
+  void reload({bool cancelPick = true}) {
+    if (canReload) _actions.hotReload(_projectId!, cancelPick: cancelPick);
   }
 
   /// Hot restarts the app; does nothing unless it runs in debug.
@@ -276,6 +277,6 @@ class WorkspaceRunLink extends ChangeNotifier {
         (before == SessionStatus.running ||
             before == SessionStatus.awaitingPermission ||
             before == SessionStatus.cancelling);
-    if (turnEnded && _reloadAfterTurn()) reload();
+    if (turnEnded && _reloadAfterTurn()) reload(cancelPick: false);
   }
 }
