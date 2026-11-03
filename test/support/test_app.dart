@@ -14,7 +14,6 @@ import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dar
 import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
@@ -39,6 +38,7 @@ import 'memory_run_config_repository.dart';
 import 'memory_skills_repository.dart';
 import 'scripted_app_run_repository.dart';
 import 'scripted_mcp_probe.dart';
+import 'scripted_widget_picker_repository.dart';
 
 /// Dependencies backed by an in-memory database; no agent is ever started. A test can pass its own
 /// [appRunRepository], [devicesRepository], [widgetPickerRepository] or [runConfigRepository] (a
@@ -105,7 +105,7 @@ Dependencies testDependencies({
     ..agentsRepository = agentsRepository ?? MemoryAgentsRepository()
     ..devicesRepository = devicesRepository ?? MemoryDevicesRepository(step: step, isPreview: true)
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)
-    ..widgetPickerRepository = widgetPickerRepository ?? FakeWidgetPickerRepositoryImpl(step: step)
+    ..widgetPickerRepository = widgetPickerRepository ?? ScriptedWidgetPickerRepository(step: step)
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()

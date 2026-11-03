@@ -19,8 +19,8 @@ import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/run_tools.dart
 import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/skill_tools.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
@@ -71,23 +71,25 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   'Resolve shell environment': (dependencies) async =>
       dependencies.shellEnvironment = await ShellEnvironment.resolve(),
   // The devices and the runs are real (`flutter daemon`, `flutter run --machine`); the widget
-  // picker is made up until the inspector is wired in (M6).
+  // picker talks to the inspector of a debug run over its VM service.
   'Create app run repositories': (dependencies) {
     final database = dependencies.database;
     final environment = dependencies.shellEnvironment;
+    Future<String?> projectPath(int projectId) async => (await (database.select(
+      database.projectsTable,
+    )..where((project) => project.id.equals(projectId))).getSingleOrNull())?.path;
+    final runs = AppRunRepositoryImpl(
+      projectPath: projectPath,
+      flutter: (path) => flutterExecutableFor(path, which: environment.which),
+      environment: environment.variables,
+    );
     dependencies
       ..devicesRepository = DevicesRepositoryImpl(
         flutter: () => flutterExecutableFor(null, which: environment.which),
         environment: environment.variables,
       )
-      ..appRunRepository = AppRunRepositoryImpl(
-        projectPath: (projectId) async => (await (database.select(
-          database.projectsTable,
-        )..where((project) => project.id.equals(projectId))).getSingleOrNull())?.path,
-        flutter: (path) => flutterExecutableFor(path, which: environment.which),
-        environment: environment.variables,
-      )
-      ..widgetPickerRepository = FakeWidgetPickerRepositoryImpl();
+      ..appRunRepository = runs
+      ..widgetPickerRepository = WidgetPickerRepositoryImpl(runs: runs, projectRoot: projectPath);
   },
   // Remembers the settings every agent reports, for the Settings screen.
   'Create agent options catalog': (dependencies) =>
@@ -103,12 +105,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     },
     observers: <TurnObserver>[GitTurnFilesObserver(environment: dependencies.shellEnvironment)],
     // Read when a chat starts its agent session, after initialization has finished.
-    sessionContext: (sessionId, agent, initializeResult) =>
-        dependencies.sessionContextRepository.forSession(
-          sessionId: sessionId,
-          agent: agent,
-          initializeResult: initializeResult,
-        ),
+    sessionContext: (sessionId, agent, initializeResult) => dependencies.sessionContextRepository
+        .forSession(sessionId: sessionId, agent: agent, initializeResult: initializeResult),
     sessionDefaults: (agentId) async =>
         (await AppSettingsRepositoryImpl(
           database: dependencies.database,

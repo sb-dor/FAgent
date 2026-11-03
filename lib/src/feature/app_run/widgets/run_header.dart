@@ -115,6 +115,15 @@ class RunHeader extends StatelessWidget {
     final notInDebug = run is RunRunning && !inDebug;
     final canScreenshot = inDebug;
     final canDevTools = run is RunRunning && run.devToolsUri != null;
+    // The picker talks to the inspector over the VM service, which `flutter run` reports a moment
+    // after the app is up.
+    final canPick = run is RunRunning && inDebug && run.vmServiceUri != null;
+    final pickTooltip = switch (run) {
+      _ when canPick => localization.pickWidget,
+      RunRunning() when notInDebug => localization.pickDebugOnly,
+      RunRunning() => localization.pickWaitingVmService,
+      _ => localization.pickNotRunning,
+    };
 
     Widget button(
       RunAction action,
@@ -253,12 +262,7 @@ class RunHeader extends StatelessWidget {
                   notInDebug ? localization.hotRestartDebugOnly : localization.hotRestart,
                   enabled: inDebug,
                 ),
-                button(
-                  RunAction.pick,
-                  Icons.ads_click,
-                  localization.pickWidget,
-                  enabled: run is RunRunning,
-                ),
+                button(RunAction.pick, Icons.ads_click, pickTooltip, enabled: canPick),
                 button(
                   RunAction.screenshot,
                   Icons.photo_camera_outlined,

@@ -5,7 +5,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_co
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -16,6 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/memory_devices_repository.dart';
 import '../../support/memory_run_config_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
+import '../../support/scripted_widget_picker_repository.dart';
 
 const Device _macos = Device(
   id: 'macos',
@@ -89,11 +90,23 @@ final class _ScriptedRunRepository implements IAppRunRepository {
   @override
   Future<void> stop(int projectId) async => stops.add(projectId);
 
-  @override
-  Future<Duration> hotReload(int projectId) async => Duration.zero;
+  /// The projects `hotReload` was called for.
+  final List<int> reloads = <int>[];
+
+  /// The projects `hotRestart` was called for.
+  final List<int> restarts = <int>[];
 
   @override
-  Future<Duration> hotRestart(int projectId) async => Duration.zero;
+  Future<Duration> hotReload(int projectId) async {
+    reloads.add(projectId);
+    return Duration.zero;
+  }
+
+  @override
+  Future<Duration> hotRestart(int projectId) async {
+    restarts.add(projectId);
+    return Duration.zero;
+  }
 
   @override
   Future<void> openDevTools(int projectId) async {}
@@ -282,27 +295,6 @@ void main() {
       expect(scripted.marked, <(int, int)>[(1, 1)]);
     });
 
-    test('setPicked keeps the picked widget until the project changes', () async {
-      controller.watch(1);
-      await pumpEventQueue();
-      const picked = PickedWidget(
-        name: 'Card',
-        file: 'lib/card.dart',
-        line: 7,
-        ancestors: <String>[],
-      );
-
-      controller.setPicked(picked);
-      expect(controller.state.picked, picked);
-      controller.watch(1);
-      await pumpEventQueue();
-      expect(controller.state.picked, picked);
-
-      controller.watch(2);
-      await pumpEventQueue();
-      expect(controller.state.picked, isNull);
-    });
-
     test(
       'clearLogs empties the logs and the error count, and the cleared lines stay away',
       () async {
@@ -420,7 +412,7 @@ void main() {
       addTearDown(run.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
       await pumpEventQueue();
@@ -486,7 +478,7 @@ void main() {
       addTearDown(subscription.cancel);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
 
@@ -504,21 +496,233 @@ void main() {
       expect(states.last, isA<RunStopped>());
     });
 
-    test('pickWidget completes with the picked widget', () async {
-      final repository = ScriptedAppRunRepository(step: _step);
-      addTearDown(repository.dispose);
-      final actions = RunActionsController(
-        runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+    group('picking', () {
+      late _ScriptedRunRepository repository;
+      late ScriptedWidgetPickerRepository picker;
+      late RunActionsController actions;
+
+      setUp(() {
+        repository = _ScriptedRunRepository();
+        // A pick waits until the test ends it, like a real one waits for a tap.
+        picker = ScriptedWidgetPickerRepository(step: const Duration(hours: 1));
+        actions = RunActionsController(runRepository: repository, pickerRepository: picker);
+      });
+
+      tearDown(() async {
+        actions.dispose();
+        await picker.dispose();
+        await repository.dispose();
+      });
+
+      List<String> chain() => actions.pick.value.chain.map((link) => link.name).toList();
+
+      test(
+        'pickWidget waits outside the action handler and shows the widget with its chain',
+        () async {
+          actions.pickWidget(1);
+          expect(actions.pick.value.picking, isTrue);
+          expect(actions.pick.value.projectId, 1);
+          expect(actions.isProcessing, isFalse, reason: 'a pick never blocks the other actions');
+
+          picker.complete(1);
+          await pumpEventQueue();
+
+          final pick = actions.pick.value;
+          expect(pick.picking, isFalse);
+          expect(pick.widget, ScriptedWidgetPickerRepository.bookingCard);
+          expect(chain(), <String>['BookingCard', 'BookingList', 'BookingScreen']);
+          expect(pick.current, 0);
+          expect(pick.problem, isNull);
+        },
       );
-      addTearDown(actions.dispose);
 
-      actions.pickWidget(1);
-      expect(actions.state, isA<RunActions$InProgressState>());
-      await Future<void>.delayed(_step * 50);
+      test('a second pickWidget while one waits is dropped', () async {
+        actions
+          ..pickWidget(1)
+          ..pickWidget(1);
+        await pumpEventQueue();
 
-      final state = actions.state as RunActions$CompletedState;
-      expect(state.picked!.name, 'BookingCard');
+        expect(picker.picks, <int>[1]);
+        actions.cancelPick(1);
+      });
+
+      test('a pick that gives no widget says why; a cancelled one keeps the last widget', () async {
+        actions.pickWidget(1);
+        picker.complete(1);
+        await pumpEventQueue();
+
+        actions.pickWidget(1);
+        picker
+          ..result = const PickCancelled()
+          ..complete(1);
+        await pumpEventQueue();
+        expect(actions.pick.value.widget, ScriptedWidgetPickerRepository.bookingCard);
+        expect(actions.pick.value.picking, isFalse);
+
+        for (final result in <PickResult>[
+          const PickNoProjectWidget(),
+          const PickFailed(PickFailure.connectionLost),
+        ]) {
+          actions.pickWidget(1);
+          picker
+            ..result = result
+            ..complete(1);
+          await pumpEventQueue();
+
+          expect(actions.pick.value.problem, result);
+          expect(actions.pick.value.widget, isNull, reason: '$result');
+          expect(actions.pick.value.picking, isFalse);
+        }
+      });
+
+      test('a pick that throws fails with the error', () async {
+        final failing = _ThrowingPicker();
+        final other = RunActionsController(runRepository: repository, pickerRepository: failing);
+        addTearDown(other.dispose);
+
+        other.pickWidget(1);
+        await pumpEventQueue();
+
+        expect(other.pick.value.problem, isA<PickFailed>());
+        expect((other.pick.value.problem! as PickFailed).kind, PickFailure.inspectorError);
+        expect(other.pick.value.picking, isFalse);
+      });
+
+      test('cancelPick ends the pick at once and asks the picker to cancel', () async {
+        actions
+          ..pickWidget(1)
+          ..cancelPick(1);
+
+        expect(actions.pick.value.picking, isFalse);
+        await pumpEventQueue();
+        expect(picker.cancels, <int>[1]);
+
+        actions.cancelPick(1);
+        await pumpEventQueue();
+        expect(picker.cancels, <int>[1], reason: 'nothing waits any more');
+      });
+
+      for (final (name, act, calls)
+          in <(String, void Function(RunActionsController), List<int> Function())>[
+            ('stop', (actions) => actions.stop(1), () => repository.stops),
+            ('hot reload', (actions) => actions.hotReload(1), () => repository.reloads),
+            ('hot restart', (actions) => actions.hotRestart(1), () => repository.restarts),
+          ]) {
+        test('$name while a pick waits runs at once and cancels the pick', () async {
+          actions.pickWidget(1);
+          await pumpEventQueue();
+
+          act(actions);
+          await pumpEventQueue();
+
+          expect(calls(), <int>[1], reason: 'not dropped');
+          expect(picker.cancels, <int>[1]);
+          expect(actions.pick.value.picking, isFalse);
+          expect(actions.state, isA<RunActions$CompletedState>());
+        });
+      }
+
+      test('a hot reload that does not cancel the pick leaves the waiting pick alone', () async {
+        actions.pickWidget(1);
+        await pumpEventQueue();
+
+        actions.hotReload(1, cancelPick: false);
+        await pumpEventQueue();
+
+        expect(repository.reloads, <int>[1]);
+        expect(actions.pick.value.picking, isTrue);
+        expect(picker.cancels, isEmpty);
+        actions.cancelPick(1);
+      });
+
+      test('a screenshot while a pick waits leaves the pick alone', () async {
+        actions
+          ..pickWidget(1)
+          ..screenshot(1);
+        await pumpEventQueue();
+
+        expect(actions.pick.value.picking, isTrue);
+        expect(picker.cancels, isEmpty);
+        actions.cancelPick(1);
+      });
+
+      test('a pick in another project cancels the waiting one', () async {
+        actions
+          ..pickWidget(1)
+          ..pickWidget(2);
+        await pumpEventQueue();
+
+        expect(picker.cancels, <int>[1]);
+        expect(actions.pick.value.projectId, 2);
+        expect(actions.pick.value.picking, isTrue);
+        actions.cancelPick(2);
+      });
+
+      test(
+        'selectAncestor switches to the link, keeps the inner links and moves the highlight',
+        () async {
+          actions.pickWidget(1);
+          picker.complete(1);
+          await pumpEventQueue();
+
+          const list = PickedWidget(
+            name: 'BookingList',
+            file: 'lib/booking_list.dart',
+            line: 20,
+            column: 5,
+            id: 'inspector-list',
+            ancestors: <PickedAncestor>[
+              PickedAncestor(
+                name: 'BookingScreen',
+                file: 'lib/s.dart',
+                line: 9,
+                id: 'inspector-screen',
+              ),
+              PickedAncestor(name: 'App', file: 'lib/main.dart', line: 3, id: 'inspector-app'),
+            ],
+          );
+          picker.selectResult = const PickPicked(list);
+          actions.selectAncestor(1, 'inspector-list');
+          await pumpEventQueue();
+
+          expect(picker.selects, <(int, String)>[(1, 'inspector-list')]);
+          expect(actions.pick.value.widget, list);
+          expect(chain(), <String>['BookingCard', 'BookingList', 'BookingScreen', 'App']);
+          expect(actions.pick.value.current, 1);
+        },
+      );
+
+      test('selectAncestor of a released id says it is gone and keeps the card', () async {
+        actions.pickWidget(1);
+        picker.complete(1);
+        await pumpEventQueue();
+
+        picker.selectResult = const PickGone();
+        actions.selectAncestor(1, 'inspector-screen');
+        await pumpEventQueue();
+
+        expect(actions.pick.value.problem, const PickGone());
+        expect(actions.pick.value.widget, ScriptedWidgetPickerRepository.bookingCard);
+        expect(actions.pick.value.current, 0);
+      });
+
+      test('dispose cancels a waiting pick; a result after it changes nothing', () async {
+        RunActionsController(runRepository: repository, pickerRepository: picker)
+          ..pickWidget(3)
+          ..dispose();
+        await pumpEventQueue();
+        expect(picker.cancels, <int>[3]);
+
+        // A picker that answers late, after the controller is gone (cancel does not end its pick).
+        final latePicker = _LatePicker();
+        RunActionsController(runRepository: repository, pickerRepository: latePicker)
+          ..pickWidget(4)
+          ..dispose();
+        expect(latePicker.cancels, <int>[4]);
+        latePicker.pending.complete(const PickPicked(ScriptedWidgetPickerRepository.bookingCard));
+        await pumpEventQueue();
+        // Reaching here without an uncaught error means the disposed notifier was not touched.
+      });
     });
 
     test('stop is not dropped while another action hangs', () async {
@@ -526,7 +730,7 @@ void main() {
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
 
@@ -543,19 +747,21 @@ void main() {
     });
 
     test('drops a second action while one is in progress', () async {
-      final repository = ScriptedAppRunRepository(step: _step * 20);
+      final repository = _ScriptedRunRepository()..screenshotGate = Completer<String?>();
       addTearDown(repository.dispose);
       final actions = RunActionsController(
         runRepository: repository,
-        pickerRepository: FakeWidgetPickerRepositoryImpl(step: _step * 20),
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
       );
       addTearDown(actions.dispose);
 
       actions
-        ..pickWidget(1)
-        ..pickWidget(1);
-      await Future<void>.delayed(_step * 200);
+        ..screenshot(1)
+        ..hotReload(1);
+      repository.screenshotGate!.complete(null);
+      await pumpEventQueue();
 
+      expect(repository.reloads, isEmpty);
       expect(actions.state, isA<RunActions$CompletedState>());
     });
   });
@@ -573,4 +779,37 @@ void main() {
       expect(state.devices, hasLength(5));
     });
   });
+}
+
+/// A picker whose every call fails.
+final class _ThrowingPicker implements IWidgetPickerRepository {
+  @override
+  Future<PickResult> pick(int projectId) async => throw StateError('broken');
+
+  @override
+  Future<void> cancel(int projectId) async {}
+
+  @override
+  Future<PickResult> select(int projectId, String id) async => throw StateError('broken');
+
+  @override
+  Future<void> dispose() async {}
+}
+
+/// A picker whose pick ends only when the test completes [pending]; `cancel` is only recorded.
+final class _LatePicker implements IWidgetPickerRepository {
+  final Completer<PickResult> pending = Completer<PickResult>();
+  final List<int> cancels = <int>[];
+
+  @override
+  Future<PickResult> pick(int projectId) => pending.future;
+
+  @override
+  Future<void> cancel(int projectId) async => cancels.add(projectId);
+
+  @override
+  Future<PickResult> select(int projectId, String id) async => const PickGone();
+
+  @override
+  Future<void> dispose() async {}
 }

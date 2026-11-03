@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
@@ -27,8 +28,9 @@ abstract interface class IAppCloseRepository {
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
-  /// Stops the runs, the devices daemon, a project creation, the agent list, the agents, the app's
-  /// MCP server, the MCP status probes and the agent probes, then closes the database.
+  /// Ends a widget pick, then stops the runs, the devices daemon, a project creation, the agent
+  /// list, the agents, the app's MCP server, the MCP status probes and the agent probes, then
+  /// closes the database.
   Future<void> shutdown();
 
   /// Quits the app (answering a pending ⌘Q or logout on macOS).
@@ -47,6 +49,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._settings,
     required this._appRun,
     required this._devices,
+    required this._widgetPicker,
     required this._appMcpServer,
     required this._mcpProbe,
     required this._agentProbe,
@@ -59,6 +62,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IAppSettingsRepository _settings;
   final IAppRunRepository _appRun;
   final IDevicesRepository _devices;
+  final IWidgetPickerRepository _widgetPicker;
   final IAppMcpServer _appMcpServer;
   final IMcpProbe _mcpProbe;
   final IAgentProbe _agentProbe;
@@ -102,6 +106,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     // unless they are killed here (the app on the device closes with them); so does the command of
     // a project creation (what it wrote stays on disk, the project is not added). One that refuses
     // to stop must not keep the agents running or the database open.
+    // The picker first: it turns the select mode off in an app that still runs, then closes its
+    // connections to the apps.
+    await _stopQuietly('widget picker', _widgetPicker.dispose);
     await Future.wait<void>(<Future<void>>[
       _stopQuietly('runs', _appRun.dispose),
       _stopQuietly('devices', _devices.dispose),

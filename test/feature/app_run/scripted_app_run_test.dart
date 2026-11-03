@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
@@ -289,26 +288,6 @@ void main() {
       final subscription = devices.watchDevices().listen((_) {});
 
       await subscription.cancel();
-    });
-  });
-
-  group('FakeWidgetPickerRepositoryImpl', () {
-    test('picks the booking card', () async {
-      final picker = FakeWidgetPickerRepositoryImpl(step: _step);
-
-      final picked = await picker.pick(1);
-
-      expect(picker.isPreview, isTrue);
-      expect(picked!.name, 'BookingCard');
-      expect(picked.file, 'lib/src/feature/booking/widgets/booking_card.dart');
-      expect(picked.line, 42);
-      expect(picked.ancestors, <String>[
-        'Row',
-        'Padding',
-        'BookingCard',
-        'ListView',
-        'BookingScreen',
-      ]);
     });
   });
 }

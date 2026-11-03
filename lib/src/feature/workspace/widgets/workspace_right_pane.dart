@@ -140,8 +140,8 @@ class _WorkspaceRightPaneState extends State<WorkspaceRightPane> {
                           RightPaneTab.run => RunTab(
                             key: ValueKey<int?>(_scope.dataController.projectId),
                             projectId: _scope.dataController.projectId,
+                            projectRoot: _scope.selectedProject?.path,
                             isPreview: _scope.runIsPreview,
-                            pickerIsPreview: _scope.pickerIsPreview,
                             devices: _scope.devicesController,
                             run: _scope.runController,
                             actions: _scope.runActionsController,

@@ -14,8 +14,8 @@ import 'package:flutter_code_agent/src/feature/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_logs.dart';
 
 /// {@template run_tab}
-/// The Run tab of the right pane for [projectId]: device, mode and buttons on top, the picked
-/// widget, and the logs.
+/// The Run tab of the right pane for [projectId]: device, mode and buttons on top, the widget
+/// picker, and the logs.
 ///
 /// The controllers belong to the window; the tab only shows them and asks them to act. The owner
 /// calls [RunController.watch] for the selected project. The device to run on is chosen by the window
@@ -25,8 +25,8 @@ class RunTab extends StatefulWidget {
   /// {@macro run_tab}
   const RunTab({
     required this.projectId,
+    required this.projectRoot,
     required this.isPreview,
-    required this.pickerIsPreview,
     required this.devices,
     required this.run,
     required this.actions,
@@ -41,12 +41,12 @@ class RunTab extends StatefulWidget {
   /// The selected project; `null` shows an empty state.
   final int? projectId;
 
+  /// The folder of the selected project, which the screenshot of a picked widget is relative to;
+  /// `null` when it is not known.
+  final String? projectRoot;
+
   /// Whether the run data is made up.
   final bool isPreview;
-
-  /// Whether the widget picker is made up. Next to a real run it is not offered: the button says
-  /// the picker comes in M6, because a made-up widget would not be in the app.
-  final bool pickerIsPreview;
 
   /// The devices that can run the app.
   final DevicesController devices;
@@ -54,7 +54,7 @@ class RunTab extends StatefulWidget {
   /// The run and the logs of the project.
   final RunController run;
 
-  /// The actions (start, stop, reload, pick a widget).
+  /// The actions (start, stop, reload) and the widget picker.
   final RunActionsController actions;
 
   /// Saves the run arguments the user edits in the dialog the device menu opens.
@@ -77,28 +77,6 @@ class RunTab extends StatefulWidget {
 }
 
 class _RunTabState extends State<RunTab> {
-  /// Whether the app waits for the user to tap a widget.
-  bool _picking = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.actions.addListener(_onAction);
-  }
-
-  @override
-  void dispose() {
-    widget.actions.removeListener(_onAction);
-    super.dispose();
-  }
-
-  void _onAction() {
-    final state = widget.actions.state;
-    if (_picking && (state is RunActions$CompletedState || state is RunActions$ErrorState)) {
-      setState(() => _picking = false);
-    }
-  }
-
   /// Chooses the device; an emulator that is not running yet is booted.
   void _chooseDevice(String id) {
     widget.run.choose(deviceId: id);
@@ -114,11 +92,6 @@ class _RunTabState extends State<RunTab> {
       arguments: widget.run.state.arguments,
       controller: widget.runConfig,
     );
-  }
-
-  void _comingIn(String milestone) {
-    final message = Localization.of(context).comingInMilestone(milestone);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _onRunAction(RunAction action) {
@@ -148,11 +121,6 @@ class _RunTabState extends State<RunTab> {
       case RunAction.restart:
         widget.actions.hotRestart(projectId);
       case RunAction.pick:
-        if (widget.pickerIsPreview && !widget.isPreview) {
-          _comingIn('M6');
-          return;
-        }
-        setState(() => _picking = true);
         widget.actions.pickWidget(projectId);
       case RunAction.screenshot:
         widget.actions.screenshot(projectId);
@@ -172,10 +140,14 @@ class _RunTabState extends State<RunTab> {
       );
     }
     return ListenableBuilder(
-      listenable: Listenable.merge(<Listenable>[widget.run, widget.devices]),
+      listenable: Listenable.merge(<Listenable>[widget.run, widget.devices, widget.actions.pick]),
       builder: (context, _) {
         final state = widget.run.state;
-        final picked = state.picked;
+        final projectId = widget.projectId!;
+        final pick = widget.actions.pick.value;
+        final showsPick =
+            pick.projectId == projectId &&
+            (pick.picking || pick.widget != null || pick.problem != null);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
@@ -193,12 +165,15 @@ class _RunTabState extends State<RunTab> {
               onMode: (mode) => widget.run.choose(mode: mode),
               onAction: _onRunAction,
             ),
-            if (_picking || picked != null)
+            if (showsPick)
               Padding(
                 padding: const EdgeInsets.fromLTRB(10, 8, 10, 0),
                 child: PickedWidgetCard(
-                  picked: _picking ? null : picked,
-                  onAddToMessage: () => widget.onAddWidget(picked!),
+                  pick: pick,
+                  projectRoot: widget.projectRoot,
+                  onCancel: () => widget.actions.cancelPick(projectId),
+                  onSelect: (id) => widget.actions.selectAncestor(projectId, id),
+                  onAddToMessage: widget.onAddWidget,
                   onOpenFile: widget.onOpenFile,
                 ),
               ),

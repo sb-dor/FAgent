@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_con
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -25,6 +27,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
+import '../../support/scripted_widget_picker_repository.dart';
 import '../../support/test_app.dart';
 
 /// A repository that replays what a test preloads and emits what it pushes.
@@ -150,6 +153,7 @@ void main() {
 
   group('RunTab', () {
     late Dependencies dependencies;
+    late ScriptedWidgetPickerRepository picker;
     late DevicesController devices;
     late RunController run;
     late RunActionsController actions;
@@ -158,7 +162,9 @@ void main() {
     late List<(String, int?)> openedFiles;
 
     setUp(() {
-      dependencies = testDependencies();
+      // A pick waits until the test ends it (or a cancel does), like a real one waits for a tap.
+      picker = ScriptedWidgetPickerRepository(step: const Duration(hours: 1));
+      dependencies = testDependencies(widgetPickerRepository: picker);
       devices = DevicesController(repository: dependencies.devicesRepository);
       run = RunController(
         repository: dependencies.appRunRepository,
@@ -204,8 +210,8 @@ void main() {
               width: width,
               child: RunTab(
                 projectId: projectId,
+                projectRoot: '/p',
                 isPreview: true,
-                pickerIsPreview: true,
                 devices: devices,
                 run: run,
                 actions: actions,
@@ -496,19 +502,247 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
+    group('the widget picker', () {
+      ScriptedAppRunRepository scripted() =>
+          dependencies.appRunRepository as ScriptedAppRunRepository;
+
+      Finder pickButton() => find.widgetWithIcon(IconButton, Icons.ads_click);
+
+      bool canPick(WidgetTester tester) =>
+          tester.widget<IconButton>(pickButton()).onPressed != null;
+
+      const hint = 'Tap a widget in the running app…';
+
+      Text link(WidgetTester tester, int index) => tester.widget<Text>(
+        find.descendant(
+          of: find.byKey(ValueKey<String>('picked-link-$index')),
+          matching: find.byType(Text),
+        ),
+      );
+
+      Future<void> startAndPick(WidgetTester tester) async {
+        await tester.tap(find.byTooltip('Run'));
+        await elapse(tester);
+        expect(run.state.run, isA<RunRunning>());
+        await tester.tap(find.byTooltip('Pick a widget in the app'));
+        await elapse(tester);
+        expect(find.text(hint), findsOneWidget);
+        expect(picker.isPicking(1), isTrue);
+      }
+
+      testWidgets('pick button disabled with each reason', (tester) async {
+        await pumpTab(tester);
+        expect(canPick(tester), isFalse);
+        expect(find.byTooltip('The app is not running'), findsOneWidget);
+
+        final startedAt = DateTime.now();
+        scripted().setRunState(
+          1,
+          RunRunning(
+            device: _macos,
+            startedAt: startedAt,
+            mode: BuildMode.profile,
+            vmServiceUri: ScriptedAppRunRepository.vmServiceUri,
+          ),
+        );
+        await elapse(tester);
+        expect(canPick(tester), isFalse);
+        expect(find.byTooltip('Picking works in debug builds only'), findsOneWidget);
+
+        scripted().setRunState(1, RunRunning(device: _macos, startedAt: startedAt));
+        await elapse(tester);
+        expect(canPick(tester), isFalse);
+        expect(find.byTooltip("Waiting for the app's VM service"), findsOneWidget);
+
+        scripted().setRunState(
+          1,
+          RunRunning(
+            device: _macos,
+            startedAt: startedAt,
+            vmServiceUri: ScriptedAppRunRepository.vmServiceUri,
+          ),
+        );
+        await elapse(tester);
+        expect(canPick(tester), isTrue);
+        expect(find.byTooltip('Pick a widget in the app'), findsOneWidget);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('stop while picking stops the run and cancels the pick', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        await tester.tap(find.byTooltip('Stop the app'));
+        await elapse(tester);
+
+        expect(run.state.run, isA<RunStopped>());
+        expect(picker.cancels, <int>[1]);
+        expect(picker.isPicking(1), isFalse);
+        expect(find.text(hint), findsNothing);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('hot reload while picking runs', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        await tester.tap(find.byTooltip('Hot reload'));
+        await elapse(tester);
+
+        expect(find.textContaining('Reloaded'), findsOneWidget, reason: 'not dropped');
+        expect(picker.cancels, <int>[1]);
+        expect(find.text(hint), findsNothing);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('hot restart while picking runs', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        await tester.tap(find.byTooltip('Hot restart'));
+        await elapse(tester);
+
+        expect(find.textContaining('Restarted application'), findsOneWidget, reason: 'not dropped');
+        expect(picker.cancels, <int>[1]);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('a screenshot while picking is taken and the pick keeps waiting', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        await tester.tap(find.byTooltip('Screenshot'));
+        await elapse(tester);
+
+        expect(scripted().screenshotCalls, <int>[1]);
+        expect(find.text(hint), findsOneWidget);
+        expect(picker.cancels, isEmpty);
+        await tester.tap(find.text('Cancel'));
+        await elapse(tester);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('cancel ends the pick; the next pick shows the hint', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        await tester.tap(find.text('Cancel'));
+        await elapse(tester);
+
+        expect(picker.cancels, <int>[1]);
+        expect(find.text(hint), findsNothing);
+        expect(find.text('Cancel'), findsNothing);
+
+        await tester.tap(find.byTooltip('Pick a widget in the app'));
+        await elapse(tester);
+        expect(picker.picks, <int>[1, 1], reason: 'the next pick is not dropped');
+        expect(find.text(hint), findsOneWidget);
+
+        await tester.tap(find.text('Cancel'));
+        await elapse(tester);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('a picked widget fills the card', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        picker.complete(1);
+        await elapse(tester);
+
+        expect(find.text(hint), findsNothing);
+        expect(find.text('booking_card.dart:42:7'), findsOneWidget);
+        expect(link(tester, 0).data, 'BookingCard');
+        expect(link(tester, 1).data, 'BookingList');
+        expect(link(tester, 2).data, 'BookingScreen');
+        expect(find.text('Add to message'), findsOneWidget);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('tapping an ancestor selects it and moves the highlight', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+        picker.complete(1);
+        await elapse(tester);
+        final colors = tester.element(find.byType(RunTab)).colors;
+        expect(link(tester, 0).style?.color, colors.accent);
+
+        picker.selectResult = const PickPicked(
+          PickedWidget(
+            name: 'BookingList',
+            file: 'lib/src/feature/booking/widgets/booking_list.dart',
+            line: 20,
+            column: 5,
+            id: 'inspector-list',
+            ancestors: <PickedAncestor>[
+              PickedAncestor(
+                name: 'BookingScreen',
+                file: 'lib/src/feature/booking/widgets/booking_screen.dart',
+                line: 9,
+                column: 12,
+                id: 'inspector-screen',
+              ),
+            ],
+          ),
+        );
+        await tester.tap(find.byKey(const ValueKey<String>('picked-link-1')));
+        await elapse(tester);
+
+        expect(picker.selects, <(int, String)>[(1, 'inspector-list')]);
+        expect(find.text('booking_list.dart:20:5'), findsOneWidget);
+        expect(link(tester, 0).data, 'BookingCard', reason: 'the picked one stays in the chain');
+        expect(link(tester, 1).data, 'BookingList');
+        expect(link(tester, 2).data, 'BookingScreen');
+        expect(link(tester, 1).style?.color, colors.accent);
+        expect(link(tester, 0).style?.color, isNot(colors.accent));
+
+        picker.selectResult = const PickPicked(ScriptedWidgetPickerRepository.bookingCard);
+        await tester.tap(find.byKey(const ValueKey<String>('picked-link-0')));
+        await elapse(tester);
+        expect(picker.selects.last, (1, 'inspector-card'));
+        expect(link(tester, 0).style?.color, colors.accent);
+        expect(find.text('booking_card.dart:42:7'), findsOneWidget);
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('a link that is gone says so and keeps the card', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+        picker.complete(1);
+        await elapse(tester);
+
+        picker.selectResult = const PickGone();
+        await tester.tap(find.byKey(const ValueKey<String>('picked-link-2')));
+        await elapse(tester);
+
+        expect(find.text('This widget is gone, pick again'), findsOneWidget);
+        expect(find.text('booking_card.dart:42:7'), findsOneWidget);
+        expect(link(tester, 0).data, 'BookingCard');
+        await disposeTestApp(tester, dependencies);
+      });
+
+      testWidgets('a tap outside the project widgets says so', (tester) async {
+        await pumpTab(tester);
+        await startAndPick(tester);
+
+        picker
+          ..result = const PickNoProjectWidget()
+          ..complete(1);
+        await elapse(tester);
+
+        expect(find.text('No widget of your project here'), findsOneWidget);
+        await disposeTestApp(tester, dependencies);
+      });
+    });
+
     testWidgets('a 340 px pane with an error and a picked widget does not overflow', (
       tester,
     ) async {
       await pumpTab(tester, width: 340, size: const Size(900, 900));
-      run.setPicked(
-        const PickedWidget(
-          name: 'BookingCard',
-          file: 'lib/src/feature/booking/widgets/booking_card.dart',
-          line: 42,
-          ancestors: <String>['Row', 'Padding', 'BookingCard', 'ListView', 'BookingScreen'],
-        ),
-      );
       await startAndReload(tester);
+      actions.pickWidget(1);
+      picker.complete(1);
+      await elapse(tester);
       await tester.tap(find.text('Details'));
       await tester.pump();
 
@@ -699,8 +933,8 @@ void main() {
               width: width,
               child: RunTab(
                 projectId: 1,
+                projectRoot: '/p',
                 isPreview: false,
-                pickerIsPreview: false,
                 devices: devices,
                 run: run,
                 actions: actions,
@@ -1072,9 +1306,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 20));
 
       expect(find.text('Tap a widget in the running app…'), findsNothing);
-      expect(find.text('BookingCard'), findsOneWidget);
-      expect(find.text('booking_card.dart:42'), findsOneWidget);
-      expect(find.text('Row › Padding › BookingCard › ListView › BookingScreen'), findsOneWidget);
+      expect(find.text('BookingCard'), findsWidgets);
+      expect(find.text('booking_card.dart:42:7'), findsOneWidget);
+      expect(find.text('BookingList'), findsOneWidget);
+      expect(find.text('BookingScreen'), findsOneWidget);
       expect(find.text('Add to message'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
@@ -1089,8 +1324,8 @@ void main() {
       await tester.tap(inPane('Hot reload'));
       await tester.pump(const Duration(milliseconds: 20));
 
-      expect(state.runController.state.picked, isA<PickedWidget>());
-      expect(find.text('BookingCard'), findsOneWidget);
+      expect(state.runActionsController.pick.value.widget, isA<PickedWidget>());
+      expect(find.text('booking_card.dart:42:7'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
 

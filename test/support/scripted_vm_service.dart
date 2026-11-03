@@ -6,9 +6,22 @@ import 'package:vm_service/vm_service.dart';
 /// The service extension that switches structured errors on.
 const String structuredErrorsExtension = 'ext.flutter.inspector.structuredErrors';
 
+/// The service extension that switches the widget inspector's select mode.
+const String inspectorShowExtension = 'ext.flutter.inspector.show';
+
+/// The inspector extensions [ScriptedVmService] answers, as an isolate that has the widget inspector
+/// registers them.
+const List<String> inspectorExtensions = <String>[
+  inspectorShowExtension,
+  'ext.flutter.inspector.getSelectedSummaryWidget',
+  'ext.flutter.inspector.getParentChain',
+  'ext.flutter.inspector.screenshot',
+  'ext.flutter.inspector.disposeGroup',
+];
+
 /// A [VmService] whose other side is driven by the test: it answers `streamListen`, `getVM`,
-/// `getIsolate` and the structured errors extension, and [emitFlutterError] and friends post
-/// events.
+/// `getIsolate`, the structured errors extension and the widget inspector extensions, and
+/// [emitFlutterError] and friends post events.
 ///
 /// [isolates] maps an isolate id to the service extensions it has registered.
 final class ScriptedVmService {
@@ -35,6 +48,25 @@ final class ScriptedVmService {
   /// When set, the structured errors extension answers with this error code.
   int? extensionErrorCode;
 
+  /// When set, every widget inspector extension answers with this error code.
+  int? inspectorErrorCode;
+
+  /// The methods that answer with an error (code -32000), as an extension that throws does.
+  final Set<String> failing = <String>{};
+
+  /// The methods that are recorded but never answered, as in an app paused at a breakpoint.
+  final Set<String> unanswered = <String>{};
+
+  /// What `getSelectedSummaryWidget` answers as `result`: a node as the inspector serializes it, or
+  /// `null` when nothing is selected (see [inspectorNode]).
+  Map<String, Object?>? selectedSummaryWidget;
+
+  /// What `getParentChain` answers as `result`, root first (see [inspectorChainEntry]).
+  List<Object?> parentChain = <Object?>[];
+
+  /// What `screenshot` answers as `result`: a base64 PNG, or `null` when the shot failed.
+  String? screenshotResult;
+
   /// Whether the client side was disposed.
   bool disposed = false;
 
@@ -47,6 +79,12 @@ final class ScriptedVmService {
         request.params['isolateId']! as String,
   ];
 
+  /// The params of every request to [method], in order.
+  List<Map<String, Object?>> requestsTo(String method) => <Map<String, Object?>>[
+    for (final request in requests)
+      if (request.method == method) request.params,
+  ];
+
   void _onMessage(String message) {
     final request = jsonDecode(message) as Map<String, Object?>;
     final id = request['id'];
@@ -55,6 +93,14 @@ final class ScriptedVmService {
       request['params'] as Map? ?? const <String, Object?>{},
     );
     requests.add((method: method, params: params));
+    if (unanswered.contains(method)) return;
+    if (failing.contains(method)) {
+      return _send(<String, Object?>{
+        'jsonrpc': '2.0',
+        'id': id,
+        'error': <String, Object?>{'code': -32000, 'message': 'Extension failed'},
+      });
+    }
     switch (method) {
       case 'streamListen':
         _respond(id, <String, Object?>{'type': 'Success'});
@@ -85,12 +131,41 @@ final class ScriptedVmService {
             'enabled': params['enabled'],
           });
         }
+      case inspectorShowExtension:
+        final enabled = params['enabled'] ?? 'false';
+        // The framework posts the new state for every call, its caller's own included, before it
+        // answers.
+        if (inspectorErrorCode == null) {
+          emitSelectModeChanged(enabled == 'true', isolateId: params['isolateId']! as String);
+        }
+        _inspector(id, method, <String, Object?>{'enabled': enabled});
+      case 'ext.flutter.inspector.getSelectedSummaryWidget':
+        _inspector(id, method, <String, Object?>{'result': selectedSummaryWidget});
+      case 'ext.flutter.inspector.getParentChain':
+        _inspector(id, method, <String, Object?>{'result': parentChain});
+      case 'ext.flutter.inspector.screenshot':
+        _inspector(id, method, <String, Object?>{'result': screenshotResult});
+      case 'ext.flutter.inspector.disposeGroup':
+        _inspector(id, method, <String, Object?>{'result': null});
       default:
         _send(<String, Object?>{
           'jsonrpc': '2.0',
           'id': id,
           'error': <String, Object?>{'code': -32601, 'message': 'Method not found'},
         });
+    }
+  }
+
+  /// Answers an inspector extension with [result], or with [inspectorErrorCode] when set.
+  void _inspector(Object? id, String method, Map<String, Object?> result) {
+    if (inspectorErrorCode case final code?) {
+      _send(<String, Object?>{
+        'jsonrpc': '2.0',
+        'id': id,
+        'error': <String, Object?>{'code': code, 'message': 'Extension failed'},
+      });
+    } else {
+      _respond(id, <String, Object?>{'type': '_extensionType', 'method': method, ...result});
     }
   }
 
@@ -127,6 +202,47 @@ final class ScriptedVmService {
         'isolate': _isolateRef(isolateId),
       });
 
+  /// Posts a `ToolEvent` stream event of [kind] with [data] from [isolateId], as the framework posts
+  /// `navigate` when a widget is picked.
+  void emitToolEvent(String kind, Map<String, Object?> data, {String isolateId = 'isolates/1'}) =>
+      _event('ToolEvent', <String, Object?>{
+        'kind': EventKind.kExtension,
+        'extensionKind': kind,
+        'extensionData': data,
+        'isolate': _isolateRef(isolateId),
+      });
+
+  /// Posts the `navigate` tool event the inspector posts when a widget is picked.
+  void emitNavigate({
+    String isolateId = 'isolates/1',
+    String source = 'flutter.inspector',
+    String fileUri = 'file:///p/app/lib/main.dart',
+    int line = 14,
+    int column = 18,
+  }) => emitToolEvent('navigate', <String, Object?>{
+    'fileUri': fileUri,
+    'line': line,
+    'column': column,
+    'source': source,
+  }, isolateId: isolateId);
+
+  /// Posts the event the framework posts when the select mode changes. [value] is a `bool`, as the
+  /// framework sends it.
+  void emitSelectModeChanged(Object? value, {String isolateId = 'isolates/1'}) => emitExtension(
+    'Flutter.ServiceExtensionStateChanged',
+    <String, Object?>{'extension': inspectorShowExtension, 'value': value},
+    isolateId: isolateId,
+  );
+
+  /// Posts `IsolateExit` for [isolateId] and forgets the isolate.
+  void exitIsolate(String isolateId) {
+    isolates.remove(isolateId);
+    _event(EventStreams.kIsolate, <String, Object?>{
+      'kind': EventKind.kIsolateExit,
+      'isolate': _isolateRef(isolateId),
+    });
+  }
+
   /// Posts a `Flutter.Error` event with [data].
   void emitFlutterError(Map<String, Object?> data, {String isolateId = 'isolates/1'}) =>
       emitExtension('Flutter.Error', data, isolateId: isolateId);
@@ -144,6 +260,34 @@ final class ScriptedVmService {
   /// Ends the connection from the VM side.
   Future<void> disconnect() => _in.close();
 }
+
+/// A widget node as `getSelectedSummaryWidget` and `getParentChain` serialize it (trimmed to what
+/// the picker reads). A [file] of `null` leaves `creationLocation` out, as for a widget without one.
+Map<String, Object?> inspectorNode(
+  String name, {
+  String valueId = 'inspector-1',
+  String? file = 'file:///p/app/lib/main.dart',
+  int line = 14,
+  int column = 18,
+  bool local = true,
+}) => <String, Object?>{
+  'description': name,
+  'type': 'DiagnosticableTreeNode',
+  'valueId': valueId,
+  'summaryTree': true,
+  'createdByLocalProject': local,
+  if (file != null)
+    'creationLocation': <String, Object?>{'file': file, 'line': line, 'column': column},
+};
+
+/// An entry of the `getParentChain` result: [node] with the siblings the DevTools tree needs, which
+/// the picker ignores.
+Map<String, Object?> inspectorChainEntry(Map<String, Object?> node, {int childIndex = 0}) =>
+    <String, Object?>{
+      'node': node,
+      'children': <Object?>[node],
+      'childIndex': childIndex,
+    };
 
 /// A `Flutter.Error` event of a `RenderFlex` that overflowed by 42 pixels, created by a `Row` at
 /// [file]:14:18, as a debug app on macOS posts it (trimmed: the render object's properties are

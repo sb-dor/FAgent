@@ -4,7 +4,6 @@ import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -35,9 +34,6 @@ abstract class RunViewState with _$RunViewState {
 
     /// The entry point for the next start.
     @Default('lib/main.dart') String target,
-
-    /// The widget the user last picked in the running app; cleared when the project changes.
-    PickedWidget? picked,
 
     /// What the project adds to every `flutter run`: its saved flavor, defines and flags.
     @Default(RunArguments()) RunArguments arguments,
@@ -107,9 +103,6 @@ final class RunController extends StateController<RunViewState> with SequentialC
 
   /// Forgets the chosen device, for when it is gone and there is none to take its place.
   void clearDevice() => setState(state.copyWith(selectedDeviceId: null));
-
-  /// Remembers the widget picked in the app, so later actions do not lose it; `null` forgets it.
-  void setPicked(PickedWidget? picked) => setState(state.copyWith(picked: picked));
 
   /// Empties the project's logs; lines that were already printed do not come back.
   void clearLogs() {

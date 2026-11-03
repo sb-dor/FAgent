@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_probe_result.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
@@ -17,6 +18,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
+import '../../support/scripted_widget_picker_repository.dart';
 
 /// Records when it is disposed, and whether the database was still open at that moment.
 final class _RecordingRun extends ScriptedAppRunRepository {
@@ -148,6 +150,7 @@ void main() {
   late AppCloseRepositoryImpl repository;
   late _RecordingRun run;
   late _RecordingDevices devices;
+  late _RecordingPicker picker;
   late AgentHub hub;
   late List<String> creationEvents;
 
@@ -157,6 +160,7 @@ void main() {
     creationEvents = <String>[];
     run = _RecordingRun(events, database);
     devices = _RecordingDevices(events, database);
+    picker = _RecordingPicker(events);
     hub = AgentHub(
       database: database,
       environment: const ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'}),
@@ -167,6 +171,7 @@ void main() {
       settings: AppSettingsRepositoryImpl(database: database),
       appRun: run,
       devices: devices,
+      widgetPicker: picker,
       appMcpServer: _RecordingAppMcpServer(events, database),
       mcpProbe: _RecordingProbe(events, database),
       agentProbe: _RecordingAgentProbe(events, database),
@@ -179,6 +184,7 @@ void main() {
       await repository.shutdown();
 
       expect(events, <String>[
+        'picker:dispose',
         'run:start',
         'devices:start',
         'run:end',
@@ -189,6 +195,15 @@ void main() {
       ]);
       // The database is closed once everything else is stopped.
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
+    });
+
+    test('ends a widget pick before the runs stop', () async {
+      final pick = picker.pick(1);
+
+      await repository.shutdown();
+
+      expect(await pick, isA<PickCancelled>());
+      expect(events.take(2), <String>['picker:dispose', 'run:start']);
     });
 
     test('shutdown disposes the project creation', () async {
@@ -233,6 +248,7 @@ void main() {
         settings: AppSettingsRepositoryImpl(database: database),
         appRun: run,
         devices: devices,
+        widgetPicker: picker,
         appMcpServer: _RecordingAppMcpServer(events, database),
         mcpProbe: _RecordingProbe(events, database),
         agentProbe: _RecordingAgentProbe(events, database),
@@ -258,6 +274,7 @@ void main() {
           settings: AppSettingsRepositoryImpl(database: database),
           appRun: failing,
           devices: devices,
+          widgetPicker: picker,
           appMcpServer: _RecordingAppMcpServer(events, database),
           mcpProbe: _RecordingProbe(events, database),
           agentProbe: _RecordingAgentProbe(events, database),
@@ -275,6 +292,19 @@ void main() {
       },
     );
   });
+}
+
+/// Records when it is disposed.
+final class _RecordingPicker extends ScriptedWidgetPickerRepository {
+  _RecordingPicker(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> dispose() async {
+    events.add('picker:dispose');
+    await super.dispose();
+  }
 }
 
 final class _FailingRun extends ScriptedAppRunRepository {

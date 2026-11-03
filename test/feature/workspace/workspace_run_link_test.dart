@@ -4,7 +4,6 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/fake_widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
@@ -18,6 +17,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_run_config_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
+import '../../support/scripted_widget_picker_repository.dart';
 
 /// Replays the lines a test preloads.
 final class _ScriptedRun implements IAppRunRepository {
@@ -108,7 +108,7 @@ void main() {
       ..watch(1);
     final actions = RunActionsController(
       runRepository: repository,
-      pickerRepository: FakeWidgetPickerRepositoryImpl(),
+      pickerRepository: ScriptedWidgetPickerRepository(),
     );
     final link = WorkspaceRunLink(
       data: data,
@@ -141,7 +141,7 @@ void main() {
     final run = RunController(repository: repository, configRepository: config)..watch(1);
     final actions = RunActionsController(
       runRepository: repository,
-      pickerRepository: FakeWidgetPickerRepositoryImpl(),
+      pickerRepository: ScriptedWidgetPickerRepository(),
     );
     final link = WorkspaceRunLink(
       data: data,
@@ -183,7 +183,7 @@ void main() {
         )..watch(1);
         final actions = RunActionsController(
           runRepository: repository,
-          pickerRepository: FakeWidgetPickerRepositoryImpl(),
+          pickerRepository: ScriptedWidgetPickerRepository(),
         );
         final link = WorkspaceRunLink(
           data: data,
@@ -300,7 +300,7 @@ void main() {
         )..watch(1);
         final actions = RunActionsController(
           runRepository: repository,
-          pickerRepository: FakeWidgetPickerRepositoryImpl(),
+          pickerRepository: ScriptedWidgetPickerRepository(),
         );
         final link = WorkspaceRunLink(
           data: data,
