@@ -61,6 +61,10 @@ final class CodeTabsController extends ChangeNotifier {
   /// Unsaved open files.
   int get unsavedCount => _tabs.where((tab) => tab.dirty).length;
 
+  /// [setMode] or [setExplorerWidth] were called: [restore] keeps those over the saved ones.
+  bool _modeChosen = false;
+  bool _widthChosen = false;
+
   Timer? _saveTimer;
   bool _disposed = false;
 
@@ -71,8 +75,11 @@ final class CodeTabsController extends ChangeNotifier {
   Future<void> restore() async {
     final saved = await _state.load(_projectId);
     if (_disposed) return;
-    _mode = saved.mode;
-    _explorerWidth = saved.explorerWidth.clamp(minExplorerWidth, maxExplorerWidth);
+    // A choice made while the saved state was loading is newer than it.
+    if (!_modeChosen) _mode = saved.mode;
+    if (!_widthChosen) {
+      _explorerWidth = saved.explorerWidth.clamp(minExplorerWidth, maxExplorerWidth);
+    }
     for (final relative in saved.tabs) {
       final path = p.join(_root, relative);
       if (_tabs.any((tab) => tab.path == path)) continue;
@@ -146,6 +153,7 @@ final class CodeTabsController extends ChangeNotifier {
 
   /// Switches between the chat and the Code view.
   void setMode(CodeViewMode mode) {
+    _modeChosen = true;
     if (mode == _mode) return;
     _mode = mode;
     _changed();
@@ -153,6 +161,7 @@ final class CodeTabsController extends ChangeNotifier {
 
   /// Sets the explorer's width within [minExplorerWidth] and [maxExplorerWidth].
   void setExplorerWidth(double width) {
+    _widthChosen = true;
     final clamped = width.clamp(minExplorerWidth, maxExplorerWidth);
     if (clamped == _explorerWidth) return;
     _explorerWidth = clamped;

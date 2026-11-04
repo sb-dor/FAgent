@@ -5,7 +5,8 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 
 /// {@template workspace_project_header}
-/// The title of a project group: a ▸/▾ chevron and the project name, which collapse the group,
+/// The title of a project group: a ▸/▾ chevron that collapses the group, the project name that
+/// selects the project,
 /// a button for a new chat that shows while the pointer is over the row, and the ⋯ menu button.
 /// {@endtemplate}
 class WorkspaceProjectHeader extends StatefulWidget {
@@ -14,6 +15,7 @@ class WorkspaceProjectHeader extends StatefulWidget {
     required this.project,
     required this.collapsed,
     required this.onToggle,
+    required this.onSelect,
     required this.onNewChat,
     required this.onMenu,
     super.key,
@@ -25,8 +27,11 @@ class WorkspaceProjectHeader extends StatefulWidget {
   /// Whether the chats of the group are hidden.
   final bool collapsed;
 
-  /// Called when the title is pressed.
+  /// Called when the chevron is pressed: the group collapses or opens.
   final VoidCallback onToggle;
+
+  /// Called when the name is pressed: the project is selected.
+  final VoidCallback onSelect;
 
   /// Called when the new chat button is pressed.
   final VoidCallback onNewChat;
@@ -55,7 +60,7 @@ class _WorkspaceProjectHeaderState extends State<WorkspaceProjectHeader> {
         clipBehavior: Clip.antiAlias,
         borderRadius: BorderRadius.circular(AppRadius.small),
         child: InkWell(
-          onTap: widget.onToggle,
+          onTap: widget.onSelect,
           hoverColor: colors.border.withValues(alpha: 0.5),
           child: SizedBox(
             height: 28,
@@ -63,12 +68,14 @@ class _WorkspaceProjectHeaderState extends State<WorkspaceProjectHeader> {
               padding: const EdgeInsets.only(left: 4, right: 4),
               child: Row(
                 children: <Widget>[
-                  Icon(
-                    widget.collapsed ? Icons.chevron_right : Icons.expand_more,
-                    size: 16,
-                    color: colors.muted,
+                  _HeaderButton(
+                    tooltip: widget.collapsed
+                        ? localization.projectExpand
+                        : localization.projectCollapse,
+                    icon: widget.collapsed ? Icons.chevron_right : Icons.expand_more,
+                    onPressed: widget.onToggle,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 2),
                   Expanded(
                     child: Text(
                       widget.project.name,

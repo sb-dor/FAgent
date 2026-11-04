@@ -18,6 +18,8 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sideb
 
 enum _ProjectAction { reveal, settings, remove }
 
+enum _ChatAction { rename, delete }
+
 enum _AddProjectAction { openFolder, newFlutter, clone }
 
 /// One line of the scrolling list: a project title, one of its chats, or a hint.
@@ -60,6 +62,44 @@ class WorkspaceSidebar extends StatefulWidget {
 
 class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
   late final _scope = WorkspaceConfigInhWidget.of(context);
+
+  /// The chat whose title is being edited in place.
+  int? _renaming;
+
+  Future<void> _openChatMenu(ChatSession session, Rect anchor) async {
+    final localization = Localization.of(context);
+    final action = await showAppMenu<_ChatAction>(
+      context: context,
+      anchor: anchor,
+      width: 200,
+      sections: <AppMenuSection<_ChatAction>>[
+        AppMenuSection<_ChatAction>(
+          items: <AppMenuItem<_ChatAction>>[
+            AppMenuItem<_ChatAction>(
+              value: _ChatAction.rename,
+              title: localization.chatRename,
+              icon: Icons.edit_outlined,
+            ),
+            AppMenuItem<_ChatAction>(
+              value: _ChatAction.delete,
+              title: localization.chatDelete,
+              icon: Icons.delete_outline,
+              tone: AppTone.danger,
+            ),
+          ],
+        ),
+      ],
+    );
+    if (!mounted) return;
+    switch (action) {
+      case _ChatAction.rename:
+        setState(() => _renaming = session.id);
+      case _ChatAction.delete:
+        _scope.deleteChat(session).ignore();
+      case null:
+        break;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +185,7 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
           project: project,
           collapsed: collapsed,
           onToggle: () => _scope.dataController.toggleCollapsed(project.id),
+          onSelect: () => _scope.selectProjectFromSidebar(project.id),
           onNewChat: () => _scope.createChat(projectId: project.id),
           onMenu: (anchor) => _openProjectMenu(project, anchor),
         ),
@@ -161,6 +202,13 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
           onTap: () => _scope.dataController
             ..selectProject(session.projectId)
             ..selectSession(session.id),
+          onMenu: (anchor) => _openChatMenu(session, anchor),
+          renaming: _renaming == session.id,
+          onRename: (title) {
+            setState(() => _renaming = null);
+            _scope.renameChat(session.id, title);
+          },
+          onCancelRename: () => setState(() => _renaming = null),
         ),
         _HintItem() => const WorkspaceNoChatsHint(),
       },

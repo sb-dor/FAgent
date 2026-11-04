@@ -36,6 +36,7 @@ import 'package:flutter_code_agent/src/feature/projects/data/projects_repository
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/session_creation/controller/session_creation_controller.dart';
 import 'package:flutter_code_agent/src/feature/session_creation/data/session_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/sessions/controller/chat_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
@@ -86,6 +87,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   late final ProjectCreationController projectCreation;
   late final ProjectRemovalController projectRemovalController;
   late final SessionsController sessionsController;
+
+  /// Renames and deletes chats from the sidebar.
+  late final ChatActionsController chatActionsController;
 
   /// The agents and where they stand: the sidebar names the agent of a chat after them.
   late final AgentsController agentsController;
@@ -150,8 +154,16 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       repository: SessionsRepositoryImpl(
         database: dependencies.database,
         hub: dependencies.agentHub,
+        queuedChats: dependencies.chatQueues,
       ),
     );
+    chatActionsController = ChatActionsController(
+      repository: SessionsRepositoryImpl(
+        database: dependencies.database,
+        hub: dependencies.agentHub,
+        queuedChats: dependencies.chatQueues,
+      ),
+    )..addListener(_onChatAction);
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionCreationController = SessionCreationController(
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
@@ -184,6 +196,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     dataController
       ..addListener(_followSelectedProject)
       ..addListener(_followSkills)
+      ..addListener(_carryCodeMode)
       ..addListener(_draft.onSelectionChanged)
       ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
@@ -197,6 +210,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     dataController
       ..removeListener(_followSelectedProject)
       ..removeListener(_followSkills)
+      ..removeListener(_carryCodeMode)
       ..removeListener(_draft.onSelectionChanged)
       ..chatHandle.removeListener(_draft.onHandleChanged)
       ..dispose();
@@ -218,6 +232,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..dispose();
     projectRemovalController
       ..removeListener(_onProjectRemoved)
+      ..dispose();
+    chatActionsController
+      ..removeListener(_onChatAction)
       ..dispose();
     projectsController.dispose();
     sessionsController.dispose();
@@ -356,6 +373,41 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       Projects$CompletedState(:final projects) => projects.where((p) => p.id == id).firstOrNull,
       _ => null,
     };
+  }
+
+  /// The project whose Chat or Code the window showed last.
+  int? _codeProjectId;
+
+  /// Chat or Code follows the user to another project: the new one opens in the mode the last one
+  /// was in, whatever it was left in itself.
+  void _carryCodeMode() {
+    final projectId = dataController.projectId;
+    if (projectId == _codeProjectId) return;
+    final previous = _codeProjectId == null
+        ? null
+        : Dependencies.of(context).codeViews.existing(_codeProjectId!);
+    _codeProjectId = projectId;
+    final mode = previous?.tabs.mode;
+    if (mode != null) codeWorkspace?.tabs.setMode(mode);
+  }
+
+  /// The sidebar's project name was pressed: its group opens and it is selected; in Chat its newest
+  /// chat opens.
+  void selectProjectFromSidebar(int projectId) {
+    if (dataController.collapsedProjects.contains(projectId)) {
+      dataController.toggleCollapsed(projectId);
+    }
+    if (dataController.projectId == projectId) return;
+    dataController.selectProject(projectId);
+    if (codeWorkspace?.tabs.mode == CodeViewMode.code) return;
+    final newest = switch (sessionsController.state) {
+      Sessions$CompletedState(:final sessions) =>
+        (sessions.where((session) => session.projectId == projectId).toList()
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+            .firstOrNull,
+      _ => null,
+    };
+    if (newest != null) dataController.selectSession(newest.id);
   }
 
   /// The Code view of the selected project; `null` without one.
@@ -615,6 +667,48 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       return false;
     }
     return true;
+  }
+
+  /// Names chat [sessionId] [title] from the sidebar; an empty name changes nothing.
+  void renameChat(int sessionId, String title) => chatActionsController.rename(sessionId, title);
+
+  /// Asks, then deletes [chat] with its history.
+  Future<void> deleteChat(ChatSession chat) async {
+    final localization = Localization.of(context);
+    final title = chat.title.isEmpty ? localization.untitledChat : chat.title;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.large)),
+        content: Text(localization.chatDeleteConfirm(title)),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(localization.cancel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: context.colors.danger),
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(localization.chatDelete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) chatActionsController.delete(chat.id);
+  }
+
+  void _onChatAction() {
+    switch (chatActionsController.state) {
+      case ChatActions$DeletedState(:final sessionId):
+        // The project stays selected: the chat area shows the pick-a-chat hint.
+        if (dataController.sessionId == sessionId) dataController.selectSession(null);
+      case ChatActions$BusyState():
+        _showMessage(Localization.of(context).chatDeleteBusy);
+      case ChatActions$FailedState():
+        _showError();
+      default:
+        break;
+    }
   }
 
   void _onProjectRemoved() {

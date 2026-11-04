@@ -125,7 +125,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('the mode is per project and remembered', (tester) async {
+  testWidgets('the mode follows a project switch and is remembered per project', (tester) async {
     final workspace = await pump(tester);
 
     await tester.tap(segment('Code'));
@@ -133,13 +133,20 @@ void main() {
     workspace.dataController.selectProject(projects.last);
     await settle(tester);
 
-    expect(find.byType(CodeExplorer), findsNothing);
-    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+    // Code stays on for the other project, with its own files.
+    expect(find.byType(CodeExplorer), findsOneWidget);
+    expect(find.text('README.md'), findsOneWidget);
+    // The state is saved 300 ms after the last change, on the test's clock.
+    await tester.pump(const Duration(milliseconds: 400));
+    await settle(tester);
     expect(state.states[projects.first]?.mode, CodeViewMode.code);
+    expect(state.states[projects.last]?.mode, CodeViewMode.code);
 
+    await tester.tap(segment('Chat'));
+    await settle(tester);
     workspace.dataController.selectProject(projects.first);
     await settle(tester);
-    expect(find.byType(CodeExplorer), findsOneWidget);
+    expect(find.byType(CodeExplorer), findsNothing);
     await disposeTestApp(tester, dependencies);
   });
 

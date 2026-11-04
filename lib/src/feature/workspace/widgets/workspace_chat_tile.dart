@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
@@ -24,9 +25,11 @@ AppStatusTone statusTone(SessionStatus status) => switch (status) {
 
 /// {@template workspace_chat_tile}
 /// A chat in the sidebar: a live status dot and the title, which ends with an ellipsis when it
-/// does not fit, and a small label with the agent's name unless the chat is Claude's.
+/// does not fit, and a small label with the agent's name unless the chat is Claude's. A right
+/// click, or the ⋯ that shows while the pointer is over the row, opens [onMenu]; while [renaming]
+/// the title is a field: Enter renames, Esc or a click elsewhere cancels.
 /// {@endtemplate}
-class WorkspaceChatTile extends StatelessWidget {
+class WorkspaceChatTile extends StatefulWidget {
   /// {@macro workspace_chat_tile}
   const WorkspaceChatTile({
     required this.session,
@@ -34,6 +37,10 @@ class WorkspaceChatTile extends StatelessWidget {
     required this.selected,
     required this.status,
     required this.onTap,
+    this.onMenu,
+    this.renaming = false,
+    this.onRename,
+    this.onCancelRename,
     super.key,
   });
 
@@ -52,54 +59,156 @@ class WorkspaceChatTile extends StatelessWidget {
   /// Called when the tile is pressed.
   final VoidCallback onTap;
 
+  /// Opens the chat's menu at the given rect (global); `null` hides the ⋯.
+  final ValueChanged<Rect>? onMenu;
+
+  /// The title is a field to rename the chat.
+  final bool renaming;
+
+  /// Called with the new name when Enter is pressed in the field.
+  final ValueChanged<String>? onRename;
+
+  /// Called when the rename is given up.
+  final VoidCallback? onCancelRename;
+
+  @override
+  State<WorkspaceChatTile> createState() => _WorkspaceChatTileState();
+}
+
+class _WorkspaceChatTileState extends State<WorkspaceChatTile> {
+  bool _hovered = false;
+  TextEditingController? _name;
+  final FocusNode _field = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.renaming) _startRename();
+  }
+
+  @override
+  void didUpdateWidget(WorkspaceChatTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.renaming && !oldWidget.renaming) _startRename();
+    if (!widget.renaming && oldWidget.renaming) {
+      _name?.dispose();
+      _name = null;
+    }
+  }
+
+  void _startRename() {
+    final title = widget.session.title;
+    _name = TextEditingController(text: title)
+      ..selection = TextSelection(baseOffset: 0, extentOffset: title.length);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _field.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _name?.dispose();
+    _field.dispose();
+    super.dispose();
+  }
+
+  void _menuAt(Rect anchor) => widget.onMenu?.call(anchor);
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
-    final title = session.title.isEmpty ? Localization.of(context).untitledChat : session.title;
-    final status = this.status;
+    final localization = Localization.of(context);
+    final title = widget.session.title.isEmpty ? localization.untitledChat : widget.session.title;
+    final status = widget.status;
+    final name = _name;
     return Semantics(
       button: true,
-      selected: selected,
-      child: Material(
-        color: selected ? colors.accentSoft : Colors.transparent,
-        clipBehavior: Clip.antiAlias,
-        borderRadius: BorderRadius.circular(AppRadius.small),
-        child: InkWell(
-          onTap: onTap,
-          hoverColor: colors.border.withValues(alpha: 0.5),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: <Widget>[
-                if (status == null)
-                  const StatusDot(tone: AppStatusTone.none)
-                else
-                  ValueListenableBuilder<SessionStatus>(
-                    valueListenable: status,
-                    builder: (context, value, _) => StatusDot(tone: statusTone(value)),
+      selected: widget.selected,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: Material(
+          color: widget.selected ? colors.accentSoft : Colors.transparent,
+          clipBehavior: Clip.antiAlias,
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          child: InkWell(
+            onTap: name == null ? widget.onTap : null,
+            onSecondaryTapUp: widget.onMenu == null
+                ? null
+                : (details) => _menuAt(
+                    Rect.fromLTWH(details.globalPosition.dx, details.globalPosition.dy, 0, 0),
                   ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-                if (session.agentId != AgentDefinition.claude.id) ...<Widget>[
-                  const SizedBox(width: 8),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 72),
-                    child: Text(
-                      agentName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall!.copyWith(color: colors.muted),
+            hoverColor: colors.border.withValues(alpha: 0.5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              child: Row(
+                children: <Widget>[
+                  if (status == null)
+                    const StatusDot(tone: AppStatusTone.none)
+                  else
+                    ValueListenableBuilder<SessionStatus>(
+                      valueListenable: status,
+                      builder: (context, value, _) => StatusDot(tone: statusTone(value)),
                     ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: name == null
+                        ? Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          )
+                        : CallbackShortcuts(
+                            bindings: <ShortcutActivator, VoidCallback>{
+                              const SingleActivator(LogicalKeyboardKey.escape): () =>
+                                  widget.onCancelRename?.call(),
+                            },
+                            child: TextField(
+                              controller: name,
+                              focusNode: _field,
+                              maxLines: 1,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                              decoration: const InputDecoration(
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                              ),
+                              onSubmitted: (value) => widget.onRename?.call(value),
+                              onTapOutside: (_) => widget.onCancelRename?.call(),
+                            ),
+                          ),
                   ),
+                  if (widget.session.agentId != AgentDefinition.claude.id &&
+                      name == null) ...<Widget>[
+                    const SizedBox(width: 8),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 72),
+                      child: Text(
+                        widget.agentName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall!
+                            .copyWith(color: colors.muted),
+                      ),
+                    ),
+                  ],
+                  if (_hovered && name == null && widget.onMenu != null)
+                    Builder(
+                      builder: (buttonContext) => IconButton(
+                        tooltip: localization.chatActions,
+                        icon: const Icon(Icons.more_horiz),
+                        iconSize: 16,
+                        color: colors.muted,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(width: 22, height: 22),
+                        onPressed: () {
+                          final box = buttonContext.findRenderObject()! as RenderBox;
+                          _menuAt(box.localToGlobal(Offset.zero) & box.size);
+                        },
+                      ),
+                    ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
