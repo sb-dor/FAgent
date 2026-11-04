@@ -211,12 +211,12 @@ void main() {
 
   test('a pending state is saved on dispose', () async {
     CodeTabsController(
-      projectId: 1,
-      root: root,
-      files: files,
-      state: state,
-      changes: changes.stream,
-    )
+        projectId: 1,
+        root: root,
+        files: files,
+        state: state,
+        changes: changes.stream,
+      )
       ..setMode(CodeViewMode.code)
       ..dispose();
     await settle();

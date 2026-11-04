@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_view_state.dart';
@@ -10,6 +11,7 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_com
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:re_editor/re_editor.dart';
 
 import '../../support/memory_code_files_repository.dart';
 import '../../support/memory_code_view_state_repository.dart';
@@ -171,6 +173,26 @@ void main() {
     expect(workspace.codeWorkspace?.tabs.explorerWidth, 180);
     await disposeTestApp(tester, dependencies);
   });
+
+  testWidgets('⌘K still opens chat search with the editor focused', (tester) async {
+    final workspace = await pump(tester);
+    await tester.tap(segment('Code'));
+    await settle(tester);
+    await tester.runAsync(() => workspace.codeWorkspace!.tabs.open('/p/lib/main.dart'));
+    await settle(tester);
+    await tester.tap(find.byType(CodeEditor));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyK);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
+    await settle(tester);
+
+    expect(find.text('Search chats…'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+    await disposeTestApp(tester, dependencies);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
   for (final locale in const <Locale>[Locale('en'), Locale('ru')]) {
     for (final dark in const <bool>[false, true]) {

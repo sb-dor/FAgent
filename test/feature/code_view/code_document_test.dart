@@ -304,8 +304,11 @@ final class _UnreadableFiles implements ICodeFilesRepository {
   Stream<FileChange> watch(String root) => _files.watch(root);
 
   @override
-  Future<FileContent> read(String path) async =>
-      throw io.FileSystemException('Cannot open file', path, const io.OSError('Permission denied', 13));
+  Future<FileContent> read(String path) async => throw io.FileSystemException(
+    'Cannot open file',
+    path,
+    const io.OSError('Permission denied', 13),
+  );
 
   @override
   Future<FileStamp?> stamp(String path) async => null;

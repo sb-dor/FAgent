@@ -36,9 +36,7 @@ void main() {
     tree = FileTreeController(files: files, root: path, changes: changes.stream)..load();
     addTearDown(tree.dispose);
     await tester.pumpWidget(
-      testApp(
-        CodeExplorer(tree: tree, onOpenFile: opened.add, onOpenExternally: external.add),
-      ),
+      testApp(CodeExplorer(tree: tree, onOpenFile: opened.add, onOpenExternally: external.add)),
     );
     await tester.pumpAndSettle();
   }

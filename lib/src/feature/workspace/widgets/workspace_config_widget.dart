@@ -21,6 +21,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat_search/widgets/chat_search_dialog.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
+import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
@@ -361,6 +362,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     return Dependencies.of(context).codeViews
         .workspaceFor(projectId: project.id, root: project.path);
   }
+
+  /// The files of the project in [root] for ⌘P, relative to it and without ignored ones.
+  Future<List<String>> listProjectFiles(String root) =>
+      ProjectFilesRepositoryImpl(environment: Dependencies.of(context).shellEnvironment).list(root);
 
   /// Picks a folder and opens it as a project.
   Future<void> pickAndOpenProject() async {

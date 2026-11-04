@@ -299,8 +299,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
 
   @override
   Future<void> refreshAll() => Future.wait(<Future<void>>[
-    for (final definition in _definitions)
-      _checking[definition.id] ?? refresh(definition.id),
+    for (final definition in _definitions) _checking[definition.id] ?? refresh(definition.id),
   ]);
 
   Future<void> _checkUntilSettled(String agentId) async {
@@ -466,13 +465,10 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
       _signIns[agentId] = started;
       started.outcome = _hub
           .authenticate(agentId, methodId, cancel: started.source.token)
-          .then<(Object, StackTrace)?>(
-            (_) {
-              unawaited(refresh(agentId));
-              return null;
-            },
-            onError: (Object error, StackTrace stackTrace) => (error, stackTrace),
-          )
+          .then<(Object, StackTrace)?>((_) {
+            unawaited(refresh(agentId));
+            return null;
+          }, onError: (Object error, StackTrace stackTrace) => (error, stackTrace))
           .whenComplete(() {
             if (identical(_signIns[agentId], started)) _signIns.remove(agentId);
           });

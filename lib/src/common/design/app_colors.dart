@@ -25,6 +25,13 @@ final class AppColors extends ThemeExtension<AppColors> {
     required this.danger,
     required this.dangerSoft,
     required this.shadow,
+    required this.syntaxKeyword,
+    required this.syntaxType,
+    required this.syntaxFunction,
+    required this.syntaxString,
+    required this.syntaxNumber,
+    required this.syntaxComment,
+    required this.syntaxMeta,
   });
 
   /// Light palette.
@@ -45,6 +52,13 @@ final class AppColors extends ThemeExtension<AppColors> {
     danger: Color(0xFFD93025),
     dangerSoft: Color(0xFFFCE8E6),
     shadow: Color(0x1F000000),
+    syntaxKeyword: Color(0xFFAF00DB),
+    syntaxType: Color(0xFF267F99),
+    syntaxFunction: Color(0xFF795E26),
+    syntaxString: Color(0xFFA31515),
+    syntaxNumber: Color(0xFF098658),
+    syntaxComment: Color(0xFF008000),
+    syntaxMeta: Color(0xFF001080),
   );
 
   /// Dark palette.
@@ -65,6 +79,13 @@ final class AppColors extends ThemeExtension<AppColors> {
     danger: Color(0xFFF06A5F),
     dangerSoft: Color(0xFF3D1D1B),
     shadow: Color(0x66000000),
+    syntaxKeyword: Color(0xFFC586C0),
+    syntaxType: Color(0xFF4EC9B0),
+    syntaxFunction: Color(0xFFDCDCAA),
+    syntaxString: Color(0xFFCE9178),
+    syntaxNumber: Color(0xFFB5CEA8),
+    syntaxComment: Color(0xFF6A9955),
+    syntaxMeta: Color(0xFF9CDCFE),
   );
 
   /// Feed and page background.
@@ -115,6 +136,27 @@ final class AppColors extends ThemeExtension<AppColors> {
   /// Drop shadow of popovers: black in both themes, stronger in dark.
   final Color shadow;
 
+  /// Keywords (`class`, `final`, `if`) in the editor.
+  final Color syntaxKeyword;
+
+  /// Types and classes in the editor.
+  final Color syntaxType;
+
+  /// Function and method names in the editor.
+  final Color syntaxFunction;
+
+  /// String literals in the editor.
+  final Color syntaxString;
+
+  /// Numbers and literals (`true`, `null`) in the editor.
+  final Color syntaxNumber;
+
+  /// Comments in the editor.
+  final Color syntaxComment;
+
+  /// Annotations and other meta in the editor.
+  final Color syntaxMeta;
+
   @override
   AppColors copyWith({
     Color? bg,
@@ -133,6 +175,13 @@ final class AppColors extends ThemeExtension<AppColors> {
     Color? danger,
     Color? dangerSoft,
     Color? shadow,
+    Color? syntaxKeyword,
+    Color? syntaxType,
+    Color? syntaxFunction,
+    Color? syntaxString,
+    Color? syntaxNumber,
+    Color? syntaxComment,
+    Color? syntaxMeta,
   }) => AppColors(
     bg: bg ?? this.bg,
     surface: surface ?? this.surface,
@@ -150,6 +199,13 @@ final class AppColors extends ThemeExtension<AppColors> {
     danger: danger ?? this.danger,
     dangerSoft: dangerSoft ?? this.dangerSoft,
     shadow: shadow ?? this.shadow,
+    syntaxKeyword: syntaxKeyword ?? this.syntaxKeyword,
+    syntaxType: syntaxType ?? this.syntaxType,
+    syntaxFunction: syntaxFunction ?? this.syntaxFunction,
+    syntaxString: syntaxString ?? this.syntaxString,
+    syntaxNumber: syntaxNumber ?? this.syntaxNumber,
+    syntaxComment: syntaxComment ?? this.syntaxComment,
+    syntaxMeta: syntaxMeta ?? this.syntaxMeta,
   );
 
   @override
@@ -172,6 +228,13 @@ final class AppColors extends ThemeExtension<AppColors> {
       danger: Color.lerp(danger, other.danger, t)!,
       dangerSoft: Color.lerp(dangerSoft, other.dangerSoft, t)!,
       shadow: Color.lerp(shadow, other.shadow, t)!,
+      syntaxKeyword: Color.lerp(syntaxKeyword, other.syntaxKeyword, t)!,
+      syntaxType: Color.lerp(syntaxType, other.syntaxType, t)!,
+      syntaxFunction: Color.lerp(syntaxFunction, other.syntaxFunction, t)!,
+      syntaxString: Color.lerp(syntaxString, other.syntaxString, t)!,
+      syntaxNumber: Color.lerp(syntaxNumber, other.syntaxNumber, t)!,
+      syntaxComment: Color.lerp(syntaxComment, other.syntaxComment, t)!,
+      syntaxMeta: Color.lerp(syntaxMeta, other.syntaxMeta, t)!,
     );
   }
 
@@ -194,10 +257,17 @@ final class AppColors extends ThemeExtension<AppColors> {
           warnSoft == other.warnSoft &&
           danger == other.danger &&
           dangerSoft == other.dangerSoft &&
-          shadow == other.shadow;
+          shadow == other.shadow &&
+          syntaxKeyword == other.syntaxKeyword &&
+          syntaxType == other.syntaxType &&
+          syntaxFunction == other.syntaxFunction &&
+          syntaxString == other.syntaxString &&
+          syntaxNumber == other.syntaxNumber &&
+          syntaxComment == other.syntaxComment &&
+          syntaxMeta == other.syntaxMeta;
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll(<Object?>[
     bg,
     surface,
     surfaceAlt,
@@ -214,7 +284,14 @@ final class AppColors extends ThemeExtension<AppColors> {
     danger,
     dangerSoft,
     shadow,
-  );
+    syntaxKeyword,
+    syntaxType,
+    syntaxFunction,
+    syntaxString,
+    syntaxNumber,
+    syntaxComment,
+    syntaxMeta,
+  ]);
 }
 
 /// Access to [AppColors] from the nearest [Theme].

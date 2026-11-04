@@ -18,8 +18,7 @@ final class ChatLoginMethodsController extends StateController<Map<String, List<
   StreamSubscription<Map<String, List<AgentLoginMethod>>>? _subscription;
 
   /// The methods of [agentId]; empty while it is not checked or unknown.
-  List<AgentLoginMethod> methodsOf(String agentId) =>
-      state[agentId] ?? const <AgentLoginMethod>[];
+  List<AgentLoginMethod> methodsOf(String agentId) => state[agentId] ?? const <AgentLoginMethod>[];
 
   /// Starts following the methods. Calling it again changes nothing.
   void watch() => handle(() async {
