@@ -30,7 +30,8 @@ final class _RecordingSending implements IPromptSendingRepository {
     if (hold case final hold?) await hold.future;
     if (failWith case final error?) {
       failWith = null;
-      throw error;
+      // A StateError or a BypassNotAllowedException (an Exception).
+      Error.throwWithStackTrace(error, StackTrace.current);
     }
   }
 

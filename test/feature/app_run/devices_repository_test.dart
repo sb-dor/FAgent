@@ -5,7 +5,6 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/emulator_launcher.d
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/launch_config_reader.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_test/flutter_test.dart';
 

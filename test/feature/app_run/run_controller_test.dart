@@ -691,8 +691,9 @@ void main() {
           ..chooseConfig(web.name);
         await pumpEventQueue();
 
-        controller.choose(deviceId: 'chrome');
-        controller.chooseConfig(null);
+        controller
+          ..choose(deviceId: 'chrome')
+          ..chooseConfig(null);
         await pumpEventQueue();
 
         expect(controller.state.selectedDeviceId, 'chrome');
