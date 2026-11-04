@@ -188,6 +188,15 @@ void main() {
       expect(await repository.busyChats(), 0);
     });
 
+    test('shutdown stops the queues before the agents', () async {
+      queued.events = events;
+      hub.notices.listen(null, onDone: () => events.add('hub:disposed'));
+
+      await repository.shutdown();
+
+      expect(events, containsAllInOrder(<String>['queues:dispose', 'hub:disposed']));
+    });
+
     test('queued messages count as busy', () async {
       queued.sessionIds = <int>{3, 8};
 
@@ -312,10 +321,19 @@ void main() {
   });
 }
 
-/// The chats whose queue holds messages, as the test sets them.
+/// The chats whose queue holds messages, as the test sets them; records when it is disposed
+/// into [events] once a test sets them.
 final class _FixedQueuedChats implements IQueuedChats {
   @override
   Set<int> sessionIds = const <int>{};
+
+  List<String>? events;
+
+  @override
+  void discard(int sessionId) => sessionIds = <int>{...sessionIds}..remove(sessionId);
+
+  @override
+  void dispose() => events?.add('queues:dispose');
 }
 
 /// Records when it is disposed.

@@ -325,11 +325,15 @@ final class AgentHub {
 
   Future<void> _runTurn(LiveSession live, String text) async {
     final turn = Completer<void>();
+    // A turn sent the moment the previous one went `idle` (a queued message, a fast user) waits
+    // for that turn to close: its journal flush and its changed files come first.
+    final previous = live.turn;
     live.turn = turn.future;
     final tokens = <Object?>[];
     var sent = false;
     live.preparingTurn.value = true;
     try {
+      if (previous != null) await previous;
       for (final observer in _observers) {
         tokens.add(
           await observer.beforeTurn(live).catchError((Object error) {
@@ -419,7 +423,8 @@ final class AgentHub {
               );
         }
       }
-      live.turn = null;
+      // A later turn may already have taken its place.
+      if (identical(live.turn, turn.future)) live.turn = null;
       turn.complete();
     }
   }

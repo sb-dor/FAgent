@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:path/path.dart' as p;
@@ -38,8 +39,8 @@ abstract interface class IProjectsRepository {
   /// Every project, most recently opened first. Closes when cancelled.
   Stream<List<Project>> watchProjects();
 
-  /// Forgets project [projectId]; its chats and their events are deleted with it, the folder on
-  /// disk stays.
+  /// Forgets project [projectId]; its chats and their events are deleted with it, and so are the
+  /// messages queued in those chats. The folder on disk stays.
   ///
   /// Throws [ProjectBusyException], and deletes nothing, while an agent works in one of its chats:
   /// the agent would go on editing files with no chat to answer its permission requests, and the
@@ -63,11 +64,13 @@ final class ProjectsRepositoryImpl implements IProjectsRepository {
   ProjectsRepositoryImpl({
     required this._database,
     required this._hub,
+    required this._queuedChats,
     this._runProcess = Process.run,
   });
 
   final AppDatabase _database;
   final AgentHub _hub;
+  final IQueuedChats _queuedChats;
   final ProcessRunner _runProcess;
 
   @override
@@ -91,6 +94,10 @@ final class ProjectsRepositoryImpl implements IProjectsRepository {
       throw ProjectBusyException(projectId);
     }
     await (_database.delete(_database.projectsTable)..where((p) => p.id.equals(projectId))).go();
+    // A paused queue would otherwise stay forever and keep the quit question asking.
+    for (final chat in chats) {
+      _queuedChats.discard(chat.id);
+    }
   }
 
   @override

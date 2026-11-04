@@ -30,7 +30,7 @@ abstract interface class IAppCloseRepository {
   Future<bool> askBeforeQuit();
 
   /// Ends a widget pick, then stops the runs, the devices daemon, a project creation, the agent
-  /// list, the agents, the app's MCP server, the MCP status probes and the agent probes, then
+  /// list, the message queues, the agents, the app's MCP server, the MCP status probes and the agent probes, then
   /// closes the database.
   Future<void> shutdown();
 
@@ -125,6 +125,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     ]);
     // No agent list change may start or close an agent while the hub stops.
     if (_stopAgentList case final stop?) await _stopQuietly('agent list', stop);
+    // No queued message may start a turn while the hub stops the turns.
+    _queuedChats.dispose();
     await _hub.dispose();
     // After the agents, so none of them is cut off mid-call; before the database its tools read.
     await _stopQuietly('app MCP server', _appMcpServer.close);

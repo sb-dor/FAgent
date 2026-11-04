@@ -360,22 +360,31 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// first prompt in a folder asks for trust.
   Future<void> queue() async {
     final draft = textController.text.trim();
-    if (draft.isEmpty) return;
-    if (!widget.project.isTrusted) {
-      final trusted = await ProjectTrustDialog.show(context, widget.project);
-      if (!trusted || !mounted) return;
+    // A second ⌘↵ while the first is being prepared would queue the same text again.
+    if (draft.isEmpty || _queueing) return;
+    _queueing = true;
+    try {
+      if (!widget.project.isTrusted) {
+        final trusted = await ProjectTrustDialog.show(context, widget.project);
+        if (!trusted || !mounted) return;
+      }
+      final prompt = await promptFor(draft);
+      if (!mounted) return;
+      textController.clear();
+      queueController.add(
+        QueuedPrompt(
+          text: prompt.text,
+          resources: prompt.resources,
+          draft: prompt.text == draft ? null : draft,
+        ),
+      );
+    } finally {
+      _queueing = false;
     }
-    final prompt = await promptFor(draft);
-    if (!mounted) return;
-    textController.clear();
-    queueController.add(
-      QueuedPrompt(
-        text: prompt.text,
-        resources: prompt.resources,
-        draft: prompt.text == draft ? null : draft,
-      ),
-    );
   }
+
+  /// [queue] is preparing a message.
+  bool _queueing = false;
 
   /// Takes the queued message at [index] out of the queue and back into the composer.
   void editQueued(int index) {

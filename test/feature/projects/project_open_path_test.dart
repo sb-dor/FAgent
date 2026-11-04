@@ -4,6 +4,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -24,6 +25,7 @@ void main() {
     repository = ProjectsRepositoryImpl(
       database: database,
       hub: AgentHub(database: database, environment: environment),
+      queuedChats: ChatQueueRegistry(create: (_) => throw UnimplementedError()),
       runProcess: (executable, arguments) async {
         runs.add((executable, arguments));
         return ProcessResult(0, exitCode, '', 'failed');

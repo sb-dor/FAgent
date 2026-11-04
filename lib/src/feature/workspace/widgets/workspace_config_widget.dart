@@ -132,6 +132,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     final projectsRepository = ProjectsRepositoryImpl(
       database: dependencies.database,
       hub: dependencies.agentHub,
+      queuedChats: dependencies.chatQueues,
     );
     projectsController = ProjectsController(repository: projectsRepository)..watch();
     projectRemovalController = ProjectRemovalController(repository: projectsRepository)

@@ -19,6 +19,9 @@ abstract class ChatQueueState with _$ChatQueueState {
 
     /// A turn ended with a failure or a stop: nothing goes until the user sends the next one.
     @Default(false) bool paused,
+
+    /// A message is on its way and its turn has not ended: a refused one may still come back.
+    @Default(false) bool sending,
   }) = _ChatQueueState;
 }
 
@@ -55,6 +58,9 @@ final class ChatQueueController extends StateController<ChatQueueState> {
 
   /// How the last turn ended; `true` before any was seen.
   bool _lastEndedNormally = true;
+
+  /// Sends whose turn has not ended yet.
+  int _inFlight = 0;
 
   /// Follows [status], the live status of the chat. Following another one (the chat's runtime
   /// state was replaced) stops following the old; the same one changes nothing.
@@ -95,6 +101,12 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     setState(state.copyWith(items: items, paused: state.paused && items.isNotEmpty));
   }
 
+  /// Forgets every message (the chat was deleted).
+  void clear() {
+    if (isDisposed) return;
+    setState(state.copyWith(items: const <QueuedPrompt>[], paused: false));
+  }
+
   /// The user stopped the running turn: its end pauses the queue. Called before the status
   /// moves.
   void pauseAfterStop() {
@@ -124,8 +136,13 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     final current = _last = status.value;
     if (current == SessionStatus.cancelling) _stopped = true;
     if (previous == null || !previous.isBusy || current.isBusy) return;
-    // A setup that reached `idle` is not a turn: the turn it prepared runs next.
-    if (current == SessionStatus.idle && !_turn.contains(previous)) return;
+    // A setup that reached `idle` is not a turn: the turn it prepared usually runs next, within
+    // the same event. A setup with no turn after it (a retry, a new agent session, the setup
+    // after a sign-in) leaves the chat idle: then the first message goes.
+    if (current == SessionStatus.idle && !_turn.contains(previous)) {
+      if (state.items.isNotEmpty && !state.paused) Timer.run(_sendIfStillIdle);
+      return;
+    }
     final stopped = _stopped;
     _stopped = false;
     _lastEndedNormally = current == SessionStatus.idle && !stopped;
@@ -137,13 +154,22 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     }
   }
 
+  void _sendIfStillIdle() {
+    if (isDisposed || state.paused || _status?.value != SessionStatus.idle) return;
+    _sendFirst();
+  }
+
   /// Sends the first message into this chat.
   void _sendFirst() {
     if (state.items.isEmpty) return;
     final prompt = state.items.first;
-    setState(state.copyWith(items: state.items.sublist(1)));
+    _inFlight++;
+    setState(state.copyWith(items: state.items.sublist(1), sending: true));
     handle(
       () => _repository.send(sessionId, prompt.text, resources: prompt.resources),
+      done: () async {
+        if (--_inFlight == 0) setState(state.copyWith(sending: false));
+      },
       error: (error, stackTrace) async {
         // The chat did not take it (it was busy again): nothing was sent, so it goes back.
         // Any other failure is the chat's own (its status pauses the rest).
@@ -200,7 +226,14 @@ final class ChatQueueRegistry implements IQueuedChats {
 
   void _disposeIfUnused(int sessionId) {
     final queue = _queues[sessionId];
-    if (queue == null || _holders.containsKey(sessionId) || queue.state.items.isNotEmpty) return;
+    if (queue == null ||
+        queue.isDisposed ||
+        _holders.containsKey(sessionId) ||
+        queue.state.items.isNotEmpty ||
+        // A send in flight may still be refused and put back.
+        queue.state.sending) {
+      return;
+    }
     _queues.remove(sessionId);
     queue.dispose();
   }
@@ -211,10 +244,18 @@ final class ChatQueueRegistry implements IQueuedChats {
       if (value.state.items.isNotEmpty) key,
   };
 
-  /// Disposes every queue.
+  @override
+  void discard(int sessionId) {
+    final queue = _queues[sessionId];
+    if (queue == null) return;
+    queue.clear();
+    _disposeIfUnused(sessionId);
+  }
+
+  @override
   void dispose() {
     for (final queue in _queues.values) {
-      queue.dispose();
+      if (!queue.isDisposed) queue.dispose();
     }
     _queues.clear();
     _holders.clear();

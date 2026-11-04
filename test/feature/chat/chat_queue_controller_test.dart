@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
@@ -14,6 +16,9 @@ final class _RecordingSending implements IPromptSendingRepository {
   final List<_Sent> sent = <_Sent>[];
   Error? failWith;
 
+  /// While set, a send waits for it (the turn runs).
+  Completer<void>? hold;
+
   @override
   Future<void> send(
     int sessionId,
@@ -21,6 +26,7 @@ final class _RecordingSending implements IPromptSendingRepository {
     List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
   }) async {
     sent.add((sessionId: sessionId, text: text, resources: resources));
+    if (hold case final hold?) await hold.future;
     if (failWith case final error?) {
       failWith = null;
       throw error;
@@ -104,20 +110,57 @@ void main() {
     expect(sending.sent.map((s) => s.text), <String>['next']);
   });
 
-  test('the setup of a turn reaching idle is not the end of the turn', () async {
-    status.value = SessionStatus.starting;
-    queue.add(_prompt('later'));
+  group('the setup of a turn reaching idle', () {
+    test('is not the end of the turn when the turn runs next: sent once, after it', () async {
+      status.value = SessionStatus.starting;
+      queue.add(_prompt('later'));
 
-    status
-      ..value = SessionStatus.creating
-      ..value = SessionStatus.idle;
-    await settle();
+      // The setup of the prompt the user sent, and its turn right after it.
+      status
+        ..value = SessionStatus.creating
+        ..value = SessionStatus.idle
+        ..value = SessionStatus.running;
+      await settle();
+      await settle();
 
-    expect(sending.sent, isEmpty);
-    expect(queue.state.items, hasLength(1));
+      expect(sending.sent, isEmpty);
+      expect(queue.state.items, hasLength(1));
 
-    await turn();
-    expect(sending.sent.map((s) => s.text), <String>['later']);
+      status.value = SessionStatus.idle;
+      await settle();
+      await settle();
+      expect(sending.sent.map((s) => s.text), <String>['later']);
+    });
+
+    test('without a turn after it (a retry, a new agent session) sends the first', () async {
+      status.value = SessionStatus.starting;
+      queue.add(_prompt('later'));
+
+      status
+        ..value = SessionStatus.loading
+        ..value = SessionStatus.idle;
+      expect(sending.sent, isEmpty);
+      await settle();
+      await settle();
+
+      expect(sending.sent.map((s) => s.text), <String>['later']);
+      expect(queue.state.items, isEmpty);
+    });
+
+    test('without a turn after it, a refused send goes back paused', () async {
+      status.value = SessionStatus.starting;
+      queue.add(_prompt('later'));
+      sending.failWith = StateError('Cannot send a prompt while the session is running');
+
+      status
+        ..value = SessionStatus.loading
+        ..value = SessionStatus.idle;
+      await settle();
+      await settle();
+
+      expect(queue.state.items.map((p) => p.text), <String>['later']);
+      expect(queue.state.paused, isTrue);
+    });
   });
 
   group('error and needsAuth pause', () {
@@ -389,6 +432,56 @@ void main() {
       await settle();
       expect(held.isDisposed, isFalse);
       expect(open(2), same(held));
+    });
+
+    test('a queue nobody shows is kept while its send runs, so a refused one comes back', () async {
+      final hold = sending.hold = Completer<void>();
+      final queue = open(1)..add(_prompt('a'));
+      registry.release(1);
+
+      statuses[1]!.value = SessionStatus.idle;
+      await settle();
+      expect(queue.state.items, isEmpty);
+      expect(queue.isDisposed, isFalse);
+
+      sending.failWith = StateError('Cannot send a prompt while the session is running');
+      hold.complete();
+      await settle();
+      await settle();
+
+      expect(queue.isDisposed, isFalse);
+      expect(queue.state.items.map((p) => p.text), <String>['a']);
+      expect(registry.sessionIds, <int>{1});
+    });
+
+    test('discard forgets the messages of a deleted chat', () async {
+      final unshown = open(1)..add(_prompt('a'));
+      registry.release(1);
+      final shown = open(2)..add(_prompt('b'));
+
+      registry
+        ..discard(1)
+        ..discard(2)
+        ..discard(3);
+      await settle();
+
+      expect(registry.sessionIds, isEmpty);
+      expect(unshown.isDisposed, isTrue);
+      // The chat on screen keeps its (now empty) queue until it goes.
+      expect(shown.isDisposed, isFalse);
+      expect(shown.state.items, isEmpty);
+    });
+
+    test('dispose stops every queue', () async {
+      final queue = open(1)..add(_prompt('a'));
+
+      registry.dispose();
+      statuses[1]!.value = SessionStatus.idle;
+      await settle();
+
+      expect(queue.isDisposed, isTrue);
+      expect(sending.sent, isEmpty);
+      expect(registry.sessionIds, isEmpty);
     });
 
     test('a queue nobody shows is disposed once it has sent everything', () async {

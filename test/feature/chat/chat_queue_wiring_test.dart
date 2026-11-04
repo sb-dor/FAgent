@@ -136,6 +136,22 @@ void main() {
     expect(chatState(tester).queueController.state.items.single.text, 'after that');
   });
 
+  testWidgets('a second ⌘↵ while the first is still being prepared queues nothing more', (
+    tester,
+  ) async {
+    await setUpProject(tester);
+    final live = await show(tester, await newChat(tester));
+    live.status.value = SessionStatus.running;
+    await settle(tester);
+    await tester.enterText(find.byType(TextField), 'once');
+    final chat = chatState(tester);
+
+    await tester.runAsync(() => Future.wait(<Future<void>>[chat.queue(), chat.queue()]));
+    await settle(tester);
+
+    expect(chat.queueController.state.items.map((p) => p.text), <String>['once']);
+  });
+
   testWidgets('Stop pauses the queue', (tester) async {
     await setUpProject(tester);
     final live = await show(tester, await newChat(tester));

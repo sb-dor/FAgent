@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/project_removal_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
@@ -19,7 +20,11 @@ void main() {
   setUp(() async {
     dependencies = testDependencies();
     database = dependencies.database;
-    repository = ProjectsRepositoryImpl(database: database, hub: dependencies.agentHub);
+    repository = ProjectsRepositoryImpl(
+      database: database,
+      hub: dependencies.agentHub,
+      queuedChats: dependencies.chatQueues,
+    );
     project = await database
         .into(database.projectsTable)
         .insert(ProjectsTableCompanion.insert(path: '/work/avera-hotel', name: 'avera-hotel'));
@@ -46,6 +51,28 @@ void main() {
 
       expect(await projectCount(), 0);
       expect(await chatCount(), 0);
+    });
+
+    test('forgets the queued messages of its chats', () async {
+      final queues = dependencies.chatQueues;
+      queues.acquire(chat).add(const QueuedPrompt(text: 'later', resources: []));
+      // The chat is no longer on screen; its paused queue still holds the message.
+      queues.release(chat);
+      expect(queues.sessionIds, <int>{chat});
+
+      await repository.remove(project);
+
+      expect(queues.sessionIds, isEmpty);
+    });
+
+    test('a refused removal keeps the queued messages', () async {
+      final queues = dependencies.chatQueues;
+      queues.acquire(chat).add(const QueuedPrompt(text: 'later', resources: []));
+      (await dependencies.agentHub.session(chat)).status.value = SessionStatus.running;
+
+      await expectLater(repository.remove(project), throwsA(isA<ProjectBusyException>()));
+
+      expect(queues.sessionIds, <int>{chat});
     });
 
     test('deletes a project whose chats were never opened', () async {
