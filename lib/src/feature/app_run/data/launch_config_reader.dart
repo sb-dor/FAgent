@@ -62,8 +62,9 @@ LaunchConfigs parseLaunchConfigs(String text, {required String projectRoot}) {
   if (decoded is! Map) return const LaunchConfigsUnreadable(LaunchUnreadableKind.notAnObject);
   final entries = decoded['configurations'];
   if (entries == null) return const LaunchConfigsRead(<LaunchConfig>[]);
-  if (entries is! List)
+  if (entries is! List) {
     return const LaunchConfigsUnreadable(LaunchUnreadableKind.noConfigurationsList);
+  }
   final root = _trimSlashes(projectRoot);
   return LaunchConfigsRead(<LaunchConfig>[
     for (final entry in entries)
@@ -225,7 +226,7 @@ String _quote(String arg) {
 /// [text] without `//` and `/* */` comments. Comment markers inside strings stay.
 String _stripComments(String text) {
   final out = StringBuffer();
-  var i = text.startsWith('﻿') ? 1 : 0;
+  var i = text.startsWith('\uFEFF') ? 1 : 0;
   while (i < text.length) {
     final char = text[i];
     if (char == '"') {
