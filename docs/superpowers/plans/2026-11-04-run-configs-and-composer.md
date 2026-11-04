@@ -129,3 +129,25 @@
 - [ ] **Step 3: Implement**; `flutter pub get`; update the docs.
 - [ ] **Step 4: Run** `flutter test`, `flutter analyze` — pass, clean. Run the app once (`flutter run -d macos`) only if a package needs native setup, and note it in the report.
 - [ ] **Step 5: Commit** `feat(chat): drop files and images into the chat`.
+
+### Task 6: Our own drop zone (replaces desktop_drop)
+
+Spec §4. Adapted from PlugFox's gist (`e94689b8e708c5ab191764506f5da089`, saved under `.superpowers/sdd/2026-11-04-run-configs-and-composer/gist/`): keep his event shape and overlay idea; the macOS events come from our own native bridge.
+
+**Files:**
+- Create: `lib/src/common/drop_zone/drop_zone_event.dart`, `lib/src/common/drop_zone/drop_zone.dart`, `lib/src/common/widget/drop_zone_overlay.dart`, `macos/Runner/DropZone.swift` (added to the Runner target in `Runner.xcodeproj`)
+- Modify: `macos/Runner/MainFlutterWindow.swift` (install the drop view and the event channel), `lib/src/feature/initialization/` (a `DropZone` in `Dependencies`), `chat_drop_target.dart`, `chat_config_widget.dart` (pass the stream), both arb files, `pubspec.yaml` (remove `desktop_drop`), `docs/superpowers/plans/2026-10-28-ui-foundation-followups.md` (remove the empty-path drop entry)
+- Test: `test/common/drop_zone/drop_zone_test.dart`, `test/feature/chat/chat_drop_target_test.dart`, `test/feature/prompt_sending/image_chips_test.dart` (drive drops through a fake stream)
+
+**Interfaces:**
+- Produces:
+  - `sealed class DropZoneEvent { double dx; double dy; }` with `DropZoneEvent$Enter`, `DropZoneEvent$Over`, `DropZoneEvent$Leave`, `DropZoneEvent$Drop({required List<String> paths, int failed = 0})`; `DropZoneEvent.fromMap(Map<Object?, Object?>)` for the channel's `{type: enter|over|leave|drop, dx, dy, paths?, failed?}`; an unknown `type` → `null` (ignored).
+  - `extension type DropZone._(Stream<DropZoneEvent>) implements Stream<DropZoneEvent>` with `factory DropZone.platform()` (the `EventChannel('flutter_code_agent/drop_zone')`, mapped through `fromMap`, `asBroadcastStream`) and `DropZone.fromStream(Stream<DropZoneEvent>)` for tests.
+  - `ChatDropTarget({required Stream<DropZoneEvent> events, required ValueChanged<List<String>> onDropped, required Widget child})`; the overlay is `DropZoneOverlay` (a `CustomPainter` with a pulsing dashed `RRect`, `context.colors`, `AppRadius.large`, two localized lines).
+- Native: a transparent `NSView` subclass covering the window's content view (autoresizing), `hitTest(_:)` returns `nil`; registered for `.fileURL`, `NSFilePromiseReceiver.readableDraggedTypes`, `.png`, `.tiff`; `draggingEntered`/`Updated` → `.copy` and an `enter`/`over` event; `draggingExited`/`draggingEnded` without a drop → `leave`; `performDragOperation` reads file URLs in order, receives promises and writes image data into `NSTemporaryDirectory()/flutter_code_agent/drops/<uuid>/` (data → `.png`), then sends one `drop` with the paths in drop order and the failed count. Coordinates are flipped to a top-left origin in points.
+
+- [ ] **Step 1: Write the failing tests:** `fromMap` for each type, missing/unknown fields; `ChatDropTarget`: `enter inside shows the overlay`, `over outside hides it`, `leave hides it`, `drop inside passes the paths in order`, `drop outside is ignored`, `a hidden (Offstage/TickerMode off) chat ignores events`, `a drop with no paths and failed > 0 shows the line`; the existing drop tests rewritten onto a fake `StreamController<DropZoneEvent>`.
+- [ ] **Step 2: Run** them — FAIL.
+- [ ] **Step 3: Implement** Dart and Swift; remove `desktop_drop`; `flutter pub get`.
+- [ ] **Step 4: Run** `flutter test`, `flutter analyze` — pass, clean; `flutter build macos --debug` — the Swift compiles. A real drag (Finder, Safari) is checked by hand, not in this task.
+- [ ] **Step 5: Commit** `feat(chat): own drop zone instead of desktop_drop`.
