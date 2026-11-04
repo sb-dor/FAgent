@@ -185,6 +185,9 @@ final class CodeViewRegistry extends ChangeNotifier implements IUnsavedFiles {
   final IDartAnalysisRepository Function(String root)? _analysisFor;
   final Map<int, CodeWorkspace> _workspaces = <int, CodeWorkspace>{};
 
+  /// The Code view of [projectId] if one was made in this run.
+  CodeWorkspace? existing(int projectId) => _workspaces[projectId];
+
   /// The Code view of [projectId] in the folder [root], made on first use; a project whose
   /// folder changed gets a new one.
   CodeWorkspace workspaceFor({required int projectId, required String root}) {

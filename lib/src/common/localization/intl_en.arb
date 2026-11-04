@@ -677,5 +677,7 @@
   "removeFile": "Remove the file",
   "codeAnalyzing": "Analyzing…",
   "codeAnalysisUnavailable": "Dart analysis unavailable",
-  "codeAnalysisRestart": "Restart"
+  "codeAnalysisRestart": "Restart",
+  "projectCollapse": "Collapse",
+  "projectExpand": "Expand"
 }

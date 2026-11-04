@@ -188,6 +188,18 @@ void main() {
     expect(again.explorerWidth, 300);
   });
 
+  test('a mode and width set before the saved state loads are kept', () async {
+    state.states[1] = const CodeViewState(explorerWidth: 300);
+    final tabs = create()
+      ..setMode(CodeViewMode.code)
+      ..setExplorerWidth(200);
+
+    await tabs.restore();
+
+    expect(tabs.mode, CodeViewMode.code);
+    expect(tabs.explorerWidth, 200);
+  });
+
   test('a missing file is dropped on restore', () async {
     state.states[1] = const CodeViewState(
       tabs: <String>['lib/gone.dart', 'pubspec.yaml'],

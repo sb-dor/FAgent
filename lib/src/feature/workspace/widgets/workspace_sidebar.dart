@@ -145,6 +145,7 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
           project: project,
           collapsed: collapsed,
           onToggle: () => _scope.dataController.toggleCollapsed(project.id),
+          onSelect: () => _scope.selectProjectFromSidebar(project.id),
           onNewChat: () => _scope.createChat(projectId: project.id),
           onMenu: (anchor) => _openProjectMenu(project, anchor),
         ),

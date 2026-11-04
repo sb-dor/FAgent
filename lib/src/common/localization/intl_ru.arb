@@ -626,5 +626,7 @@
   "removeFile": "Убрать файл",
   "codeAnalyzing": "Анализ…",
   "codeAnalysisUnavailable": "Анализ Dart недоступен",
-  "codeAnalysisRestart": "Перезапустить"
+  "codeAnalysisRestart": "Перезапустить",
+  "projectCollapse": "Свернуть",
+  "projectExpand": "Развернуть"
 }

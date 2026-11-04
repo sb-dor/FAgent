@@ -184,6 +184,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     dataController
       ..addListener(_followSelectedProject)
       ..addListener(_followSkills)
+      ..addListener(_carryCodeMode)
       ..addListener(_draft.onSelectionChanged)
       ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
@@ -197,6 +198,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     dataController
       ..removeListener(_followSelectedProject)
       ..removeListener(_followSkills)
+      ..removeListener(_carryCodeMode)
       ..removeListener(_draft.onSelectionChanged)
       ..chatHandle.removeListener(_draft.onHandleChanged)
       ..dispose();
@@ -356,6 +358,41 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       Projects$CompletedState(:final projects) => projects.where((p) => p.id == id).firstOrNull,
       _ => null,
     };
+  }
+
+  /// The project whose Chat or Code the window showed last.
+  int? _codeProjectId;
+
+  /// Chat or Code follows the user to another project: the new one opens in the mode the last one
+  /// was in, whatever it was left in itself.
+  void _carryCodeMode() {
+    final projectId = dataController.projectId;
+    if (projectId == _codeProjectId) return;
+    final previous = _codeProjectId == null
+        ? null
+        : Dependencies.of(context).codeViews.existing(_codeProjectId!);
+    _codeProjectId = projectId;
+    final mode = previous?.tabs.mode;
+    if (mode != null) codeWorkspace?.tabs.setMode(mode);
+  }
+
+  /// The sidebar's project name was pressed: its group opens and it is selected; in Chat its newest
+  /// chat opens.
+  void selectProjectFromSidebar(int projectId) {
+    if (dataController.collapsedProjects.contains(projectId)) {
+      dataController.toggleCollapsed(projectId);
+    }
+    if (dataController.projectId == projectId) return;
+    dataController.selectProject(projectId);
+    if (codeWorkspace?.tabs.mode == CodeViewMode.code) return;
+    final newest = switch (sessionsController.state) {
+      Sessions$CompletedState(:final sessions) =>
+        (sessions.where((session) => session.projectId == projectId).toList()
+              ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
+            .firstOrNull,
+      _ => null,
+    };
+    if (newest != null) dataController.selectSession(newest.id);
   }
 
   /// The Code view of the selected project; `null` without one.

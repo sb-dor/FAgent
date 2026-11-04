@@ -159,12 +159,12 @@ void main() {
       await pumpSidebar(tester);
       expect(find.text('Booking screen'), findsOneWidget);
 
-      await tester.tap(find.text('avera-hotel'));
+      await tester.tap(find.byTooltip('Collapse').first);
       await tester.pump();
       expect(find.text('Booking screen'), findsNothing);
       expect(find.text('Dark theme'), findsOneWidget);
 
-      await tester.tap(find.text('avera-hotel'));
+      await tester.tap(find.byTooltip('Expand'));
       await tester.pump();
       expect(find.text('Booking screen'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
@@ -180,7 +180,7 @@ void main() {
       });
       await pumpSidebar(tester);
 
-      await tester.tap(find.text('avera-hotel'));
+      await tester.tap(find.byTooltip('Collapse'));
       await tester.pump();
       expect(find.text('Booking screen'), findsNothing);
 
