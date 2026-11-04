@@ -637,5 +637,8 @@
   "@newProjectChipDone": {"placeholders": {"name": {"type": "String"}}},
   "newProjectChipFailed": "{name}: error",
   "@newProjectChipFailed": {"placeholders": {"name": {"type": "String"}}},
-  "newProjectChipHide": "Hide"
+  "newProjectChipHide": "Hide",
+  "fileCardFolder": "Folder",
+  "fileCardFile": "File",
+  "removeFile": "Remove the file"
 }

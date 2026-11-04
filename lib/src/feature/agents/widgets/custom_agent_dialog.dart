@@ -46,6 +46,7 @@ class _CustomAgentDialogState extends State<CustomAgentDialog> {
     text: widget.initial?.environment.entries.map((e) => '${e.key}=${e.value}').join('\n'),
   );
   late RulesChannel _rules = widget.initial?.rulesChannel ?? RulesChannel.firstMessage;
+
   /// Why the environment lines were refused; `null` until a save finds a bad line.
   String? _environmentProblem;
 

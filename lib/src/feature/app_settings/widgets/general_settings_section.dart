@@ -98,9 +98,8 @@ class GeneralSettingsSection extends StatelessWidget {
                 children: <Widget>[
                   Text(
                     localization.settingsQuitAsk,
-                    style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: context.colors.muted,
-                    ),
+                    style: Theme.of(context).textTheme.bodySmall!
+                        .copyWith(color: context.colors.muted),
                   ),
                   const SizedBox(width: 8),
                   Switch(

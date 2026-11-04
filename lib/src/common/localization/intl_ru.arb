@@ -586,5 +586,8 @@
   "@newProjectChipDone": {"placeholders": {"name": {"type": "String"}}},
   "newProjectChipFailed": "{name}: ошибка",
   "@newProjectChipFailed": {"placeholders": {"name": {"type": "String"}}},
-  "newProjectChipHide": "Скрыть"
+  "newProjectChipHide": "Скрыть",
+  "fileCardFolder": "Папка",
+  "fileCardFile": "Файл",
+  "removeFile": "Убрать файл"
 }

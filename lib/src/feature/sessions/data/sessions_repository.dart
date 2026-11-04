@@ -57,7 +57,9 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
   @override
   Future<void> setAgent(int sessionId, String agentId) async {
     final sessions = _database.sessionsTable;
-    final row = await (_database.select(sessions)..where((s) => s.id.equals(sessionId))).getSingle();
+    final row = await (_database.select(
+      sessions,
+    )..where((s) => s.id.equals(sessionId))).getSingle();
     if (row.acpSessionId != null) {
       throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
     }
@@ -68,11 +70,10 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
       throw StateError('Chat $sessionId is starting; its agent cannot change');
     }
     // Only while the chat still has no agent session, so the new agent never meets the old one's.
-    final changed = await (_database.update(
-      sessions,
-    )..where((s) => s.id.equals(sessionId) & s.acpSessionId.isNull())).write(
-      SessionsTableCompanion(agentId: Value<String>(agentId)),
-    );
+    final changed =
+        await (_database.update(sessions)
+              ..where((s) => s.id.equals(sessionId) & s.acpSessionId.isNull()))
+            .write(SessionsTableCompanion(agentId: Value<String>(agentId)));
     if (changed == 0) {
       throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
     }

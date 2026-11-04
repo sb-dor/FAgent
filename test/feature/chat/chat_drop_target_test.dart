@@ -51,28 +51,19 @@ void main() {
       expect(dropped.single.text, '@lib/src/');
     });
 
-    test('a file outside the project is its absolute path', () {
+    test('a file outside the project is a card, not text', () {
       final path = p.join(outside.path, 'secret.txt');
 
       final dropped = classifyDrop(<String>[path], projectRoot: root.path);
 
       expect(dropped, <DroppedPath>[DropAbsolute(path)]);
-      expect(dropped.single.text, path);
+      expect(dropped.single.text, isNull);
     });
 
-    test('a folder outside the project is its absolute path', () {
+    test('a folder outside the project is a folder card', () {
       final dropped = classifyDrop(<String>[outside.path], projectRoot: root.path);
 
-      expect(dropped, <DroppedPath>[DropAbsolute(outside.path)]);
-    });
-
-    test('an outside path with spaces is wrapped in backticks', () {
-      final path = p.join(outside.path, 'My Notes', 'plan.txt');
-      File(path).createSync(recursive: true);
-
-      final dropped = classifyDrop(<String>[path], projectRoot: root.path);
-
-      expect(dropped.single.text, '`$path`');
+      expect(dropped, <DroppedPath>[DropAbsolute(outside.path, folder: true)]);
     });
 
     test('an image extension is an image, inside the project or not', () {
@@ -225,12 +216,7 @@ void main() {
       expect(find.byType(DropZoneOverlay, skipOffstage: false), findsNothing);
       await send(
         tester,
-        DropZoneEvent$Drop(
-          dx: inside.dx,
-          dy: inside.dy,
-          paths: const <String>['/a'],
-          failed: 1,
-        ),
+        DropZoneEvent$Drop(dx: inside.dx, dy: inside.dy, paths: const <String>['/a'], failed: 1),
       );
 
       expect(dropped, isEmpty);
@@ -386,7 +372,9 @@ void main() {
 
       await dropFiles(tester, <String>[p.join(root.path, 'lib', 'main.dart'), secret]);
 
-      expect(chat.textController.text, 'compare @lib/main.dart $secret ');
+      // The outside file is a card above the field, not text.
+      expect(chat.textController.text, 'compare @lib/main.dart ');
+      expect(chat.files.value.single.path, secret);
       expect(find.byType(SnackBar), findsNothing);
     });
 

@@ -14,20 +14,18 @@ sealed class DroppedPath with _$DroppedPath {
   /// A file or folder inside the project: `@relative`, or `@relative/` for a folder.
   const factory DroppedPath.mention(String relative, {@Default(false) bool folder}) = DropMention;
 
-  /// A file or folder outside the project: its absolute path as plain text.
-  const factory DroppedPath.absolute(String path) = DropAbsolute;
+  /// A file or folder outside the project: a card above the composer's text.
+  const factory DroppedPath.absolute(String path, {@Default(false) bool folder}) = DropAbsolute;
 
   /// An image file (wherever it is): an image chip of the composer.
   const factory DroppedPath.image(String path) = DropImage;
 
   const DroppedPath._();
 
-  /// What goes into the composer text; `null` for an image.
+  /// What goes into the composer text; `null` for an image or a card.
   String? get text => switch (this) {
     DropMention(:final relative, :final folder) => folder ? '@$relative/' : '@$relative',
-    // A path with whitespace would read as several words.
-    DropAbsolute(:final path) => path.contains(RegExp(r'\s')) ? '`$path`' : path,
-    DropImage() => null,
+    DropAbsolute() || DropImage() => null,
   };
 }
 
@@ -48,7 +46,7 @@ DropClassification classifyDrop(List<String> paths, {required String projectRoot
           folder: FileSystemEntity.isDirectorySync(path),
         )
       else
-        DropAbsolute(path),
+        DropAbsolute(path, folder: FileSystemEntity.isDirectorySync(path)),
   ];
 }
 
