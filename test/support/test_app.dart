@@ -20,6 +20,8 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -35,6 +37,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'flutter_version_runner.dart';
 import 'memory_agents_repository.dart';
+import 'memory_code_view_state_repository.dart';
 import 'memory_devices_repository.dart';
 import 'memory_permission_rules_repository.dart';
 import 'memory_project_creation_repository.dart';
@@ -65,12 +68,17 @@ import 'scripted_widget_picker_repository.dart';
 /// test passes its own [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
 /// that fails every server unless the test passes its own [mcpProbe]. Nothing is ever dropped on
 /// the window unless the test passes its own [dropZone] (`DropZone.fromStream` of a controller).
+/// The Code view reads the real file system unless the test passes its own [codeFilesRepository],
+/// and remembers its state in a [MemoryCodeViewStateRepository] unless it passes
+/// [codeViewStateRepository].
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
   IDevicesRepository? devicesRepository,
   IWidgetPickerRepository? widgetPickerRepository,
   IRunConfigRepository? runConfigRepository,
+  ICodeFilesRepository? codeFilesRepository,
+  ICodeViewStateRepository? codeViewStateRepository,
   ISkillsRepository? skillsRepository,
   IChatSkillsRepository? chatSkillsRepository,
   IAgentsRepository? agentsRepository,
@@ -121,6 +129,8 @@ Dependencies testDependencies({
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)
     ..widgetPickerRepository = widgetPickerRepository ?? ScriptedWidgetPickerRepository(step: step)
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
+    ..codeFilesRepository = codeFilesRepository ?? CodeFilesRepositoryImpl(environment: environment)
+    ..codeViewStateRepository = codeViewStateRepository ?? MemoryCodeViewStateRepository()
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()

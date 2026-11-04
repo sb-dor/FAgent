@@ -3,6 +3,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_code_agent/src/common/database/database.steps.dart';
 import 'package:flutter_code_agent/src/common/database/tables/app_settings_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/chat_skill_states_table.dart';
+import 'package:flutter_code_agent/src/common/database/tables/code_view_state_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/custom_agents_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/mcp_servers_table.dart';
 import 'package:flutter_code_agent/src/common/database/tables/projects_table.dart';
@@ -29,6 +30,7 @@ part 'database.g.dart';
     RunConfigsTable,
     ChatSkillStatesTable,
     CustomAgentsTable,
+    CodeViewStateTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -50,7 +52,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -86,6 +88,9 @@ class AppDatabase extends _$AppDatabase {
       },
       from9To10: (m, schema) async {
         await m.addColumn(schema.runConfigs, schema.runConfigs.selectedConfig);
+      },
+      from10To11: (m, schema) async {
+        await m.createTable(schema.codeViewState);
       },
     ),
     // SQLite ignores foreign keys (and ON DELETE CASCADE) unless enabled per connection.
