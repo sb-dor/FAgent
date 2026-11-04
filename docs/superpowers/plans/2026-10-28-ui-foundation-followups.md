@@ -396,4 +396,14 @@ Deferred from the Code view (docs/superpowers/plans/2026-11-04-code-view.md). Pa
   - The remembered tabs and mode are saved 300 ms after the last change; quitting inside that window keeps the previous state (`code_view/controller/code_tabs_controller.dart`)
   - re_editor normalizes mixed line endings to the file's main one on the first edit; a save without edits writes nothing (`code_view/controller/code_document.dart`)
   - FSEvents can report a write to a new file as a create; the Code view only relies on "exists or deleted" (`code_view/data/code_files_repository.dart`)
+  - From the final review (minor):
+    - restoring tabs can race a fresh open; documents opened while the controller is disposed leak (`code_view/controller/code_tabs_controller.dart`)
+    - a double click on **Save all** in the chat bar may not send (the message stays in the composer) (`chat/controller/unsaved_files_gate.dart`)
+    - an agent write in the microseconds between the rename and the stat counts as the app's own; stat the temp file before the rename (`code_view/data/code_files_repository.dart`)
+    - undoing back to the saved text leaves the conflict bar; disposed documents can still notify (`code_view/controller/code_document.dart`)
+    - the tree re-lists a folder for every change in it; large folders are listed on the UI isolate (`code_view/controller/file_tree_controller.dart`, `code_view/data/code_files_repository.dart`)
+    - changing a project's folder drops its unsaved files without asking (`code_view/controller/code_workspace.dart`)
+    - the highlight theme is rebuilt on every editor build (`code_view/widgets/code_editor_view.dart`)
+    - the quit and removal dialogs give only a count, not the file names; the unsaved quit dialog lacks `AppRadius.large` (`app_close/widgets/app_close_guard.dart`)
+  - Check by hand: the native quit handshake while the unsaved dialog is open, ⌘W with the find panel focused, opening a 5 MB file
 
