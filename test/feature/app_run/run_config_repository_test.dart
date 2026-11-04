@@ -135,6 +135,20 @@ void main() {
     expect(seen, <String?>[null, 'Dev']);
   });
 
+  test('saving the selection does not re-emit the arguments', () async {
+    final project = await insertProject('/work/app');
+    await repository.save(project, dev);
+    final seen = <RunArguments>[];
+    final subscription = repository.watch(project).listen(seen.add);
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+
+    await repository.saveSelected(project, 'Prod');
+    await pumpEventQueue();
+
+    expect(seen, const <RunArguments>[dev]);
+  });
+
   test('launchConfigs reads the launch.json of the project folder on every call', () async {
     final root = io.Directory.systemTemp.createTempSync('run_config_repository_test');
     addTearDown(() => root.deleteSync(recursive: true));

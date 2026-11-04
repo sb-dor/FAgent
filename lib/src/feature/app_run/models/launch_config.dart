@@ -82,3 +82,51 @@ final class LaunchCwdOutsideProject extends LaunchUnsupported {
   @override
   int get hashCode => Object.hash(LaunchCwdOutsideProject, cwd);
 }
+
+/// What reading the `launch.json` of a project gave.
+sealed class LaunchConfigs {
+  const LaunchConfigs();
+}
+
+/// The project has no `launch.json`.
+final class LaunchConfigsMissing extends LaunchConfigs {
+  /// Creates the result.
+  const LaunchConfigsMissing();
+}
+
+/// Why a `launch.json` cannot be read.
+enum LaunchUnreadableKind {
+  /// The text is not JSON (even with comments and trailing commas allowed).
+  invalidJson,
+
+  /// The JSON is not an object.
+  notAnObject,
+
+  /// `configurations` is there but is not a list.
+  noConfigurationsList,
+
+  /// The file system refused, or the file is not text.
+  cannotRead,
+}
+
+/// The file exists but cannot be read.
+final class LaunchConfigsUnreadable extends LaunchConfigs {
+  /// Creates the result.
+  const LaunchConfigsUnreadable(this.kind, [this.detail]);
+
+  /// What is wrong.
+  final LaunchUnreadableKind kind;
+
+  /// The message of the parser ([LaunchUnreadableKind.invalidJson]) or of the file system
+  /// ([LaunchUnreadableKind.cannotRead]); `null` for the other kinds.
+  final String? detail;
+}
+
+/// The file was read.
+final class LaunchConfigsRead extends LaunchConfigs {
+  /// Creates the result.
+  const LaunchConfigsRead(this.configs);
+
+  /// The Dart launch configurations in the order of the file.
+  final List<LaunchConfig> configs;
+}

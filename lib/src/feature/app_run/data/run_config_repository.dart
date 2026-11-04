@@ -39,7 +39,9 @@ final class RunConfigRepositoryImpl implements IRunConfigRepository {
   Stream<RunArguments> watch(int projectId) =>
       (_database.select(_database.runConfigsTable)..where((row) => row.projectId.equals(projectId)))
           .watchSingleOrNull()
-          .map((row) => row == null ? const RunArguments() : _decode(row));
+          .map((row) => row == null ? const RunArguments() : _decode(row))
+          // A saved selection changes the row, not the arguments.
+          .distinct();
 
   @override
   Future<void> save(int projectId, RunArguments arguments) => _database

@@ -9,7 +9,6 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_co
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/launch_config_reader.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
@@ -511,6 +510,51 @@ void main() {
       expect((run.state.launchConfigs! as LaunchConfigsRead).configs, <LaunchConfig>[web, prod]);
     });
 
+    test('a restored selection switches the chips once per watch', () async {
+      config = MemoryRunConfigRepository(
+        selected: <int, String>{1: 'Web'},
+        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[web, prod])},
+      );
+      final run = RunController(repository: scripted, configRepository: config)
+        ..choose(deviceId: 'macos');
+      addTearDown(run.dispose);
+
+      run.watch(1);
+      await pumpEventQueue();
+      expect(run.state.selectedDeviceId, 'web-server');
+      expect(run.state.mode, BuildMode.release);
+
+      run.choose(deviceId: 'macos', mode: BuildMode.debug);
+      await run.refreshConfigs();
+      await config.saveSelected(1, 'Web');
+      await pumpEventQueue();
+      expect(run.state.selectedDeviceId, 'macos', reason: 'a re-read leaves the user\'s chip');
+      expect(run.state.mode, BuildMode.debug);
+
+      run.watch(2);
+      await pumpEventQueue();
+      run.watch(1);
+      await pumpEventQueue();
+      expect(run.state.selectedDeviceId, 'web-server', reason: 'a new follow restores again');
+      expect(run.state.mode, BuildMode.release);
+    });
+
+    test('a restored config without a device or mode keeps the chips', () async {
+      config = MemoryRunConfigRepository(
+        selected: <int, String>{1: 'Prod'},
+        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[web, prod])},
+      );
+      final run = RunController(repository: scripted, configRepository: config)
+        ..choose(deviceId: 'macos');
+      addTearDown(run.dispose);
+
+      run.watch(1);
+      await pumpEventQueue();
+
+      expect(run.state.selectedDeviceId, 'macos');
+      expect(run.state.mode, BuildMode.debug);
+    });
+
     test('choosing a config with a device switches the device chip', () async {
       controller.watch(1);
       await pumpEventQueue();
@@ -893,6 +937,35 @@ void main() {
           isA<RunConfigNotStartable>(),
         ),
       );
+    });
+
+    test('a stop while the start arguments are resolved wins: nothing starts', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
+      );
+      addTearDown(actions.dispose);
+      final resolved = Completer<RunStartArguments>();
+
+      actions.start(1, device: _macos, mode: BuildMode.debug, arguments: () => resolved.future);
+      await pumpEventQueue();
+      actions.stop(1);
+      resolved.complete(const RunStartArguments());
+      await Future<void>.delayed(_step * 10);
+
+      expect(repository.starts, isEmpty);
+      expect(repository.currentRun(1), isA<RunIdle>());
+
+      actions.start(
+        1,
+        device: _macos,
+        mode: BuildMode.debug,
+        arguments: () async => const RunStartArguments(),
+      );
+      await Future<void>.delayed(_step * 10);
+      expect(repository.starts, hasLength(1), reason: 'the next start is not blocked');
     });
 
     group('picking', () {

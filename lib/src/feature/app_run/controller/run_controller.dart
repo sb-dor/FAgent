@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/launch_config_reader.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
@@ -70,6 +69,13 @@ final class RunController extends StateController<RunViewState> with SequentialC
   StreamSubscription<String?>? _selectedSubscription;
   StreamSubscription<LogEntry>? _logsSubscription;
 
+  /// Whether this follow still has to switch the chips to the restored configuration: set by
+  /// [watch], done once the stored selection and the first read of the file are both in.
+  bool _restorePending = false;
+
+  /// Whether the stored selection of this follow has arrived.
+  bool _selectionArrived = false;
+
   /// Per project: the newest line the user cleared; a replay never brings those back.
   final Map<int, int> _clearedThrough = <int, int>{};
 
@@ -80,10 +86,13 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// first running device once the devices are known, and never overrides a choice), and the chosen
   /// device survives a change of project. The mode and the target (a per-project path) go back to
   /// `debug` and `lib/main.dart`. The project's selected configuration and its `launch.json` are
-  /// read.
+  /// read; once both are in, a selected configuration with a device or a mode switches the chips to
+  /// them, once for this follow (later reads leave the chips to the user).
   void watch(int projectId) => handle(() async {
     if (state.projectId == projectId && _runSubscription != null) return;
     await _cancel();
+    _restorePending = true;
+    _selectionArrived = false;
     setState(RunViewState(projectId: projectId, selectedDeviceId: state.selectedDeviceId));
     _runSubscription = _repository.watchRun(projectId).listen((run) {
       if (state.projectId == projectId) setState(state.copyWith(run: run));
@@ -93,8 +102,10 @@ final class RunController extends StateController<RunViewState> with SequentialC
     });
     _selectedSubscription = _configRepository.watchSelected(projectId).listen((name) {
       if (state.projectId != projectId) return;
+      _selectionArrived = true;
       setState(state.copyWith(selectedConfig: name));
       _dropVanished(projectId);
+      _restoreChips(projectId);
     });
     _logsSubscription = _repository.logs(projectId).listen((entry) {
       if (state.projectId != projectId || entry.seq <= (_clearedThrough[projectId] ?? -1)) return;
@@ -126,6 +137,8 @@ final class RunController extends StateController<RunViewState> with SequentialC
   void chooseConfig(String? name) => handle(() async {
     final projectId = state.projectId;
     if (projectId == null) return;
+    // The user's choice replaces the restored one.
+    _restorePending = false;
     setState(state.copyWith(selectedConfig: name));
     final config = name == null ? null : _configNamed(state.launchConfigs, name);
     if (config != null && (config.deviceId != null || config.mode != null)) {
@@ -140,8 +153,11 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// Default is the chosen [RunViewState.target] with the project's [RunViewState.arguments]. A
   /// selected configuration is read from `launch.json` right now, so an edit of the file counts
   /// without the menu being opened; the start is then the configuration's own target, flavor,
-  /// defines, flags and environment, without the Default arguments. A configuration that is gone
-  /// from the file starts Default and the choice goes back to Default.
+  /// defines, flags and environment, without the Default arguments. Its `deviceId` and
+  /// `flutterMode` are not applied here: they switch the chips when the configuration is chosen
+  /// ([chooseConfig]) or restored ([watch]), and the chips are the user's after that; the device
+  /// and the mode of a start are the chips'. A configuration that is gone from the file starts
+  /// Default and the choice goes back to Default.
   ///
   /// Throws [RunConfigNotStartable] when the configuration cannot run or the file cannot be read.
   Future<RunStartArguments> startArgumentsFor(int projectId) async {
@@ -172,6 +188,21 @@ final class RunController extends StateController<RunViewState> with SequentialC
     if (state.projectId != projectId) return;
     setState(state.copyWith(launchConfigs: configs));
     _dropVanished(projectId);
+    _restoreChips(projectId);
+  }
+
+  /// Switches the chips to the device and the mode of the restored configuration, once per
+  /// [watch]: when the stored selection and the first read of the file are both in. Only the fields
+  /// the configuration sets change.
+  void _restoreChips(int projectId) {
+    if (!_restorePending || state.projectId != projectId) return;
+    if (!_selectionArrived || state.launchConfigs == null) return;
+    _restorePending = false;
+    final name = state.selectedConfig;
+    final config = name == null ? null : _configNamed(state.launchConfigs, name);
+    if (config != null && (config.deviceId != null || config.mode != null)) {
+      choose(deviceId: config.deviceId, mode: config.mode);
+    }
   }
 
   /// Goes back to Default when the selected configuration is not in the file read last (or there
