@@ -29,6 +29,7 @@ void main() {
   Widget composer({
     required bool canSend,
     required bool canStop,
+    bool stopping = false,
     VoidCallback? onSend,
     VoidCallback? onStop,
     List<String>? mentionFiles,
@@ -46,6 +47,7 @@ void main() {
       focusNode: focus,
       canSend: canSend,
       canStop: canStop,
+      stopping: stopping,
       onSend: onSend ?? () {},
       onStop: onStop ?? () {},
       mentionFiles: mentionFiles,
@@ -219,6 +221,24 @@ void main() {
     await tester.pumpWidget(composer(canSend: false, canStop: true, onStop: () => stopped = true));
     await tester.tap(find.byTooltip('Stop'));
     expect(stopped, isTrue);
+  });
+
+  testWidgets('while the turn stops the button spins and cannot be pressed', (tester) async {
+    var stopped = 0;
+    await tester.pumpWidget(
+      composer(canSend: false, canStop: false, stopping: true, onStop: () => stopped++),
+    );
+
+    final button = find.byTooltip('Stopping…');
+    expect(button, findsOneWidget);
+    expect(
+      find.descendant(of: button, matching: find.byType(CircularProgressIndicator)),
+      findsOneWidget,
+    );
+    expect(tester.widget<IconButton>(find.byType(IconButton)).onPressed, isNull);
+    await tester.tap(button);
+    expect(stopped, 0);
+    expect(find.byTooltip('Send'), findsNothing);
   });
 
   testWidgets('the toolbar sits under the text field next to the send button', (tester) async {

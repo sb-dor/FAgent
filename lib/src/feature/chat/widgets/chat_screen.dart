@@ -126,6 +126,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         canStop:
                             view.status == SessionStatus.running ||
                             view.status == SessionStatus.awaitingPermission,
+                        stopping: view.status == SessionStatus.cancelling,
                         onSend: _scope.send,
                         onStop: _scope.stop,
                         mentionFiles: _scope.fileMentionController.files,

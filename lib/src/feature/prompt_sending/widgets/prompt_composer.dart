@@ -34,6 +34,7 @@ class PromptComposer extends StatefulWidget {
     required this.canStop,
     required this.onSend,
     required this.onStop,
+    this.stopping = false,
     this.mentionFiles,
     this.onMentionStart,
     this.toolbar = const <Widget>[],
@@ -58,6 +59,9 @@ class PromptComposer extends StatefulWidget {
 
   /// A turn can be stopped now.
   final bool canStop;
+
+  /// A stop is in progress: the button stays a Stop button, disabled, with a spinner.
+  final bool stopping;
 
   /// Sends the text.
   final VoidCallback onSend;
@@ -325,7 +329,16 @@ class _PromptComposerState extends State<PromptComposer> {
     return KeyEventResult.handled;
   }
 
-  Widget _sendButton(GeneratedLocalization localization) => widget.canStop
+  Widget _sendButton(GeneratedLocalization localization) => widget.stopping
+      ? IconButton.filledTonal(
+          tooltip: localization.statusCancelling,
+          onPressed: null,
+          icon: const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        )
+      : widget.canStop
       ? IconButton.filledTonal(
           tooltip: localization.stop,
           onPressed: widget.onStop,
