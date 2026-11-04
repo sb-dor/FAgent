@@ -265,6 +265,28 @@ void main() {
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
     });
 
+    test('stops the Code views (their analysis servers) before the database closes', () async {
+      repository = AppCloseRepositoryImpl(
+        hub: hub,
+        database: database,
+        settings: AppSettingsRepositoryImpl(database: database),
+        appRun: run,
+        devices: devices,
+        widgetPicker: picker,
+        appMcpServer: _RecordingAppMcpServer(events, database),
+        mcpProbe: _RecordingProbe(events, database),
+        agentProbe: _RecordingAgentProbe(events, database),
+        projectCreation: _RecordingCreation(creationEvents),
+        stopCodeViews: () async => events.add('codeViews:stop'),
+        queuedChats: queued,
+      );
+
+      await repository.shutdown();
+
+      expect(events, contains('codeViews:stop'));
+      await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
+    });
+
     test('stops following the agent list before the agents stop', () async {
       hub.notices.listen(null, onDone: () => events.add('hub:disposed'));
       repository = AppCloseRepositoryImpl(

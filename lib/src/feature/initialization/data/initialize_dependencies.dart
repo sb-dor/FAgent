@@ -27,6 +27,7 @@ import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_contro
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -182,6 +183,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   'Create code views': (dependencies) => dependencies.codeViews = CodeViewRegistry(
     files: dependencies.codeFilesRepository,
     state: dependencies.codeViewStateRepository,
+    analysisFor: (root) =>
+        DartAnalysisRepositoryImpl(root: root, environment: dependencies.shellEnvironment),
   ),
   // The SDK path, the Flutter version and the fvm version are real; the doctor report is made up.
   'Create Flutter SDK repository': (dependencies) =>
