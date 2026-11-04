@@ -31,6 +31,7 @@ import 'package:flutter_code_agent/src/feature/project_trust/widgets/project_tru
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/skill_prompt.dart';
@@ -167,6 +168,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     const <ComposerImage>[],
   );
 
+  /// The files and folders from outside the project that go with the next message, as cards of
+  /// the composer.
+  final ValueNotifier<List<ComposerFile>> files = ValueNotifier<List<ComposerFile>>(
+    const <ComposerFile>[],
+  );
+
   /// [ChatConfigWidget.runContext], as something the composer can listen to.
   late final ValueNotifier<RunMentions?> runContext = ValueNotifier<RunMentions?>(
     widget.runContext,
@@ -250,6 +257,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     textController.dispose();
     composerFocus.dispose();
     images.dispose();
+    files.dispose();
     runContext.dispose();
     chatSkills.dispose();
     super.dispose();
@@ -356,34 +364,57 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// text (or `Use the <name> skill.`) with `SKILL.md` embedded as a resource: the agent does not
   /// find those skills on disk. The project's own skills (`.claude/skills`) and every other text
   /// go as typed, as does a command whose `SKILL.md` cannot be read. Mentioned files follow as
-  /// `resource_link`s ([resourcesFor]), then, [withImages], the composer's [images] as `image`
-  /// blocks.
+  /// `resource_link`s ([resourcesFor]), then, [withImages], the composer's [files] as links and its
+  /// [images] as `image` blocks.
   Future<({String text, List<Map<String, Object?>> resources})> promptFor(
     String text, {
     bool withImages = true,
   }) async {
     // Taken now: the caller clears the images it sent.
-    final pictures = <Map<String, Object?>>[
-      if (withImages)
+    final attached = <Map<String, Object?>>[
+      if (withImages) ...<Map<String, Object?>>[
+        for (final file in files.value) file.toBlock(),
         for (final image in images.value) image.toBlock(),
+      ],
     ];
-    final files = <Map<String, Object?>>[...await resourcesFor(text), ...pictures];
+    final blocks = <Map<String, Object?>>[...await resourcesFor(text), ...attached];
     final command = leadingCommand(text);
     final skill = command == null ? null : skillsOfChat.runnable(command.name);
     if (command == null || skill == null || skill.source == SkillSource.project) {
-      return (text: text, resources: files);
+      return (text: text, resources: blocks);
     }
     final String markdown;
     try {
       markdown = await skillTextController.read(skill.id, projectRoot: projectRoot);
     } on Object {
-      return (text: text, resources: files);
+      return (text: text, resources: blocks);
     }
     return (
       text: skillPromptText(skill.name, command.rest),
-      resources: <Map<String, Object?>>[skillResource(skill.name, markdown), ...files],
+      resources: <Map<String, Object?>>[skillResource(skill.name, markdown), ...blocks],
     );
   }
+
+  /// Takes [sent] out of [files]; one added while the message was prepared stays.
+  void _clearFiles(List<ComposerFile> sent) {
+    if (sent.isEmpty) return;
+    files.value = <ComposerFile>[
+      for (final file in files.value)
+        if (!sent.contains(file)) file,
+    ];
+  }
+
+  /// Adds [file] as a card; one already there is not added twice.
+  void _addFile(ComposerFile file) {
+    if (files.value.contains(file)) return;
+    files.value = <ComposerFile>[...files.value, file];
+  }
+
+  /// Takes the card [file] out (its ✕).
+  void removeFile(ComposerFile file) => files.value = <ComposerFile>[
+    for (final kept in files.value)
+      if (kept != file) kept,
+  ];
 
   /// Takes [sent] out of [images]; one added while the message was prepared stays.
   void _clearImages(List<ComposerImage> sent) {
@@ -404,18 +435,22 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Sends the composer text ([promptFor]); the first prompt in a folder asks for trust.
   Future<void> send() async {
     final text = textController.text.trim();
-    // Images alone are a message too.
-    if ((text.isEmpty && images.value.isEmpty) || _refuseImagesForAgent()) return;
+    // Images or cards alone are a message too.
+    if ((text.isEmpty && images.value.isEmpty && files.value.isEmpty) || _refuseImagesForAgent()) {
+      return;
+    }
     if (unsavedGate.hold(send)) return;
     if (!widget.project.isTrusted) {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
     }
     final attached = images.value;
+    final cards = files.value;
     final prompt = await promptFor(text);
     if (!mounted) return;
     textController.clear();
     _clearImages(attached);
+    _clearFiles(cards);
     promptController.send(sessionId, prompt.text, resources: prompt.resources);
   }
 
@@ -424,7 +459,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   Future<void> queue() async {
     final draft = textController.text.trim();
     // A second ⌘↵ while the first is being prepared would queue the same text again.
-    if ((draft.isEmpty && images.value.isEmpty) || _queueing || _refuseImagesForAgent()) return;
+    if ((draft.isEmpty && images.value.isEmpty && files.value.isEmpty) ||
+        _queueing ||
+        _refuseImagesForAgent()) {
+      return;
+    }
     if (unsavedGate.hold(queue)) return;
     _queueing = true;
     try {
@@ -433,17 +472,20 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         if (!trusted || !mounted) return;
       }
       final attached = images.value;
-      // The images are kept as such; their blocks are built when the message goes.
+      final cards = files.value;
+      // The images and cards are kept as such; their blocks are built when the message goes.
       final prompt = await promptFor(draft, withImages: false);
       if (!mounted) return;
       textController.clear();
       _clearImages(attached);
+      _clearFiles(cards);
       queueController.add(
         QueuedPrompt(
           text: prompt.text,
           resources: prompt.resources,
           draft: prompt.text == draft ? null : draft,
           images: attached,
+          files: cards,
         ),
       );
     } finally {
@@ -460,6 +502,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final prompt = queueController.edit(index);
     if (prompt == null) return;
     if (prompt.typed.isNotEmpty) insertDraft(prompt.typed);
+    prompt.files.forEach(_addFile);
     if (prompt.images.isEmpty) return;
     final all = <ComposerImage>[...images.value, ...prompt.images];
     images.value = all.take(kMaxComposerImages).toList();
@@ -565,6 +608,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final texts = <String>[for (final path in dropped) ?path.text];
     if (texts.isNotEmpty) _insertAtCaret(texts.join(' '));
     if (dropped.any((path) => path is DropMention)) refreshFiles();
+    for (final path in dropped) {
+      if (path case DropAbsolute(:final path, :final folder)) {
+        _addFile(ComposerFile(path: path, folder: folder));
+      }
+    }
     composerFocus.requestFocus();
     await _attachImageFiles(<String>[
       for (final path in dropped)

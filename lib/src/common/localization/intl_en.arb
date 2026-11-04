@@ -671,5 +671,8 @@
   "saveAll": "Save all",
   "chatUnsavedFiles": "{count, plural, =1{1 unsaved file — the agent sees the version on disk} other{{count} unsaved files — the agent sees the version on disk}}",
   "@chatUnsavedFiles": {"placeholders": {"count": {"type": "int"}}},
-  "chatSendAnyway": "Send anyway"
+  "chatSendAnyway": "Send anyway",
+  "fileCardFolder": "Folder",
+  "fileCardFile": "File",
+  "removeFile": "Remove the file"
 }

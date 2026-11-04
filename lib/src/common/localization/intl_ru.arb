@@ -620,5 +620,8 @@
   "saveAll": "Сохранить все",
   "chatUnsavedFiles": "{count, plural, one{{count} несохранённый файл — агент видит версию с диска} few{{count} несохранённых файла — агент видит версию с диска} many{{count} несохранённых файлов — агент видит версию с диска} other{{count} несохранённого файла — агент видит версию с диска}}",
   "@chatUnsavedFiles": {"placeholders": {"count": {"type": "int"}}},
-  "chatSendAnyway": "Отправить так"
+  "chatSendAnyway": "Отправить так",
+  "fileCardFolder": "Папка",
+  "fileCardFile": "Файл",
+  "removeFile": "Убрать файл"
 }

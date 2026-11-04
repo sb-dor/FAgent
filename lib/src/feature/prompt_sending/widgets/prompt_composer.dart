@@ -7,11 +7,13 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_commands.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
@@ -53,6 +55,8 @@ class PromptComposer extends StatefulWidget {
     this.chatSkills = ChatSkills.empty,
     this.images = const <ComposerImage>[],
     this.onRemoveImage,
+    this.files = const <ComposerFile>[],
+    this.onRemoveFile,
     this.onPasteImage,
     super.key,
   });
@@ -121,6 +125,13 @@ class PromptComposer extends StatefulWidget {
 
   /// Removes the image at the index (its chip's ✕); `null` hides the ✕.
   final ValueChanged<int>? onRemoveImage;
+
+  /// The files and folders from outside the project that go with the message, as cards above the
+  /// text.
+  final List<ComposerFile> files;
+
+  /// Removes a card (its ✕); `null` hides the ✕.
+  final ValueChanged<ComposerFile>? onRemoveFile;
 
   /// ⌘V was pressed: the clipboard may hold an image. `null` pastes text only.
   final VoidCallback? onPasteImage;
@@ -377,7 +388,10 @@ class _PromptComposerState extends State<PromptComposer> {
   }
 
   /// The field holds text or the message has images: there is something to send.
-  bool get _hasContent => widget.controller.text.trim().isNotEmpty || widget.images.isNotEmpty;
+  bool get _hasContent =>
+      widget.controller.text.trim().isNotEmpty ||
+      widget.images.isNotEmpty ||
+      widget.files.isNotEmpty;
 
   /// `⌘↵ Queue` next to the button while the agent works and there is something to queue.
   Widget _queueHint(GeneratedLocalization localization) => ListenableBuilder(
@@ -436,6 +450,14 @@ class _PromptComposerState extends State<PromptComposer> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                // In the field's tap region too: removing a card keeps the caret.
+                if (widget.files.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: FileChips(files: widget.files, onRemove: widget.onRemoveFile),
+                    ),
+                  ),
                 // In the field's tap region too: removing an image keeps the caret.
                 if (widget.images.isNotEmpty)
                   TextFieldTapRegion(

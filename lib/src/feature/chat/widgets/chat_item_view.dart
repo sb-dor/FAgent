@@ -9,6 +9,8 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart'
 import 'package:flutter_code_agent/src/feature/chat/widgets/plan_card.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_call_card.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/widgets/turn_files_card.dart';
@@ -93,8 +95,14 @@ class ChatItemView extends StatelessWidget {
                         ),
                       ),
                     ),
-                  if (images.isNotEmpty) ...<Widget>[
+                  if (attachedFiles(text, resources) case final files
+                      when files.isNotEmpty) ...<Widget>[
                     if (text.isNotEmpty) const SizedBox(height: 8),
+                    FileChips(files: files),
+                  ],
+                  if (images.isNotEmpty) ...<Widget>[
+                    if (text.isNotEmpty || attachedFiles(text, resources).isNotEmpty)
+                      const SizedBox(height: 8),
                     _MessageImages(images: images),
                   ],
                 ],
