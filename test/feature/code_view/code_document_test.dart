@@ -145,6 +145,67 @@ void main() {
     });
   });
 
+  group('final review', () {
+    test('I1: keepMine covers only the change it was given; a second one asks again', () async {
+      final document = await CodeDocument.open(path, files: files);
+      type(document, 'mine ');
+      files.put(path, 'theirs\n', notify: false);
+      await document.onDiskChange(FileChangeKind.modified);
+      document.keepMine();
+
+      files.put(path, 'theirs again\n', notify: false);
+      await document.onDiskChange(FileChangeKind.modified);
+
+      expect(document.changedOnDisk, isTrue);
+      await expectLater(document.save(), throwsA(isA<FileChangedOnDiskException>()));
+      expect(files.files[path], 'theirs again\n');
+    });
+
+    test('I2: typing during a reload keeps the typing and marks the conflict', () async {
+      final slow = _SlowFiles(files, readDelay: const Duration(milliseconds: 20));
+      final document = await CodeDocument.open(path, files: slow);
+      files.put(path, 'agent\n', notify: false);
+
+      final reloading = document.onDiskChange(FileChangeKind.modified);
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      type(document, 'typed ');
+      await reloading;
+
+      expect(document.editing.text, 'typed one\ntwo\n');
+      expect(document.dirty, isTrue);
+      expect(document.changedOnDisk, isTrue);
+    });
+
+    test('I3: the line break is the one most lines use', () {
+      expect(CodeDocument.lineBreakOf('a\r\nb\nc\nd\n'), TextLineBreak.lf);
+      expect(CodeDocument.lineBreakOf('a\r\nb\r\nc\n'), TextLineBreak.crlf);
+      expect(CodeDocument.lineBreakOf('one line'), TextLineBreak.lf);
+    });
+
+    test('M6: saving a deleted file that came back asks instead of overwriting it', () async {
+      final document = await CodeDocument.open(path, files: files);
+      files.remove(path, notify: false);
+      await document.onDiskChange(FileChangeKind.deleted);
+      files.put(path, 'recreated\n', notify: false);
+
+      await expectLater(document.save(), throwsA(isA<FileChangedOnDiskException>()));
+      expect(files.files[path], 'recreated\n');
+
+      await document.save(overwrite: true);
+      expect(files.files[path], 'one\ntwo\n');
+    });
+
+    test('M7: a conflict found while saving shows on the document', () async {
+      final document = await CodeDocument.open(path, files: files);
+      type(document, 'x');
+      files.put(path, 'theirs\n', notify: false);
+
+      await expectLater(document.save(), throwsA(isA<FileChangedOnDiskException>()));
+
+      expect(document.changedOnDisk, isTrue);
+    });
+  });
+
   group('save', () {
     test('writes and records the new stamp', () async {
       final document = await CodeDocument.open(path, files: files);
@@ -322,9 +383,12 @@ final class _UnreadableFiles implements ICodeFilesRepository {
 
 /// [MemoryCodeFilesRepository] whose writes wait a little, so a change can arrive during one.
 final class _SlowFiles implements ICodeFilesRepository {
-  _SlowFiles(this._files);
+  _SlowFiles(this._files, {this.readDelay = Duration.zero});
 
   final MemoryCodeFilesRepository _files;
+
+  /// How long a read waits before it reads.
+  final Duration readDelay;
 
   @override
   Future<List<FileNode>> list(String root, String dir) => _files.list(root, dir);
@@ -333,7 +397,11 @@ final class _SlowFiles implements ICodeFilesRepository {
   Stream<FileChange> watch(String root) => _files.watch(root);
 
   @override
-  Future<FileContent> read(String path) => _files.read(path);
+  Future<FileContent> read(String path) async {
+    final content = await _files.read(path);
+    await Future<void>.delayed(readDelay);
+    return content;
+  }
 
   @override
   Future<FileStamp?> stamp(String path) => _files.stamp(path);

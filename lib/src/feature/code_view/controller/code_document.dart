@@ -85,8 +85,11 @@ final class CodeDocument extends ChangeNotifier {
   /// The line break the file mostly uses, so new lines match it.
   @visibleForTesting
   static TextLineBreak lineBreakOf(String text) {
-    if (text.contains('\r\n')) return TextLineBreak.crlf;
-    if (text.contains('\r')) return TextLineBreak.cr;
+    final crlf = '\r\n'.allMatches(text).length;
+    final lf = '\n'.allMatches(text).length - crlf;
+    final cr = '\r'.allMatches(text).length - crlf;
+    if (crlf > lf && crlf >= cr) return TextLineBreak.crlf;
+    if (cr > lf && cr > crlf) return TextLineBreak.cr;
     return TextLineBreak.lf;
   }
 
@@ -125,8 +128,9 @@ final class CodeDocument extends ChangeNotifier {
   String? get error => _error;
   String? _error;
 
-  /// The next save writes without checking the disk: the user chose to keep their edits.
-  bool _overwriteNext = false;
+  /// The file on disk that [changedOnDisk] is about; [keepMine] makes the next save expect it, so
+  /// a later change asks again.
+  FileStamp? _diskStamp;
 
   bool _saving = false;
 
@@ -145,28 +149,38 @@ final class CodeDocument extends ChangeNotifier {
 
   /// Writes the text to disk.
   ///
-  /// Throws [FileChangedOnDiskException] when the file changed since it was read, unless
-  /// [overwrite] (or [keepMine] before). Other failures are kept in [error] and the document stays
-  /// unsaved. A document without edits that is still on disk is not written.
+  /// Throws [FileChangedOnDiskException] when the file changed since it was read (or came back
+  /// after it was deleted), unless [overwrite]; the document is then [changedOnDisk]. Other
+  /// failures are kept in [error] and the document stays unsaved. A document without edits that is
+  /// still on disk is not written.
   Future<void> save({bool overwrite = false}) async {
     if (kind != CodeDocumentKind.text || _saving) return;
-    if (!_dirty && !_deleted && !overwrite && !_overwriteNext) return;
+    if (!_dirty && !_deleted && !overwrite) return;
     _saving = true;
     final codeLines = editing.codeLines;
     try {
-      final written = await _files.write(
-        path,
-        editing.text,
-        expected: overwrite || _overwriteNext || _deleted ? null : stamp,
-      );
+      var expected = stamp;
+      if (overwrite) {
+        expected = null;
+      } else if (_deleted) {
+        // A deleted file is written only while it is still gone: one that came back is someone
+        // else's.
+        final current = await _files.stamp(path);
+        if (current != null) throw FileChangedOnDiskException(path, current);
+        expected = null;
+      }
+      final written = await _files.write(path, editing.text, expected: expected);
       stamp = written;
       _saved = codeLines;
-      _overwriteNext = false;
+      _diskStamp = null;
       _changedOnDisk = false;
       _deleted = false;
       _error = null;
       _dirty = !identical(editing.codeLines, _saved) && editing.codeLines != _saved;
-    } on FileChangedOnDiskException {
+    } on FileChangedOnDiskException catch (error) {
+      // The watch may not have told yet (or never will: a link's target outside the project).
+      _changeDuringSave = null;
+      _markChanged(error.actual);
       rethrow;
     } on io.FileSystemException catch (error) {
       _error = _describe(error);
@@ -181,9 +195,28 @@ final class CodeDocument extends ChangeNotifier {
     }
   }
 
+  /// The file on disk is [actual] (gone when `null`) and not what the unsaved edits started from.
+  void _markChanged(FileStamp? actual) {
+    if (_disposed) return;
+    if (actual == null) {
+      _deleted = true;
+      _changedOnDisk = false;
+    } else {
+      _deleted = false;
+      _diskStamp = actual;
+      _changedOnDisk = true;
+    }
+    notifyListeners();
+  }
+
   /// Replaces the text with the file on disk, keeping the caret where it still fits.
-  Future<void> reloadFromDisk() async {
+  Future<void> reloadFromDisk() => _reload(followDisk: false);
+
+  /// Reads the file and shows it. Following the disk on its own ([followDisk]), the reload gives
+  /// way to edits typed while the file was read: they stay, and the document is [changedOnDisk].
+  Future<void> _reload({required bool followDisk}) async {
     if (kind != CodeDocumentKind.text) return;
+    final before = editing.codeLines;
     final FileContent content;
     try {
       content = await _files.read(path);
@@ -193,6 +226,10 @@ final class CodeDocument extends ChangeNotifier {
       return;
     }
     if (_disposed) return;
+    if (followDisk && !identical(editing.codeLines, before)) {
+      _markChanged(content.stamp);
+      return;
+    }
     final selection = editing.selection;
     editing.text = content.text;
     final last = editing.lineCount - 1;
@@ -204,15 +241,17 @@ final class CodeDocument extends ChangeNotifier {
     _dirty = false;
     _changedOnDisk = false;
     _deleted = false;
-    _overwriteNext = false;
+    _diskStamp = null;
     _error = null;
     notifyListeners();
   }
 
-  /// Keeps the unsaved edits over the changed file: the next save overwrites it.
+  /// Keeps the unsaved edits over the changed file: the next save overwrites that version of it,
+  /// and a later change asks again.
   void keepMine() {
+    stamp = _diskStamp ?? stamp;
+    _diskStamp = null;
     _changedOnDisk = false;
-    _overwriteNext = true;
     notifyListeners();
   }
 
@@ -234,12 +273,10 @@ final class CodeDocument extends ChangeNotifier {
     }
     if (current == stamp && !_deleted) return;
     if (_dirty) {
-      _deleted = false;
-      _changedOnDisk = true;
-      notifyListeners();
+      _markChanged(current);
       return;
     }
-    await reloadFromDisk();
+    await _reload(followDisk: true);
   }
 
   @override

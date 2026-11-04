@@ -19,6 +19,9 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
 
   /// Whether saving them works.
   bool saves = true;
+
+  /// What saving throws, if anything.
+  Error? saveError;
   final StreamController<void> requests = StreamController<void>.broadcast();
   final List<String> calls = <String>[];
   Completer<void>? shutdownGate;
@@ -40,6 +43,7 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
   @override
   Future<bool> saveAllFiles() async {
     calls.add('saveAllFiles');
+    if (saveError case final error?) throw error;
     if (saves) unsaved = 0;
     return saves;
   }
@@ -145,6 +149,21 @@ void main() {
 
       expect(find.textContaining('could not be saved'), findsOneWidget);
       expect(repository.calls, <String>['saveAllFiles']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('M4: an unexpected error while saving stays open and can quit later', (
+      tester,
+    ) async {
+      final repository = await pumpGuard(tester, unsaved: 1)
+        ..saveError = StateError('chmod missing');
+      await close(tester, repository);
+
+      await answer(tester, 'Save all');
+      expect(find.textContaining('could not be saved'), findsOneWidget);
+
+      await answer(tester, "Don't save");
+      expect(repository.calls, <String>['saveAllFiles', 'shutdown', 'quit']);
       await disposeTestApp(tester, dependencies);
     });
 

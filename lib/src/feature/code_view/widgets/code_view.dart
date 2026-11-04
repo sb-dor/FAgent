@@ -14,7 +14,6 @@ import 'package:flutter_code_agent/src/feature/code_view/widgets/code_file_bars.
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_quick_open.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_tab_bar.dart';
 import 'package:path/path.dart' as p;
-import 'package:re_editor/re_editor.dart';
 
 /// {@template code_view}
 /// The Code view of one project in place of the chat: the explorer, a divider that sets its width,
@@ -42,58 +41,8 @@ class CodeView extends StatefulWidget {
   State<CodeView> createState() => _CodeViewState();
 }
 
-/// Find and scroll state of one tab: kept while the tab is open, so switching tabs keeps them.
-final class _TabView {
-  _TabView(CodeDocument document)
-    : find = CodeFindController(document.editing),
-      scroll = CodeScrollController();
-
-  final CodeFindController find;
-  final CodeScrollController scroll;
-
-  void dispose() {
-    find.dispose();
-    scroll.verticalScroller.dispose();
-    scroll.horizontalScroller.dispose();
-  }
-}
-
 class _CodeViewState extends State<CodeView> {
-  final Map<CodeDocument, _TabView> _views = <CodeDocument, _TabView>{};
-
   CodeWorkspace get _workspace => widget.workspace;
-
-  @override
-  void initState() {
-    super.initState();
-    _workspace.tabs.addListener(_dropClosed);
-  }
-
-  @override
-  void didUpdateWidget(CodeView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (identical(oldWidget.workspace, widget.workspace)) return;
-    oldWidget.workspace.tabs.removeListener(_dropClosed);
-    widget.workspace.tabs.addListener(_dropClosed);
-    _disposeViews(_views.keys.toList());
-  }
-
-  /// Frees the find and scroll state of closed tabs.
-  void _dropClosed() {
-    final open = _workspace.tabs.tabs.toSet();
-    _disposeViews(<CodeDocument>[
-      for (final document in _views.keys)
-        if (!open.contains(document)) document,
-    ]);
-  }
-
-  void _disposeViews(List<CodeDocument> documents) {
-    for (final document in documents) {
-      _views.remove(document)?.dispose();
-    }
-  }
-
-  _TabView _viewOf(CodeDocument document) => _views.putIfAbsent(document, () => _TabView(document));
 
   Future<void> _open(String path) async {
     try {
@@ -171,13 +120,6 @@ class _CodeViewState extends State<CodeView> {
   );
 
   @override
-  void dispose() {
-    _workspace.tabs.removeListener(_dropClosed);
-    _disposeViews(_views.keys.toList());
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) => CallbackShortcuts(
     bindings: <ShortcutActivator, VoidCallback>{
       const SingleActivator(LogicalKeyboardKey.keyS, meta: true): () => _save().ignore(),
@@ -239,8 +181,8 @@ class _CodeViewState extends State<CodeView> {
             CodeDocumentKind.text => CodeEditorView(
               key: ObjectKey(active),
               document: active,
-              find: _viewOf(active).find,
-              scroll: _viewOf(active).scroll,
+              find: _workspace.viewOf(active).find,
+              scroll: _workspace.viewOf(active).scroll,
               onSave: () => _save(active).ignore(),
             ),
             CodeDocumentKind.image => CodeImageView(path: active.path),

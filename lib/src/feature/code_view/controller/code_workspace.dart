@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
+import 'package:re_editor/re_editor.dart';
 
 /// {@template code_workspace}
 /// The Code view of one project: its explorer and its tabs, both following one watch of the
@@ -31,7 +33,9 @@ final class CodeWorkspace {
       state: state,
       changes: changes,
     );
-    tabs.restore().ignore();
+    tabs
+      ..addListener(_dropClosedViews)
+      ..restore().ignore();
   }
 
   /// `projects.id`.
@@ -46,10 +50,52 @@ final class CodeWorkspace {
   /// The open files.
   late final CodeTabsController tabs;
 
+  final Map<CodeDocument, CodeTabView> _views = <CodeDocument, CodeTabView>{};
+
+  /// The find and scroll state of [document]'s tab: kept while the tab is open, so switching tabs,
+  /// Chat and Code, or projects brings it back as it was.
+  CodeTabView viewOf(CodeDocument document) =>
+      _views.putIfAbsent(document, () => CodeTabView(document));
+
+  void _dropClosedViews() {
+    final open = tabs.tabs.toSet();
+    for (final document in _views.keys.where((document) => !open.contains(document)).toList()) {
+      _views.remove(document)?.dispose();
+    }
+  }
+
   /// Stops both and closes the files without saving.
   void dispose() {
+    tabs.removeListener(_dropClosedViews);
+    for (final view in _views.values) {
+      view.dispose();
+    }
+    _views.clear();
     tree.dispose();
     tabs.dispose();
+  }
+}
+
+/// {@template code_tab_view}
+/// What the editor of one tab remembers besides the text: the find panel and the scroll position.
+/// {@endtemplate}
+final class CodeTabView {
+  /// {@macro code_tab_view}
+  CodeTabView(CodeDocument document)
+    : find = CodeFindController(document.editing),
+      scroll = CodeScrollController();
+
+  /// The find panel's state.
+  final CodeFindController find;
+
+  /// The scroll position.
+  final CodeScrollController scroll;
+
+  /// Frees both.
+  void dispose() {
+    find.dispose();
+    scroll.verticalScroller.dispose();
+    scroll.horizontalScroller.dispose();
   }
 }
 

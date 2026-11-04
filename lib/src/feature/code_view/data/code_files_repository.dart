@@ -270,7 +270,10 @@ final class CodeFilesRepositoryImpl implements ICodeFilesRepository {
       await temp.writeAsString(text, flush: true);
       final mode = stat.mode & 0x1FF;
       if (exists && mode != temp.statSync().mode & 0x1FF) {
-        final chmod = await io.Process.run('chmod', <String>[mode.toRadixString(8), temp.path]);
+        final chmod = await io.Process.run('/bin/chmod', <String>[
+          mode.toRadixString(8),
+          temp.path,
+        ]);
         if (chmod.exitCode != 0) {
           throw io.FileSystemException('chmod failed: ${chmod.stderr}', temp.path);
         }

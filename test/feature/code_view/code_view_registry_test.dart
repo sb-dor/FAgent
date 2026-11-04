@@ -69,6 +69,18 @@ void main() {
     expect(registry.workspaceFor(projectId: 1, root: '/a'), isNot(same(a)));
   });
 
+  test('M10: a tab keeps its find and scroll state until it closes', () async {
+    final a = registry.workspaceFor(projectId: 1, root: '/a');
+    final document = await a.tabs.open('/a/main.dart');
+
+    final view = a.viewOf(document);
+    expect(a.viewOf(document), same(view));
+
+    a.tabs.close(document.path);
+    final again = await a.tabs.open('/a/main.dart');
+    expect(a.viewOf(again), isNot(same(view)));
+  });
+
   test('another root for the same project makes a new workspace', () async {
     final a = registry.workspaceFor(projectId: 1, root: '/a');
 

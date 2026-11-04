@@ -62,7 +62,15 @@ final class AppCloseController extends StateController<AppCloseState>
   /// Saves the unsaved files, then goes on quitting; a save that leaves some unsaved asks again.
   void saveAndQuit() => handle(() async {
     if (state is! AppClose$UnsavedState) return;
-    if (!await _repository.saveAllFiles()) {
+    bool saved;
+    try {
+      saved = await _repository.saveAllFiles();
+    } on Object catch (error, stackTrace) {
+      // Not a refusal the files know about; the dialog must come back, or no quit would work.
+      l.w('App close | saving the files failed: $error', stackTrace);
+      saved = false;
+    }
+    if (!saved) {
       setState(AppCloseState.unsaved(files: _repository.unsavedFiles(), saveFailed: true));
       return;
     }
