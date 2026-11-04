@@ -183,6 +183,20 @@ class _TabState extends State<_Tab> {
                         decoration: document.deleted ? TextDecoration.lineThrough : null,
                       ),
                     ),
+                    if (document.errorCount > 0) ...<Widget>[
+                      const SizedBox(width: 6),
+                      Text(
+                        'ⓧ ${document.errorCount}',
+                        style: textTheme.labelSmall?.copyWith(color: colors.danger),
+                      ),
+                    ],
+                    if (document.warningCount > 0) ...<Widget>[
+                      const SizedBox(width: 4),
+                      Text(
+                        '⚠ ${document.warningCount}',
+                        style: textTheme.labelSmall?.copyWith(color: colors.warn),
+                      ),
+                    ],
                     if (document.deleted) ...<Widget>[
                       const SizedBox(width: 6),
                       Text(

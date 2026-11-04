@@ -39,6 +39,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'flutter_version_runner.dart';
 import 'memory_agents_repository.dart';
 import 'memory_code_view_state_repository.dart';
+import 'memory_dart_analysis_repository.dart';
 import 'memory_devices_repository.dart';
 import 'memory_permission_rules_repository.dart';
 import 'memory_project_creation_repository.dart';
@@ -134,7 +135,11 @@ Dependencies testDependencies({
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
     ..codeFilesRepository = codeFiles
     ..codeViewStateRepository = codeState
-    ..codeViews = CodeViewRegistry(files: codeFiles, state: codeState)
+    ..codeViews = CodeViewRegistry(
+      files: codeFiles,
+      state: codeState,
+      analysisFor: (root) => MemoryDartAnalysisRepository(),
+    )
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()

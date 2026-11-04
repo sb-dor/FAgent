@@ -623,5 +623,8 @@
   "chatSendAnyway": "Отправить так",
   "fileCardFolder": "Папка",
   "fileCardFile": "Файл",
-  "removeFile": "Убрать файл"
+  "removeFile": "Убрать файл",
+  "codeAnalyzing": "Анализ…",
+  "codeAnalysisUnavailable": "Анализ Dart недоступен",
+  "codeAnalysisRestart": "Перезапустить"
 }

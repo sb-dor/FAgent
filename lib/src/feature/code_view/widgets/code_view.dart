@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
+import 'package:flutter_code_agent/src/feature/code_view/widgets/code_analysis_footer.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_editor_view.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_explorer.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_file_bars.dart';
@@ -138,6 +139,7 @@ class _CodeViewState extends State<CodeView> {
                 tree: _workspace.tree,
                 onOpenFile: (path) => _open(path).ignore(),
                 onOpenExternally: widget.onOpenExternally,
+                filesWithErrors: _workspace.analysis == null ? null : _workspace.filesWithErrors,
               ),
             ),
             _Divider(
@@ -184,6 +186,7 @@ class _CodeViewState extends State<CodeView> {
               find: _workspace.viewOf(active).find,
               scroll: _workspace.viewOf(active).scroll,
               onSave: () => _save(active).ignore(),
+              analysis: _workspace.analysis,
             ),
             CodeDocumentKind.image => CodeImageView(path: active.path),
             CodeDocumentKind.notText ||
@@ -194,6 +197,8 @@ class _CodeViewState extends State<CodeView> {
             ),
           },
         ),
+        if (_workspace.analysis case final analysis? when active.path.endsWith('.dart'))
+          CodeAnalysisFooter(status: analysis.status, onRestart: () => analysis.restart().ignore()),
       ],
     );
   }

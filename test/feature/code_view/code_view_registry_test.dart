@@ -4,16 +4,23 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_code_files_repository.dart';
 import '../../support/memory_code_view_state_repository.dart';
+import '../../support/memory_dart_analysis_repository.dart';
 
 void main() {
   late MemoryCodeFilesRepository files;
   late CodeViewRegistry registry;
+  late Map<String, MemoryDartAnalysisRepository> analyses;
 
   setUp(() {
     files = MemoryCodeFilesRepository(
       files: <String, String>{'/a/main.dart': 'a\n', '/b/main.dart': 'b\n'},
     );
-    registry = CodeViewRegistry(files: files, state: MemoryCodeViewStateRepository());
+    analyses = <String, MemoryDartAnalysisRepository>{};
+    registry = CodeViewRegistry(
+      files: files,
+      state: MemoryCodeViewStateRepository(),
+      analysisFor: (root) => analyses[root] = MemoryDartAnalysisRepository(),
+    );
   });
 
   tearDown(() => registry.dispose());
@@ -85,5 +92,40 @@ void main() {
     final a = registry.workspaceFor(projectId: 1, root: '/a');
 
     expect(registry.workspaceFor(projectId: 1, root: '/b'), isNot(same(a)));
+  });
+
+  group('Dart analysis', () {
+    test('opening, editing and closing a .dart tab drives open, change and close', () async {
+      final a = registry.workspaceFor(projectId: 1, root: '/a');
+      final document = await a.tabs.open('/a/main.dart');
+      document.editing.replaceSelection('x');
+      document.editing.selection = document.editing.selection;
+      a.tabs.close('/a/main.dart', discard: true);
+
+      expect(analyses['/a']!.calls, <(String, String, String?)>[
+        ('open', '/a/main.dart', 'a\n'),
+        ('change', '/a/main.dart', 'xa\n'),
+        ('close', '/a/main.dart', null),
+      ]);
+    });
+
+    test('a workspace disposes its analysis', () async {
+      registry
+        ..workspaceFor(projectId: 1, root: '/a')
+        ..discard(1);
+      await settle();
+
+      expect(analyses['/a']!.disposed, isTrue);
+    });
+
+    test('close waits for every analysis to stop', () async {
+      registry
+        ..workspaceFor(projectId: 1, root: '/a')
+        ..workspaceFor(projectId: 2, root: '/b');
+
+      await registry.close();
+
+      expect(analyses.values.every((analysis) => analysis.disposed), isTrue);
+    });
   });
 }

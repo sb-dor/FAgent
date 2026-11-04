@@ -48,6 +48,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             projectCreation: dependencies.projectCreationRepository,
             queuedChats: dependencies.chatQueues,
             unsavedFiles: dependencies.codeViews,
+            stopCodeViews: dependencies.codeViews.close,
             stopAgentList: dependencies.stopFollowingCustomAgents,
           ),
     )..watch();

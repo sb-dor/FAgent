@@ -407,3 +407,23 @@ Deferred from the Code view (docs/superpowers/plans/2026-11-04-code-view.md). Pa
     - the quit and removal dialogs give only a count, not the file names; the unsaved quit dialog lacks `AppRadius.large` (`app_close/widgets/app_close_guard.dart`)
   - Check by hand: the native quit handshake while the unsaved dialog is open, ⌘W with the find panel focused, opening a 5 MB file
 
+## Dart analysis follow-ups
+
+Deferred from the Dart analysis milestone (docs/superpowers/plans/2026-11-04-dart-analysis.md). Paths are under `lib/src/feature/` unless they start with `test/` or `common/`.
+
+- **Next steps:**
+  - Hover documentation, go to definition (⌘-click), format on save, quick fixes (the light bulb), rename, a Problems panel listing every error of the project
+  - Completion documentation beside the list (`completionItem/resolve` already asks for it)
+- **Bugs and risks:**
+  - Every edit of an open Dart file builds its whole text for the debounced `didChange`; very large files would want incremental sync (`code_view/controller/code_workspace.dart`)
+  - The completion list is placed from the editor's metrics (font 13, line height 1.4, padding 5, the gutter's width, the scroll offsets); a change in re_editor's layout would misplace it (`code_view/widgets/code_editor_view.dart`)
+  - The server's labels are what the list shows: its Flutter snippets read "Flutter Stateful Widget" and match `stful` through their filter text (`code_view/widgets/code_completion_list.dart`)
+  - From the final review (minor):
+    - completion edits: `_after()` handles one edit on the caret's line; a stale edit range falls back to the word before the caret; each edit and mirror is its own undo step (`code_view/controller/completion_edit.dart`, `snippet_session.dart`)
+    - snippets: edits are attributed to a stop by diff; a nested placeholder ends the session (`code_view/controller/snippet_session.dart`)
+    - server lifetime: a crashed server is forgotten but not disposed; a double click on Restart while starting restarts nothing; a server that hangs after `initialize` stays "ready" and every completion waits 10 s; quit does not wait for workspaces discarded earlier (`code_view/data/dart_analysis_repository.dart`, `code_view/controller/code_workspace.dart`)
+    - underlines: zero-length diagnostics are invisible; underlines lag typing until the server answers (`code_view/widgets/code_diagnostic_spans.dart`)
+    - `LspConnection._onBytes` copies the buffer on every chunk (`common/dart_analysis/lsp_connection.dart`)
+    - editor: `_detach()` can clear another document's decorator in `didUpdateWidget`; ⌃Space is macOS's default input-source shortcut (consider ⌥Esc too); the list's position depends on re_editor's metrics; IME composition is not checked before the list takes Enter (`code_view/widgets/code_editor_view.dart`)
+  - Check by hand: completion and underlines in a real Flutter project, a fold above the caret, quitting while the server starts
+

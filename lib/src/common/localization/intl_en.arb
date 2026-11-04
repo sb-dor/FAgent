@@ -674,5 +674,8 @@
   "chatSendAnyway": "Send anyway",
   "fileCardFolder": "Folder",
   "fileCardFile": "File",
-  "removeFile": "Remove the file"
+  "removeFile": "Remove the file",
+  "codeAnalyzing": "Analyzing…",
+  "codeAnalysisUnavailable": "Dart analysis unavailable",
+  "codeAnalysisRestart": "Restart"
 }

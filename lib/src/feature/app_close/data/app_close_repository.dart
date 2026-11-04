@@ -65,6 +65,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._queuedChats,
     this._unsavedFiles,
     this._stopAgentList,
+    this._stopCodeViews,
   });
 
   final AgentHub _hub;
@@ -84,6 +85,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
 
   /// Stops feeding the agent list into the hub; called before the hub is disposed.
   final Future<void> Function()? _stopAgentList;
+
+  /// Closes the Code views, which stops their Dart analysis servers.
+  final Future<void> Function()? _stopCodeViews;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -135,6 +139,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     // The picker first: it turns the select mode off in an app that still runs, then closes its
     // connections to the apps.
     await _stopQuietly('widget picker', _widgetPicker.dispose);
+    // `dart language-server` lives in its own process group too.
+    if (_stopCodeViews case final stop?) await _stopQuietly('code views', stop);
     await Future.wait<void>(<Future<void>>[
       _stopQuietly('runs', _appRun.dispose),
       _stopQuietly('devices', _devices.dispose),
