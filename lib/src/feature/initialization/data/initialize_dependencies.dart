@@ -24,6 +24,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
@@ -178,6 +179,10 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   'Create code view repositories': (dependencies) => dependencies
     ..codeFilesRepository = CodeFilesRepositoryImpl(environment: dependencies.shellEnvironment)
     ..codeViewStateRepository = CodeViewStateRepositoryImpl(database: dependencies.database),
+  'Create code views': (dependencies) => dependencies.codeViews = CodeViewRegistry(
+    files: dependencies.codeFilesRepository,
+    state: dependencies.codeViewStateRepository,
+  ),
   // The SDK path, the Flutter version and the fvm version are real; the doctor report is made up.
   'Create Flutter SDK repository': (dependencies) =>
       dependencies.flutterSdkRepository = FlutterSdkRepositoryImpl(

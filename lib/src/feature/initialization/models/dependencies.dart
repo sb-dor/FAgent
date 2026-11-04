@@ -14,6 +14,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
@@ -87,6 +88,9 @@ class Dependencies {
 
   /// The remembered Code view of each project.
   late final ICodeViewStateRepository codeViewStateRepository;
+
+  /// The Code view of every project opened in this run, and the unsaved files app-wide.
+  late final CodeViewRegistry codeViews;
 
   /// Picks a widget in a running app.
   late final IWidgetPickerRepository widgetPickerRepository;

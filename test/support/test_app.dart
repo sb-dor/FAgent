@@ -20,6 +20,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
@@ -109,6 +110,8 @@ Dependencies testDependencies({
         step: Duration.zero,
       );
   final hub = AgentHub(database: database, environment: environment);
+  final codeFiles = codeFilesRepository ?? CodeFilesRepositoryImpl(environment: environment);
+  final codeState = codeViewStateRepository ?? MemoryCodeViewStateRepository();
   return Dependencies()
     ..database = database
     ..dropZone = dropZone ?? DropZone.fromStream(const Stream<DropZoneEvent>.empty())
@@ -129,8 +132,9 @@ Dependencies testDependencies({
     ..appRunRepository = appRunRepository ?? ScriptedAppRunRepository(step: step, isPreview: true)
     ..widgetPickerRepository = widgetPickerRepository ?? ScriptedWidgetPickerRepository(step: step)
     ..runConfigRepository = runConfigRepository ?? MemoryRunConfigRepository()
-    ..codeFilesRepository = codeFilesRepository ?? CodeFilesRepositoryImpl(environment: environment)
-    ..codeViewStateRepository = codeViewStateRepository ?? MemoryCodeViewStateRepository()
+    ..codeFilesRepository = codeFiles
+    ..codeViewStateRepository = codeState
+    ..codeViews = CodeViewRegistry(files: codeFiles, state: codeState)
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()
