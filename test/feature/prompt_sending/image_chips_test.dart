@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
@@ -107,11 +108,24 @@ void main() {
 
   Finder chips() => find.descendant(of: find.byType(ImageChips), matching: find.byType(Image));
 
-  Map<String, Object?> imageBlock(Uint8List bytes) => <String, Object?>{
-    'type': 'image',
-    'mimeType': 'image/png',
-    'data': base64Encode(bytes),
-  };
+  /// [block] is the composer's image block of [bytes]: the full image, a PNG thumbnail in the
+  /// app's `_meta`.
+  void expectImageBlock(Map<String, Object?> block, Uint8List bytes) {
+    expect(block['type'], 'image');
+    expect(block['mimeType'], 'image/png');
+    expect(block['data'], base64Encode(bytes));
+    expect(block['_meta'], <String, Object?>{
+      'flutter_code_agent': <String, Object?>{
+        'thumbnail': isA<String>(),
+        'thumbnailMimeType': 'image/png',
+      },
+    });
+  }
+
+  Future<void> tapSend(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('Send'));
+    await settle(tester);
+  }
 
   testWidgets('a dropped image shows as a chip above the text and ✕ removes it', (tester) async {
     final (chat, _) = await pumpChat(tester);
@@ -197,6 +211,18 @@ void main() {
     expect(chat.images.value, isEmpty);
   });
 
+  testWidgets('an image that cannot be decoded is refused with one line', (tester) async {
+    final (chat, _) = await pumpChat(tester);
+    final broken = p.join(root.path, 'broken.png');
+    File(broken).writeAsStringSync('not an image');
+
+    await dropFiles(tester, <String>[broken]);
+    await tester.pump();
+
+    expect(chat.images.value, isEmpty);
+    expect(find.text('Could not read broken.png'), findsOneWidget);
+  });
+
   testWidgets('send puts the image blocks after the text and clears the chips', (tester) async {
     final (chat, live) = await pumpChat(tester);
     await dropFiles(tester, <String>[p.join(root.path, 'shot.png')]);
@@ -205,10 +231,10 @@ void main() {
     await tester.runAsync(chat.send);
     await settle(tester);
 
-    expect(live.lastPrompt, <Map<String, Object?>>[
-      <String, Object?>{'type': 'text', 'text': 'what is wrong here?'},
-      imageBlock(_png),
-    ]);
+    final sent = live.lastPrompt!;
+    expect(sent, hasLength(2));
+    expect(sent.first, <String, Object?>{'type': 'text', 'text': 'what is wrong here?'});
+    expectImageBlock(sent.last, _png);
     expect(chat.images.value, isEmpty);
     expect(chips(), findsNothing);
     // Lets the hub's start attempt end.
@@ -226,7 +252,10 @@ void main() {
     await settle(tester);
 
     final queued = chat.queueController.state.items.single;
-    expect(queued.resources.last, imageBlock(_png));
+    // Kept once, as the image: its block is built when the message goes.
+    expect(queued.resources, isEmpty);
+    expect(queued.images.single.bytes, _png);
+    expectImageBlock(queued.blocks.last, _png);
     expect(queued.attachmentCount, 1);
     expect(chat.images.value, isEmpty);
     expect(chat.textController.text, isEmpty);
@@ -240,9 +269,65 @@ void main() {
     expect(chips(), findsOneWidget);
   });
 
-  test('a composer image is an ACP image block', () {
-    final image = ComposerImage(name: 'shot.png', mimeType: 'image/png', bytes: _png);
+  testWidgets('images alone can be sent; the prompt has no text block', (tester) async {
+    final (chat, live) = await pumpChat(tester);
+    await dropFiles(tester, <String>[p.join(root.path, 'shot.png')]);
+    expect(chat.textController.text, isEmpty);
 
-    expect(image.toBlock(), imageBlock(_png));
+    await tapSend(tester);
+
+    final sent = live.lastPrompt!;
+    expectImageBlock(sent.single, _png);
+    expect(chat.images.value, isEmpty);
+    await tester.pump(const Duration(seconds: 20));
+  });
+
+  testWidgets('✎ that would pass 10 images keeps 10 and says so', (tester) async {
+    final (chat, live) = await pumpChat(tester);
+    live.status.value = SessionStatus.running;
+    await settle(tester);
+    final paths = <String>[for (var i = 0; i < 6; i++) p.join(root.path, 'shot$i.png')];
+    for (final path in paths) {
+      File(path).writeAsBytesSync(_png);
+    }
+    await dropFiles(tester, paths);
+    chat.textController.text = 'first';
+    await tester.runAsync(chat.queue);
+    await settle(tester);
+    await dropFiles(tester, paths);
+    expect(chat.images.value, hasLength(6));
+
+    chat.editQueued(0);
+    await tester.pump();
+
+    expect(chat.images.value, hasLength(10));
+    expect(find.text('At most 10 images per message'), findsOneWidget);
+  });
+
+  testWidgets('a composer image keeps a PNG thumbnail of at most 256 px', (tester) async {
+    late ComposerImage image;
+    late ui.Image thumbnail;
+    await tester.runAsync(() async {
+      final recorder = ui.PictureRecorder();
+      ui.Canvas(recorder)
+          .drawRect(const Rect.fromLTWH(0, 0, 1000, 500), Paint()..color = const Color(0xFF336699));
+      final picture = await recorder.endRecording().toImage(1000, 500);
+      final bytes = (await picture.toByteData(format: ui.ImageByteFormat.png))!;
+      image = await ComposerImage.of(
+        name: 'wide.png',
+        mimeType: 'image/png',
+        bytes: bytes.buffer.asUint8List(),
+      );
+      final codec = await ui.instantiateImageCodec(image.thumbnail);
+      thumbnail = (await codec.getNextFrame()).image;
+    });
+
+    expect((thumbnail.width, thumbnail.height), (256, 128));
+    expect(image.thumbnail.length, lessThan(image.bytes.length));
+    final block = image.toBlock();
+    expect((block['_meta']! as Map<String, Object?>)['flutter_code_agent'], <String, Object?>{
+      'thumbnail': base64Encode(image.thumbnail),
+      'thumbnailMimeType': 'image/png',
+    });
   });
 }

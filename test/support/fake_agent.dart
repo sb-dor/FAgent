@@ -40,7 +40,8 @@
 // {"method", "params"}; `authenticate` also appends the client's capabilities as
 // {"method": "client/capabilities", "params"}. session/new and session/load are
 // recorded raw, as they came over the wire, so params the SDK does not model (a
-// top-level `systemPrompt`) are kept.
+// top-level `systemPrompt`) are kept. With FAKE_AGENT_PROMPTS_FILE set, the raw params of every
+// session/prompt are appended to that file the same way.
 // Sign-in: the agent offers `browser-login` and `api-key` (with
 // `_meta.api-key.provider: fake`) and can log out. `authenticate` succeeds, or
 // fails with FAKE_AGENT_AUTH_FAIL=1, or never answers with FAKE_AGENT_AUTH_HANG=1.
@@ -96,8 +97,12 @@ Future<void> main(List<String> arguments) async {
     select('effort', efforts[session] ?? 'low', <String>['low', 'high']),
   ];
 
-  void record(String method, Map<String, Object?> params) {
-    final file = Platform.environment['FAKE_AGENT_REQUESTS_FILE'];
+  void record(
+    String method,
+    Map<String, Object?> params, {
+    String variable = 'FAKE_AGENT_REQUESTS_FILE',
+  }) {
+    final file = Platform.environment[variable];
     if (file == null) return;
     File(file).writeAsStringSync(
       '${jsonEncode(<String, Object?>{'method': method, 'params': params})}\n',
@@ -406,6 +411,12 @@ Future<void> main(List<String> arguments) async {
               case {'method': final String method, 'params': final Map<String, Object?> params}
               when method == 'session/new' || method == 'session/load') {
             record(method, params);
+          }
+          if (message case {
+            'method': 'session/prompt',
+            'params': final Map<String, Object?> params,
+          }) {
+            record('session/prompt', params, variable: 'FAKE_AGENT_PROMPTS_FILE');
           }
         }
         return frame;

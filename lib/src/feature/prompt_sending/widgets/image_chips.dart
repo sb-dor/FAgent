@@ -36,7 +36,7 @@ class ImageChips extends StatelessWidget {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: <Widget>[
-                  ImageThumbnail(bytes: image.bytes),
+                  ImageThumbnail(bytes: image.thumbnail),
                   if (onRemove case final onRemove?)
                     Positioned(
                       top: -6,
@@ -65,21 +65,30 @@ class ImageChips extends StatelessWidget {
 }
 
 /// {@template image_thumbnail}
-/// A square, cropped preview of an image file; a broken one shows an icon.
+/// A square, cropped preview of an image file; a missing or broken one shows an icon.
 /// {@endtemplate}
 class ImageThumbnail extends StatelessWidget {
   /// {@macro image_thumbnail}
   const ImageThumbnail({required this.bytes, this.size = 56, super.key});
 
-  /// The image file.
-  final Uint8List bytes;
+  /// The image file; `null` shows the broken-image icon.
+  final Uint8List? bytes;
 
   /// Side of the square.
   final double size;
 
+  Widget _broken(AppColors colors) => SizedBox.square(
+    dimension: size,
+    child: ColoredBox(
+      color: colors.surfaceAlt,
+      child: Icon(Icons.broken_image_outlined, color: colors.muted),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
+    final bytes = this.bytes;
     // Decoded no larger than shown: a screenshot would otherwise take its full size in memory.
     final decoded = (size * 2 * MediaQuery.devicePixelRatioOf(context)).round();
     return DecoratedBox(
@@ -90,25 +99,21 @@ class ImageThumbnail extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.small),
-        child: Image(
-          image: ResizeImage(
-            MemoryImage(bytes),
-            width: decoded,
-            height: decoded,
-            policy: ResizeImagePolicy.fit,
-          ),
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          gaplessPlayback: true,
-          errorBuilder: (context, _, _) => SizedBox.square(
-            dimension: size,
-            child: ColoredBox(
-              color: colors.surfaceAlt,
-              child: Icon(Icons.broken_image_outlined, color: colors.muted),
-            ),
-          ),
-        ),
+        child: bytes == null
+            ? _broken(colors)
+            : Image(
+                image: ResizeImage(
+                  MemoryImage(bytes),
+                  width: decoded,
+                  height: decoded,
+                  policy: ResizeImagePolicy.fit,
+                ),
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (context, _, _) => _broken(colors),
+              ),
       ),
     );
   }

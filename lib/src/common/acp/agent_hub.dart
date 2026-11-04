@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_slot_registry.dart';
 import 'package:flutter_code_agent/src/common/acp/app_tool_permission.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/permission_broker.dart';
+import 'package:flutter_code_agent/src/common/acp/prompt_images.dart';
 import 'package:flutter_code_agent/src/common/acp/raw_acp_message.dart';
 import 'package:flutter_code_agent/src/common/acp/session_context.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
@@ -272,6 +273,10 @@ final class AgentHub {
   ///
   /// Allowed in `cold`, `idle` and `error` (an error restarts the agent). The
   /// prompt is journaled before it is sent; if that write fails nothing is sent.
+  ///
+  /// An empty [text] sends no text block (a message of images only). The journal keeps an image
+  /// that carries a thumbnail as the thumbnail ([promptBlockForJournal]); the agent gets the full
+  /// image, without the app's `_meta` ([promptBlockForAgent]).
   Future<void> prompt(
     int sessionId,
     String text, {
@@ -287,7 +292,7 @@ final class AgentHub {
       }
       live
         ..lastPrompt = <Map<String, Object?>>[
-          <String, Object?>{'type': 'text', 'text': text},
+          if (text.isNotEmpty) <String, Object?>{'type': 'text', 'text': text},
           ...resources,
         ]
         ..canRetryPrompt.value = false;
@@ -300,7 +305,9 @@ final class AgentHub {
       // has them already.
       final rules = live.firstMessageRules;
       final blocks = live.lastPrompt!;
-      if (rules != null && !blocks.any(isRulesResource)) blocks.insert(1, rulesResource(rules));
+      if (rules != null && !blocks.any(isRulesResource)) {
+        blocks.insert(text.isEmpty ? 0 : 1, rulesResource(rules));
+      }
       // The mode is only known once the agent session exists; the prompt waits
       // for the user's consent and can be repeated after it.
       if (live.bypassBlocked) {
@@ -319,8 +326,12 @@ final class AgentHub {
     final live = await session(sessionId);
     final last = live.lastPrompt;
     if (last == null || !live.canRetryPrompt.value) throw StateError('No prompt to repeat');
-    final text = last.first['text']! as String;
-    await prompt(sessionId, text, resources: last.skip(1).toList());
+    // A message of images only has no text block.
+    final text = switch (last.firstOrNull) {
+      {'type': 'text', 'text': final String text} => text,
+      _ => '',
+    };
+    await prompt(sessionId, text, resources: last.skip(text.isEmpty ? 0 : 1).toList());
   }
 
   Future<void> _runTurn(LiveSession live, String text) async {
@@ -355,16 +366,24 @@ final class AgentHub {
         );
         return;
       }
+      final blocks = live.lastPrompt!;
       final request = PromptRequest.fromJson(<String, Object?>{
         'sessionId': live.acpSessionId,
-        'prompt': live.lastPrompt,
+        'prompt': <Map<String, Object?>>[for (final block in blocks) promptBlockForAgent(block)],
       });
       // Durable before sending: a crash after this point still shows the
       // prompt. If the write fails nothing is sent (the catch below reports it).
+      // Built from the blocks, not from the request: the full images stay out of the journal and
+      // out of a JSON round trip.
       await live.store.addDurable(
         SessionEventOrigin.user,
         SessionEventKind.prompt,
-        _plain(request.toJson()),
+        _plain(<String, Object?>{
+          'sessionId': live.acpSessionId,
+          'prompt': <Map<String, Object?>>[
+            for (final block in blocks) promptBlockForJournal(block),
+          ],
+        }),
       );
       if (live.status.value != SessionStatus.running) return;
       live.preparingTurn.value = false;

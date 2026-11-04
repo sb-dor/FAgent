@@ -146,14 +146,27 @@ void main() {
     ) async {
       final chat = await pumpChat(tester);
       chat.textController.value = const TextEditingValue(
+        text: 'read now',
+        selection: TextSelection.collapsed(offset: 4),
+      );
+
+      await dropFiles(tester, <String>[p.join(root.path, 'notes.md')]);
+
+      expect(chat.textController.text, 'read @notes.md now');
+      expect(chat.textController.selection, const TextSelection.collapsed(offset: 14));
+    });
+
+    testWidgets('a drop just before a space adds no second one', (tester) async {
+      final chat = await pumpChat(tester);
+      chat.textController.value = const TextEditingValue(
         text: 'read  now',
         selection: TextSelection.collapsed(offset: 5),
       );
 
       await dropFiles(tester, <String>[p.join(root.path, 'notes.md')]);
 
-      expect(chat.textController.text, 'read @notes.md  now');
-      expect(chat.textController.selection, const TextSelection.collapsed(offset: 15));
+      expect(chat.textController.text, 'read @notes.md now');
+      expect(chat.textController.selection, const TextSelection.collapsed(offset: 14));
     });
 
     testWidgets('a drop glued to a word gets a space before it, several go in order', (

@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
@@ -82,20 +79,22 @@ class ChatItemView extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  SelectableText.rich(
-                    TextSpan(
-                      children: mentionSpans(
-                        text,
-                        resources,
-                        pill: AppText.mono(
-                          context,
-                          size: 13,
-                        ).copyWith(color: colors.accent, backgroundColor: colors.accentSoft),
+                  // A message of images only has no text.
+                  if (text.isNotEmpty)
+                    SelectableText.rich(
+                      TextSpan(
+                        children: mentionSpans(
+                          text,
+                          resources,
+                          pill: AppText.mono(
+                            context,
+                            size: 13,
+                          ).copyWith(color: colors.accent, backgroundColor: colors.accentSoft),
+                        ),
                       ),
                     ),
-                  ),
                   if (images.isNotEmpty) ...<Widget>[
-                    const SizedBox(height: 8),
+                    if (text.isNotEmpty) const SizedBox(height: 8),
                     _MessageImages(images: images),
                   ],
                 ],
@@ -164,40 +163,16 @@ class ChatItemView extends StatelessWidget {
   }
 }
 
-/// The thumbnails of a user message's images; each is decoded once, not on every fold of the feed.
-class _MessageImages extends StatefulWidget {
+/// The thumbnails of a user message's images ([MessageImage.bytes] decodes each once).
+class _MessageImages extends StatelessWidget {
   const _MessageImages({required this.images});
 
   final List<MessageImage> images;
 
   @override
-  State<_MessageImages> createState() => _MessageImagesState();
-}
-
-class _MessageImagesState extends State<_MessageImages> {
-  final Map<String, Uint8List?> _decoded = <String, Uint8List?>{};
-
-  @override
-  void didUpdateWidget(_MessageImages oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final data = <String>{for (final image in widget.images) image.data};
-    _decoded.removeWhere((key, _) => !data.contains(key));
-  }
-
-  Uint8List? _bytes(String data) => _decoded.putIfAbsent(data, () {
-    try {
-      return base64Decode(data);
-    } on FormatException {
-      return null;
-    }
-  });
-
-  @override
   Widget build(BuildContext context) => Wrap(
     spacing: 8,
     runSpacing: 8,
-    children: <Widget>[
-      for (final image in widget.images) ImageThumbnail(bytes: _bytes(image.data) ?? Uint8List(0)),
-    ],
+    children: <Widget>[for (final image in images) ImageThumbnail(bytes: image.bytes)],
   );
 }

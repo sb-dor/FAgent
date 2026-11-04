@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:meta/meta.dart';
 
 /// One entry of the chat feed, folded from the journal by `ChatTranscript`.
@@ -30,26 +33,58 @@ final class UserMessageItem extends ChatItem {
 }
 
 /// {@template message_image}
-/// An image of a user message, as its ACP `image` block carries it.
+/// An image of a user message, as its ACP `image` block carries it in the journal.
 /// {@endtemplate}
 @immutable
 final class MessageImage {
   /// {@macro message_image}
-  const MessageImage({required this.mimeType, required this.data});
+  const MessageImage({required this.mimeType, required this.data, this.isThumbnail = false});
 
   /// `image/png`, `image/jpeg`, …
   final String mimeType;
 
-  /// The image, base64-encoded; decoded only where it is shown (the feed is folded again on every
-  /// event).
+  /// The image, base64-encoded.
   final String data;
+
+  /// [data] is the app's small copy of the image; the agent got the full one.
+  final bool isThumbnail;
+
+  /// The decoded [data]; `null` when it is not base64. Decoded once per image for the whole app:
+  /// the feed is folded again on every event, so the same image comes back in new objects.
+  Uint8List? get bytes => _decoded.of(data);
+
+  static final _DecodedImages _decoded = _DecodedImages();
 
   @override
   bool operator ==(Object other) =>
-      other is MessageImage && other.mimeType == mimeType && other.data == data;
+      other is MessageImage &&
+      other.mimeType == mimeType &&
+      other.data == data &&
+      other.isThumbnail == isThumbnail;
 
   @override
-  int get hashCode => Object.hash(mimeType, data);
+  int get hashCode => Object.hash(mimeType, data, isThumbnail);
+}
+
+/// The decoded bytes of the latest [_limit] images by their base64 text.
+final class _DecodedImages {
+  static const int _limit = 64;
+
+  // Insertion order is use order: a hit moves to the end, the first entry is the oldest.
+  final Map<String, Uint8List?> _bytes = <String, Uint8List?>{};
+
+  Uint8List? of(String data) {
+    if (_bytes.containsKey(data)) return _bytes[data] = _bytes.remove(data);
+    Uint8List? bytes;
+    try {
+      bytes = base64Decode(data);
+    } on FormatException {
+      bytes = null;
+    }
+    _bytes[data] = bytes;
+    if (_bytes.length > _limit) _bytes.remove(_bytes.keys.first);
+    return bytes;
+  }
 }
 
 /// Agent reply text (Markdown), merged from chunks with the same message id.

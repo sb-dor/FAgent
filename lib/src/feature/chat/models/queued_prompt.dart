@@ -13,16 +13,16 @@ abstract class QueuedPrompt with _$QueuedPrompt {
     /// The text sent to the agent.
     required String text,
 
-    /// The ACP content blocks sent after [text] (files, an embedded skill, images), as they were
-    /// when the message was queued.
+    /// The ACP content blocks sent after [text] (files, an embedded skill), as they were when the
+    /// message was queued; the [images] follow them.
     required List<Map<String, Object?>> resources,
 
     /// The composer text as the user typed it, when it differs from [text] (a `/skill` command):
     /// shown in the queue and put back into the field by ✎.
     String? draft,
 
-    /// The composer's images when the message was queued (their blocks are in [resources]): ✎
-    /// puts them back as chips.
+    /// The composer's images when the message was queued: sent after [resources] (their blocks are
+    /// built only then, see [blocks]), and put back as chips by ✎.
     @Default(<ComposerImage>[]) List<ComposerImage> images,
   }) = _QueuedPrompt;
 
@@ -31,8 +31,13 @@ abstract class QueuedPrompt with _$QueuedPrompt {
   /// What the queue shows and ✎ gives back.
   String get typed => draft ?? text;
 
-  /// The files and images among [resources].
-  int get attachmentCount => resources
-      .where((block) => block['type'] == 'resource_link' || block['type'] == 'image')
-      .length;
+  /// What goes to the agent after [text]: [resources], then the [images].
+  List<Map<String, Object?>> get blocks => <Map<String, Object?>>[
+    ...resources,
+    for (final image in images) image.toBlock(),
+  ];
+
+  /// The files among [resources] and the [images].
+  int get attachmentCount =>
+      resources.where((block) => block['type'] == 'resource_link').length + images.length;
 }

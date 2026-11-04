@@ -116,7 +116,10 @@ class _QueueRow extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              item.typed.split('\n').first,
+              // A message of images only is named by them.
+              item.typed.isEmpty
+                  ? localization.queueAttachments(attachments)
+                  : item.typed.split('\n').first,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: textTheme.bodyMedium,

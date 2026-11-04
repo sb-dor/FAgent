@@ -350,10 +350,17 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// text (or `Use the <name> skill.`) with `SKILL.md` embedded as a resource: the agent does not
   /// find those skills on disk. The project's own skills (`.claude/skills`) and every other text
   /// go as typed, as does a command whose `SKILL.md` cannot be read. Mentioned files follow as
-  /// `resource_link`s ([resourcesFor]), then the composer's [images] as `image` blocks.
-  Future<({String text, List<Map<String, Object?>> resources})> promptFor(String text) async {
+  /// `resource_link`s ([resourcesFor]), then, [withImages], the composer's [images] as `image`
+  /// blocks.
+  Future<({String text, List<Map<String, Object?>> resources})> promptFor(
+    String text, {
+    bool withImages = true,
+  }) async {
     // Taken now: the caller clears the images it sent.
-    final pictures = <Map<String, Object?>>[for (final image in images.value) image.toBlock()];
+    final pictures = <Map<String, Object?>>[
+      if (withImages)
+        for (final image in images.value) image.toBlock(),
+    ];
     final files = <Map<String, Object?>>[...await resourcesFor(text), ...pictures];
     final command = leadingCommand(text);
     final skill = command == null ? null : skillsOfChat.runnable(command.name);
@@ -391,7 +398,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Sends the composer text ([promptFor]); the first prompt in a folder asks for trust.
   Future<void> send() async {
     final text = textController.text.trim();
-    if (text.isEmpty || _refuseImagesForAgent()) return;
+    // Images alone are a message too.
+    if ((text.isEmpty && images.value.isEmpty) || _refuseImagesForAgent()) return;
     if (!widget.project.isTrusted) {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
@@ -409,7 +417,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   Future<void> queue() async {
     final draft = textController.text.trim();
     // A second ⌘↵ while the first is being prepared would queue the same text again.
-    if (draft.isEmpty || _queueing || _refuseImagesForAgent()) return;
+    if ((draft.isEmpty && images.value.isEmpty) || _queueing || _refuseImagesForAgent()) return;
     _queueing = true;
     try {
       if (!widget.project.isTrusted) {
@@ -417,7 +425,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         if (!trusted || !mounted) return;
       }
       final attached = images.value;
-      final prompt = await promptFor(draft);
+      // The images are kept as such; their blocks are built when the message goes.
+      final prompt = await promptFor(draft, withImages: false);
       if (!mounted) return;
       textController.clear();
       _clearImages(attached);
@@ -442,12 +451,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   void editQueued(int index) {
     final prompt = queueController.edit(index);
     if (prompt == null) return;
-    insertDraft(prompt.typed);
-    if (prompt.images.isNotEmpty) {
-      images.value = <ComposerImage>[
-        ...images.value,
-        ...prompt.images,
-      ].take(kMaxComposerImages).toList();
+    if (prompt.typed.isNotEmpty) insertDraft(prompt.typed);
+    if (prompt.images.isEmpty) return;
+    final all = <ComposerImage>[...images.value, ...prompt.images];
+    images.value = all.take(kMaxComposerImages).toList();
+    if (all.length > kMaxComposerImages) {
+      _tell(Localization.of(context).imageLimit(kMaxComposerImages));
     }
   }
 
@@ -523,15 +532,17 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     composerFocus.requestFocus();
   }
 
-  /// Puts [inserted] at the caret (in place of the selection), with a space before it when it
-  /// would be glued to a word and one after it, and moves the caret behind it.
+  /// Puts [inserted] at the caret (in place of the selection), with a space before and after it
+  /// unless one is already there, and moves the caret behind it.
   void _insertAtCaret(String inserted) {
     final text = textController.text;
     final selection = textController.selection;
     final start = selection.isValid ? selection.start : text.length;
     final end = selection.isValid ? selection.end : text.length;
-    final separator = start > 0 && !RegExp(r'\s').hasMatch(text[start - 1]) ? ' ' : '';
-    final piece = '$separator$inserted ';
+    final space = RegExp(r'\s');
+    final before = start > 0 && !space.hasMatch(text[start - 1]) ? ' ' : '';
+    final after = end < text.length && space.hasMatch(text[end]) ? '' : ' ';
+    final piece = '$before$inserted$after';
     textController.value = TextEditingValue(
       text: text.replaceRange(start, end, piece),
       selection: TextSelection.collapsed(offset: start + piece.length),
@@ -564,14 +575,16 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         final file = File(path);
         reason = _imageRefusal(localization, name, await file.length());
         if (reason == null) {
-          final bytes = await file.readAsBytes();
-          if (!mounted) return;
-          reason = _addImage(
-            localization,
-            ComposerImage(name: name, mimeType: composerImageType(path)!, bytes: bytes),
+          final image = await ComposerImage.of(
+            name: name,
+            mimeType: composerImageType(path)!,
+            bytes: await file.readAsBytes(),
           );
+          if (!mounted) return;
+          reason = _addImage(localization, image);
         }
-      } on FileSystemException {
+        // A missing file, or one the engine cannot decode.
+      } on Exception {
         reason = localization.imageUnreadable(name);
       }
       refusal ??= reason;
@@ -588,12 +601,20 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       return;
     }
     if (bytes == null || !mounted) return;
+    const name = 'clipboard.png';
     final localization = Localization.of(context);
-    final refusal = _addImage(
-      localization,
-      ComposerImage(name: 'clipboard.png', mimeType: 'image/png', bytes: bytes),
-    );
-    if (refusal != null) _tell(refusal);
+    // Checked before the thumbnail is made: a refused image is not decoded.
+    var refusal = _imageRefusal(localization, name, bytes.length);
+    if (refusal == null) {
+      try {
+        final image = await ComposerImage.of(name: name, mimeType: 'image/png', bytes: bytes);
+        if (!mounted) return;
+        refusal = _addImage(localization, image);
+      } on Exception {
+        refusal = localization.imageUnreadable(name);
+      }
+    }
+    if (refusal != null && mounted) _tell(refusal);
   }
 
   /// Takes the chip of the image at [index] away.

@@ -363,7 +363,7 @@ class _PromptComposerState extends State<PromptComposer> {
     if (keyboard.isShiftPressed) return KeyEventResult.ignored;
     // ⌘↵: queued while the agent works, sent when it does not.
     if (keyboard.isMetaPressed) {
-      if (widget.controller.text.trim().isNotEmpty) {
+      if (_hasContent) {
         if (widget.busy) {
           widget.onQueue?.call();
         } else if (widget.canSend) {
@@ -376,10 +376,13 @@ class _PromptComposerState extends State<PromptComposer> {
     return KeyEventResult.handled;
   }
 
-  /// `⌘↵ Queue` next to the button while the agent works and the field holds text.
+  /// The field holds text or the message has images: there is something to send.
+  bool get _hasContent => widget.controller.text.trim().isNotEmpty || widget.images.isNotEmpty;
+
+  /// `⌘↵ Queue` next to the button while the agent works and there is something to queue.
   Widget _queueHint(GeneratedLocalization localization) => ListenableBuilder(
     listenable: widget.controller,
-    builder: (context, _) => widget.busy && widget.controller.text.trim().isNotEmpty
+    builder: (context, _) => widget.busy && _hasContent
         ? Padding(
             padding: const EdgeInsets.only(right: 8, bottom: 12),
             child: Text(
@@ -409,9 +412,7 @@ class _PromptComposerState extends State<PromptComposer> {
           listenable: widget.controller,
           builder: (context, _) => IconButton.filled(
             tooltip: localization.send,
-            onPressed: widget.canSend && widget.controller.text.trim().isNotEmpty
-                ? widget.onSend
-                : null,
+            onPressed: widget.canSend && _hasContent ? widget.onSend : null,
             icon: const Icon(Icons.arrow_upward_rounded),
           ),
         );

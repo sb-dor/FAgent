@@ -92,15 +92,33 @@ void main() {
       ),
     );
 
-    final thumbnails = find.descendant(
-      of: find.byType(ChatItemView),
-      matching: find.byType(Image),
-    );
+    final thumbnails = find.descendant(of: find.byType(ChatItemView), matching: find.byType(Image));
     expect(thumbnails, findsNWidgets(2));
     expect(
       tester.getTopLeft(thumbnails.first).dy,
       greaterThan(tester.getTopLeft(find.text('look')).dy),
     );
+  });
+
+  testWidgets('a message of images only shows no empty text; a broken image a placeholder', (
+    tester,
+  ) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      _item(
+        const UserMessageItem(
+          0,
+          text: '',
+          images: <MessageImage>[MessageImage(mimeType: 'image/png', data: '%%not base64%%')],
+        ),
+      ),
+    );
+
+    expect(
+      find.descendant(of: find.byType(ChatItemView), matching: find.byType(SelectableText)),
+      findsNothing,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
   });
 
   group('clicking an edit row', () {

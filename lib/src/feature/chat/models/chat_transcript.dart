@@ -1,5 +1,6 @@
 // ignore_for_file: avoid_classes_with_only_static_members
 
+import 'package:flutter_code_agent/src/common/acp/prompt_images.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 
@@ -177,7 +178,13 @@ abstract final class ChatTranscript {
             final String mimeType,
             final String data,
           )) {
-            images.add(MessageImage(mimeType: mimeType, data: data));
+            images.add(
+              MessageImage(
+                mimeType: mimeType,
+                data: data,
+                isThumbnail: isJournaledThumbnail(block),
+              ),
+            );
           }
       }
     }

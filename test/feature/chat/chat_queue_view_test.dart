@@ -1,12 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_queue_view.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/test_app.dart';
 
 const _link = <String, Object?>{'type': 'resource_link', 'uri': 'file:///p/a.dart', 'name': 'a'};
-const _image = <String, Object?>{'type': 'image', 'mimeType': 'image/png', 'data': 'AA=='};
+final _image = ComposerImage(
+  name: 'shot.png',
+  mimeType: 'image/png',
+  bytes: Uint8List.fromList(<int>[0]),
+  thumbnail: Uint8List.fromList(<int>[0]),
+);
 const _skill = <String, Object?>{
   'type': 'resource',
   'resource': <String, Object?>{'uri': 'skill://x/SKILL.md', 'text': '# x'},
@@ -14,9 +21,10 @@ const _skill = <String, Object?>{
 
 void main() {
   final items = <QueuedPrompt>[
-    const QueuedPrompt(
+    QueuedPrompt(
       text: 'Fix the tests\nthen run them again',
-      resources: <Map<String, Object?>>[_link, _image],
+      resources: const <Map<String, Object?>>[_link],
+      images: <ComposerImage>[_image],
     ),
     const QueuedPrompt(
       text: 'Use the x skill.',
@@ -42,6 +50,18 @@ void main() {
       onSendNext: onSendNext,
     ),
   );
+
+  testWidgets('a message of images only is named by its attachments', (tester) async {
+    await tester.pumpWidget(
+      view(
+        queued: <QueuedPrompt>[
+          QueuedPrompt(text: '', resources: const <Map<String, Object?>>[], images: [_image]),
+        ],
+      ),
+    );
+
+    expect(find.text('1 attachment'), findsOneWidget);
+  });
 
   testWidgets('rows with first line and attachment count, ✎ and ✕, paused banner', (tester) async {
     final edited = <int>[];

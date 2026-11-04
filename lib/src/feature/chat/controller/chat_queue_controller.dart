@@ -166,7 +166,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     _inFlight++;
     setState(state.copyWith(items: state.items.sublist(1), sending: true));
     handle(
-      () => _repository.send(sessionId, prompt.text, resources: prompt.resources),
+      () => _repository.send(sessionId, prompt.text, resources: prompt.blocks),
       done: () async {
         if (--_inFlight == 0) setState(state.copyWith(sending: false));
       },
