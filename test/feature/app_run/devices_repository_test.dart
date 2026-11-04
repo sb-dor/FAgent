@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/emulator_launcher.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/launch_config_reader.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -14,6 +17,15 @@ const Map<String, Object?> _macos = <String, Object?>{
   'platformType': 'macos',
   'emulator': false,
   'sdk': 'macOS 26.0',
+};
+
+/// What `flutter --show-web-server-device daemon` reports for the web server device.
+const Map<String, Object?> _webServer = <String, Object?>{
+  'id': 'web-server',
+  'name': 'Web Server',
+  'platformType': 'web',
+  'emulator': false,
+  'sdk': 'Flutter Tools',
 };
 
 const Map<String, Object?> _runningPixel = <String, Object?>{
@@ -133,14 +145,50 @@ void main() {
       expect(started, isEmpty);
     });
 
-    test('starts `flutter daemon` with the environment', () async {
+    test('starts `flutter --show-web-server-device daemon` with the environment', () async {
       watch();
       await pumpEventQueue();
 
       expect(started, hasLength(1));
       expect(started.single.executable, '/opt/flutter/bin/flutter');
-      expect(started.single.arguments, <String>['daemon']);
+      // The global flag goes before the subcommand; without it the daemon never lists
+      // `web-server`.
+      expect(started.single.arguments, <String>['--show-web-server-device', 'daemon']);
       expect(started.single.environment, <String, String>{'PATH': '/usr/bin'});
+    });
+
+    test('the web-server device a configuration names is listed as a running device', () async {
+      final launch = parseLaunchConfigs(
+        File('test/fixtures/launch_json/user_launch.json').readAsStringSync(),
+        projectRoot: '/work/app',
+      );
+      final webServer = (launch as LaunchConfigsRead).configs.singleWhere(
+        (config) => config.name == 'Run DEV Web Server (Debug)',
+      );
+      // Like flutter_tools: the daemon lists `web-server` only when started with the flag.
+      final listed = <Object?>[_macos];
+      devicesAnswer = listed;
+      await repository.dispose();
+      repository = DevicesRepositoryImpl(
+        flutter: () => flutterPath,
+        environment: const <String, String>{},
+        start: (executable, arguments, {workingDirectory, environment}) {
+          if (arguments.contains('--show-web-server-device')) listed.add(_webServer);
+          return scriptedStarter(create, started: started)(
+            executable,
+            arguments,
+            workingDirectory: workingDirectory,
+            environment: environment,
+          );
+        },
+      );
+      watch();
+      await connect();
+
+      final device = lists.single.where((device) => device.id == webServer.deviceId).firstOrNull;
+      expect(device, isNotNull, reason: 'the config "${webServer.name}" can start');
+      expect(device!.kind, DeviceKind.running);
+      expect(device.platform, DevicePlatform.web);
     });
 
     test('asks for the devices only once the daemon is connected', () async {
