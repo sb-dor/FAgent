@@ -356,3 +356,23 @@ Deferred from the reviews of the M6 plan (docs/superpowers/plans/2026-11-02-m6-w
   - Card tests: the layout at 340 px with a thumbnail is untested; the thumbnail test waits 10 x 10 ms of real time for the file read (`test/feature/app_run/picked_widget_card_test.dart`)
   - Opt-in test: it selects the widget through `setSelectionById`, not a real tap, and does not hot restart during a pick (`test/integration/widget_picker_test.dart`)
   - Wiring: `initialize_dependencies.dart` got unrelated formatter churn in the `sessionContext` block with Task 2 (`feature/initialization/data/initialize_dependencies.dart`)
+
+## Round 1 follow-ups
+
+Deferred from the reviews of the first feedback round (docs/superpowers/plans/2026-11-04-run-configs-and-composer.md: run configurations, the ⌘↵ queue, file drop). Paths are under `lib/src/feature/` unless they start with `test/`.
+
+- **Bugs and risks:**
+  - `launch.json`: `createLaunchJson` creates the file, then writes it — a crash in between leaves an empty file; a `.vscode` that is a file is unhandled (`app_run/data/launch_config_reader.dart`)
+  - `launch.json`: line 268 still has the invisible literal U+FEFF — write `'﻿'`; the `if (entries is! List)` return is unbraced (`app_run/data/launch_config_reader.dart`)
+  - Run configuration: a stored selection can briefly overwrite a fresh choice when drift's first emission is late (converges); a chip clicked before the stored selection and the first read arrive is overridden by the restore (a window of milliseconds) (`app_run/controller/run_controller.dart`)
+  - Run configuration: after switching back to Default a config device that was never listed stays chosen (by design, the chip is the user's); the menu's sentinel values could collide with a config name (theoretical) (`app_run/controller/run_controller.dart`, `app_run/widgets/run_split_button.dart`)
+  - Queue: a late Stop on a not-yet-rebuilt button after the turn ended is lost while the queue already sent the next message; ⌘↵ with the suggestion menu open picks the item like Enter (`chat/controller/chat_queue_controller.dart`, `prompt_sending/widgets/prompt_composer.dart`)
+  - Queue: a bypass-blocked first prompt plus a message queued during its setup — the queued message replaces `lastPrompt`; fix: `prompt()` throws `BypassNotAllowedException` before overwriting `lastPrompt` when ready and blocked, and the queue treats it like `StateError` (put back and pause) (`common/acp/agent_hub.dart`, `chat/controller/chat_queue_controller.dart`)
+  - Queue: a turn whose `finally` throws before `turn.complete()` now blocks the next turn — complete it defensively; removal race: a send not yet running passes the `isBusy` check, and a refused send re-queues into a deleted chat (`common/acp/agent_hub.dart`, `chat/controller/chat_queue_controller.dart`)
+  - Drop: `desktop_drop` is `^0.8.4`, not the planned `^0.9.2` — 0.9.x needs `cross_file ^0.4.0`, which no `file_selector` release accepts yet; move up once `file_selector_platform_interface` takes `cross_file` 0.4 (`pubspec.yaml`)
+  - Images: a sent image stays in the chat journal as base64 (up to 10 × 5 MB in one `prompt` event); ⌘V reads an image only when the clipboard holds no text (a file copied in Finder pastes its name) (`common/acp/agent_hub.dart`, `chat/widgets/chat_config_widget.dart`)
+- **Next steps:**
+  - Title bar: the Run button keeps a bare "Run" and says "Choose a device" for an unavailable config device — show the config name and `runDeviceUnavailable` in its tooltip (`workspace/widgets/workspace_run_controls.dart`)
+  - Split button: its parts have no explicit `Semantics(button, enabled)`, the arrow no `semanticLabel`; the disabled main part loses the full-name tooltip (`app_run/widgets/run_split_button.dart`)
+  - Tests: the Russian strings of the split button are thinly covered (`test/feature/app_run/run_split_button_test.dart`); `agent_probe_test.dart` 'silent agent times out' failed once in a full run, passed alone and on rerun (M5 test, `test/feature/agents/agent_probe_test.dart`)
+  - Drop: a real drop from Finder is checked by hand only; the drop target's own hit test (`DropTarget` bounds against the window) is not exercised by the widget tests, which call its callbacks (`chat/widgets/chat_drop_target.dart`)
