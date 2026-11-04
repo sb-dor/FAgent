@@ -25,7 +25,7 @@ analysis server — следующая веха.
   видят один вид «Код» с одними вкладками. Без выбранного проекта переключателя нет.
 - Сайдбар и правая панель (Changes, Run, Plan) остаются. В «Коде» колонка чата становится:
   - **Проводник** (240 px, тянется 180–480): дерево папок проекта. Папки раскрываются лениво.
-    `.git`, `build`, `.dart_tool` не показываются; игнорируемое `.gitignore` — приглушено. Дерево
+    `.git` и `.dart_tool` (на любой глубине) и `build` рядом с `pubspec.yaml` не показываются; игнорируемое `.gitignore` — приглушено. Дерево
     следует за диском (правки агента, новые и удалённые файлы).
   - **Редактор**: вкладки сверху (● — несохранено, ✕ и средняя кнопка закрывают), под ними код с
     номерами строк, подсветкой, сворачиванием, поиском ⌘F (и заменой из него), ⌘S — сохранить,
@@ -42,16 +42,17 @@ analysis server — следующая веха.
 
 Новая фича `lib/src/feature/code_view/` по `docs/AI_INSTRUCTIONS.md`.
 
-- `IProjectFilesRepository` (файловая система и `git`, через конструктор):
+- `ICodeFilesRepository` (файловая система и `git`, через конструктор; имя `IProjectFilesRepository`
+  уже занято списком файлов для `@`-упоминаний — его ⌘P и использует):
   - `list(String dir) → Future<List<FileNode>>` — записи одной папки (папки сначала, по имени),
     с пометкой `ignored` по `git check-ignore --stdin` (вне git-репозитория — ничего не игнорируется);
   - `watch(String root) → Stream<FileChange>` — `Directory.watch(recursive: true)`, без `build/`,
-    `.dart_tool/`, `.git/`, слитые за 100 мс; долгоживущий поток по правилам «Stream-Returning
+    `.dart_tool/`, `.git/` (по тому же правилу), слитые за 100 мс; долгоживущий поток по правилам «Stream-Returning
     Methods», отписка в `dispose`;
   - `read(String path) → Future<FileContent>` — текст и `FileStamp` (время изменения и размер);
     отказ `FileNotTextException` (NUL в первых 8 КБ или не UTF-8) и `FileTooLargeException` (> 5 МБ);
   - `write(String path, String text, {required FileStamp? expected}) → Future<FileStamp>` — через
-    временный файл и переименование; `FileChangedOnDiskException`, если штамп на диске не равен
+    временный файл и переименование, с правами исходного файла и по цели симлинка; `FileChangedOnDiskException`, если штамп на диске не равен
     `expected`; `expected: null` — запись без проверки (перезапись по согласию, восстановление
     удалённого).
 - `FileTreeController` — раскрытые папки, их содержимое, обновление по `watch`; дерево рисуется одним
