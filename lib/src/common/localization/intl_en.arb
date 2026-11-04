@@ -637,5 +637,10 @@
   "@newProjectChipDone": {"placeholders": {"name": {"type": "String"}}},
   "newProjectChipFailed": "{name}: error",
   "@newProjectChipFailed": {"placeholders": {"name": {"type": "String"}}},
-  "newProjectChipHide": "Hide"
+  "newProjectChipHide": "Hide",
+  "codeViewChat": "Chat",
+  "codeViewCode": "Code",
+  "codeEmptyHint": "Choose a file on the left or press ⌘P",
+  "codeOpenExternally": "Open in default app",
+  "codeProjectFolderMissing": "Project folder not found"
 }

@@ -74,7 +74,8 @@ final class FileTreeController extends StateController<FileTreeState>
 
   /// Reads the project's folder and follows its changes.
   void load() => handle(() async {
-    _subscription ??= _changes.listen(_onChange);
+    // A failed watch (the folder went away) only stops updates; reading the folder tells the rest.
+    _subscription ??= _changes.listen(_onChange, onError: (Object _) {});
     if (!await _list(_root)) {
       setState(const FileTreeState.missing());
       return;

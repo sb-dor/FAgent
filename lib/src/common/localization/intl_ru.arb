@@ -586,5 +586,10 @@
   "@newProjectChipDone": {"placeholders": {"name": {"type": "String"}}},
   "newProjectChipFailed": "{name}: ошибка",
   "@newProjectChipFailed": {"placeholders": {"name": {"type": "String"}}},
-  "newProjectChipHide": "Скрыть"
+  "newProjectChipHide": "Скрыть",
+  "codeViewChat": "Чат",
+  "codeViewCode": "Код",
+  "codeEmptyHint": "Выберите файл слева или нажмите ⌘P",
+  "codeOpenExternally": "Открыть в приложении по умолчанию",
+  "codeProjectFolderMissing": "Папка проекта не найдена"
 }

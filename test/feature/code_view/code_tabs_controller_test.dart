@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
@@ -112,6 +113,16 @@ void main() {
 
     expect(clean.editing.text, 'agent\n');
     expect(dirty.changedOnDisk, isTrue);
+  });
+
+  test('a watch error keeps the tabs', () async {
+    final tabs = create();
+    await tabs.open(main);
+
+    changes.addError(const FileSystemException('watch failed'));
+    await settle();
+
+    expect(tabs.tabs, hasLength(1));
   });
 
   test('deleting a folder marks the tabs under it deleted', () async {

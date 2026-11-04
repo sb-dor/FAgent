@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
@@ -155,6 +156,16 @@ void main() {
     changes.add(const FileChange(path: '$root/lib/src', kind: FileChangeKind.created));
     await settle();
     expect(rows(), <String>['assets/', '+lib/', '  src/', '  main.dart', 'pubspec.yaml']);
+  });
+
+  test('a watch error leaves the tree as it is', () async {
+    tree.load();
+    await settle();
+
+    changes.addError(const FileSystemException('watch failed'));
+    await settle();
+
+    expect(rows(), <String>['assets/', 'lib/', 'pubspec.yaml']);
   });
 
   test('a missing root is missing', () async {

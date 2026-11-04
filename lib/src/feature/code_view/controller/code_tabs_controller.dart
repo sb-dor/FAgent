@@ -23,7 +23,8 @@ final class CodeTabsController extends ChangeNotifier {
     required this._state,
     required Stream<FileChange> changes,
   }) {
-    _subscription = changes.listen(_onChange);
+    // A failed watch only stops updates; the open files stay as they are.
+    _subscription = changes.listen(_onChange, onError: (Object _) {});
   }
 
   final int _projectId;
