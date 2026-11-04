@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
@@ -5,6 +8,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/devices_contro
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/launch_config_reader.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -12,6 +16,7 @@ import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_car
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_logs.dart';
+import 'package:l/l.dart' show l;
 
 /// {@template run_tab}
 /// The Run tab of the right pane for [projectId]: device, mode and buttons on top, the widget
@@ -94,6 +99,28 @@ class _RunTabState extends State<RunTab> {
     );
   }
 
+  /// Opens `launch.json` of the project in the editor; when there is none, writes the empty one
+  /// first.
+  Future<void> _openLaunchJson() async {
+    final root = widget.projectRoot;
+    if (root == null) return;
+    final path = launchJsonPath(root);
+    if (widget.run.state.launchConfigs is LaunchConfigsMissing) {
+      try {
+        await createLaunchJson(root);
+      } on FileSystemException catch (error, stackTrace) {
+        l.w('RunTab | cannot create $path: $error', stackTrace);
+        if (mounted) {
+          ScaffoldMessenger.maybeOf(context)
+              ?.showSnackBar(SnackBar(content: Text(Localization.of(context).somethingWentWrong)));
+        }
+        return;
+      }
+      unawaited(widget.run.refreshConfigs());
+    }
+    if (mounted) widget.onOpenFile(path, null);
+  }
+
   void _onRunAction(RunAction action) {
     final projectId = widget.projectId;
     final state = widget.run.state;
@@ -161,6 +188,9 @@ class _RunTabState extends State<RunTab> {
               launchFailed:
                   state.selectedDeviceId != null &&
                   widget.devices.launchFailed(state.selectedDeviceId!),
+              onConfig: widget.run.chooseConfig,
+              onOpenLaunchJson: _openLaunchJson,
+              onConfigMenuOpening: widget.run.refreshConfigs,
               onMode: (mode) => widget.run.choose(mode: mode),
               onAction: _onRunAction,
             ),

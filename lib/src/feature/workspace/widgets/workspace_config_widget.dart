@@ -13,6 +13,8 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/launch_config_texts.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
@@ -275,11 +277,13 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   ///
   /// - none chosen: the first running device, so every way to start the app (the Run tab, the title
   ///   bar) sees a device whether or not the Run tab was ever opened;
-  /// - the chosen device is gone: if it was an emulator that has booted, the running device of the
-  ///   same emulator; otherwise the first running device, or none.
+  /// - the chosen device is gone from the list it was in: if it was an emulator that has booted,
+  ///   the running device of the same emulator; otherwise the first running device, or none.
   ///
-  /// A device the user chose that is still in the list is never replaced. Nothing changes while the
-  /// devices are not known (loading, or an error).
+  /// A device the user chose that is still in the list is never replaced, and neither is one that
+  /// was never in the list: a run configuration names its device (`web-server`) whether or not it
+  /// is connected, and the Run tab says it is not available instead of switching to another one.
+  /// Nothing changes while the devices are not known (loading, or an error).
   void _chooseDefaultDevice() {
     final run = runController.state;
     if (run.projectId == null) return;
@@ -291,9 +295,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       _lastSelected = chosen;
       return;
     }
-    final booted = chosenId == null || _lastSelected == null || _lastSelected!.id != chosenId
-        ? null
-        : _runningOf(devices, _lastSelected!.emulatorId);
+    final seen = _lastSelected != null && _lastSelected!.id == chosenId;
+    if (chosenId != null && !seen) return;
+
+    final booted = seen ? _runningOf(devices, _lastSelected!.emulatorId) : null;
     final next = booted ?? devices.where((d) => d.kind == DeviceKind.running).firstOrNull;
     _lastSelected = null;
     if (next != null) {
@@ -313,6 +318,15 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// is not an action result: the picker keeps it, per project (see `RunActionsController.pick`).
   void _onRunAction() {
     final state = runActionsController.state;
+    if (state case RunActions$ErrorState(:final error)) {
+      // A start the app refused (an unsupported configuration, an unreadable `launch.json`) says
+      // why; the other failures are in the run's logs.
+      if (error is RunConfigNotStartable && !identical(state, _handledError) && mounted) {
+        _showMessage(Localization.of(context).runRefusedText(error));
+      }
+      _handledError = state;
+      return;
+    }
     if (state is! RunActions$CompletedState || identical(state, _handledAction)) return;
     _handledAction = state;
     if (state case RunActions$CompletedState(:final screenshot?, :final projectId?)) {
@@ -324,6 +338,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
 
   /// The last finished action that was dealt with, so one result is not taken twice.
   RunActions$CompletedState? _handledAction;
+
+  /// The last failed action that was dealt with.
+  RunActions$ErrorState? _handledError;
 
   /// The selected project with its latest data (trust changes, renames).
   Project? get selectedProject {

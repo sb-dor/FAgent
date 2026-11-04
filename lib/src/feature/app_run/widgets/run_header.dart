@@ -14,6 +14,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_reload_switch.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_split_button.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_status.dart';
 import 'package:path/path.dart' as p;
 
@@ -42,8 +43,9 @@ enum RunAction {
 }
 
 /// {@template run_header}
-/// The top of the Run tab: the device, mode and entry point chips, the action buttons, the status
-/// line and the "reload after every agent turn" switch.
+/// The top of the Run tab: the device, mode and entry point chips, the action buttons (Run is split:
+/// the arrow chooses the run configuration of `launch.json`), the status line and the "reload after
+/// every agent turn" switch.
 ///
 /// Where the device chip would be, the header says what is wrong with the devices instead: no
 /// Flutter SDK (with a link to its settings), a failure to get them (with a retry), or that there
@@ -62,6 +64,9 @@ class RunHeader extends StatelessWidget {
     required this.onAction,
     required this.onRetryDevices,
     required this.onOpenFlutterSettings,
+    required this.onConfig,
+    required this.onOpenLaunchJson,
+    required this.onConfigMenuOpening,
     this.launchFailed = false,
     super.key,
   });
@@ -93,6 +98,15 @@ class RunHeader extends StatelessWidget {
   /// Called when the user follows the link to the Flutter settings.
   final VoidCallback onOpenFlutterSettings;
 
+  /// Called with the name of the run configuration the user chose; `null` is Default.
+  final ValueChanged<String?> onConfig;
+
+  /// Called when the user chooses to open `launch.json` (or to create it, when there is none).
+  final VoidCallback onOpenLaunchJson;
+
+  /// Called, and waited for, before the configurations menu opens, to read `launch.json` again.
+  final Future<void> Function() onConfigMenuOpening;
+
   /// Whether booting the chosen emulator failed; the status line says so, with a retry.
   final bool launchFailed;
 
@@ -109,6 +123,14 @@ class RunHeader extends StatelessWidget {
     final selected = deviceList.where((device) => device.id == state.selectedDeviceId).firstOrNull;
     final launching = selected?.kind == DeviceKind.available;
     final canStart = selected?.kind == DeviceKind.running;
+    // A device that is chosen but not in the list: the one a run configuration names, not connected.
+    final unavailableDeviceId =
+        devices is Devices$CompletedState &&
+            selected == null &&
+            state.selectedDeviceId != null &&
+            !active
+        ? state.selectedDeviceId
+        : null;
     // Hot reload and restart need the JIT and the inspector (screenshots) exists in debug only;
     // DevTools needs the address `flutter run` reports a moment after the app is up.
     final inDebug = run is RunRunning && run.mode == BuildMode.debug;
@@ -125,33 +147,23 @@ class RunHeader extends StatelessWidget {
       _ => localization.pickNotRunning,
     };
 
-    Widget button(
-      RunAction action,
-      IconData icon,
-      String tooltip, {
-      bool enabled = true,
-      bool primary = false,
-      bool danger = false,
-    }) => IconButton(
-      onPressed: enabled ? () => onAction(action) : null,
-      tooltip: tooltip,
-      icon: Icon(icon, size: 16),
-      style: IconButton.styleFrom(
-        fixedSize: const Size(28, 26),
-        minimumSize: const Size(28, 26),
-        padding: EdgeInsets.zero,
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.small)),
-        backgroundColor: primary && enabled ? colors.accent : colors.bg,
-        foregroundColor: primary
-            ? colors.onAccent
-            : danger
-            ? colors.danger
-            : colors.text,
-        disabledForegroundColor: colors.muted.withValues(alpha: 0.5),
-        side: BorderSide(color: primary && enabled ? colors.accent : colors.border),
-      ),
-    );
+    Widget button(RunAction action, IconData icon, String tooltip, {bool enabled = true}) =>
+        IconButton(
+          onPressed: enabled ? () => onAction(action) : null,
+          tooltip: tooltip,
+          icon: Icon(icon, size: 16),
+          style: IconButton.styleFrom(
+            fixedSize: const Size(28, 26),
+            minimumSize: const Size(28, 26),
+            padding: EdgeInsets.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.small)),
+            backgroundColor: colors.bg,
+            foregroundColor: colors.text,
+            disabledForegroundColor: colors.muted.withValues(alpha: 0.5),
+            side: BorderSide(color: colors.border),
+          ),
+        );
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -234,22 +246,32 @@ class RunHeader extends StatelessWidget {
               spacing: 6,
               runSpacing: 6,
               children: <Widget>[
-                if (active)
-                  button(RunAction.stop, Icons.stop, localization.runStop, danger: true)
-                else
-                  button(
-                    RunAction.start,
-                    Icons.play_arrow,
-                    canStart
-                        ? localization.runStart
-                        : launching
-                        ? (launchFailed
-                              ? localization.runLaunchFailed
-                              : localization.runLaunchingEmulator)
-                        : localization.runChooseDeviceFirst,
-                    enabled: canStart,
-                    primary: true,
+                RunSplitButton(
+                  label: state.selectedConfig == null
+                      ? localization.runStart
+                      : localization.runWithConfig(state.selectedConfig!),
+                  enabled: canStart,
+                  disabledReason: unavailableDeviceId != null
+                      ? localization.runDeviceUnavailable(unavailableDeviceId)
+                      : launching
+                      ? (launchFailed
+                            ? localization.runLaunchFailed
+                            : localization.runLaunchingEmulator)
+                      : localization.runChooseDeviceFirst,
+                  onRun: () => onAction(RunAction.start),
+                  running: active,
+                  onStop: () => onAction(RunAction.stop),
+                  stopTooltip: localization.runStop,
+                  menuTooltip: localization.runConfigTooltip,
+                  menu: runConfigMenu(
+                    localization: localization,
+                    configs: state.launchConfigs,
+                    selected: state.selectedConfig,
                   ),
+                  onSelected: onConfig,
+                  onOpenLaunchJson: onOpenLaunchJson,
+                  onMenuOpening: onConfigMenuOpening,
+                ),
                 button(
                   RunAction.reload,
                   Icons.bolt,
@@ -280,6 +302,15 @@ class RunHeader extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
+            if (unavailableDeviceId != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  localization.runDeviceUnavailable(unavailableDeviceId),
+                  style: Theme.of(context).textTheme.bodySmall!
+                      .copyWith(fontSize: 11, color: colors.danger),
+                ),
+              ),
             if (launching && launchFailed)
               _DevicesProblem(
                 message: localization.runLaunchFailed,

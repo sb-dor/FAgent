@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
@@ -26,6 +27,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widge
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
+import '../../support/memory_run_config_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
 import '../../support/scripted_widget_picker_repository.dart';
 import '../../support/test_app.dart';
@@ -480,10 +482,10 @@ void main() {
     testWidgets('Run is disabled until a device is chosen', (tester) async {
       await pumpTab(tester, chooseDevice: false);
       expect(find.text('Choose a device'), findsOneWidget, reason: 'the tab never picks for you');
-      final startButton = tester.widget<IconButton>(
-        find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(IconButton)),
+      final startButton = tester.widget<InkWell>(
+        find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(InkWell)).first,
       );
-      expect(startButton.onPressed, isNull);
+      expect(startButton.onTap, isNull);
       expect(find.byTooltip('Choose a device to run on'), findsOneWidget);
 
       run.choose(deviceId: 'macos');
@@ -962,8 +964,8 @@ void main() {
       await disposeTestApp(tester, dependencies);
     }
 
-    IconButton startButton(WidgetTester tester) => tester.widget<IconButton>(
-      find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(IconButton)),
+    InkWell startButton(WidgetTester tester) => tester.widget<InkWell>(
+      find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(InkWell)).first,
     );
 
     testWidgets('no Flutter SDK says so and links to the Flutter settings', (tester) async {
@@ -1012,7 +1014,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 20));
       run.choose(deviceId: 'macos');
       await tester.pump();
-      expect(startButton(tester).onPressed, isNotNull);
+      expect(startButton(tester).onTap, isNotNull);
 
       await tester.tap(find.text('macOS'));
       await tester.pumpAndSettle();
@@ -1021,7 +1023,7 @@ void main() {
 
       expect(fake.launched, <String>['emulator:Pixel_9']);
       expect(run.state.selectedDeviceId, 'emulator:Pixel_9');
-      expect(startButton(tester).onPressed, isNull);
+      expect(startButton(tester).onTap, isNull);
       expect(find.text('Starting the emulator…'), findsOneWidget);
       expect(find.text('Not running'), findsNothing);
       await finish(tester);
@@ -1044,7 +1046,7 @@ void main() {
 
       expect(find.text('Could not start the emulator'), findsOneWidget);
       expect(find.text('Starting the emulator…'), findsNothing);
-      expect(startButton(tester).onPressed, isNull, reason: 'still not a running device');
+      expect(startButton(tester).onTap, isNull, reason: 'still not a running device');
 
       fake.launchError = null;
       await tester.tap(find.text('Retry'));
@@ -1092,7 +1094,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(fake.launched, isEmpty);
-      expect(startButton(tester).onPressed, isNotNull);
+      expect(startButton(tester).onTap, isNotNull);
       expect(find.text('Starting the emulator…'), findsNothing);
       await finish(tester);
     });
@@ -1119,6 +1121,18 @@ void main() {
       dependencies = testDependencies(devicesRepository: fakeDevices);
     });
 
+    /// Dependencies whose project 1 has [launch] as its `launch.json` and [selected] as its
+    /// selected configuration.
+    void useLaunchJson(LaunchConfigs launch, {String? selected}) {
+      dependencies = testDependencies(
+        devicesRepository: fakeDevices,
+        runConfigRepository: MemoryRunConfigRepository(
+          launch: <int, LaunchConfigs>{1: launch},
+          selected: <int, String>{1: ?selected},
+        ),
+      );
+    }
+
     /// The button of the right pane (the title bar has buttons with the same tooltips).
     Finder inPane(String tooltip) =>
         find.descendant(of: find.byType(WorkspaceRightPane), matching: find.byTooltip(tooltip));
@@ -1132,6 +1146,7 @@ void main() {
       WidgetTester tester, {
       Size? size,
       bool openRunTab = true,
+      Locale locale = const Locale('en'),
     }) async {
       tester.view
         ..physicalSize = size ?? const Size(1280, 800)
@@ -1153,7 +1168,12 @@ void main() {
             );
       });
       await tester.pumpWidget(
-        testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
+        testApp(
+          const WorkspaceConfigWidget(),
+          dependencies: dependencies,
+          withSettings: true,
+          locale: locale,
+        ),
       );
       await settle(tester);
       await tester.pumpAndSettle();
@@ -1275,6 +1295,104 @@ void main() {
       await settle(tester);
 
       expect(state.runController.state.selectedDeviceId, isNull);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a device a configuration chose stays chosen while it is not connected', (
+      tester,
+    ) async {
+      useLaunchJson(
+        const LaunchConfigsRead(<LaunchConfig>[LaunchConfig(name: 'Web', deviceId: 'web-server')]),
+        selected: 'Web',
+      );
+      final state = await pump(tester);
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      expect(state.runController.state.selectedConfig, 'Web');
+      expect(state.runController.state.selectedDeviceId, 'web-server');
+      expect(find.byTooltip("Device web-server isn't available"), findsWidgets);
+
+      // An unrelated change of the devices does not take it away either.
+      fakeDevices.set(const <Device>[_macos, _pixelEmulator]);
+      await settle(tester);
+      expect(state.runController.state.selectedDeviceId, 'web-server');
+
+      // And it works once the device is there.
+      fakeDevices.set(const <Device>[
+        _macos,
+        Device(
+          id: 'web-server',
+          name: 'Web Server',
+          platform: DevicePlatform.web,
+          kind: DeviceKind.running,
+        ),
+      ]);
+      await settle(tester);
+      expect(state.runController.state.selectedDeviceId, 'web-server');
+      expect(state.runLink.canStart, isTrue);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a refused start says why instead of staying silent', (tester) async {
+      useLaunchJson(
+        const LaunchConfigsRead(<LaunchConfig>[
+          LaunchConfig(name: 'Broken', unsupported: LaunchUnsupportedVariable(r'${env:HOME}')),
+        ]),
+        selected: 'Broken',
+      );
+      await pump(tester);
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      await tester.tap(inPane('Run · Broken'));
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.pump();
+
+      expect(find.text(r"“Broken” can't run. Unsupported: ${env:HOME}"), findsOneWidget);
+      expect(find.byTooltip('Stop the app'), findsNothing, reason: 'nothing started');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a refused start because of an unreadable file says so', (tester) async {
+      useLaunchJson(
+        const LaunchConfigsUnreadable(LaunchUnreadableKind.invalidJson, 'bad'),
+        selected: 'Web',
+      );
+      await pump(tester);
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      await tester.tap(inPane('Run · Web'));
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.pump();
+
+      expect(
+        find.text("“Web” can't run. launch.json can't be read: invalid JSON: bad"),
+        findsOneWidget,
+      );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a refused start is worded in Russian too', (tester) async {
+      useLaunchJson(
+        const LaunchConfigsRead(<LaunchConfig>[
+          LaunchConfig(name: 'Far', unsupported: LaunchCwdOutsideProject('/other')),
+        ]),
+        selected: 'Far',
+      );
+      await pump(tester, locale: const Locale('ru'));
+      await settle(tester);
+      await tester.pump(const Duration(milliseconds: 20));
+
+      await tester.tap(inPane('Запустить · Far'));
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.pump();
+
+      expect(
+        find.text('«Far» не запускается. Не поддерживается: cwd /other вне проекта'),
+        findsOneWidget,
+      );
       await disposeTestApp(tester, dependencies);
     });
 
