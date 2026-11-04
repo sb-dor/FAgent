@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
@@ -35,6 +36,7 @@ final class CodeWorkspace {
       state: state,
       changes: changes,
     );
+    _diagnostics = analysis?.diagnostics.listen(_onDiagnostics);
     tabs
       ..addListener(_dropClosedViews)
       ..addListener(_syncAnalysis)
@@ -43,6 +45,25 @@ final class CodeWorkspace {
 
   /// The Dart analysis of the project; `null` without one (tests).
   final IDartAnalysisRepository? analysis;
+
+  /// The last diagnostics the analysis published, by file (it analyzes the whole project).
+  final Map<String, List<DartDiagnostic>> _published = <String, List<DartDiagnostic>>{};
+  StreamSubscription<DartFileDiagnostics>? _diagnostics;
+
+  /// The files the analysis reports errors in.
+  ValueListenable<Set<String>> get filesWithErrors => _filesWithErrors;
+  final ValueNotifier<Set<String>> _filesWithErrors = ValueNotifier<Set<String>>(const <String>{});
+
+  void _onDiagnostics(DartFileDiagnostics published) {
+    _published[published.path] = published.diagnostics;
+    for (final document in tabs.tabs) {
+      if (document.path == published.path) document.setDiagnostics(published.diagnostics);
+    }
+    _filesWithErrors.value = <String>{
+      for (final MapEntry(key: path, value: diagnostics) in _published.entries)
+        if (diagnostics.any((d) => d.severity == DartSeverity.error)) path,
+    };
+  }
 
   /// The text each open text document had when the analysis last heard of it.
   final Map<CodeDocument, (CodeLines, VoidCallback)> _analyzed =
@@ -71,6 +92,8 @@ final class CodeWorkspace {
       _analyzed[document] = (document.editing.codeLines, listener);
       document.editing.addListener(listener);
       analysis.open(document.path, document.editing.text);
+      // A file opened again shows what the analysis reported about it before.
+      if (_published[document.path] case final diagnostics?) document.setDiagnostics(diagnostics);
     }
   }
 
@@ -112,6 +135,8 @@ final class CodeWorkspace {
       document.editing.removeListener(listener);
     }
     _analyzed.clear();
+    await _diagnostics?.cancel();
+    _filesWithErrors.dispose();
     for (final view in _views.values) {
       view.dispose();
     }

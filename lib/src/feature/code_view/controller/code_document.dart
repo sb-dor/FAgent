@@ -1,6 +1,7 @@
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
 import 'package:path/path.dart' as p;
@@ -70,16 +71,58 @@ final class CodeDocument extends ChangeNotifier {
     } on io.FileSystemException catch (error) {
       return other(CodeDocumentKind.unreadable, _describe(error));
     }
-    return CodeDocument._(
+    late final CodeDocument document;
+    return document = CodeDocument._(
       path: path,
       kind: CodeDocumentKind.text,
       files: files,
-      editing: CodeLineEditingController.fromText(
-        content.text,
-        CodeLineOptions(lineBreak: lineBreakOf(content.text)),
+      editing: CodeLineEditingController(
+        codeLines: CodeLines.fromText(content.text),
+        options: CodeLineOptions(lineBreak: lineBreakOf(content.text)),
+        // The controller takes its span builder once; the editor sets [decorator] later.
+        spanBuilder:
+            ({
+              required context,
+              required index,
+              required codeLine,
+              required textSpan,
+              required style,
+            }) =>
+                document.decorator?.call(
+                  context: context,
+                  index: index,
+                  codeLine: codeLine,
+                  textSpan: textSpan,
+                  style: style,
+                ) ??
+                textSpan,
       ),
       stamp: content.stamp,
     );
+  }
+
+  /// Draws something over the highlighted lines (the analysis's underlines); set by the editor.
+  CodeLineSpanBuilder? decorator;
+
+  /// The analysis's errors and warnings of this file.
+  ValueListenable<List<DartDiagnostic>> get diagnostics => _diagnostics;
+  final ValueNotifier<List<DartDiagnostic>> _diagnostics = ValueNotifier<List<DartDiagnostic>>(
+    const <DartDiagnostic>[],
+  );
+
+  /// Errors among [diagnostics].
+  int get errorCount => _diagnostics.value.where((d) => d.severity == DartSeverity.error).length;
+
+  /// Warnings among [diagnostics].
+  int get warningCount =>
+      _diagnostics.value.where((d) => d.severity == DartSeverity.warning).length;
+
+  /// Takes the analysis's [diagnostics] of this file and redraws the lines.
+  void setDiagnostics(List<DartDiagnostic> diagnostics) {
+    if (_disposed || listEquals(diagnostics, _diagnostics.value)) return;
+    _diagnostics.value = List<DartDiagnostic>.unmodifiable(diagnostics);
+    editing.forceRepaint();
+    notifyListeners();
   }
 
   /// The line break the file mostly uses, so new lines match it.
@@ -282,6 +325,7 @@ final class CodeDocument extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _diagnostics.dispose();
     editing
       ..removeListener(_onEdit)
       ..dispose();

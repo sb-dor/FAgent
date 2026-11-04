@@ -1,4 +1,5 @@
 import 'package:control/control.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
@@ -17,8 +18,12 @@ class CodeExplorer extends StatelessWidget {
     required this.tree,
     required this.onOpenFile,
     required this.onOpenExternally,
+    this.filesWithErrors,
     super.key,
   });
+
+  /// The files the Dart analysis reports errors in, drawn in the error color.
+  final ValueListenable<Set<String>>? filesWithErrors;
 
   /// The explorer's state.
   final FileTreeController tree;
@@ -52,17 +57,21 @@ class CodeExplorer extends StatelessWidget {
             ),
           ),
         ),
-        FileTree$LoadedState(:final rows) => ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          itemExtent: rowHeight,
-          itemCount: rows.length,
-          itemBuilder: (context, index) => _Row(
-            row: rows[index],
-            onTap: () {
-              final node = rows[index].node;
-              node.isDirectory ? tree.toggle(node.path) : onOpenFile(node.path);
-            },
-            onOpenExternally: () => onOpenExternally(rows[index].node.path),
+        FileTree$LoadedState(:final rows) => ValueListenableBuilder<Set<String>>(
+          valueListenable: filesWithErrors ?? _noErrors,
+          builder: (context, errors, _) => ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemExtent: rowHeight,
+            itemCount: rows.length,
+            itemBuilder: (context, index) => _Row(
+              row: rows[index],
+              hasErrors: errors.contains(rows[index].node.path),
+              onTap: () {
+                final node = rows[index].node;
+                node.isDirectory ? tree.toggle(node.path) : onOpenFile(node.path);
+              },
+              onOpenExternally: () => onOpenExternally(rows[index].node.path),
+            ),
           ),
         ),
       },
@@ -70,10 +79,19 @@ class CodeExplorer extends StatelessWidget {
   );
 }
 
+/// No file has errors (the explorer without an analysis).
+final ValueListenable<Set<String>> _noErrors = ValueNotifier<Set<String>>(const <String>{});
+
 class _Row extends StatelessWidget {
-  const _Row({required this.row, required this.onTap, required this.onOpenExternally});
+  const _Row({
+    required this.row,
+    required this.onTap,
+    required this.onOpenExternally,
+    this.hasErrors = false,
+  });
 
   final FileTreeRow row;
+  final bool hasErrors;
   final VoidCallback onTap;
   final VoidCallback onOpenExternally;
 
@@ -101,8 +119,13 @@ class _Row extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.colors;
     final node = row.node;
-    final style = Theme.of(context).textTheme.bodySmall
-        ?.copyWith(color: node.ignored ? colors.muted : colors.text);
+    final style = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: hasErrors
+          ? colors.danger
+          : node.ignored
+          ? colors.muted
+          : colors.text,
+    );
     return InkWell(
       onTap: onTap,
       onSecondaryTapUp: (details) => _menu(context, details.globalPosition),

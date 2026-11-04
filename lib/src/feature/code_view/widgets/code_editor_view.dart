@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/dart_completion_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_completion_list.dart';
+import 'package:flutter_code_agent/src/feature/code_view/widgets/code_diagnostic_spans.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_find_panel.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_highlight.dart';
 import 'package:re_editor/re_editor.dart';
@@ -86,7 +89,11 @@ class _CodeEditorViewState extends State<CodeEditorView> {
   final GlobalKey _editorKey = GlobalKey();
   final GlobalKey _gutterKey = GlobalKey();
   final OverlayPortalController _overlay = OverlayPortalController();
+  final OverlayPortalController _hoverOverlay = OverlayPortalController();
   DartCompletionController? _completion;
+
+  /// The diagnostic under the pointer and where the pointer is (global).
+  (DartDiagnostic, Offset)? _hover;
 
   @override
   void initState() {
@@ -111,6 +118,71 @@ class _CodeEditorViewState extends State<CodeEditorView> {
     if (analysis == null || !widget.document.path.endsWith('.dart')) return;
     _completion = DartCompletionController(document: widget.document, analysis: analysis)
       ..addListener(_onCompletion);
+    final document = widget.document;
+    document.decorator =
+        ({
+          required context,
+          required index,
+          required codeLine,
+          required textSpan,
+          required style,
+        }) => diagnosticSpans(
+          textSpan: textSpan,
+          line: index,
+          diagnostics: document.diagnostics.value,
+          colors: context.colors,
+          onEnter: _showHover,
+          onExit: _hideHover,
+        );
+    document.editing.forceRepaint();
+  }
+
+  void _showHover(DartDiagnostic diagnostic, Offset position) {
+    if (!mounted) return;
+    setState(() => _hover = (diagnostic, position));
+    if (!_hoverOverlay.isShowing) _hoverOverlay.show();
+  }
+
+  void _hideHover() {
+    if (!mounted || _hover == null) return;
+    setState(() => _hover = null);
+    if (_hoverOverlay.isShowing) _hoverOverlay.hide();
+  }
+
+  Widget _buildHover(BuildContext overlayContext) {
+    final hover = _hover;
+    final overlay = Overlay.of(overlayContext).context.findRenderObject() as RenderBox?;
+    if (hover == null || overlay == null) return const SizedBox.shrink();
+    final (diagnostic, position) = hover;
+    final colors = overlayContext.colors;
+    final at = overlay.globalToLocal(position);
+    const width = 420.0;
+    return Positioned(
+      left: at.dx.clamp(0.0, (overlay.size.width - width).clamp(0.0, double.infinity)),
+      top: at.dy + 18,
+      child: IgnorePointer(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: width),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surface,
+              border: Border.all(color: diagnosticColor(colors, diagnostic.severity)),
+              borderRadius: BorderRadius.circular(AppRadius.small),
+              boxShadow: <BoxShadow>[BoxShadow(color: colors.shadow, blurRadius: 6)],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Text(
+                diagnostic.code == null
+                    ? diagnostic.message
+                    : '${diagnostic.message} (${diagnostic.code})',
+                style: Theme.of(overlayContext).textTheme.bodySmall?.copyWith(color: colors.text),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _detach() {
@@ -119,6 +191,9 @@ class _CodeEditorViewState extends State<CodeEditorView> {
       ..dispose();
     _completion = null;
     if (_overlay.isShowing) _overlay.hide();
+    if (_hoverOverlay.isShowing) _hoverOverlay.hide();
+    _hover = null;
+    widget.document.decorator = null;
   }
 
   void _onCompletion() {
@@ -341,7 +416,12 @@ class _CodeEditorViewState extends State<CodeEditorView> {
                   Stack(children: <Widget>[_buildList(Overlay.of(overlayContext).context)]),
             ),
           ),
-          child: KeyedSubtree(key: _editorKey, child: editor),
+          child: OverlayPortal(
+            controller: _hoverOverlay,
+            overlayChildBuilder: (overlayContext) =>
+                Positioned.fill(child: Stack(children: <Widget>[_buildHover(overlayContext)])),
+            child: KeyedSubtree(key: _editorKey, child: editor),
+          ),
         ),
       ),
     );
