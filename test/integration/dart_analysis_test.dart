@@ -46,7 +46,7 @@ void main() {
     analysis.open(file, 'stful');
     await ready();
 
-    List<DartCompletion> items = const <DartCompletion>[];
+    var items = const <DartCompletion>[];
     final deadline = DateTime.now().add(const Duration(minutes: 1));
     // The server labels it "Flutter Stateful Widget"; `stful` is what typing matches.
     bool isStful(DartCompletion item) => item.filterText == 'stful';
