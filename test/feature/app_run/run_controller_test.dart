@@ -513,7 +513,9 @@ void main() {
     test('a restored selection switches the chips once per watch', () async {
       config = MemoryRunConfigRepository(
         selected: <int, String>{1: 'Web'},
-        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[web, prod])},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[web, prod]),
+        },
       );
       final run = RunController(repository: scripted, configRepository: config)
         ..choose(deviceId: 'macos');
@@ -542,7 +544,9 @@ void main() {
     test('a restored config without a device or mode keeps the chips', () async {
       config = MemoryRunConfigRepository(
         selected: <int, String>{1: 'Prod'},
-        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[web, prod])},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[web, prod]),
+        },
       );
       final run = RunController(repository: scripted, configRepository: config)
         ..choose(deviceId: 'macos');
@@ -593,6 +597,143 @@ void main() {
       expect(controller.state.mode, BuildMode.debug);
       expect(controller.state.selectedConfig, 'Web', reason: 'the chips do not undo the choice');
       expect((await controller.startArgumentsFor(1)).target, 'lib/main_web.dart');
+    });
+
+    group('a config\'s device and mode do not leak', () {
+      const webServer = LaunchConfig(name: 'Run DEV Web Server (Debug)', deviceId: 'web-server');
+      const devApp = LaunchConfig(name: 'Run DEV App (Debug)', flavor: 'avera');
+      const release = LaunchConfig(name: 'Release', mode: BuildMode.release);
+
+      setUp(() {
+        config.launch[1] = const LaunchConfigsRead(<LaunchConfig>[
+          web,
+          prod,
+          webServer,
+          devApp,
+          release,
+        ]);
+      });
+
+      test('a config without a device gives back the device the user had', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos')
+          ..chooseConfig(webServer.name);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'web-server');
+
+        controller.chooseConfig(devApp.name);
+        await pumpEventQueue();
+
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.debug);
+      });
+
+      test('a config without a mode gives back the mode the user had', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos')
+          ..chooseConfig(release.name);
+        await pumpEventQueue();
+        expect(controller.state.mode, BuildMode.release);
+
+        controller.chooseConfig(devApp.name);
+        await pumpEventQueue();
+
+        expect(controller.state.mode, BuildMode.debug);
+        expect(controller.state.selectedDeviceId, 'macos');
+      });
+
+      test('Default gives back both', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos', mode: BuildMode.profile)
+          ..chooseConfig(web.name);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'web-server');
+        expect(controller.state.mode, BuildMode.release);
+
+        controller.chooseConfig(null);
+        await pumpEventQueue();
+
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.profile);
+      });
+
+      test('only the fields the previous config set go back', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos', mode: BuildMode.profile)
+          ..chooseConfig(web.name);
+        await pumpEventQueue();
+
+        // Release sets the mode only: the device goes back, the mode stays the config's.
+        controller.chooseConfig(release.name);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.release);
+
+        controller.chooseConfig(null);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.profile, reason: 'the mode before any config');
+      });
+
+      test('a chip changed while a config is selected is what comes back', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos')
+          ..chooseConfig(web.name);
+        await pumpEventQueue();
+
+        controller.choose(deviceId: 'chrome');
+        controller.chooseConfig(null);
+        await pumpEventQueue();
+
+        expect(controller.state.selectedDeviceId, 'chrome');
+        expect(controller.state.mode, BuildMode.debug, reason: 'the mode chip was not touched');
+      });
+
+      test('a restored config gives the chips back when the user picks another', () async {
+        await config.saveSelected(1, webServer.name);
+        final run = RunController(repository: scripted, configRepository: config)
+          ..choose(deviceId: 'macos');
+        addTearDown(run.dispose);
+        run.watch(1);
+        await pumpEventQueue();
+        expect(run.state.selectedDeviceId, 'web-server');
+
+        run.chooseConfig(devApp.name);
+        await pumpEventQueue();
+
+        expect(run.state.selectedDeviceId, 'macos');
+      });
+
+      test(
+        'a project switch does not carry a config\'s device into a project on Default',
+        () async {
+          config.launch[2] = const LaunchConfigsRead(<LaunchConfig>[prod]);
+          controller.watch(1);
+          await pumpEventQueue();
+          controller
+            ..choose(deviceId: 'macos')
+            ..chooseConfig(webServer.name);
+          await pumpEventQueue();
+          expect(controller.state.selectedDeviceId, 'web-server');
+
+          controller.watch(2);
+          await pumpEventQueue();
+
+          expect(controller.state.selectedConfig, isNull);
+          expect(controller.state.selectedDeviceId, 'macos');
+          expect(controller.state.mode, BuildMode.debug);
+        },
+      );
     });
 
     test('choosing Default stores null', () async {

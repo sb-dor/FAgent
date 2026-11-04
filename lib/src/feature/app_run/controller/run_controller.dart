@@ -79,21 +79,39 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// Per project: the newest line the user cleared; a replay never brings those back.
   final Map<int, int> _clearedThrough = <int, int>{};
 
+  /// Whether the device chip shows a configuration's device rather than the user's own.
+  bool _deviceOverridden = false;
+
+  /// The device the user had before a configuration switched the chip; meaningful while
+  /// [_deviceOverridden].
+  String? _userDeviceId;
+
+  /// Whether the mode chip shows a configuration's mode rather than the user's own.
+  bool _modeOverridden = false;
+
+  /// The mode the user had before a configuration switched the chip; meaningful while
+  /// [_modeOverridden].
+  BuildMode _userMode = BuildMode.debug;
+
   /// Follows [projectId]: drops the previous project's subscriptions, run and output. Calling it
   /// again for the same project changes nothing.
   ///
   /// The device is not chosen here: it stays `null` until [choose] sets it (the window picks the
   /// first running device once the devices are known, and never overrides a choice), and the chosen
-  /// device survives a change of project. The mode and the target (a per-project path) go back to
-  /// `debug` and `lib/main.dart`. The project's selected configuration and its `launch.json` are
-  /// read; once both are in, a selected configuration with a device or a mode switches the chips to
-  /// them, once for this follow (later reads leave the chips to the user).
+  /// device survives a change of project; a device a configuration of the previous project set is
+  /// not carried over: the user's own comes back. The mode and the target (a per-project path) go
+  /// back to `debug` and `lib/main.dart`. The project's selected configuration and its
+  /// `launch.json` are read; once both are in, a selected configuration with a device or a mode
+  /// switches the chips to them, once for this follow (later reads leave the chips to the user).
   void watch(int projectId) => handle(() async {
     if (state.projectId == projectId && _runSubscription != null) return;
     await _cancel();
     _restorePending = true;
     _selectionArrived = false;
-    setState(RunViewState(projectId: projectId, selectedDeviceId: state.selectedDeviceId));
+    final deviceId = _deviceOverridden ? _userDeviceId : state.selectedDeviceId;
+    _deviceOverridden = false;
+    _modeOverridden = false;
+    setState(RunViewState(projectId: projectId, selectedDeviceId: deviceId));
     _runSubscription = _repository.watchRun(projectId).listen((run) {
       if (state.projectId == projectId) setState(state.copyWith(run: run));
     });
@@ -131,19 +149,17 @@ final class RunController extends StateController<RunViewState> with SequentialC
   }
 
   /// Chooses the configuration the next start runs, by [name]; `null` is Default. The choice is
-  /// stored for the project. A configuration with a device or a mode switches the chips to them
-  /// ([choose]); the chips stay the user's to change after that. Of two configurations with the
-  /// same name the first counts.
+  /// stored for the project. A configuration with a device or a mode switches the chips to them;
+  /// the chips stay the user's to change after that. A chip the previous configuration switched and
+  /// this one does not set (or Default) goes back to what the user had ([_applyConfigChips]). Of
+  /// two configurations with the same name the first counts.
   void chooseConfig(String? name) => handle(() async {
     final projectId = state.projectId;
     if (projectId == null) return;
     // The user's choice replaces the restored one.
     _restorePending = false;
     setState(state.copyWith(selectedConfig: name));
-    final config = name == null ? null : _configNamed(state.launchConfigs, name);
-    if (config != null && (config.deviceId != null || config.mode != null)) {
-      choose(deviceId: config.deviceId, mode: config.mode);
-    }
+    _applyConfigChips(name == null ? null : _configNamed(state.launchConfigs, name));
     await _configRepository.saveSelected(projectId, name);
   });
 
@@ -178,7 +194,8 @@ final class RunController extends StateController<RunViewState> with SequentialC
     }
     final config = _configNamed(configs, name);
     if (config == null) return defaults;
-    if (config.unsupported case final reason?) throw RunConfigNotStartable.unsupported(name, reason);
+    if (config.unsupported case final reason?)
+      throw RunConfigNotStartable.unsupported(name, reason);
     return RunStartArguments.fromLaunchConfig(config);
   }
 
@@ -199,10 +216,34 @@ final class RunController extends StateController<RunViewState> with SequentialC
     if (!_selectionArrived || state.launchConfigs == null) return;
     _restorePending = false;
     final name = state.selectedConfig;
-    final config = name == null ? null : _configNamed(state.launchConfigs, name);
-    if (config != null && (config.deviceId != null || config.mode != null)) {
-      choose(deviceId: config.deviceId, mode: config.mode);
+    _applyConfigChips(name == null ? null : _configNamed(state.launchConfigs, name));
+  }
+
+  /// Switches the chips to the device and the mode [config] sets, remembering what the user had
+  /// before; a chip the previous configuration switched and [config] (`null` for Default) does not
+  /// set goes back to the user's value. As in VS Code, a configuration's device and mode last only
+  /// while it is selected.
+  void _applyConfigChips(LaunchConfig? config) {
+    var deviceId = state.selectedDeviceId;
+    var mode = state.mode;
+    if (config?.deviceId case final configDevice?) {
+      if (!_deviceOverridden) _userDeviceId = deviceId;
+      _deviceOverridden = true;
+      deviceId = configDevice;
+    } else if (_deviceOverridden) {
+      _deviceOverridden = false;
+      deviceId = _userDeviceId;
     }
+    if (config?.mode case final configMode?) {
+      if (!_modeOverridden) _userMode = mode;
+      _modeOverridden = true;
+      mode = configMode;
+    } else if (_modeOverridden) {
+      _modeOverridden = false;
+      mode = _userMode;
+    }
+    if (deviceId == state.selectedDeviceId && mode == state.mode) return;
+    setState(state.copyWith(selectedDeviceId: deviceId, mode: mode));
   }
 
   /// Goes back to Default when the selected configuration is not in the file read last (or there
@@ -228,15 +269,20 @@ final class RunController extends StateController<RunViewState> with SequentialC
     _ => null,
   };
 
-  /// Chooses what the next start uses; an argument left out keeps its value. (Not called `select`:
-  /// `StateController` already has a method of that name.)
-  void choose({String? deviceId, BuildMode? mode, String? target}) => setState(
-    state.copyWith(
-      selectedDeviceId: deviceId ?? state.selectedDeviceId,
-      mode: mode ?? state.mode,
-      target: target ?? state.target,
-    ),
-  );
+  /// Chooses what the next start uses; an argument left out keeps its value. A chip chosen while
+  /// a configuration has switched it is the user's again: it stays when the configuration is left.
+  /// (Not called `select`: `StateController` already has a method of that name.)
+  void choose({String? deviceId, BuildMode? mode, String? target}) {
+    if (deviceId != null) _deviceOverridden = false;
+    if (mode != null) _modeOverridden = false;
+    setState(
+      state.copyWith(
+        selectedDeviceId: deviceId ?? state.selectedDeviceId,
+        mode: mode ?? state.mode,
+        target: target ?? state.target,
+      ),
+    );
+  }
 
   /// Forgets the chosen device, for when it is gone and there is none to take its place.
   void clearDevice() => setState(state.copyWith(selectedDeviceId: null));
