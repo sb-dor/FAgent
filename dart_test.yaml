@@ -10,3 +10,6 @@ tags:
   agent:
     # The real Claude adapter and the app MCP server; the test skips itself unless FLUTTER_AGENT_TEST=1.
     timeout: 10m
+  dart_analysis:
+    # The real `dart language-server`; the test skips itself unless DART_LSP_TEST=1.
+    timeout: 5m

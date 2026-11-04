@@ -407,3 +407,15 @@ Deferred from the Code view (docs/superpowers/plans/2026-11-04-code-view.md). Pa
     - the quit and removal dialogs give only a count, not the file names; the unsaved quit dialog lacks `AppRadius.large` (`app_close/widgets/app_close_guard.dart`)
   - Check by hand: the native quit handshake while the unsaved dialog is open, ⌘W with the find panel focused, opening a 5 MB file
 
+## Dart analysis follow-ups
+
+Deferred from the Dart analysis milestone (docs/superpowers/plans/2026-11-04-dart-analysis.md). Paths are under `lib/src/feature/` unless they start with `test/` or `common/`.
+
+- **Next steps:**
+  - Hover documentation, go to definition (⌘-click), format on save, quick fixes (the light bulb), rename, a Problems panel listing every error of the project
+  - Completion documentation beside the list (`completionItem/resolve` already asks for it)
+- **Bugs and risks:**
+  - Every edit of an open Dart file builds its whole text for the debounced `didChange`; very large files would want incremental sync (`code_view/controller/code_workspace.dart`)
+  - The completion list is placed from the editor's metrics (font 13, line height 1.4, padding 5, the gutter's width, the scroll offsets); a change in re_editor's layout would misplace it (`code_view/widgets/code_editor_view.dart`)
+  - The server's labels are what the list shows: its Flutter snippets read "Flutter Stateful Widget" and match `stful` through their filter text (`code_view/widgets/code_completion_list.dart`)
+
