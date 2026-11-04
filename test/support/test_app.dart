@@ -6,6 +6,8 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone_event.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
@@ -61,7 +63,8 @@ import 'scripted_widget_picker_repository.dart';
 /// repository is a [MemoryProjectCreationRepository] unless the test passes its own
 /// [projectCreationRepository]. The app's MCP server is a real one that is never started unless the
 /// test passes its own [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
-/// that fails every server unless the test passes its own [mcpProbe].
+/// that fails every server unless the test passes its own [mcpProbe]. Nothing is ever dropped on
+/// the window unless the test passes its own [dropZone] (`DropZone.fromStream` of a controller).
 Dependencies testDependencies({
   Duration step = const Duration(milliseconds: 1),
   IAppRunRepository? appRunRepository,
@@ -77,6 +80,7 @@ Dependencies testDependencies({
   IProjectCreationRepository? projectCreationRepository,
   IAppMcpServer? appMcpServer,
   IMcpProbe? mcpProbe,
+  DropZone? dropZone,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
@@ -99,6 +103,7 @@ Dependencies testDependencies({
   final hub = AgentHub(database: database, environment: environment);
   return Dependencies()
     ..database = database
+    ..dropZone = dropZone ?? DropZone.fromStream(const Stream<DropZoneEvent>.empty())
     ..shellEnvironment = environment
     ..agentOptionsCatalog = AgentOptionsCatalogImpl(database: database)
     ..customAgentsRepository = CustomAgentsRepositoryImpl(database: database)

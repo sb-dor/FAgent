@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
@@ -41,6 +42,9 @@ class Dependencies {
 
   /// Database
   late final AppDatabase database;
+
+  /// Files dragged over the window; every chat's drop target listens.
+  late final DropZone dropZone;
 
   /// Login-shell environment for every child process (agents, `flutter`, `git`).
   late final ShellEnvironment shellEnvironment;

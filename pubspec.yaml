@@ -36,7 +36,6 @@ dependencies:
       ref: 685a9bc6ef60c987b99b5526e125813adba54e2a
   crypto: ^3.0.8
   dart_acp_sdk: 0.1.1
-  desktop_drop: ^0.8.4
   drift: ^2.35.3
   drift_flutter: ^0.3.1
   file_selector: ^1.1.0

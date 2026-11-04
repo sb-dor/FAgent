@@ -708,6 +708,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   @override
   Widget build(BuildContext context) => ChatConfigInhWidget(
     state: this,
-    child: ChatDropTarget(onDropped: drop, child: const ChatScreen()),
+    child: ChatDropTarget(
+      events: Dependencies.of(context).dropZone,
+      onDropped: drop,
+      child: const ChatScreen(),
+    ),
   );
 }

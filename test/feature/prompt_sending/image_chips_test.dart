@@ -1,16 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone_event.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_drop_target.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
@@ -38,8 +41,11 @@ void main() {
   late Directory root;
   late Dependencies dependencies;
   late int projectId;
+  late StreamController<DropZoneEvent> dropEvents;
 
   setUp(() {
+    dropEvents = StreamController<DropZoneEvent>.broadcast();
+    addTearDown(dropEvents.close);
     root = Directory.systemTemp.createTempSync('image_project');
     File(p.join(root.path, 'shot.png')).writeAsBytesSync(_png);
     addTearDown(() => root.deleteSync(recursive: true));
@@ -57,6 +63,7 @@ void main() {
     Future<Uint8List?> Function()? clipboard,
   }) async {
     dependencies = testDependencies(
+      dropZone: DropZone.fromStream(dropEvents.stream),
       agentsRepository: MemoryAgentsRepository(
         agents: <AgentInfo>[memoryClaudeAgent, memoryCodexAgent, _textOnlyAgent],
       ),
@@ -93,16 +100,14 @@ void main() {
   }
 
   Future<void> dropFiles(WidgetTester tester, List<String> paths) async {
-    await tester.runAsync(() async {
-      tester.widget<DropTarget>(find.byType(DropTarget)).onDragDone!(
-        DropDoneDetails(
-          files: <DropItem>[for (final path in paths) DropItemFile(path)],
-          localPosition: Offset.zero,
-          globalPosition: Offset.zero,
-        ),
-      );
-      await Future<void>.delayed(const Duration(milliseconds: 100));
-    });
+    final at = tester.getCenter(find.byType(ChatDropTarget));
+    // The chat listens in the test's fake-async zone, so each await of the drop (reading and
+    // decoding every image in turn) needs a pump, and its real I/O some real time between pumps.
+    dropEvents.add(DropZoneEvent$Drop(dx: at.dx, dy: at.dy, paths: paths));
+    for (var i = 0; i < 6 + 6 * paths.length; i++) {
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 10)));
+    }
     await tester.pump();
   }
 
