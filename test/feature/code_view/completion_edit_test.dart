@@ -8,14 +8,17 @@ void main() {
       CodeLineEditingController.fromText(text)
         ..selection = CodeLineSelection.collapsed(index: line, offset: column);
 
-  DartCompletion plain(String text, {LspTextEdit? edit, List<LspTextEdit> more = const <LspTextEdit>[]}) =>
-      DartCompletion(
-        label: text,
-        kind: DartCompletionKind.classType,
-        insertText: text,
-        edit: edit,
-        additionalEdits: more,
-      );
+  DartCompletion plain(
+    String text, {
+    LspTextEdit? edit,
+    List<LspTextEdit> more = const <LspTextEdit>[],
+  }) => DartCompletion(
+    label: text,
+    kind: DartCompletionKind.classType,
+    insertText: text,
+    edit: edit,
+    additionalEdits: more,
+  );
 
   LspRange range(int line, int start, [int? end, int? endLine]) => LspRange(
     start: LspPosition(line: line, character: start),
@@ -41,7 +44,10 @@ void main() {
 
     applyCompletion(
       editing,
-      plain('bar()', edit: LspTextEdit(range: range(0, 4, 6), newText: 'bar()')),
+      plain(
+        'bar()',
+        edit: LspTextEdit(range: range(0, 4, 6), newText: 'bar()'),
+      ),
       caret: const LspPosition(line: 0, character: 6),
     );
 

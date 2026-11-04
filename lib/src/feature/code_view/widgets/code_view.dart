@@ -184,6 +184,7 @@ class _CodeViewState extends State<CodeView> {
               find: _workspace.viewOf(active).find,
               scroll: _workspace.viewOf(active).scroll,
               onSave: () => _save(active).ignore(),
+              analysis: _workspace.analysis,
             ),
             CodeDocumentKind.image => CodeImageView(path: active.path),
             CodeDocumentKind.notText ||
