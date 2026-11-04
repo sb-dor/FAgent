@@ -138,21 +138,81 @@ void main() {
     });
 
     test('another variable makes the config unsupported with its name', () {
-      final inProgram = readOne(r'"program": "${env:HOME}/main.dart"');
-      expect(inProgram.unsupported, contains(r'${env:HOME}'));
-      final inArgs = readOne(r'"args": ["--dart-define=A=${command:pickX}"]');
-      expect(inArgs.unsupported, contains(r'${command:pickX}'));
-      final inEnv = readOne(r'"env": {"A": "${userHome}"}');
-      expect(inEnv.unsupported, contains(r'${userHome}'));
-      final inCwd = readOne(r'"cwd": "${fileDirname}"');
-      expect(inCwd.unsupported, contains(r'${fileDirname}'));
+      expect(
+        readOne(r'"program": "${env:HOME}/main.dart"').unsupported,
+        const LaunchUnsupportedVariable(r'${env:HOME}'),
+      );
+      expect(
+        readOne(r'"args": ["--dart-define=A=${command:pickX}"]').unsupported,
+        const LaunchUnsupportedVariable(r'${command:pickX}'),
+      );
+      expect(
+        readOne(r'"env": {"A": "${userHome}"}').unsupported,
+        const LaunchUnsupportedVariable(r'${userHome}'),
+      );
+      expect(
+        readOne(r'"cwd": "${fileDirname}"').unsupported,
+        const LaunchUnsupportedVariable(r'${fileDirname}'),
+      );
+      expect(
+        readOne(r'"program": "${workspaceFolderBasename}/main.dart"').unsupported,
+        const LaunchUnsupportedVariable(r'${workspaceFolderBasename}'),
+      );
     });
 
     test('a cwd outside the project is unsupported', () {
-      final config = readOne(r'"cwd": "${workspaceFolder}/packages/core"');
-      expect(config.unsupported, isNotNull);
-      expect(config.unsupported, contains('packages/core'));
-      expect(readOne('"cwd": "/somewhere/else"').unsupported, isNotNull);
+      expect(
+        readOne(r'"cwd": "${workspaceFolder}/packages/core"').unsupported,
+        const LaunchCwdOutsideProject(r'${workspaceFolder}/packages/core'),
+      );
+      expect(
+        readOne('"cwd": "/somewhere/else"').unsupported,
+        const LaunchCwdOutsideProject('/somewhere/else'),
+      );
+      expect(readOne('"cwd": ".."').unsupported, const LaunchCwdOutsideProject('..'));
+      expect(readOne('"cwd": "$root-other"').unsupported, isA<LaunchCwdOutsideProject>());
+    });
+
+    test('cwd spellings of the project folder are the project folder', () {
+      for (final cwd in <String>[
+        '.',
+        './',
+        '',
+        r'${workspaceFolder}/.',
+        r'${workspaceFolder}//',
+        r'${workspaceFolder}/lib/..',
+        '$root/',
+        '$root/./',
+      ]) {
+        expect(readOne('"cwd": "$cwd"').unsupported, isNull, reason: cwd);
+      }
+    });
+
+    test('values that are not strings are ignored or stringified without throwing', () {
+      final configs = read('''
+{"configurations": [
+  {"name": "c", "type": "dart", "request": "launch",
+   "args": [1, null, "--flavor=x"], "env": {"A": 1, "B": null}, "cwd": 5,
+   "program": 7, "deviceId": 3, "flutterMode": 4, "preLaunchTask": 1},
+  {"name": "d", "type": "dart", "request": "launch", "name": 5},
+  "text", 3, null
+]}
+''');
+      expect(configs, hasLength(1));
+      final config = configs.single;
+      expect(config.flavor, 'x');
+      expect(config.extraArgs, isEmpty);
+      expect(config.environment, <String, String>{'A': '1'});
+      expect(config.target, 'lib/main.dart');
+      expect(config.deviceId, isNull);
+      expect(config.mode, isNull);
+      expect(config.unsupported, isNull);
+      expect(config.hasPreLaunchTask, isFalse);
+    });
+
+    test('a leading byte order mark is ignored', () {
+      final configs = read('\uFEFF${single('"args": ["--flavor=x"]')}');
+      expect(configs.single.flavor, 'x');
     });
 
     test('deviceId and flutterMode keys', () {
@@ -233,12 +293,17 @@ void main() {
     test('invalid JSON is unreadable with the parser message', () {
       final result = parseLaunchConfigs('{"configurations": [', projectRoot: root);
       expect(result, isA<LaunchConfigsUnreadable>());
-      expect((result as LaunchConfigsUnreadable).reason, isNotEmpty);
-      expect(parseLaunchConfigs('[1, 2]', projectRoot: root), isA<LaunchConfigsUnreadable>());
-      expect(
-        parseLaunchConfigs('{"configurations": 3}', projectRoot: root),
-        isA<LaunchConfigsUnreadable>(),
-      );
+      expect((result as LaunchConfigsUnreadable).kind, LaunchUnreadableKind.invalidJson);
+      expect(result.detail, isNotEmpty);
+    });
+
+    test('JSON that is not an object, or without a list of configurations, is unreadable', () {
+      final notObject = parseLaunchConfigs('[1, 2]', projectRoot: root);
+      expect((notObject as LaunchConfigsUnreadable).kind, LaunchUnreadableKind.notAnObject);
+      expect(notObject.detail, isNull);
+      final notList = parseLaunchConfigs('{"configurations": 3}', projectRoot: root);
+      expect((notList as LaunchConfigsUnreadable).kind, LaunchUnreadableKind.noConfigurationsList);
+      expect(notList.detail, isNull);
     });
   });
 
@@ -267,7 +332,16 @@ void main() {
     test('a file that is not JSON is unreadable', () async {
       Directory('${project.path}/.vscode').createSync();
       File(launchJsonPath(project.path)).writeAsStringSync('not json');
-      expect(await readLaunchConfigs(project.path), isA<LaunchConfigsUnreadable>());
+      final result = await readLaunchConfigs(project.path);
+      expect((result as LaunchConfigsUnreadable).kind, LaunchUnreadableKind.invalidJson);
+    });
+
+    test('a file that is not text is unreadable as cannotRead', () async {
+      Directory('${project.path}/.vscode').createSync();
+      File(launchJsonPath(project.path)).writeAsBytesSync(<int>[0xff, 0xfe, 0xfd]);
+      final result = await readLaunchConfigs(project.path);
+      expect((result as LaunchConfigsUnreadable).kind, LaunchUnreadableKind.cannotRead);
+      expect(result.detail, isNotEmpty);
     });
 
     test('createLaunchJson writes the empty file and never overwrites', () async {

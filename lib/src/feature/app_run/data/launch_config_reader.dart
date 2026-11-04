@@ -16,13 +16,32 @@ final class LaunchConfigsMissing extends LaunchConfigs {
   const LaunchConfigsMissing();
 }
 
+/// Why a `launch.json` cannot be read.
+enum LaunchUnreadableKind {
+  /// The text is not JSON (even with comments and trailing commas allowed).
+  invalidJson,
+
+  /// The JSON is not an object.
+  notAnObject,
+
+  /// `configurations` is there but is not a list.
+  noConfigurationsList,
+
+  /// The file system refused, or the file is not text.
+  cannotRead,
+}
+
 /// The file exists but cannot be read.
 final class LaunchConfigsUnreadable extends LaunchConfigs {
   /// Creates the result.
-  const LaunchConfigsUnreadable(this.reason);
+  const LaunchConfigsUnreadable(this.kind, [this.detail]);
 
-  /// What is wrong, as the parser or the file system said it.
-  final String reason;
+  /// What is wrong.
+  final LaunchUnreadableKind kind;
+
+  /// The message of the parser ([LaunchUnreadableKind.invalidJson]) or of the file system
+  /// ([LaunchUnreadableKind.cannotRead]); `null` for the other kinds.
+  final String? detail;
 }
 
 /// The file was read.
@@ -51,10 +70,10 @@ Future<LaunchConfigs> readLaunchConfigs(String projectRoot) async {
     if (!file.existsSync()) return const LaunchConfigsMissing();
     return parseLaunchConfigs(await file.readAsString(), projectRoot: projectRoot);
   } on FileSystemException catch (error) {
-    return LaunchConfigsUnreadable(error.message);
+    return LaunchConfigsUnreadable(LaunchUnreadableKind.cannotRead, error.message);
   } on FormatException catch (error) {
     // A file that is not UTF-8.
-    return LaunchConfigsUnreadable(error.message);
+    return LaunchConfigsUnreadable(LaunchUnreadableKind.cannotRead, error.message);
   }
 }
 
@@ -78,12 +97,13 @@ LaunchConfigs parseLaunchConfigs(String text, {required String projectRoot}) {
   try {
     decoded = jsonDecode(_dropTrailingCommas(_stripComments(text)));
   } on FormatException catch (error) {
-    return LaunchConfigsUnreadable(error.message);
+    return LaunchConfigsUnreadable(LaunchUnreadableKind.invalidJson, error.message);
   }
-  if (decoded is! Map) return const LaunchConfigsUnreadable('The file is not a JSON object');
+  if (decoded is! Map) return const LaunchConfigsUnreadable(LaunchUnreadableKind.notAnObject);
   final entries = decoded['configurations'];
   if (entries == null) return const LaunchConfigsRead(<LaunchConfig>[]);
-  if (entries is! List) return const LaunchConfigsUnreadable('"configurations" is not a list');
+  if (entries is! List)
+    return const LaunchConfigsUnreadable(LaunchUnreadableKind.noConfigurationsList);
   final root = _trimSlashes(projectRoot);
   return LaunchConfigsRead(<LaunchConfig>[
     for (final entry in entries)
@@ -135,7 +155,7 @@ LaunchConfig? _parseConfig(Map<Object?, Object?> entry, String root) {
         if (entry['env'] case final Map<Object?, Object?> env) ...env.values.map((v) => '$v'),
         if (deviceId is String) deviceId,
       ],
-      cwd is String ? _substitute(cwd, root) : null,
+      cwd is String ? cwd : null,
       root,
     ),
     hasPreLaunchTask: preLaunchTask is String && preLaunchTask.isNotEmpty,
@@ -143,19 +163,25 @@ LaunchConfig? _parseConfig(Map<Object?, Object?> entry, String root) {
 }
 
 /// The first `${…}` variable other than `${workspaceFolder}` among [values], or a `cwd` that is
-/// not the project folder; `null` when the configuration can run.
-String? _unsupportedReason(Iterable<String?> values, String? cwd, String root) {
+/// not the project folder (as the file spells it, with `${workspaceFolder}` still in it); `null`
+/// when the configuration can run.
+LaunchUnsupported? _unsupportedReason(Iterable<String?> values, String? cwd, String root) {
   for (final value in values) {
     if (value == null) continue;
     for (final match in _variable.allMatches(value)) {
-      if (match[0] != _workspaceFolder) return 'Unsupported: ${match[0]}';
+      if (match[0] != _workspaceFolder) return LaunchUnsupportedVariable(match[0]!);
     }
   }
-  if (cwd != null && cwd.isNotEmpty && _trimSlashes(cwd) != root) {
-    return 'Unsupported: cwd $cwd is not the project folder';
+  if (cwd != null && cwd.isNotEmpty && !_isProjectFolder(_substitute(cwd, root), root)) {
+    return LaunchCwdOutsideProject(cwd);
   }
   return null;
 }
+
+/// Whether [cwd] (already free of `${workspaceFolder}`) names [root], relative or absolute, with
+/// `.`, `..` and trailing slashes resolved.
+bool _isProjectFolder(String cwd, String root) =>
+    p.equals(p.normalize(p.join(root, cwd)), p.normalize(root));
 
 String _substitute(String value, String root) => value.replaceAll(_workspaceFolder, root);
 

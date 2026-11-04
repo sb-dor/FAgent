@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -36,11 +37,48 @@ abstract class LaunchConfig with _$LaunchConfig {
     /// Variables added to the environment of `flutter run`.
     @Default(<String, String>{}) Map<String, String> environment,
 
-    /// Why the configuration cannot run, for example an unknown `${…}` variable; `null` when it
-    /// can.
-    String? unsupported,
+    /// Why the configuration cannot run; `null` when it can.
+    LaunchUnsupported? unsupported,
 
     /// Whether the file names a `preLaunchTask`, which the app skips.
     @Default(false) bool hasPreLaunchTask,
   }) = _LaunchConfig;
+}
+
+/// Why a [LaunchConfig] cannot run. The values are data, not text: the screen words them.
+@immutable
+sealed class LaunchUnsupported {
+  const LaunchUnsupported();
+}
+
+/// The configuration uses a `${…}` variable other than `${workspaceFolder}`.
+final class LaunchUnsupportedVariable extends LaunchUnsupported {
+  /// Creates the reason.
+  const LaunchUnsupportedVariable(this.name);
+
+  /// The variable as the file spells it, for example `${env:HOME}`.
+  final String name;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is LaunchUnsupportedVariable && other.name == name;
+
+  @override
+  int get hashCode => Object.hash(LaunchUnsupportedVariable, name);
+}
+
+/// The configuration's `cwd` is not the project folder.
+final class LaunchCwdOutsideProject extends LaunchUnsupported {
+  /// Creates the reason.
+  const LaunchCwdOutsideProject(this.cwd);
+
+  /// The `cwd` as the file spells it.
+  final String cwd;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is LaunchCwdOutsideProject && other.cwd == cwd;
+
+  @override
+  int get hashCode => Object.hash(LaunchCwdOutsideProject, cwd);
 }
