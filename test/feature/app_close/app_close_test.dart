@@ -9,10 +9,16 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/test_app.dart';
 
 final class _FakeAppCloseRepository implements IAppCloseRepository {
-  _FakeAppCloseRepository({this.busy = 0, this.ask = true});
+  _FakeAppCloseRepository({this.busy = 0, this.ask = true, this.unsaved = 0});
 
   int busy;
   bool ask;
+
+  /// Unsaved files in the Code view.
+  int unsaved;
+
+  /// Whether saving them works.
+  bool saves = true;
   final StreamController<void> requests = StreamController<void>.broadcast();
   final List<String> calls = <String>[];
   Completer<void>? shutdownGate;
@@ -27,6 +33,16 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
 
   @override
   Future<bool> askBeforeQuit() async => ask;
+
+  @override
+  int unsavedFiles() => unsaved;
+
+  @override
+  Future<bool> saveAllFiles() async {
+    calls.add('saveAllFiles');
+    if (saves) unsaved = 0;
+    return saves;
+  }
 
   @override
   Future<void> shutdown() async {
@@ -48,10 +64,11 @@ void main() {
     WidgetTester tester, {
     int busy = 0,
     bool ask = true,
+    int unsaved = 0,
     Locale locale = const Locale('en'),
   }) async {
     useDesktopView(tester);
-    final repository = _FakeAppCloseRepository(busy: busy, ask: ask);
+    final repository = _FakeAppCloseRepository(busy: busy, ask: ask, unsaved: unsaved);
     dependencies = testDependencies();
     await tester.pumpWidget(
       testApp(
@@ -63,6 +80,84 @@ void main() {
     await tester.pump();
     return repository;
   }
+
+  group('unsaved files', () {
+    Future<void> close(WidgetTester tester, _FakeAppCloseRepository repository) async {
+      repository.close();
+      await tester.pump();
+      await tester.pump();
+    }
+
+    Future<void> answer(WidgetTester tester, String button) async {
+      await tester.tap(find.text(button));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('quitting asks even with askBeforeQuit off', (tester) async {
+      final repository = await pumpGuard(tester, unsaved: 2, ask: false);
+
+      await close(tester, repository);
+
+      expect(find.text('Unsaved changes'), findsOneWidget);
+      expect(find.text('2 files have unsaved changes.'), findsOneWidget);
+      expect(repository.calls, isEmpty);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Save all saves and quits', (tester) async {
+      final repository = await pumpGuard(tester, unsaved: 1);
+      await close(tester, repository);
+
+      await answer(tester, 'Save all');
+
+      expect(repository.calls, <String>['saveAllFiles', 'shutdown', 'quit']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets("Don't save quits", (tester) async {
+      final repository = await pumpGuard(tester, unsaved: 1);
+      await close(tester, repository);
+
+      await answer(tester, "Don't save");
+
+      expect(repository.calls, <String>['shutdown', 'quit']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Cancel stays', (tester) async {
+      final repository = await pumpGuard(tester, unsaved: 1);
+      await close(tester, repository);
+
+      await answer(tester, 'Cancel');
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(repository.calls, <String>['cancelQuit']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a failed save stays open and says so', (tester) async {
+      final repository = await pumpGuard(tester, unsaved: 1)
+        ..saves = false;
+      await close(tester, repository);
+
+      await answer(tester, 'Save all');
+
+      expect(find.textContaining('could not be saved'), findsOneWidget);
+      expect(repository.calls, <String>['saveAllFiles']);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('after Save all, working agents still ask', (tester) async {
+      final repository = await pumpGuard(tester, unsaved: 1, busy: 2);
+      await close(tester, repository);
+
+      await answer(tester, 'Save all');
+
+      expect(find.textContaining('Agents are still working in 2 chats.'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
 
   testWidgets('closing an idle app quits without asking', (tester) async {
     final repository = await pumpGuard(tester);

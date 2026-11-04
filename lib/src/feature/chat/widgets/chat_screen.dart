@@ -16,6 +16,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_queue_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_unsaved_files_bar.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
@@ -121,6 +122,16 @@ class _ChatScreenState extends State<ChatScreen> {
               // While the agent works "Send next" resumes the queue for the end of the turn.
               onSendNext: _canSend(view) || view.status.isBusy ? _scope.sendNextQueued : null,
             ),
+          ),
+          ValueListenableBuilder<int>(
+            valueListenable: _scope.unsavedGate.held,
+            builder: (context, held, _) => held == 0
+                ? const SizedBox.shrink()
+                : ChatUnsavedFilesBar(
+                    count: held,
+                    onSaveAll: () => _scope.unsavedGate.saveAll().ignore(),
+                    onSendAnyway: () => _scope.unsavedGate.sendAnyway().ignore(),
+                  ),
           ),
           StateConsumer<FileMentionController, FileMentionState>(
             controller: _scope.fileMentionController,

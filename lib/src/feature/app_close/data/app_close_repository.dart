@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
@@ -28,6 +29,12 @@ abstract interface class IAppCloseRepository {
 
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
+
+  /// Files edited in the Code view and not saved yet.
+  int unsavedFiles();
+
+  /// Saves them; `true` when every one was saved.
+  Future<bool> saveAllFiles();
 
   /// Ends a widget pick, then stops the runs, the devices daemon, a project creation, the agent
   /// list, the message queues, the agents, the app's MCP server, the MCP status probes and the agent probes, then
@@ -56,6 +63,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._agentProbe,
     required this._projectCreation,
     required this._queuedChats,
+    this._unsavedFiles,
     this._stopAgentList,
   });
 
@@ -70,6 +78,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IAgentProbe _agentProbe;
   final IProjectCreationRepository _projectCreation;
   final IQueuedChats _queuedChats;
+
+  /// The Code view's unsaved files; none without it.
+  final IUnsavedFiles? _unsavedFiles;
 
   /// Stops feeding the agent list into the hub; called before the hub is disposed.
   final Future<void> Function()? _stopAgentList;
@@ -108,6 +119,12 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
 
   @override
   Future<bool> askBeforeQuit() async => (await _settings.watch().first).askBeforeQuit;
+
+  @override
+  int unsavedFiles() => _unsavedFiles?.count() ?? 0;
+
+  @override
+  Future<bool> saveAllFiles() async => await _unsavedFiles?.saveAll() ?? true;
 
   @override
   Future<void> shutdown() async {

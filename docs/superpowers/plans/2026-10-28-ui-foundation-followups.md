@@ -381,3 +381,19 @@ Deferred from the reviews of the first feedback round (docs/superpowers/plans/20
   - Split button: its parts have no explicit `Semantics(button, enabled)`, the arrow no `semanticLabel`; the disabled main part loses the full-name tooltip (`app_run/widgets/run_split_button.dart`)
   - Tests: the Russian strings of the split button are thinly covered (`test/feature/app_run/run_split_button_test.dart`); `agent_probe_test.dart` 'silent agent times out' failed once in a full run, passed alone and on rerun (M5 test, `test/feature/agents/agent_probe_test.dart`)
   - Drop: the native drop view is checked by hand only (Finder, Safari, Photos); the widget tests drive `ChatDropTarget` through a fake `DropZone` stream, and nothing tests `DropZone.swift` itself (`macos/Runner/DropZone.swift`); the channel mapping in `DropZone.platform` (non-map events, unknown types) and the overlay's reduced-motion branch have no test (`common/drop_zone/drop_zone.dart`, `common/widget/drop_zone_overlay.dart`)
+
+## Code view follow-ups
+
+Deferred from the Code view (docs/superpowers/plans/2026-11-04-code-view.md). Paths are under `lib/src/feature/` unless they start with `test/`.
+
+- **Next steps:**
+  - Hot exit: keep unsaved buffers on quit and bring them back on the next launch, instead of asking (`code_view/controller/code_tabs_controller.dart`)
+  - Search across files, git gutter marks beside the line numbers, split editor, a terminal
+  - Explorer: create, rename and delete files and folders
+  - Dart analysis server (LSP): diagnostics, completion, hover — the next milestone
+- **Bugs and risks:**
+  - "Open in default app" goes through `open -t` (by design it never runs a file an agent wrote), so an image opens in the text editor, not Preview (`projects/data/projects_repository.dart`)
+  - The remembered tabs and mode are saved 300 ms after the last change; quitting inside that window keeps the previous state (`code_view/controller/code_tabs_controller.dart`)
+  - re_editor normalizes mixed line endings to the file's main one on the first edit; a save without edits writes nothing (`code_view/controller/code_document.dart`)
+  - FSEvents can report a write to a new file as a create; the Code view only relies on "exists or deleted" (`code_view/data/code_files_repository.dart`)
+

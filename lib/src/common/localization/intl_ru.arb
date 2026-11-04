@@ -612,5 +612,13 @@
   "codeFindNoResults": "Нет совпадений",
   "codeFindToggleReplace": "Показать замену",
   "codeMatchCase": "С учётом регистра",
-  "codeRegex": "Регулярное выражение"
+  "codeRegex": "Регулярное выражение",
+  "quitUnsavedTitle": "Несохранённые изменения",
+  "quitUnsavedBody": "{count, plural, one{{count} файл не сохранён.} few{{count} файла не сохранены.} many{{count} файлов не сохранены.} other{{count} файла не сохранены.}}",
+  "@quitUnsavedBody": {"placeholders": {"count": {"type": "int"}}},
+  "quitUnsavedFailed": "Не все файлы сохранились: они изменились на диске или не записались.",
+  "saveAll": "Сохранить все",
+  "chatUnsavedFiles": "{count, plural, one{{count} несохранённый файл — агент видит версию с диска} few{{count} несохранённых файла — агент видит версию с диска} many{{count} несохранённых файлов — агент видит версию с диска} other{{count} несохранённого файла — агент видит версию с диска}}",
+  "@chatUnsavedFiles": {"placeholders": {"count": {"type": "int"}}},
+  "chatSendAnyway": "Отправить так"
 }

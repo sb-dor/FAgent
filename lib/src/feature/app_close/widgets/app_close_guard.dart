@@ -47,6 +47,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             agentProbe: dependencies.agentProbe,
             projectCreation: dependencies.projectCreationRepository,
             queuedChats: dependencies.chatQueues,
+            unsavedFiles: dependencies.codeViews,
             stopAgentList: dependencies.stopFollowingCustomAgents,
           ),
     )..watch();
@@ -59,6 +60,41 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
   }
 
   Future<void> _onState(AppCloseState previous, AppCloseState current) async {
+    if (current case AppClose$UnsavedState(:final files, :final saveFailed)) {
+      final localization = Localization.of(context);
+      final answer = await showDialog<_UnsavedAnswer>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(localization.quitUnsavedTitle),
+          content: Text(
+            saveFailed
+                ? '${localization.quitUnsavedBody(files)}\n${localization.quitUnsavedFailed}'
+                : localization.quitUnsavedBody(files),
+          ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(localization.cancel)),
+            TextButton(
+              onPressed: () => Navigator.pop(context, _UnsavedAnswer.discard),
+              child: Text(localization.codeDontSave),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, _UnsavedAnswer.save),
+              child: Text(localization.saveAll),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      switch (answer) {
+        case _UnsavedAnswer.save:
+          _controller.saveAndQuit();
+        case _UnsavedAnswer.discard:
+          _controller.quitWithoutSaving();
+        case null:
+          _controller.cancel();
+      }
+      return;
+    }
     if (current case AppClose$ConfirmingState(:final busyChats)) {
       final localization = Localization.of(context);
       final quit = await showDialog<bool>(
@@ -116,3 +152,5 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
     child: widget.child,
   );
 }
+
+enum _UnsavedAnswer { save, discard }

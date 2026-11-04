@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.d
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/unsaved_files_gate.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
@@ -158,6 +159,9 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
 
+  /// Holds a message back while the project has files unsaved in the Code view.
+  late final UnsavedFilesGate unsavedGate;
+
   /// The images that go with the next message (dropped or pasted), as chips of the composer.
   final ValueNotifier<List<ComposerImage>> images = ValueNotifier<List<ComposerImage>>(
     const <ComposerImage>[],
@@ -183,6 +187,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final hub = dependencies.agentHub;
     _queues = dependencies.chatQueues;
     queueController = _queues.acquire(sessionId);
+    unsavedGate = UnsavedFilesGate(files: dependencies.codeViews, projectId: widget.project.id);
     // Assigned before it opens: [_followStatus] reads it on the first change.
     chatController = ChatController(
       repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
@@ -241,6 +246,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     chatSkillsController.dispose();
     chatSkillActionsController.dispose();
     skillTextController.dispose();
+    unsavedGate.dispose();
     textController.dispose();
     composerFocus.dispose();
     images.dispose();
@@ -400,6 +406,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final text = textController.text.trim();
     // Images alone are a message too.
     if ((text.isEmpty && images.value.isEmpty) || _refuseImagesForAgent()) return;
+    if (unsavedGate.hold(send)) return;
     if (!widget.project.isTrusted) {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
@@ -418,6 +425,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final draft = textController.text.trim();
     // A second ⌘↵ while the first is being prepared would queue the same text again.
     if ((draft.isEmpty && images.value.isEmpty) || _queueing || _refuseImagesForAgent()) return;
+    if (unsavedGate.hold(queue)) return;
     _queueing = true;
     try {
       if (!widget.project.isTrusted) {
