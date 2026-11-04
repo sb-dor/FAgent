@@ -7,6 +7,15 @@ import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnost
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
+/// [DartAnalysisServer.start] was cancelled before the server answered `initialize`.
+final class DartAnalysisStartCancelled implements Exception {
+  /// Creates the exception.
+  const DartAnalysisStartCancelled();
+
+  @override
+  String toString() => 'DartAnalysisStartCancelled';
+}
+
 /// {@template dart_analysis_server}
 /// The Dart analysis server of one project over LSP (`dart language-server`): open files and
 /// their text, completion, and the errors it publishes.
@@ -27,6 +36,7 @@ final class DartAnalysisServer {
     required Map<String, String> environment,
     LspProcessStarter starter = startGroupedLspProcess,
     Duration initializeTimeout = const Duration(seconds: 30),
+    Future<void>? cancel,
   }) async {
     final process = await starter(
       executable,
@@ -38,7 +48,7 @@ final class DartAnalysisServer {
     final server = DartAnalysisServer._(process, connection);
     try {
       final rootUri = Uri.directory(root).toString().replaceFirst(RegExp(r'/$'), '');
-      await connection.request('initialize', <String, Object?>{
+      final initialize = connection.request('initialize', <String, Object?>{
         'processId': null,
         'clientInfo': <String, Object?>{'name': 'flutter_code_agent'},
         'rootUri': rootUri,
@@ -64,6 +74,11 @@ final class DartAnalysisServer {
           },
         },
       }, timeout: initializeTimeout);
+      // Quitting while the server starts must not wait for its answer.
+      await Future.any<Object?>(<Future<Object?>>[
+        initialize,
+        if (cancel != null) cancel.then<Object?>((_) => throw const DartAnalysisStartCancelled()),
+      ]);
       connection.notify('initialized', <String, Object?>{});
     } on Object {
       await connection.close();

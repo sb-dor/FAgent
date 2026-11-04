@@ -96,6 +96,9 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
 
   DartAnalysisServer? _server;
   Future<void>? _starting;
+
+  /// Completes on [dispose]: a start still waiting for the server gives up and stops it.
+  final Completer<void> _cancelStart = Completer<void>();
   final List<StreamSubscription<Object?>> _subscriptions = <StreamSubscription<Object?>>[];
   bool _disposed = false;
 
@@ -144,6 +147,7 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
         root: _root,
         environment: _environment.variables,
         starter: _starter,
+        cancel: _cancelStart.future,
       );
     } on Object catch (error, stackTrace) {
       l.w('Dart analysis | the server did not start: $error', stackTrace);
@@ -270,6 +274,7 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
       timer.cancel();
     }
     _timers.clear();
+    if (!_cancelStart.isCompleted) _cancelStart.complete();
     await _starting;
     final server = _server;
     _forget();

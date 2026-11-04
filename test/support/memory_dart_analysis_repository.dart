@@ -21,6 +21,9 @@ final class MemoryDartAnalysisRepository implements IDartAnalysisRepository {
   /// `open`, `change`, `close` and `complete` calls in order, with their path and text.
   final List<(String, String, String?)> calls = <(String, String, String?)>[];
 
+  /// The caret of every [complete], in order.
+  final List<LspPosition> positions = <LspPosition>[];
+
   /// How often [restart] was called.
   int restarts = 0;
 
@@ -50,6 +53,7 @@ final class MemoryDartAnalysisRepository implements IDartAnalysisRepository {
   @override
   Future<List<DartCompletion>> complete(String path, String text, LspPosition position) async {
     calls.add(('complete', path, text));
+    positions.add(position);
     return await onComplete?.call(path, text, position) ?? const <DartCompletion>[];
   }
 

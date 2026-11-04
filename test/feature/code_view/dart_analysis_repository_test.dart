@@ -222,6 +222,21 @@ void main() {
     expect(methods(processes.single), isNot(contains('textDocument/didChange')));
   });
 
+  test('I1: dispose during a start that hangs stops it at once', () async {
+    final hung = ScriptedLspProcess();
+    final repository = DartAnalysisRepositoryImpl(
+      root: root,
+      environment: ShellEnvironment(<String, String>{'PATH': p.join(sdk.path, 'bin')}),
+      starter: (executable, arguments, {workingDirectory, environment}) async => hung,
+    )..open(file, 'x');
+    await settle();
+    expect(repository.status.value, const DartAnalysisStatus.starting());
+
+    await repository.dispose().timeout(const Duration(seconds: 2));
+
+    expect(hung.stopped, isTrue);
+  });
+
   test('dispose stops the server', () async {
     final repository = create()..open(file, 'x');
     await settle();

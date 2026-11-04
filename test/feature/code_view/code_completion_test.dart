@@ -281,6 +281,96 @@ void main() {
     expect(document.editing.text, "import 'package:uuid/uuid.dart';\n\nUuid\n");
   });
 
+  group('final review', () {
+    testCode('C1: with a fold above, completion asks for the real line and inserts there', (tester) async {
+      files.put(main, 'void a() {\n  x;\n}\nfoo\n', notify: false);
+      analysis.onComplete = (path, text, position) => <DartCompletion>[
+        const DartCompletion(
+          label: 'fooBar',
+          kind: DartCompletionKind.function,
+          insertText: 'fooBar',
+          edit: LspTextEdit(
+            range: LspRange(
+              start: LspPosition(line: 3, character: 0),
+              end: LspPosition(line: 3, character: 3),
+            ),
+            newText: 'fooBar',
+          ),
+        ),
+      ];
+      final document = await pump(tester);
+      document.editing
+        ..collapseChunk(0, 3)
+        ..selection = const CodeLineSelection.collapsed(index: 1, offset: 3);
+      await tester.pump();
+      expect(document.editing.codeLines.length, lessThan(document.editing.lineCount));
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.space);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await settle(tester);
+      // Every request, the first one with the block still folded too.
+      expect(analysis.positions, everyElement(const LspPosition(line: 3, character: 3)));
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+      expect(document.editing.text, 'void a() {\n  x;\n}\nfooBar\n');
+    });
+
+    testCode('I2: moving the caret before the request goes out asks nothing', (tester) async {
+      final document = await pump(tester);
+      document.editing.replaceSelection('S');
+      document.editing.selection = const CodeLineSelection.collapsed(index: 0, offset: 0);
+      await settle(tester);
+
+      expect(analysis.positions, isEmpty);
+      expect(rows(), findsNothing);
+    });
+
+    testCode('I2: an answer that arrives after the caret moved opens nothing', (tester) async {
+      final pending = Completer<List<DartCompletion>>();
+      analysis.onComplete = (path, text, position) => pending.future;
+      final document = await pump(tester);
+      await type(tester, document, 'S');
+
+      document.editing.selection = const CodeLineSelection.collapsed(index: 0, offset: 0);
+      await tester.pump();
+      pending.complete(answer);
+      await settle(tester);
+
+      expect(rows(), findsNothing);
+    });
+
+    testCode('I3: an answer in flight when a row is accepted does not reopen the list', (tester) async {
+      final later = Completer<List<DartCompletion>>();
+      var calls = 0;
+      analysis.onComplete = (path, text, position) => ++calls == 1 ? answer : later.future;
+      final document = await pump(tester);
+      await type(tester, document, 'S');
+      await type(tester, document, 't');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+      later.complete(answer);
+      await settle(tester);
+
+      expect(rows(), findsNothing);
+      expect(document.editing.text, 'String\n');
+    });
+
+    testCode('I4: clicking a row keeps the keyboard in the editor', (tester) async {
+      final document = await pump(tester);
+      await type(tester, document, 'Stat');
+
+      await tester.tap(find.text('StatelessWidget'));
+      await settle(tester);
+
+      expect(document.editing.text, 'StatelessWidget\n');
+      final focused = FocusManager.instance.primaryFocus?.context;
+      expect(focused?.findAncestorWidgetOfExactType<CodeEditor>(), isNotNull);
+    });
+  });
+
   for (final locale in const <Locale>[Locale('en'), Locale('ru')]) {
     for (final dark in const <bool>[false, true]) {
       testCode('the list fits at 900×600 in ${locale.languageCode}, ${dark ? 'dark' : 'light'}', (

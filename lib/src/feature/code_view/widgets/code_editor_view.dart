@@ -128,7 +128,11 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           required style,
         }) => diagnosticSpans(
           textSpan: textSpan,
-          line: index,
+          // A folded block above hides lines: the diagnostics count document lines.
+          line: switch (document.editing.codeLines.index2lineIndex(index)) {
+            < 0 => index,
+            final line => line,
+          },
           diagnostics: document.diagnostics.value,
           colors: context.colors,
           onEnter: _showHover,
@@ -273,7 +277,8 @@ class _CodeEditorViewState extends State<CodeEditorView> {
     return Positioned(
       left: position.dx,
       top: position.dy,
-      child: TapRegion(
+      // In the editor's tap group: a click on a row keeps the keyboard in the editor.
+      child: CodeEditorTapRegion(
         onTapOutside: (_) => completion.dismiss(),
         child: CodeCompletionList(
           items: completion.items,

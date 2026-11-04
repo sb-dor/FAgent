@@ -226,6 +226,26 @@ void main() {
       expect(_leaves(span), contains(('x', context.colors.danger)));
     });
 
+    testCode('C1: with a fold above, a line is underlined by its real line', (tester) async {
+      files.put(main, 'void a() {\n  x;\n}\ny;\n', notify: false);
+      final document = await pump(tester);
+      publish(main, <DartDiagnostic>[_diagnostic(DartSeverity.error, line: 3, start: 0, end: 1)]);
+      await settle(tester);
+      document.editing.collapseChunk(0, 3);
+      await tester.pump();
+      final context = tester.element(find.byType(CodeEditor));
+
+      final span = document.decorator!(
+        context: context,
+        index: 1,
+        codeLine: document.editing.codeLines[1],
+        textSpan: const TextSpan(text: 'y;'),
+        style: const TextStyle(),
+      );
+
+      expect(_leaves(span), contains(('y', context.colors.danger)));
+    });
+
     testCode('hovering the range shows the message and code', (tester) async {
       final document = await pump(tester);
       publish(main, <DartDiagnostic>[

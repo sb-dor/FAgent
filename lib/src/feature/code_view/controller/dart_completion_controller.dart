@@ -60,12 +60,16 @@ final class DartCompletionController extends ChangeNotifier {
   void _onEditing() {
     if (_applying || _disposed) return;
     if (_snippet case final snippet?) {
+      // A fold hides lines the snippet's offsets count: the session cannot follow it.
+      if (_editing.codeLines.length != _editing.lineCount) snippet.end();
       snippet.onEdit();
       if (!snippet.active) _snippet = null;
     }
     final lines = _editing.codeLines;
     if (identical(lines, _lines)) {
-      // The caret moved without an edit.
+      // The caret moved without an edit: nothing asked for it, and no answer still on the way.
+      _timer?.cancel();
+      _edits++;
       if (open) dismiss();
       return;
     }
@@ -114,13 +118,34 @@ final class DartCompletionController extends ChangeNotifier {
     final items = await _analysis.complete(
       _document.path,
       _editing.text,
-      LspPosition(line: selection.extentIndex, character: selection.extentOffset),
+      LspPosition(line: _documentLine(selection.extentIndex), character: selection.extentOffset),
     );
     // Typed on since it was asked: a newer request answers instead.
     if (_disposed || edits != _edits) return;
     _answer = List<DartCompletion>.of(items)
       ..sort((a, b) => (a.sortText ?? a.label).compareTo(b.sortText ?? b.label));
     _narrow();
+  }
+
+  /// The document line of the visible line [index]: a folded block above counts its hidden lines.
+  int _documentLine(int index) {
+    final line = _editing.codeLines.index2lineIndex(index);
+    return line < 0 ? index : line;
+  }
+
+  /// Opens every folded block, so visible lines are document lines again (LSP edits count the
+  /// latter).
+  void _unfoldAll() {
+    var folded = true;
+    while (folded) {
+      folded = false;
+      for (var i = _editing.codeLines.length - 1; i >= 0; i--) {
+        if (_editing.codeLines[i].chunkParent) {
+          _editing.expandChunk(i);
+          folded = true;
+        }
+      }
+    }
   }
 
   void _narrow() {
@@ -163,9 +188,17 @@ final class DartCompletionController extends ChangeNotifier {
   /// snippet, and the imports the analysis adds when resolving it.
   Future<void> select(DartCompletion item) async {
     _timer?.cancel();
+    // An answer still on the way is about the text before this insert.
+    _edits++;
     dismiss();
     final resolved = item.data == null ? item : await _analysis.resolve(item);
     if (_disposed) return;
+    _applying = true;
+    try {
+      _unfoldAll();
+    } finally {
+      _applying = false;
+    }
     final selection = _editing.selection;
     final caret = LspPosition(line: selection.extentIndex, character: selection.extentOffset);
     final edit = resolved.edit;
