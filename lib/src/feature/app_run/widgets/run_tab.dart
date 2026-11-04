@@ -110,8 +110,7 @@ class _RunTabState extends State<RunTab> {
             projectId,
             device: device,
             mode: state.mode,
-            target: state.target,
-            arguments: state.arguments,
+            arguments: () => widget.run.startArgumentsFor(projectId),
           );
         }
       case RunAction.stop:

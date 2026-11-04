@@ -12,6 +12,7 @@ import '../../generated_migrations/schema_v5.dart' as v5;
 import '../../generated_migrations/schema_v6.dart' as v6;
 import '../../generated_migrations/schema_v7.dart' as v7;
 import '../../generated_migrations/schema_v8.dart' as v8;
+import '../../generated_migrations/schema_v9.dart' as v9;
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -187,5 +188,28 @@ void main() {
       (await database.select(database.customAgentsTable).getSingle()).rulesChannel,
       'firstMessage',
     );
+  });
+
+  test('v9 → v10 keeps run args and adds selectedConfig null', () async {
+    final schema = await verifier.schemaAt(9);
+    final old = v9.DatabaseAtV9(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      'INSERT INTO run_configs (project_id, flavor, dart_defines, extra_args) '
+      "VALUES (1, 'dev', '[\"A=1\"]', '--verbose')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 10);
+
+    final row = await database.select(database.runConfigsTable).getSingle();
+    expect(row.flavor, 'dev');
+    expect(row.dartDefines, '["A=1"]');
+    expect(row.extraArgs, '--verbose');
+    expect(row.selectedConfig, isNull);
   });
 }

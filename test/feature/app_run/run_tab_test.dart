@@ -71,6 +71,7 @@ final class _ScriptedRunRepository implements IAppRunRepository {
     required BuildMode mode,
     required String target,
     RunArguments arguments = const RunArguments(),
+    Map<String, String> environment = const <String, String>{},
   }) async {}
 
   @override
