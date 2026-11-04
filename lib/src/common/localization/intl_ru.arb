@@ -628,5 +628,11 @@
   "codeAnalysisUnavailable": "Анализ Dart недоступен",
   "codeAnalysisRestart": "Перезапустить",
   "projectCollapse": "Свернуть",
-  "projectExpand": "Развернуть"
+  "projectExpand": "Развернуть",
+  "chatRename": "Переименовать",
+  "chatDelete": "Удалить",
+  "chatActions": "Действия с чатом",
+  "chatDeleteConfirm": "Удалить чат «{title}»? Его история удалится.",
+  "@chatDeleteConfirm": {"placeholders": {"title": {"type": "String"}}},
+  "chatDeleteBusy": "Агент ещё работает в этом чате — сначала остановите его."
 }

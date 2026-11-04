@@ -206,7 +206,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final chatRepository = ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository);
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionAgentController = SessionAgentController(
-      repository: SessionsRepositoryImpl(database: dependencies.database, hub: hub),
+      repository: SessionsRepositoryImpl(
+        database: dependencies.database,
+        hub: hub,
+        queuedChats: dependencies.chatQueues,
+      ),
     )..addListener(_onAgentChanged);
     recoveryController = ChatRecoveryController(repository: chatRepository);
     loginMethodsController = ChatLoginMethodsController(repository: chatRepository)..watch();

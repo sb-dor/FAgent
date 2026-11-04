@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 
@@ -23,15 +24,55 @@ abstract interface class ISessionsRepository {
   /// Throws a [StateError] when the chat already has an agent session: its agent can no longer
   /// change.
   Future<void> setAgent(int sessionId, String agentId);
+
+  /// Names chat [sessionId] [title] (trimmed); an empty name changes nothing. The automatic title
+  /// fills only a chat without one, so the name stays.
+  Future<void> rename(int sessionId, String title);
+
+  /// Deletes chat [sessionId] with its history and its queued messages.
+  ///
+  /// Throws [ChatBusyException], and deletes nothing, while its agent works.
+  Future<void> delete(int sessionId);
+}
+
+/// A chat was not deleted: its agent is working.
+final class ChatBusyException implements Exception {
+  /// Creates the exception for chat [sessionId].
+  const ChatBusyException(this.sessionId);
+
+  /// The chat that was kept.
+  final int sessionId;
+
+  @override
+  String toString() => 'ChatBusyException: the agent works in chat $sessionId';
 }
 
 /// Drift and AgentHub backed [ISessionsRepository].
 final class SessionsRepositoryImpl implements ISessionsRepository {
   /// Creates the repository.
-  SessionsRepositoryImpl({required this._database, required this._hub});
+  SessionsRepositoryImpl({required this._database, required this._hub, required this._queuedChats});
 
   final AppDatabase _database;
   final AgentHub _hub;
+  final IQueuedChats _queuedChats;
+
+  @override
+  Future<void> rename(int sessionId, String title) async {
+    final name = title.trim();
+    if (name.isEmpty) return;
+    await (_database.update(_database.sessionsTable)..where((s) => s.id.equals(sessionId))).write(
+      SessionsTableCompanion(title: Value<String>(name)),
+    );
+  }
+
+  // The foreign keys cascade (`PRAGMA foreign_keys = ON`): the chat's events go with it.
+  @override
+  Future<void> delete(int sessionId) async {
+    if (_hub.opened(sessionId)?.status.value.isBusy ?? false) throw ChatBusyException(sessionId);
+    await (_database.delete(_database.sessionsTable)..where((s) => s.id.equals(sessionId))).go();
+    // A paused queue would otherwise stay forever and keep the quit question asking.
+    _queuedChats.discard(sessionId);
+  }
 
   @override
   Stream<List<ChatSession>> watchAllSessions() =>

@@ -679,5 +679,11 @@
   "codeAnalysisUnavailable": "Dart analysis unavailable",
   "codeAnalysisRestart": "Restart",
   "projectCollapse": "Collapse",
-  "projectExpand": "Expand"
+  "projectExpand": "Expand",
+  "chatRename": "Rename",
+  "chatDelete": "Delete",
+  "chatActions": "Chat actions",
+  "chatDeleteConfirm": "Delete the chat “{title}”? Its history is deleted.",
+  "@chatDeleteConfirm": {"placeholders": {"title": {"type": "String"}}},
+  "chatDeleteBusy": "The agent is still working in this chat. Stop it first."
 }

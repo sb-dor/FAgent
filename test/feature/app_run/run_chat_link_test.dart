@@ -173,7 +173,10 @@ void main() {
     if (openChat) {
       await tester.tap(find.text('The chat'));
     } else {
-      await tester.tap(find.text('p').first);
+      // The project is selected and no chat is open (pressing its name would open its newest chat).
+      WorkspaceConfigInhWidget.of(
+        tester.element(find.byType(WorkspaceWidget)),
+      ).dataController.selectProject(projectId);
     }
     for (var i = 0; i < 5; i++) {
       await settle(tester);

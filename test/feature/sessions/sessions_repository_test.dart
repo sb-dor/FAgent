@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
@@ -40,6 +41,7 @@ void main() {
   late File secondRequests;
   late AgentHub hub;
   late SessionsRepositoryImpl repository;
+  late _RecordingQueuedChats queued;
 
   setUpAll(() async {
     temp = Directory.systemTemp.createTempSync('sessions_repository_test');
@@ -74,7 +76,8 @@ void main() {
       ),
       cancelTimeout: const Duration(seconds: 1),
     );
-    repository = SessionsRepositoryImpl(database: database, hub: hub);
+    queued = _RecordingQueuedChats();
+    repository = SessionsRepositoryImpl(database: database, hub: hub, queuedChats: queued);
   });
 
   tearDown(() async {
@@ -95,6 +98,63 @@ void main() {
   Future<String> agentOf(int id) async => (await (database.select(
     database.sessionsTable,
   )..where((s) => s.id.equals(id))).getSingle()).agentId;
+
+  Future<String?> titleOf(int id) async => (await (database.select(
+    database.sessionsTable,
+  )..where((s) => s.id.equals(id))).getSingleOrNull())?.title;
+
+  group('rename', () {
+    test('sets the title, trimmed', () async {
+      final chat = await newChat();
+
+      await repository.rename(chat, '  Booking screen  ');
+
+      expect(await titleOf(chat), 'Booking screen');
+    });
+
+    test('an empty name changes nothing', () async {
+      final chat = await newChat();
+      await repository.rename(chat, 'Kept');
+
+      await repository.rename(chat, '   ');
+
+      expect(await titleOf(chat), 'Kept');
+    });
+  });
+
+  group('delete', () {
+    test('removes the chat and its history and drops its queue', () async {
+      final chat = await newChat();
+      await database
+          .into(database.sessionEventsTable)
+          .insert(
+            SessionEventsTableCompanion.insert(
+              sessionId: chat,
+              seq: 1,
+              origin: 'user',
+              kind: 'prompt',
+              payload: '{}',
+            ),
+          );
+
+      await repository.delete(chat);
+
+      expect(await titleOf(chat), isNull);
+      expect(await database.select(database.sessionEventsTable).get(), isEmpty);
+      expect(queued.discarded, <int>[chat]);
+    });
+
+    test('refuses a chat whose agent is working', () async {
+      final chat = await newChat();
+      final live = await hub.session(chat);
+      live.status.value = SessionStatus.running;
+
+      await expectLater(repository.delete(chat), throwsA(isA<ChatBusyException>()));
+
+      expect(await titleOf(chat), isNotNull);
+      live.status.value = SessionStatus.idle;
+    });
+  });
 
   test("setAgent changes a new chat's agent", () async {
     final chat = await newChat();
@@ -238,3 +298,18 @@ Future<void> _untilStatus(LiveSession live, SessionStatus status) async {
     await Future<void>.delayed(const Duration(milliseconds: 20));
   }
 }
+
+/// [IQueuedChats] that records the chats whose queues were dropped.
+final class _RecordingQueuedChats implements IQueuedChats {
+  final List<int> discarded = <int>[];
+
+  @override
+  Set<int> get sessionIds => const <int>{};
+
+  @override
+  void discard(int sessionId) => discarded.add(sessionId);
+
+  @override
+  void dispose() {}
+}
+

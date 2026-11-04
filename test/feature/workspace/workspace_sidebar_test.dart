@@ -379,6 +379,201 @@ void main() {
     });
   });
 
+  group('chat menu', () {
+    Future<String?> titleOf(int id) async => (await (database.select(
+      database.sessionsTable,
+    )..where((s) => s.id.equals(id))).getSingleOrNull())?.title;
+
+    Future<void> rightClick(WidgetTester tester, String title) async {
+      await tester.tap(find.text(title), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a right click on a chat offers Rename and Delete', (tester) async {
+      useWindow(tester, 1280, 800);
+      await tester.runAsync(() async => addChat(await addProject('avera-hotel'), 'Booking screen'));
+      await pumpSidebar(tester);
+
+      await rightClick(tester, 'Booking screen');
+
+      expect(find.text('Rename'), findsOneWidget);
+      expect(find.text('Delete'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the ⋯ of a hovered chat opens the same menu', (tester) async {
+      useWindow(tester, 1280, 800);
+      await tester.runAsync(() async => addChat(await addProject('avera-hotel'), 'Booking screen'));
+      await pumpSidebar(tester);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: tester.getCenter(find.text('Booking screen')));
+      await tester.pump();
+
+      await tester.tap(find.byTooltip('Chat actions'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Rename'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Rename edits in place: Enter saves', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int chat;
+      await tester.runAsync(() async {
+        chat = await addChat(await addProject('avera-hotel'), 'Booking screen');
+      });
+      await pumpSidebar(tester);
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      final field = find.descendant(of: find.byType(WorkspaceSidebar), matching: find.byType(TextField));
+      expect(field, findsOneWidget);
+      expect(tester.widget<TextField>(field).controller!.text, 'Booking screen');
+
+      await tester.enterText(field, 'Hotel booking');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(await tester.runAsync(() => titleOf(chat)), 'Hotel booking');
+      expect(find.text('Hotel booking'), findsOneWidget);
+      expect(field, findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Esc cancels a rename, and an empty name is ignored', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int chat;
+      await tester.runAsync(() async {
+        chat = await addChat(await addProject('avera-hotel'), 'Booking screen');
+      });
+      await pumpSidebar(tester);
+      final field = find.descendant(of: find.byType(WorkspaceSidebar), matching: find.byType(TextField));
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(field, 'Changed my mind');
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await settle(tester);
+      expect(field, findsNothing);
+      expect(await tester.runAsync(() => titleOf(chat)), 'Booking screen');
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Rename'));
+      await tester.pumpAndSettle();
+      await tester.enterText(field, '   ');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+      expect(await tester.runAsync(() => titleOf(chat)), 'Booking screen');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Delete asks first: Cancel keeps the chat, Delete removes it', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int chat;
+      await tester.runAsync(() async {
+        chat = await addChat(await addProject('avera-hotel'), 'Booking screen');
+      });
+      await pumpSidebar(tester);
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete the chat “Booking screen”? Its history is deleted.'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(await tester.runAsync(() => titleOf(chat)), 'Booking screen');
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(await tester.runAsync(() => titleOf(chat)), isNull);
+      expect(find.text('Booking screen'), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('deleting the open chat shows the pick-a-chat hint', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int avera;
+      late int chat;
+      await tester.runAsync(() async {
+        avera = await addProject('avera-hotel');
+        chat = await addChat(avera, 'Booking screen');
+      });
+      await pumpSidebar(tester);
+      scopeOf(tester).dataController
+        ..selectProject(avera)
+        ..selectSession(chat);
+      await settle(tester);
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(scopeOf(tester).dataController.sessionId, isNull);
+      expect(scopeOf(tester).dataController.projectId, avera);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a chat whose agent works is kept and the user is told why', (tester) async {
+      useWindow(tester, 1280, 800);
+      late int chat;
+      await tester.runAsync(() async {
+        chat = await addChat(await addProject('avera-hotel'), 'Booking screen');
+        (await dependencies.agentHub.session(chat)).status.value = SessionStatus.running;
+      });
+      await pumpSidebar(tester);
+
+      await rightClick(tester, 'Booking screen');
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      expect(find.text('The agent is still working in this chat. Stop it first.'), findsOneWidget);
+      expect(await tester.runAsync(() => titleOf(chat)), 'Booking screen');
+      await tester.runAsync(() async {
+        (await dependencies.agentHub.session(chat)).status.value = SessionStatus.idle;
+      });
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the menu and the rename field fit in Russian', (tester) async {
+      useWindow(tester, 900, 600);
+      await tester.runAsync(() async => addChat(await addProject('avera-hotel'), 'Бронирование'));
+      await tester.pumpWidget(
+        testApp(
+          const WorkspaceConfigWidget(),
+          dependencies: dependencies,
+          withSettings: true,
+          locale: const Locale('ru'),
+        ),
+      );
+      await settle(tester);
+      await tester.pumpAndSettle();
+
+      await rightClick(tester, 'Бронирование');
+      expect(find.text('Переименовать'), findsOneWidget);
+      expect(find.text('Удалить'), findsOneWidget);
+      await tester.tap(find.text('Переименовать'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      await disposeTestApp(tester, dependencies);
+    });
+  });
+
   group('top and bottom', () {
     testWidgets('the Project menu offers the folder picker, the wizard and a coming soon clone', (
       tester,
