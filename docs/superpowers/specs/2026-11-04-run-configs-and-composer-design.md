@@ -100,7 +100,7 @@
   этих событий из `EventChannel('flutter_code_agent/drop_zone')`; одна широковещательная подписка
   на приложение — в `Dependencies`.
 - Нативная часть (`macos/Runner/DropZone.swift`): прозрачный `NSView` поверх вида Flutter
-  (`hitTest` → `nil`, мышь проходит), зарегистрированный на файлы (`.fileURL`), обещания файлов
+  (обычный `hitTest`, как у `desktop_drop`: мышь доходит до Flutter по цепочке ответчиков), зарегистрированный на файлы (`.fileURL`), обещания файлов
   (`NSFilePromiseReceiver` — Safari, Фото, письма) и картинки данными (`.png`, `.tiff`). Обещания и
   данные сохраняются во временную папку `…/flutter_code_agent/drops/<uuid>/` (картинка данными —
   `.png`); `Drop` уходит, когда все получены.
