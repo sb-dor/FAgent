@@ -357,6 +357,20 @@ void main() {
     expect(_agentText(live).join(), 'hi');
   });
 
+  test('a prompt while one is held for bypass is refused and keeps the held one', () async {
+    final hub = newHub();
+    final chat = await newChat(acpSessionId: 'bypass-held');
+    final live = await hub.session(chat);
+    await expectLater(hub.prompt(chat, 'echo first'), throwsA(isA<BypassNotAllowedException>()));
+
+    await expectLater(hub.prompt(chat, 'echo second'), throwsA(isA<BypassNotAllowedException>()));
+
+    expect(live.canRetryPrompt.value, isTrue);
+    await hub.acknowledgeBypass(chat);
+    await hub.retryPrompt(chat);
+    expect(_agentText(live).join(), 'first');
+  });
+
   test('bypass consent is stored with the chat and survives a restart', () async {
     final chat = await newChat(acpSessionId: 'bypass-2');
     await newHub().acknowledgeBypass(chat);
@@ -770,6 +784,79 @@ void main() {
     });
   });
 
+  group('a turn sent while the previous one is still closing', () {
+    test('starts after the previous turn has saved its changed files', () async {
+      final gate = Completer<void>();
+      final observer = _SlowAfterObserver(gate.future);
+      final hub = newHub(observers: <TurnObserver>[observer]);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      final first = hub.prompt(chat, 'echo first');
+      // The first turn is `idle` and still records its changed files.
+      await observer.entered.future;
+      expect(live.status.value, SessionStatus.idle);
+      final second = hub.prompt(chat, 'echo second');
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      expect(live.store.events.where((e) => e.kind == SessionEventKind.prompt), hasLength(1));
+
+      gate.complete();
+      await Future.wait(<Future<void>>[first, second]);
+
+      final kinds = <String>[
+        for (final event in live.store.events)
+          if (event.kind == SessionEventKind.prompt || event.kind == SessionEventKind.turnFiles)
+            event.kind,
+      ];
+      expect(kinds, <String>[
+        SessionEventKind.prompt,
+        SessionEventKind.turnFiles,
+        SessionEventKind.prompt,
+        SessionEventKind.turnFiles,
+      ]);
+      expect(_agentText(live).join(), contains('second'));
+    });
+
+    test('an observer whose afterTurn throws does not block the next turn', () async {
+      final hub = newHub(observers: <TurnObserver>[_ThrowingAfterObserver()]);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      await expectLater(hub.prompt(chat, 'echo first'), throwsA(isA<StateError>()));
+      expect(live.turn, isNull);
+
+      await hub
+          .prompt(chat, 'echo second')
+          .catchError((Object _) {})
+          .timeout(const Duration(seconds: 10));
+      expect(_agentText(live).join(), 'firstsecond');
+    });
+
+    test(
+      'the end of the previous turn does not forget the next one: dispose waits for it',
+      () async {
+        final gate = Completer<void>();
+        final observer = _SlowAfterObserver(gate.future);
+        final hub = newHub(observers: <TurnObserver>[observer]);
+        final chat = await newChat();
+        final live = await hub.session(chat);
+
+        final first = hub.prompt(chat, 'echo first');
+        await observer.entered.future;
+        var secondDone = false;
+        final second = hub.prompt(chat, 'hang').whenComplete(() => secondDone = true);
+        gate.complete();
+        await first;
+        await _untilSent(live);
+
+        expect(live.turn, isNotNull);
+        await hub.dispose();
+        expect(secondDone, isTrue);
+        await second;
+      },
+    );
+  });
+
   group('session context', () {
     late File requests;
     late AgentDefinition recordingAgent;
@@ -912,4 +999,36 @@ final class _GateObserver implements TurnObserver {
 
   @override
   Future<Map<String, Object?>?> afterTurn(LiveSession session, Object? beforeToken) async => null;
+}
+
+/// Throws synchronously after every turn (not a failed future: `catchError` never sees it).
+final class _ThrowingAfterObserver implements TurnObserver {
+  @override
+  Future<Object?> beforeTurn(LiveSession session) async => null;
+
+  @override
+  Future<Map<String, Object?>?> afterTurn(LiveSession session, Object? beforeToken) =>
+      throw StateError('afterTurn failed');
+}
+
+/// Records the changed files of each turn; the first turn's recording waits for [_gate].
+final class _SlowAfterObserver implements TurnObserver {
+  _SlowAfterObserver(this._gate);
+
+  final Future<void> _gate;
+  final Completer<void> entered = Completer<void>();
+  var _turns = 0;
+
+  @override
+  Future<Object?> beforeTurn(LiveSession session) async => null;
+
+  @override
+  Future<Map<String, Object?>?> afterTurn(LiveSession session, Object? beforeToken) async {
+    final turn = ++_turns;
+    if (turn == 1) {
+      entered.complete();
+      await _gate;
+    }
+    return <String, Object?>{'turn': turn};
+  }
 }

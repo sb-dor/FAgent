@@ -188,7 +188,12 @@ final class _DaemonSession {
     }
     final DaemonProcess process;
     try {
-      process = await _starter(executable, const <String>['daemon'], environment: _environment);
+      // `--show-web-server-device` is a global flag (it goes before the subcommand): without it
+      // the daemon never lists `web-server`, the device a run configuration may name.
+      process = await _starter(executable, const <String>[
+        '--show-web-server-device',
+        'daemon',
+      ], environment: _environment);
     } on Object catch (error, stackTrace) {
       _fail(error, stackTrace);
       return;

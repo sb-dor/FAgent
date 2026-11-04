@@ -62,6 +62,9 @@ abstract class AgentProbeResult with _$AgentProbeResult {
     /// The agent supports ACP `logout`.
     @Default(false) bool canLogout,
 
+    /// The agent takes image blocks in a prompt (`promptCapabilities.image`).
+    @Default(false) bool image,
+
     /// Sign-in state the agent pushed after `initialize`; `null` when it pushes none.
     AcpAuthStatus? authStatus,
 

@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
@@ -12,6 +13,10 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
@@ -41,6 +46,9 @@ class Dependencies {
   /// Database
   late final AppDatabase database;
 
+  /// Files dragged over the window; every chat's drop target listens.
+  late final DropZone dropZone;
+
   /// Login-shell environment for every child process (agents, `flutter`, `git`).
   late final ShellEnvironment shellEnvironment;
 
@@ -57,6 +65,9 @@ class Dependencies {
   /// disposed.
   late final Future<void> Function() stopFollowingCustomAgents;
 
+  /// The message queues of the chats; a queue with messages outlives its chat's widget.
+  late final ChatQueueRegistry chatQueues;
+
   /// Checks agents with a short ACP handshake; stopped when the app closes.
   late final IAgentProbe agentProbe;
 
@@ -71,6 +82,15 @@ class Dependencies {
 
   /// The arguments each project adds to `flutter run`.
   late final IRunConfigRepository runConfigRepository;
+
+  /// The files of the projects for the Code view.
+  late final ICodeFilesRepository codeFilesRepository;
+
+  /// The remembered Code view of each project.
+  late final ICodeViewStateRepository codeViewStateRepository;
+
+  /// The Code view of every project opened in this run, and the unsaved files app-wide.
+  late final CodeViewRegistry codeViews;
 
   /// Picks a widget in a running app.
   late final IWidgetPickerRepository widgetPickerRepository;

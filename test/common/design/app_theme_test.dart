@@ -21,6 +21,28 @@ double contrast(Color a, Color b) {
 }
 
 void main() {
+  test('syntax colors are readable on the editor background in both themes', () {
+    for (final colors in <AppColors>[AppColors.light, AppColors.dark]) {
+      for (final color in <Color>[
+        colors.syntaxKeyword,
+        colors.syntaxType,
+        colors.syntaxFunction,
+        colors.syntaxString,
+        colors.syntaxNumber,
+        colors.syntaxComment,
+        colors.syntaxMeta,
+      ]) {
+        expect(contrast(color, colors.bg), greaterThanOrEqualTo(4.5), reason: '$color');
+      }
+    }
+    expect(AppColors.light.lerp(AppColors.dark, 1).syntaxKeyword, AppColors.dark.syntaxKeyword);
+    expect(
+      AppColors.light.copyWith(syntaxString: AppColors.dark.syntaxString).syntaxString,
+      AppColors.dark.syntaxString,
+    );
+    expect(AppColors.light, isNot(AppColors.light.copyWith(syntaxMeta: AppColors.dark.syntaxMeta)));
+  });
+
   test('text is readable in both themes', () {
     for (final colors in [AppColors.light, AppColors.dark]) {
       expect(contrast(colors.text, colors.bg), greaterThanOrEqualTo(4.5));

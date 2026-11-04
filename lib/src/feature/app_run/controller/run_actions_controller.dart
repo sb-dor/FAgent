@@ -6,7 +6,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:l/l.dart';
 
@@ -79,6 +79,10 @@ final class RunActionsController extends StateController<RunActionsState>
   final IWidgetPickerRepository _pickerRepository;
   final ValueNotifier<RunPickState> _pick = ValueNotifier<RunPickState>(const RunPickState());
 
+  /// Per project: how many stops were asked for; a start that was resolving its arguments when the
+  /// count moved does not start.
+  final Map<int, int> _stops = <int, int>{};
+
   /// Changes with every pick, switch and cancel: a result that comes back after a newer one started
   /// (or after a cancel) is dropped.
   int _pickToken = 0;
@@ -86,28 +90,35 @@ final class RunActionsController extends StateController<RunActionsState>
   /// What the widget picker shows.
   ValueListenable<RunPickState> get pick => _pick;
 
-  /// Starts the app of [projectId] on [device] with the selection the Run tab shows.
+  /// Starts the app of [projectId] on [device] with the selection the Run tab shows. [arguments]
+  /// gives the target, the arguments and the environment right before the start (the selected
+  /// launch configuration is read again then, see `RunController.startArgumentsFor`); when it
+  /// throws, nothing starts and the state is the error. A [stop] of the project while [arguments]
+  /// is still running wins: the start is given up.
   void start(
     int projectId, {
     required Device device,
     required BuildMode mode,
-    required String target,
-    RunArguments arguments = const RunArguments(),
-  }) => _run(
-    projectId,
-    () => _runRepository.start(
+    required Future<RunStartArguments> Function() arguments,
+  }) => _run(projectId, () async {
+    final stops = _stops[projectId] ?? 0;
+    final start = await arguments();
+    if ((_stops[projectId] ?? 0) != stops) return;
+    await _runRepository.start(
       projectId,
       device: device,
       mode: mode,
-      target: target,
-      arguments: arguments,
-    ),
-  );
+      target: start.target,
+      arguments: start.arguments,
+      environment: start.environment,
+    );
+  });
 
   /// Stops the app; a pick that waits is cancelled. While another action is in progress the stop
   /// goes to the repository at once (ending the run also ends what that action waits for) and the
   /// state is left to that action; a failure is then logged.
   void stop(int projectId) {
+    _stops[projectId] = (_stops[projectId] ?? 0) + 1;
     cancelPick(projectId);
     if (!isProcessing) return _run(projectId, () => _runRepository.stop(projectId));
     _runRepository.stop(projectId).catchError((Object error, StackTrace stackTrace) {
@@ -242,7 +253,7 @@ final class RunActionsController extends StateController<RunActionsState>
     if (!isDisposed) _pick.value = value;
   }
 
-  void _run(int projectId, Future<Object?> Function() action) => handle(() async {
+  void _run(int projectId, Future<void> Function() action) => handle(() async {
     setState(const RunActionsState.inProgress());
     await action();
     setState(RunActionsState.completed(projectId: projectId));

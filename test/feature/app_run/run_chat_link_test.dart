@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
@@ -73,6 +74,7 @@ final class _SpyRunRepository implements IAppRunRepository {
     required BuildMode mode,
     required String target,
     RunArguments arguments = const RunArguments(),
+    Map<String, String> environment = const <String, String>{},
   }) {
     started.add(device.id);
     return _inner.start(
@@ -81,6 +83,7 @@ final class _SpyRunRepository implements IAppRunRepository {
       mode: mode,
       target: target,
       arguments: arguments,
+      environment: environment,
     );
   }
 
@@ -197,7 +200,7 @@ void main() {
       projectId,
       device: workspace.selectedDevice!,
       mode: BuildMode.debug,
-      target: 'lib/main.dart',
+      arguments: () async => const RunStartArguments(),
     );
     await until(tester, () => running(tester));
   }

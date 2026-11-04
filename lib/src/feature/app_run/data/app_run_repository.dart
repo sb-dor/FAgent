@@ -57,13 +57,15 @@ abstract interface class IAppRunRepository {
   Future<void> markSent(int projectId, int seq);
 
   /// Starts the app on [device] with the project's [arguments] and returns once the build began;
-  /// follow it through [watchRun]. A running app is stopped and started again.
+  /// follow it through [watchRun]. A running app is stopped and started again. `flutter run` runs
+  /// in the project folder; [environment] is added over the app's own environment.
   Future<void> start(
     int projectId, {
     required Device device,
     required BuildMode mode,
     required String target,
     RunArguments arguments = const RunArguments(),
+    Map<String, String> environment = const <String, String>{},
   });
 
   /// Stops the app. Does nothing when it is not running.
@@ -252,6 +254,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     required BuildMode mode,
     required String target,
     RunArguments arguments = const RunArguments(),
+    Map<String, String> environment = const <String, String>{},
   }) async {
     if (_disposed) return;
     final run = _run(projectId);
@@ -325,7 +328,14 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       ..setState(const RunBuilding())
       ..log(LogLevel.info, <String>[flutter, ...flutterArgs].map(_quote).join(' '));
     await launch.begin(
-      () => _start(flutter, flutterArgs, workingDirectory: path, environment: _environment),
+      () => _start(
+        flutter,
+        flutterArgs,
+        workingDirectory: path,
+        environment: environment.isEmpty
+            ? _environment
+            : <String, String>{..._environment, ...environment},
+      ),
     );
   }
 

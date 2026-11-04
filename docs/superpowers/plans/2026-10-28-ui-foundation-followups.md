@@ -356,3 +356,54 @@ Deferred from the reviews of the M6 plan (docs/superpowers/plans/2026-11-02-m6-w
   - Card tests: the layout at 340 px with a thumbnail is untested; the thumbnail test waits 10 x 10 ms of real time for the file read (`test/feature/app_run/picked_widget_card_test.dart`)
   - Opt-in test: it selects the widget through `setSelectionById`, not a real tap, and does not hot restart during a pick (`test/integration/widget_picker_test.dart`)
   - Wiring: `initialize_dependencies.dart` got unrelated formatter churn in the `sessionContext` block with Task 2 (`feature/initialization/data/initialize_dependencies.dart`)
+
+## Round 1 follow-ups
+
+Deferred from the reviews of the first feedback round (docs/superpowers/plans/2026-11-04-run-configs-and-composer.md: run configurations, the ⌘↵ queue, file drop). Paths are under `lib/src/feature/` unless they start with `test/`.
+
+- **Bugs and risks:**
+  - `launch.json`: `createLaunchJson` creates the file, then writes it — a crash in between leaves an empty file; a `.vscode` that is a file is unhandled (`app_run/data/launch_config_reader.dart`)
+  - Run configuration: a stored selection can briefly overwrite a fresh choice when drift's first emission is late (converges); a chip clicked before the stored selection and the first read arrive is overridden by the restore (a window of milliseconds) (`app_run/controller/run_controller.dart`)
+  - Run configuration: the menu's sentinel values could collide with a config name (theoretical) (`app_run/widgets/run_split_button.dart`); a selected config that vanishes from the file goes back to Default without giving the chips back (`_dropVanished`, `app_run/controller/run_controller.dart`)
+  - Queue: a late Stop on a not-yet-rebuilt button after the turn ended is lost while the queue already sent the next message; ⌘↵ with the suggestion menu open picks the item like Enter (`chat/controller/chat_queue_controller.dart`, `prompt_sending/widgets/prompt_composer.dart`)
+  - Queue: removal race: a send not yet running passes the `isBusy` check, and a refused send re-queues into a deleted chat (`chat/controller/chat_queue_controller.dart`)
+  - Images: ⌘V reads an image only when the clipboard holds no text (a file copied in Finder pastes its name); the full image is still base64-encoded once and parsed by `PromptRequest.fromJson` on the UI isolate before it goes to the agent (the journal keeps only a 256 px thumbnail) (`chat/widgets/chat_config_widget.dart`, `common/acp/agent_hub.dart`)
+  - Drop: `classifyDrop` makes synchronous file-system calls on the UI isolate; a project symlink that points outside the project becomes an absolute path (`chat/models/drop_classification.dart`)
+  - Images: an image the engine cannot decode is refused (`prompt_sending/models/composer_image.dart`); the static decode cache can still hold large images journaled before the thumbnail fix (`_DecodedImages`, `chat/models/chat_item.dart`)
+  - Queue: a cold or failed chat blocked for bypass and resumed with "Send next" keeps the prompt as `lastPrompt` and also puts it back in the queue — Allow then resuming sends it twice (`common/acp/agent_hub.dart` ~318, `chat/controller/chat_queue_controller.dart` ~175)
+  - Drop: a file promise with no names before it is received loses extra reader callbacks without counting them as failed; paths inside one promise arrive in arrival order (`DropCollector.receive`, `macos/Runner/DropZone.swift`)
+  - Drop: the overlay keeps pulsing until every promise arrives (up to 30 s) — add a "receiving" state or send `leave` early (`macos/Runner/DropZone.swift`)
+  - Drop: received files under `$TMPDIR/flutter_code_agent/drops/` are never cleaned up (`macos/Runner/DropZone.swift`)
+- **Next steps:**
+  - Composer: image admission, clipboard and drop classification live in `chat_config_widget.dart` (~715 lines) — extract a `ComposerImagesController` (`chat/widgets/chat_config_widget.dart`)
+  - Run tab: `RunTab._openLaunchJson` calls the data layer (`createLaunchJson`, `launchJsonPath`) directly — route it through `RunController` / `IRunConfigRepository` (`app_run/widgets/run_tab.dart`)
+  - Title bar: the Run button keeps a bare "Run" and says "Choose a device" for an unavailable config device — show the config name and `runDeviceUnavailable` in its tooltip (`workspace/widgets/workspace_run_controls.dart`)
+  - Split button: its parts have no explicit `Semantics(button, enabled)`, the arrow no `semanticLabel`; the disabled main part loses the full-name tooltip (`app_run/widgets/run_split_button.dart`)
+  - Tests: the Russian strings of the split button are thinly covered (`test/feature/app_run/run_split_button_test.dart`); `agent_probe_test.dart` 'silent agent times out' failed once in a full run, passed alone and on rerun (M5 test, `test/feature/agents/agent_probe_test.dart`)
+  - Drop: the native drop view is checked by hand only (Finder, Safari, Photos); the widget tests drive `ChatDropTarget` through a fake `DropZone` stream, and nothing tests `DropZone.swift` itself (`macos/Runner/DropZone.swift`); the channel mapping in `DropZone.platform` (non-map events, unknown types) and the overlay's reduced-motion branch have no test (`common/drop_zone/drop_zone.dart`, `common/widget/drop_zone_overlay.dart`)
+
+## Code view follow-ups
+
+Deferred from the Code view (docs/superpowers/plans/2026-11-04-code-view.md). Paths are under `lib/src/feature/` unless they start with `test/`.
+
+- **Next steps:**
+  - Hot exit: keep unsaved buffers on quit and bring them back on the next launch, instead of asking (`code_view/controller/code_tabs_controller.dart`)
+  - Search across files, git gutter marks beside the line numbers, split editor, a terminal
+  - Explorer: create, rename and delete files and folders
+  - Dart analysis server (LSP): diagnostics, completion, hover — the next milestone
+- **Bugs and risks:**
+  - "Open in default app" goes through `open -t` (by design it never runs a file an agent wrote), so an image opens in the text editor, not Preview (`projects/data/projects_repository.dart`)
+  - The remembered tabs and mode are saved 300 ms after the last change; quitting inside that window keeps the previous state (`code_view/controller/code_tabs_controller.dart`)
+  - re_editor normalizes mixed line endings to the file's main one on the first edit; a save without edits writes nothing (`code_view/controller/code_document.dart`)
+  - FSEvents can report a write to a new file as a create; the Code view only relies on "exists or deleted" (`code_view/data/code_files_repository.dart`)
+  - From the final review (minor):
+    - restoring tabs can race a fresh open; documents opened while the controller is disposed leak (`code_view/controller/code_tabs_controller.dart`)
+    - a double click on **Save all** in the chat bar may not send (the message stays in the composer) (`chat/controller/unsaved_files_gate.dart`)
+    - an agent write in the microseconds between the rename and the stat counts as the app's own; stat the temp file before the rename (`code_view/data/code_files_repository.dart`)
+    - undoing back to the saved text leaves the conflict bar; disposed documents can still notify (`code_view/controller/code_document.dart`)
+    - the tree re-lists a folder for every change in it; large folders are listed on the UI isolate (`code_view/controller/file_tree_controller.dart`, `code_view/data/code_files_repository.dart`)
+    - changing a project's folder drops its unsaved files without asking (`code_view/controller/code_workspace.dart`)
+    - the highlight theme is rebuilt on every editor build (`code_view/widgets/code_editor_view.dart`)
+    - the quit and removal dialogs give only a count, not the file names; the unsaved quit dialog lacks `AppRadius.large` (`app_close/widgets/app_close_guard.dart`)
+  - Check by hand: the native quit handshake while the unsaved dialog is open, ⌘W with the find panel focused, opening a 5 MB file
+

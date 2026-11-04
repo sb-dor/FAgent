@@ -1,17 +1,25 @@
 import 'dart:async';
+import 'dart:io' as io;
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
+import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 
 import '../../support/memory_devices_repository.dart';
 import '../../support/memory_run_config_repository.dart';
@@ -79,6 +87,7 @@ final class _ScriptedRunRepository implements IAppRunRepository {
     required BuildMode mode,
     required String target,
     RunArguments arguments = const RunArguments(),
+    Map<String, String> environment = const <String, String>{},
   }) async {}
 
   @override
@@ -421,12 +430,552 @@ void main() {
         1,
         device: _macos,
         mode: run.state.mode,
-        target: run.state.target,
-        arguments: run.state.arguments,
+        arguments: () => run.startArgumentsFor(1),
       );
       await Future<void>.delayed(_step * 50);
 
       expect(repository.starts.single.arguments.toFlutterArgs(), <String>['--flavor', 'dev']);
+    });
+
+    test(
+      'Default starts with the saved arguments and the target, without reading launch.json',
+      () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller.choose(target: 'lib/main_dev.dart');
+        final reads = config.launchReads.length;
+
+        expect(
+          await controller.startArgumentsFor(1),
+          const RunStartArguments(
+            target: 'lib/main_dev.dart',
+            arguments: RunArguments(flavor: 'dev'),
+          ),
+        );
+        expect(config.launchReads, hasLength(reads));
+      },
+    );
+  });
+
+  group('RunController configurations', () {
+    late _ScriptedRunRepository scripted;
+    late MemoryRunConfigRepository config;
+    late RunController controller;
+
+    const web = LaunchConfig(
+      name: 'Web',
+      target: 'lib/main_web.dart',
+      deviceId: 'web-server',
+      mode: BuildMode.release,
+    );
+    const prod = LaunchConfig(
+      name: 'Prod',
+      target: 'lib/main_prod.dart',
+      flavor: 'prod',
+      dartDefines: <String>['API=https://prod'],
+      extraArgs: '--dart-define-from-file=config/avera/production.json',
+      environment: <String, String>{'SENTRY': 'on'},
+    );
+
+    setUp(() {
+      scripted = _ScriptedRunRepository();
+      config = MemoryRunConfigRepository(
+        initial: <int, RunArguments>{
+          1: const RunArguments(flavor: 'dev', dartDefines: <String>['X=1'], extraArgs: '-v'),
+        },
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[web, prod]),
+        },
+      );
+      controller = RunController(repository: scripted, configRepository: config);
+    });
+
+    tearDown(() async {
+      controller.dispose();
+      await scripted.dispose();
+    });
+
+    test('watch reads launch.json and the stored selection of the project', () async {
+      config = MemoryRunConfigRepository(
+        selected: <int, String>{1: 'Prod'},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[web, prod]),
+        },
+      );
+      final run = RunController(repository: scripted, configRepository: config)..watch(1);
+      addTearDown(run.dispose);
+      await pumpEventQueue();
+
+      expect(run.state.selectedConfig, 'Prod');
+      expect((run.state.launchConfigs! as LaunchConfigsRead).configs, <LaunchConfig>[web, prod]);
+    });
+
+    test('a restored selection switches the chips once per watch', () async {
+      config = MemoryRunConfigRepository(
+        selected: <int, String>{1: 'Web'},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[web, prod]),
+        },
+      );
+      final run = RunController(repository: scripted, configRepository: config)
+        ..choose(deviceId: 'macos');
+      addTearDown(run.dispose);
+
+      run.watch(1);
+      await pumpEventQueue();
+      expect(run.state.selectedDeviceId, 'web-server');
+      expect(run.state.mode, BuildMode.release);
+
+      run.choose(deviceId: 'macos', mode: BuildMode.debug);
+      await run.refreshConfigs();
+      await config.saveSelected(1, 'Web');
+      await pumpEventQueue();
+      expect(run.state.selectedDeviceId, 'macos', reason: 'a re-read leaves the user\'s chip');
+      expect(run.state.mode, BuildMode.debug);
+
+      run.watch(2);
+      await pumpEventQueue();
+      run.watch(1);
+      await pumpEventQueue();
+      expect(run.state.selectedDeviceId, 'web-server', reason: 'a new follow restores again');
+      expect(run.state.mode, BuildMode.release);
+    });
+
+    test('a restored config without a device or mode keeps the chips', () async {
+      config = MemoryRunConfigRepository(
+        selected: <int, String>{1: 'Prod'},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[web, prod]),
+        },
+      );
+      final run = RunController(repository: scripted, configRepository: config)
+        ..choose(deviceId: 'macos');
+      addTearDown(run.dispose);
+
+      run.watch(1);
+      await pumpEventQueue();
+
+      expect(run.state.selectedDeviceId, 'macos');
+      expect(run.state.mode, BuildMode.debug);
+    });
+
+    test('choosing a config with a device switches the device chip', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller
+        ..choose(deviceId: 'macos')
+        ..chooseConfig('Web');
+      await pumpEventQueue();
+
+      expect(controller.state.selectedConfig, 'Web');
+      expect(controller.state.selectedDeviceId, 'web-server');
+      expect(controller.state.mode, BuildMode.release);
+      expect(config.savedSelections, <(int, String?)>[(1, 'Web')]);
+    });
+
+    test('a config without a device or mode keeps the chips', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller
+        ..choose(deviceId: 'macos', mode: BuildMode.profile)
+        ..chooseConfig('Prod');
+      await pumpEventQueue();
+
+      expect(controller.state.selectedDeviceId, 'macos');
+      expect(controller.state.mode, BuildMode.profile);
+    });
+
+    test('the chip stays switchable after choosing', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Web');
+      await pumpEventQueue();
+
+      controller.choose(deviceId: 'macos', mode: BuildMode.debug);
+
+      expect(controller.state.selectedDeviceId, 'macos');
+      expect(controller.state.mode, BuildMode.debug);
+      expect(controller.state.selectedConfig, 'Web', reason: 'the chips do not undo the choice');
+      expect((await controller.startArgumentsFor(1)).target, 'lib/main_web.dart');
+    });
+
+    group('a config\'s device and mode do not leak', () {
+      const webServer = LaunchConfig(name: 'Run DEV Web Server (Debug)', deviceId: 'web-server');
+      const devApp = LaunchConfig(name: 'Run DEV App (Debug)', flavor: 'avera');
+      const release = LaunchConfig(name: 'Release', mode: BuildMode.release);
+
+      setUp(() {
+        config.launch[1] = const LaunchConfigsRead(<LaunchConfig>[
+          web,
+          prod,
+          webServer,
+          devApp,
+          release,
+        ]);
+      });
+
+      test('a config without a device gives back the device the user had', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos')
+          ..chooseConfig(webServer.name);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'web-server');
+
+        controller.chooseConfig(devApp.name);
+        await pumpEventQueue();
+
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.debug);
+      });
+
+      test('a config without a mode gives back the mode the user had', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos')
+          ..chooseConfig(release.name);
+        await pumpEventQueue();
+        expect(controller.state.mode, BuildMode.release);
+
+        controller.chooseConfig(devApp.name);
+        await pumpEventQueue();
+
+        expect(controller.state.mode, BuildMode.debug);
+        expect(controller.state.selectedDeviceId, 'macos');
+      });
+
+      test('Default gives back both', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos', mode: BuildMode.profile)
+          ..chooseConfig(web.name);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'web-server');
+        expect(controller.state.mode, BuildMode.release);
+
+        controller.chooseConfig(null);
+        await pumpEventQueue();
+
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.profile);
+      });
+
+      test('only the fields the previous config set go back', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos', mode: BuildMode.profile)
+          ..chooseConfig(web.name);
+        await pumpEventQueue();
+
+        // Release sets the mode only: the device goes back, the mode stays the config's.
+        controller.chooseConfig(release.name);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.release);
+
+        controller.chooseConfig(null);
+        await pumpEventQueue();
+        expect(controller.state.selectedDeviceId, 'macos');
+        expect(controller.state.mode, BuildMode.profile, reason: 'the mode before any config');
+      });
+
+      test('a chip changed while a config is selected is what comes back', () async {
+        controller.watch(1);
+        await pumpEventQueue();
+        controller
+          ..choose(deviceId: 'macos')
+          ..chooseConfig(web.name);
+        await pumpEventQueue();
+
+        controller
+          ..choose(deviceId: 'chrome')
+          ..chooseConfig(null);
+        await pumpEventQueue();
+
+        expect(controller.state.selectedDeviceId, 'chrome');
+        expect(controller.state.mode, BuildMode.debug, reason: 'the mode chip was not touched');
+      });
+
+      test('a restored config gives the chips back when the user picks another', () async {
+        await config.saveSelected(1, webServer.name);
+        final run = RunController(repository: scripted, configRepository: config)
+          ..choose(deviceId: 'macos');
+        addTearDown(run.dispose);
+        run.watch(1);
+        await pumpEventQueue();
+        expect(run.state.selectedDeviceId, 'web-server');
+
+        run.chooseConfig(devApp.name);
+        await pumpEventQueue();
+
+        expect(run.state.selectedDeviceId, 'macos');
+      });
+
+      test(
+        'a project switch does not carry a config\'s device into a project on Default',
+        () async {
+          config.launch[2] = const LaunchConfigsRead(<LaunchConfig>[prod]);
+          controller.watch(1);
+          await pumpEventQueue();
+          controller
+            ..choose(deviceId: 'macos')
+            ..chooseConfig(webServer.name);
+          await pumpEventQueue();
+          expect(controller.state.selectedDeviceId, 'web-server');
+
+          controller.watch(2);
+          await pumpEventQueue();
+
+          expect(controller.state.selectedConfig, isNull);
+          expect(controller.state.selectedDeviceId, 'macos');
+          expect(controller.state.mode, BuildMode.debug);
+        },
+      );
+    });
+
+    test('choosing Default stores null', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Prod');
+      await pumpEventQueue();
+
+      controller.chooseConfig(null);
+      await pumpEventQueue();
+
+      expect(controller.state.selectedConfig, isNull);
+      expect(config.savedSelections.last, (1, null));
+    });
+
+    test('a vanished config falls back to Default', () async {
+      config = MemoryRunConfigRepository(
+        selected: <int, String>{1: 'Gone'},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[prod]),
+        },
+      );
+      final run = RunController(repository: scripted, configRepository: config)..watch(1);
+      addTearDown(run.dispose);
+      await pumpEventQueue();
+
+      expect(run.state.selectedConfig, isNull);
+      expect(config.savedSelections, <(int, String?)>[(1, null)]);
+    });
+
+    test('a config removed from the file before a start runs Default and saves it', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Prod');
+      await pumpEventQueue();
+
+      config.launch[1] = const LaunchConfigsRead(<LaunchConfig>[web]);
+      final start = await controller.startArgumentsFor(1);
+
+      expect(
+        start,
+        const RunStartArguments(
+          arguments: RunArguments(flavor: 'dev', dartDefines: <String>['X=1'], extraArgs: '-v'),
+        ),
+      );
+      expect(controller.state.selectedConfig, isNull);
+      expect(config.savedSelections.last, (1, null));
+    });
+
+    test('a deleted launch.json falls back to Default', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Prod');
+      await pumpEventQueue();
+
+      config.launch.remove(1);
+      await controller.refreshConfigs();
+
+      expect(controller.state.launchConfigs, isA<LaunchConfigsMissing>());
+      expect(controller.state.selectedConfig, isNull);
+      expect(config.savedSelections.last, (1, null));
+    });
+
+    test('an unreadable launch.json keeps the choice and refuses the start', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Prod');
+      await pumpEventQueue();
+
+      config.launch[1] = const LaunchConfigsUnreadable(LaunchUnreadableKind.invalidJson, 'oops');
+      await controller.refreshConfigs();
+      expect(controller.state.selectedConfig, 'Prod');
+
+      await expectLater(
+        controller.startArgumentsFor(1),
+        throwsA(
+          isA<RunConfigNotStartable>()
+              .having((error) => error.name, 'name', 'Prod')
+              .having((error) => error.unreadable?.detail, 'unreadable', 'oops'),
+        ),
+      );
+      expect(controller.state.selectedConfig, 'Prod');
+    });
+
+    test('an unsupported config is refused with its reason', () async {
+      const home = LaunchConfig(
+        name: 'Home',
+        unsupported: LaunchUnsupportedVariable(r'${env:HOME}'),
+      );
+      config.launch[1] = const LaunchConfigsRead(<LaunchConfig>[home]);
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Home');
+      await pumpEventQueue();
+
+      await expectLater(
+        controller.startArgumentsFor(1),
+        throwsA(
+          isA<RunConfigNotStartable>().having(
+            (error) => error.unsupported,
+            'unsupported',
+            const LaunchUnsupportedVariable(r'${env:HOME}'),
+          ),
+        ),
+      );
+    });
+
+    test('two configs with the same name use the first', () async {
+      const first = LaunchConfig(name: 'Dup', flavor: 'a', deviceId: 'macos');
+      const second = LaunchConfig(name: 'Dup', flavor: 'b', deviceId: 'chrome');
+      config.launch[1] = const LaunchConfigsRead(<LaunchConfig>[first, second]);
+      controller.watch(1);
+      await pumpEventQueue();
+
+      controller.chooseConfig('Dup');
+      await pumpEventQueue();
+
+      expect(controller.state.selectedDeviceId, 'macos');
+      expect((await controller.startArgumentsFor(1)).arguments.flavor, 'a');
+    });
+
+    test('refreshConfigs reads the file of the current project again', () async {
+      controller.watch(1);
+      await pumpEventQueue();
+      config.launch[1] = const LaunchConfigsRead(<LaunchConfig>[prod]);
+
+      await controller.refreshConfigs();
+
+      expect((controller.state.launchConfigs! as LaunchConfigsRead).configs, <LaunchConfig>[prod]);
+    });
+
+    test('a switch of project brings that project\'s selection and file', () async {
+      config
+        ..launch[2] = const LaunchConfigsRead(<LaunchConfig>[web])
+        ..launch[1] = const LaunchConfigsRead(<LaunchConfig>[prod]);
+      await config.saveSelected(2, 'Web');
+      controller.watch(1);
+      await pumpEventQueue();
+      controller.chooseConfig('Prod');
+      await pumpEventQueue();
+
+      controller.watch(2);
+      await pumpEventQueue();
+
+      expect(controller.state.selectedConfig, 'Web');
+      expect((controller.state.launchConfigs! as LaunchConfigsRead).configs, <LaunchConfig>[web]);
+    });
+
+    test(
+      'a config run passes its flavor, defines, extra args and target, not the Default args',
+      () async {
+        final repository = ScriptedAppRunRepository(step: _step);
+        addTearDown(repository.dispose);
+        final run = RunController(repository: repository, configRepository: config)..watch(1);
+        addTearDown(run.dispose);
+        final actions = RunActionsController(
+          runRepository: repository,
+          pickerRepository: ScriptedWidgetPickerRepository(step: _step),
+        );
+        addTearDown(actions.dispose);
+        await pumpEventQueue();
+        run.chooseConfig('Prod');
+        await pumpEventQueue();
+
+        actions.start(
+          1,
+          device: _macos,
+          mode: run.state.mode,
+          arguments: () => run.startArgumentsFor(1),
+        );
+        await Future<void>.delayed(_step * 50);
+
+        final start = repository.starts.single;
+        expect(start.target, 'lib/main_prod.dart');
+        expect(start.arguments.toFlutterArgs(), <String>[
+          '--flavor',
+          'prod',
+          '--dart-define',
+          'API=https://prod',
+          '--dart-define-from-file=config/avera/production.json',
+        ]);
+        expect(start.environment, <String, String>{'SENTRY': 'on'});
+      },
+    );
+  });
+
+  group('RunController with launch.json on disk', () {
+    test('editing launch.json between starts uses the new args', () async {
+      driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      final root = io.Directory.systemTemp.createTempSync('run_controller_test');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final project = await database
+          .into(database.projectsTable)
+          .insert(ProjectsTableCompanion.insert(path: root.path, name: 'app'));
+      final file = io.File(p.join(root.path, '.vscode', 'launch.json'))
+        ..createSync(recursive: true);
+      void writeLaunch(String flavor) => file.writeAsStringSync('''
+{
+  // The project's run configurations.
+  "configurations": [
+    {"name": "Prod", "type": "dart", "request": "launch", "args": ["--flavor", "$flavor"],},
+  ],
+}''');
+      writeLaunch('prod');
+
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final run = RunController(
+        repository: repository,
+        configRepository: RunConfigRepositoryImpl(database: database),
+      )..watch(project);
+      addTearDown(run.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
+      );
+      addTearDown(actions.dispose);
+      await pumpEventQueue();
+      run.chooseConfig('Prod');
+      await pumpEventQueue();
+
+      void start() => actions.start(
+        project,
+        device: _macos,
+        mode: BuildMode.debug,
+        arguments: () => run.startArgumentsFor(project),
+      );
+      start();
+      await Future<void>.delayed(_step * 50);
+
+      // Edited while the menu is closed: no refreshConfigs, nothing reopened.
+      writeLaunch('staging');
+      start();
+      await Future<void>.delayed(_step * 50);
+
+      expect(repository.starts.map((start) => start.arguments.flavor), <String?>[
+        'prod',
+        'staging',
+      ]);
     });
   });
 
@@ -482,7 +1031,12 @@ void main() {
       );
       addTearDown(actions.dispose);
 
-      actions.start(1, device: _macos, mode: BuildMode.debug, target: 'lib/main.dart');
+      actions.start(
+        1,
+        device: _macos,
+        mode: BuildMode.debug,
+        arguments: () async => const RunStartArguments(),
+      );
       await Future<void>.delayed(_step * 50);
       expect(states.last, isA<RunRunning>());
       expect(actions.state, isA<RunActions$CompletedState>());
@@ -494,6 +1048,66 @@ void main() {
       actions.stop(1);
       await Future<void>.delayed(_step * 50);
       expect(states.last, isA<RunStopped>());
+    });
+
+    test('a start whose arguments cannot be had is an error and starts nothing', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
+      );
+      addTearDown(actions.dispose);
+
+      actions.start(
+        1,
+        device: _macos,
+        mode: BuildMode.debug,
+        arguments: () async => throw const RunConfigNotStartable.unsupported(
+          'Home',
+          LaunchUnsupportedVariable(r'${env:HOME}'),
+        ),
+      );
+      await Future<void>.delayed(_step * 10);
+
+      expect(repository.starts, isEmpty);
+      expect(
+        actions.state,
+        isA<RunActions$ErrorState>().having(
+          (state) => state.error,
+          'error',
+          isA<RunConfigNotStartable>(),
+        ),
+      );
+    });
+
+    test('a stop while the start arguments are resolved wins: nothing starts', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
+      );
+      addTearDown(actions.dispose);
+      final resolved = Completer<RunStartArguments>();
+
+      actions.start(1, device: _macos, mode: BuildMode.debug, arguments: () => resolved.future);
+      await pumpEventQueue();
+      actions.stop(1);
+      resolved.complete(const RunStartArguments());
+      await Future<void>.delayed(_step * 10);
+
+      expect(repository.starts, isEmpty);
+      expect(repository.currentRun(1), isA<RunIdle>());
+
+      actions.start(
+        1,
+        device: _macos,
+        mode: BuildMode.debug,
+        arguments: () async => const RunStartArguments(),
+      );
+      await Future<void>.delayed(_step * 10);
+      expect(repository.starts, hasLength(1), reason: 'the next start is not blocked');
     });
 
     group('picking', () {

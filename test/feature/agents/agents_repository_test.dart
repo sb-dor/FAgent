@@ -604,6 +604,36 @@ void main() {
       expect(agentOf(repository, 'codex').signInCheckedInChat, isFalse);
     });
 
+    test('a custom agent takes images as its probe says; the built-in ones always do', () async {
+      const mine = AgentDefinition(
+        id: 'custom:1',
+        displayName: 'Mine',
+        executable: '/opt/mine',
+        source: AgentSource.custom,
+      );
+      const pictures = AgentDefinition(
+        id: 'custom:2',
+        displayName: 'Pictures',
+        executable: '/opt/pictures',
+        source: AgentSource.custom,
+      );
+      await useAgents(<AgentDefinition>[...AgentDefinition.builtins, mine, pictures]);
+      probe.results['custom:1'] = const AgentProbeResult(version: '0.1.0');
+      probe.results['custom:2'] = const AgentProbeResult(version: '0.1.0', image: true);
+      final repository = newRepository();
+      // Not checked yet: the user is not held back by a missing check.
+      expect(agentOf(repository, 'custom:1').acceptsImages, isTrue);
+
+      await repository.refresh('custom:1');
+      await repository.refresh('custom:2');
+      await repository.refresh('codex');
+
+      expect(agentOf(repository, 'custom:1').acceptsImages, isFalse);
+      expect(agentOf(repository, 'custom:2').acceptsImages, isTrue);
+      expect(agentOf(repository, 'codex').acceptsImages, isTrue);
+      expect(agentOf(repository, 'claude').acceptsImages, isTrue);
+    });
+
     test('a failed probe is failed with its reason', () async {
       probe.results['codex'] = const AgentProbeResult(failure: 'no ACP answer to initialize');
       final repository = newRepository();

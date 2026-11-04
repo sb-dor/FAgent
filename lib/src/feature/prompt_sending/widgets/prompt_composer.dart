@@ -7,10 +7,14 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_commands.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/file_chips.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 
@@ -23,7 +27,9 @@ import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 /// (as [runContext] lets them work; choosing one calls [onAppCommand]) and the agent's [commands]
 /// the same way. While a permission request waits, Enter and Escape
 /// (without Shift, Command, Alt or Control) in an empty field call [onAcceptPending] and
-/// [onRejectPending].
+/// [onRejectPending]. ⌘↵ with text calls [onQueue] while the agent is [busy] (plain Enter does
+/// nothing then) and [onSend] otherwise; it never answers a permission request. [images] show as
+/// chips above the text; ⌘V calls [onPasteImage] and still pastes text as usual.
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -34,6 +40,9 @@ class PromptComposer extends StatefulWidget {
     required this.canStop,
     required this.onSend,
     required this.onStop,
+    this.stopping = false,
+    this.busy = false,
+    this.onQueue,
     this.mentionFiles,
     this.onMentionStart,
     this.toolbar = const <Widget>[],
@@ -44,6 +53,11 @@ class PromptComposer extends StatefulWidget {
     this.runContext,
     this.onAppCommand,
     this.chatSkills = ChatSkills.empty,
+    this.images = const <ComposerImage>[],
+    this.onRemoveImage,
+    this.files = const <ComposerFile>[],
+    this.onRemoveFile,
+    this.onPasteImage,
     super.key,
   });
 
@@ -58,6 +72,15 @@ class PromptComposer extends StatefulWidget {
 
   /// A turn can be stopped now.
   final bool canStop;
+
+  /// A stop is in progress: the button stays a Stop button, disabled, with a spinner.
+  final bool stopping;
+
+  /// The agent works (a turn or its setup): ⌘↵ queues instead of sending, the hint says so.
+  final bool busy;
+
+  /// Queues the text (⌘↵ while [busy]); `null` queues nothing.
+  final VoidCallback? onQueue;
 
   /// Sends the text.
   final VoidCallback onSend;
@@ -96,6 +119,22 @@ class PromptComposer extends StatefulWidget {
 
   /// The skills of the chat's project for the `/` menu (shown before the app's commands).
   final ChatSkills chatSkills;
+
+  /// The images that go with the message, as chips above the text.
+  final List<ComposerImage> images;
+
+  /// Removes the image at the index (its chip's ✕); `null` hides the ✕.
+  final ValueChanged<int>? onRemoveImage;
+
+  /// The files and folders from outside the project that go with the message, as cards above the
+  /// text.
+  final List<ComposerFile> files;
+
+  /// Removes a card (its ✕); `null` hides the ✕.
+  final ValueChanged<ComposerFile>? onRemoveFile;
+
+  /// ⌘V was pressed: the clipboard may hold an image. `null` pastes text only.
+  final VoidCallback? onPasteImage;
 
   @override
   State<PromptComposer> createState() => _PromptComposerState();
@@ -305,6 +344,17 @@ class _PromptComposerState extends State<PromptComposer> {
       if (event is KeyDownEvent) widget.onCycleMode?.call();
       return KeyEventResult.handled;
     }
+    if (event is KeyDownEvent && key == LogicalKeyboardKey.keyV) {
+      final keyboard = HardwareKeyboard.instance;
+      if (keyboard.isMetaPressed &&
+          !keyboard.isShiftPressed &&
+          !keyboard.isAltPressed &&
+          !keyboard.isControlPressed) {
+        widget.onPasteImage?.call();
+      }
+      // The field pastes the text, if there is any.
+      return KeyEventResult.ignored;
+    }
     // A waiting permission request is answered from an empty field only (any text, even a
     // space, is a draft the key must not skip over).
     // Only the bare key answers: ⌘↵, ⇧↵ and the like are something else.
@@ -320,12 +370,53 @@ class _PromptComposerState extends State<PromptComposer> {
       }
     }
     if (event is! KeyDownEvent || key != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
-    if (HardwareKeyboard.instance.isShiftPressed) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed) return KeyEventResult.ignored;
+    // ⌘↵: queued while the agent works, sent when it does not.
+    if (keyboard.isMetaPressed) {
+      if (_hasContent) {
+        if (widget.busy) {
+          widget.onQueue?.call();
+        } else if (widget.canSend) {
+          widget.onSend();
+        }
+      }
+      return KeyEventResult.handled;
+    }
     if (widget.canSend) widget.onSend();
     return KeyEventResult.handled;
   }
 
-  Widget _sendButton(GeneratedLocalization localization) => widget.canStop
+  /// The field holds text or the message has images: there is something to send.
+  bool get _hasContent =>
+      widget.controller.text.trim().isNotEmpty ||
+      widget.images.isNotEmpty ||
+      widget.files.isNotEmpty;
+
+  /// `⌘↵ Queue` next to the button while the agent works and there is something to queue.
+  Widget _queueHint(GeneratedLocalization localization) => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (context, _) => widget.busy && _hasContent
+        ? Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 12),
+            child: Text(
+              localization.queueHint,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.muted),
+            ),
+          )
+        : const SizedBox.shrink(),
+  );
+
+  Widget _sendButton(GeneratedLocalization localization) => widget.stopping
+      ? IconButton.filledTonal(
+          tooltip: localization.statusCancelling,
+          onPressed: null,
+          icon: const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        )
+      : widget.canStop
       ? IconButton.filledTonal(
           tooltip: localization.stop,
           onPressed: widget.onStop,
@@ -335,9 +426,7 @@ class _PromptComposerState extends State<PromptComposer> {
           listenable: widget.controller,
           builder: (context, _) => IconButton.filled(
             tooltip: localization.send,
-            onPressed: widget.canSend && widget.controller.text.trim().isNotEmpty
-                ? widget.onSend
-                : null,
+            onPressed: widget.canSend && _hasContent ? widget.onSend : null,
             icon: const Icon(Icons.arrow_upward_rounded),
           ),
         );
@@ -361,6 +450,19 @@ class _PromptComposerState extends State<PromptComposer> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                // In the field's tap region too: removing a card keeps the caret.
+                if (widget.files.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: FileChips(files: widget.files, onRemove: widget.onRemoveFile),
+                    ),
+                  ),
+                // In the field's tap region too: removing an image keeps the caret.
+                if (widget.images.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: ImageChips(images: widget.images, onRemove: widget.onRemoveImage),
+                  ),
                 // Part of the field's tap region: a click keeps the caret.
                 if (_count > 0)
                   TextFieldTapRegion(
@@ -388,7 +490,7 @@ class _PromptComposerState extends State<PromptComposer> {
                     maxLines: 10,
                     keyboardType: TextInputType.multiline,
                     decoration: InputDecoration(
-                      hintText: localization.promptHint,
+                      hintText: widget.busy ? localization.promptBusyHint : localization.promptHint,
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
                     ),
@@ -408,6 +510,7 @@ class _PromptComposerState extends State<PromptComposer> {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      _queueHint(localization),
                       _sendButton(localization),
                     ],
                   ),

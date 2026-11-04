@@ -11,6 +11,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_item_view.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -52,6 +53,38 @@ void main() {
   // Every test builds its own in-memory database.
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
+  testWidgets('outside files of a user message show as cards, mentions stay pills', (
+    tester,
+  ) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      _item(
+        const UserMessageItem(
+          0,
+          text: 'compare @lib/a.dart',
+          resources: <String>['file:///p/lib/a.dart', 'file:///Users/me/Desktop/shot.heic'],
+        ),
+      ),
+    );
+
+    expect(find.byType(FileCard), findsOneWidget);
+    expect(find.text('HEIC'), findsOneWidget);
+    // Read-only: a sent card has no ✕.
+    expect(find.byTooltip('Remove the file'), findsNothing);
+  });
+
+  testWidgets('a user message of cards alone shows them', (tester) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      _item(
+        const UserMessageItem(0, text: '', resources: <String>['file:///Users/me/Downloads/']),
+      ),
+    );
+
+    expect(find.byType(FileCard), findsOneWidget);
+    expect(find.text('Folder'), findsOneWidget);
+  });
+
   testWidgets('mentions in a user message become pills', (tester) async {
     useDesktopView(tester);
     await tester.pumpWidget(
@@ -73,6 +106,52 @@ void main() {
     expect(children[1].style?.backgroundColor, context.colors.accentSoft);
     // The old `@file` line under the text is gone.
     expect(find.text('@a.dart'), findsNothing);
+  });
+
+  testWidgets('the images of a user message are thumbnails under its text', (tester) async {
+    useDesktopView(tester);
+    const png =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    await tester.pumpWidget(
+      _item(
+        const UserMessageItem(
+          0,
+          text: 'look',
+          images: <MessageImage>[
+            MessageImage(mimeType: 'image/png', data: png),
+            MessageImage(mimeType: 'image/png', data: png),
+          ],
+        ),
+      ),
+    );
+
+    final thumbnails = find.descendant(of: find.byType(ChatItemView), matching: find.byType(Image));
+    expect(thumbnails, findsNWidgets(2));
+    expect(
+      tester.getTopLeft(thumbnails.first).dy,
+      greaterThan(tester.getTopLeft(find.text('look')).dy),
+    );
+  });
+
+  testWidgets('a message of images only shows no empty text; a broken image a placeholder', (
+    tester,
+  ) async {
+    useDesktopView(tester);
+    await tester.pumpWidget(
+      _item(
+        const UserMessageItem(
+          0,
+          text: '',
+          images: <MessageImage>[MessageImage(mimeType: 'image/png', data: '%%not base64%%')],
+        ),
+      ),
+    );
+
+    expect(
+      find.descendant(of: find.byType(ChatItemView), matching: find.byType(SelectableText)),
+      findsNothing,
+    );
+    expect(find.byIcon(Icons.broken_image_outlined), findsOneWidget);
   });
 
   group('clicking an edit row', () {

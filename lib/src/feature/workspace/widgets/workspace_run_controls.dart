@@ -6,11 +6,12 @@ import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_mode_chip.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/app_title_bar.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 
 /// {@template workspace_run_controls}
-/// The run controls of the title bar: the device chip, Run (Stop while the app builds or runs) and
+/// The run controls of the title bar: the device and mode chips, Run (Stop while the app builds or runs) and
 /// hot reload, and the Preview badge while the run is made up. Nothing is shown without a selected
 /// project.
 /// {@endtemplate}
@@ -47,6 +48,11 @@ class WorkspaceRunControls extends StatelessWidget {
                 onSelected: scope.chooseDevice,
                 onEditArguments: scope.editRunArguments,
               ),
+            ),
+            const SizedBox(width: 6),
+            RunModeChip(
+              mode: scope.runController.state.mode,
+              onSelected: (mode) => scope.runController.choose(mode: mode),
             ),
             const SizedBox(width: 6),
             if (link.isActive)

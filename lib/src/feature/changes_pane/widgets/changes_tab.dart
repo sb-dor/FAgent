@@ -24,7 +24,7 @@ class ChangesTab extends StatelessWidget {
         projectRoot: scope.selectedProject?.path ?? '',
         selectedPath: scope.dataController.selectedChangePath,
         onSelect: scope.dataController.selectChange,
-        onOpenFile: (path) => scope.openPath(path).ignore(),
+        onOpenFile: (path) => scope.openInCode(path).ignore(),
       ),
     );
   }

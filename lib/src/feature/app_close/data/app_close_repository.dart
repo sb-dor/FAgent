@@ -4,7 +4,9 @@ import 'dart:io' as io;
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
@@ -22,14 +24,20 @@ abstract interface class IAppCloseRepository {
   /// that.
   Stream<void> closeRequests();
 
-  /// Chats with a turn or setup in flight, plus a running login.
+  /// Chats with a turn or setup in flight or with queued messages, plus a running login.
   Future<int> busyChats();
 
   /// Whether quitting while agents work asks the user first (a setting).
   Future<bool> askBeforeQuit();
 
+  /// Files edited in the Code view and not saved yet.
+  int unsavedFiles();
+
+  /// Saves them; `true` when every one was saved.
+  Future<bool> saveAllFiles();
+
   /// Ends a widget pick, then stops the runs, the devices daemon, a project creation, the agent
-  /// list, the agents, the app's MCP server, the MCP status probes and the agent probes, then
+  /// list, the message queues, the agents, the app's MCP server, the MCP status probes and the agent probes, then
   /// closes the database.
   Future<void> shutdown();
 
@@ -54,6 +62,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._mcpProbe,
     required this._agentProbe,
     required this._projectCreation,
+    required this._queuedChats,
+    this._unsavedFiles,
     this._stopAgentList,
   });
 
@@ -67,6 +77,10 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IMcpProbe _mcpProbe;
   final IAgentProbe _agentProbe;
   final IProjectCreationRepository _projectCreation;
+  final IQueuedChats _queuedChats;
+
+  /// The Code view's unsaved files; none without it.
+  final IUnsavedFiles? _unsavedFiles;
 
   /// Stops feeding the agent list into the hub; called before the hub is disposed.
   final Future<void> Function()? _stopAgentList;
@@ -94,11 +108,23 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   }
 
   @override
-  Future<int> busyChats() async =>
-      (await _hub.busySessions()).length + (_hub.auth.isRunning ? 1 : 0);
+  Future<int> busyChats() async {
+    // A busy chat with queued messages is one chat.
+    final chats = <int>{
+      for (final session in await _hub.busySessions()) session.id,
+      ..._queuedChats.sessionIds,
+    };
+    return chats.length + (_hub.auth.isRunning ? 1 : 0);
+  }
 
   @override
   Future<bool> askBeforeQuit() async => (await _settings.watch().first).askBeforeQuit;
+
+  @override
+  int unsavedFiles() => _unsavedFiles?.count() ?? 0;
+
+  @override
+  Future<bool> saveAllFiles() async => await _unsavedFiles?.saveAll() ?? true;
 
   @override
   Future<void> shutdown() async {
@@ -116,6 +142,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     ]);
     // No agent list change may start or close an agent while the hub stops.
     if (_stopAgentList case final stop?) await _stopQuietly('agent list', stop);
+    // No queued message may start a turn while the hub stops the turns.
+    _queuedChats.dispose();
     await _hub.dispose();
     // After the agents, so none of them is cut off mid-call; before the database its tools read.
     await _stopQuietly('app MCP server', _appMcpServer.close);

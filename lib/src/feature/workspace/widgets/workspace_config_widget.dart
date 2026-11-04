@@ -1,3 +1,5 @@
+import 'dart:io' as io;
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
@@ -13,11 +15,16 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/launch_config_texts.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat_search/widgets/chat_search_dialog.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
+import 'package:flutter_code_agent/src/feature/code_view/models/code_view_state.dart';
+import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
@@ -130,6 +137,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     final projectsRepository = ProjectsRepositoryImpl(
       database: dependencies.database,
       hub: dependencies.agentHub,
+      queuedChats: dependencies.chatQueues,
     );
     projectsController = ProjectsController(repository: projectsRepository)..watch();
     projectRemovalController = ProjectRemovalController(repository: projectsRepository)
@@ -275,11 +283,13 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   ///
   /// - none chosen: the first running device, so every way to start the app (the Run tab, the title
   ///   bar) sees a device whether or not the Run tab was ever opened;
-  /// - the chosen device is gone: if it was an emulator that has booted, the running device of the
-  ///   same emulator; otherwise the first running device, or none.
+  /// - the chosen device is gone from the list it was in: if it was an emulator that has booted,
+  ///   the running device of the same emulator; otherwise the first running device, or none.
   ///
-  /// A device the user chose that is still in the list is never replaced. Nothing changes while the
-  /// devices are not known (loading, or an error).
+  /// A device the user chose that is still in the list is never replaced, and neither is one that
+  /// was never in the list: a run configuration names its device (`web-server`) whether or not it
+  /// is connected, and the Run tab says it is not available instead of switching to another one.
+  /// Nothing changes while the devices are not known (loading, or an error).
   void _chooseDefaultDevice() {
     final run = runController.state;
     if (run.projectId == null) return;
@@ -291,9 +301,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       _lastSelected = chosen;
       return;
     }
-    final booted = chosenId == null || _lastSelected == null || _lastSelected!.id != chosenId
-        ? null
-        : _runningOf(devices, _lastSelected!.emulatorId);
+    final seen = _lastSelected != null && _lastSelected!.id == chosenId;
+    if (chosenId != null && !seen) return;
+
+    final booted = seen ? _runningOf(devices, _lastSelected!.emulatorId) : null;
     final next = booted ?? devices.where((d) => d.kind == DeviceKind.running).firstOrNull;
     _lastSelected = null;
     if (next != null) {
@@ -313,6 +324,15 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// is not an action result: the picker keeps it, per project (see `RunActionsController.pick`).
   void _onRunAction() {
     final state = runActionsController.state;
+    if (state case RunActions$ErrorState(:final error)) {
+      // A start the app refused (an unsupported configuration, an unreadable `launch.json`) says
+      // why; the other failures are in the run's logs.
+      if (error is RunConfigNotStartable && !identical(state, _handledError) && mounted) {
+        _showMessage(Localization.of(context).runRefusedText(error));
+      }
+      _handledError = state;
+      return;
+    }
     if (state is! RunActions$CompletedState || identical(state, _handledAction)) return;
     _handledAction = state;
     if (state case RunActions$CompletedState(:final screenshot?, :final projectId?)) {
@@ -325,6 +345,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// The last finished action that was dealt with, so one result is not taken twice.
   RunActions$CompletedState? _handledAction;
 
+  /// The last failed action that was dealt with.
+  RunActions$ErrorState? _handledError;
+
   /// The selected project with its latest data (trust changes, renames).
   Project? get selectedProject {
     final id = dataController.projectId;
@@ -334,6 +357,18 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       _ => null,
     };
   }
+
+  /// The Code view of the selected project; `null` without one.
+  CodeWorkspace? get codeWorkspace {
+    final project = selectedProject;
+    if (project == null) return null;
+    return Dependencies.of(context).codeViews
+        .workspaceFor(projectId: project.id, root: project.path);
+  }
+
+  /// The files of the project in [root] for ⌘P, relative to it and without ignored ones.
+  Future<List<String>> listProjectFiles(String root) =>
+      ProjectFilesRepositoryImpl(environment: Dependencies.of(context).shellEnvironment).list(root);
 
   /// Picks a folder and opens it as a project.
   Future<void> pickAndOpenProject() async {
@@ -500,19 +535,33 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     if (!runLink.addWidget(picked)) _showMessage(Localization.of(context).noChatForWidget);
   }
 
-  /// Opens [file] of the running app in the editor; a relative path is inside the selected project.
-  ///
-  /// [line] is not used yet: the file opens in the default text editor (`open -t`), which cannot
-  /// jump to a line. The parameter stays for a future editor integration.
+  /// Opens [file] from a Run log line: a path relative to the project is resolved against it, and a
+  /// file in the project opens in the Code view at [line].
   Future<void> openRunFile(String file, int? line) async {
     final root = selectedProject?.path;
-    if (p.isAbsolute(file)) return openPath(file);
-    if (root != null) return openPath(p.join(root, file));
+    if (p.isAbsolute(file)) return openInCode(file, line: line);
+    if (root != null) return openInCode(p.join(root, file), line: line);
+  }
+
+  /// Opens [path] in the Code view of the selected project at [line] (1-based), revealing it in the
+  /// explorer; a path outside the project goes to the default app.
+  Future<void> openInCode(String path, {int? line}) async {
+    final workspace = codeWorkspace;
+    if (workspace == null || !p.isWithin(workspace.root, path)) return openPath(path);
+    try {
+      await workspace.tabs.open(path, line: line);
+    } on io.PathNotFoundException {
+      if (mounted) _showMessage(Localization.of(context).fileMissing);
+      return;
+    }
+    workspace.tabs.setMode(CodeViewMode.code);
+    workspace.tree.reveal(path);
   }
 
   /// Asks, then forgets [project] with its chats; the folder on disk stays.
   Future<void> removeProject(Project project) async {
     final localization = Localization.of(context);
+    if (!await _saveBeforeRemoving(project) || !mounted) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -534,9 +583,45 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     if (confirmed == true) projectRemovalController.remove(project.id);
   }
 
+  /// Unsaved files of [project] in the Code view ask first: save them, drop them, or keep the
+  /// project; `false` to keep it.
+  Future<bool> _saveBeforeRemoving(Project project) async {
+    final unsaved = Dependencies.of(context).codeViews;
+    final count = unsaved.count(projectId: project.id);
+    if (count == 0) return true;
+    final localization = Localization.of(context);
+    final answer = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.large)),
+        title: Text(localization.quitUnsavedTitle),
+        content: Text(localization.quitUnsavedBody(count)),
+        actions: <Widget>[
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(localization.cancel)),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(localization.codeDontSave),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(localization.save),
+          ),
+        ],
+      ),
+    );
+    if (answer == null) return false;
+    if (answer && !await unsaved.saveAll(projectId: project.id)) {
+      if (mounted) _showMessage(localization.quitUnsavedFailed);
+      return false;
+    }
+    return true;
+  }
+
   void _onProjectRemoved() {
     switch (projectRemovalController.state) {
       case ProjectRemoval$CompletedState(:final projectId):
+        // Its open files go without saving: the user answered before the removal.
+        Dependencies.of(context).codeViews.discard(projectId);
         if (dataController.projectId == projectId) dataController.clearSelection();
       case ProjectRemoval$BusyState():
         _showMessage(Localization.of(context).removeProjectBusy);

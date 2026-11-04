@@ -1,7 +1,8 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/database/tables/projects_table.dart';
 
-/// What a project adds to every `flutter run`. There is no row for a project without arguments.
+/// What a project adds to every `flutter run`, and which launch configuration it runs. There is no
+/// row for a project that never saved either.
 @DataClassName('RunConfigRow')
 class RunConfigsTable extends Table {
   @override
@@ -21,4 +22,8 @@ class RunConfigsTable extends Table {
 
   /// More arguments as the user typed them.
   TextColumn get extraArgs => text().withDefault(const Constant(''))();
+
+  /// The name of the `.vscode/launch.json` configuration the Run button starts; `null` for Default
+  /// (the arguments above).
+  TextColumn get selectedConfig => text().nullable()();
 }

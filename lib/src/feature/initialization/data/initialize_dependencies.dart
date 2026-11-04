@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
 import 'package:flutter_code_agent/src/common/controller/controller_observer.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
@@ -22,6 +23,10 @@ import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -31,6 +36,7 @@ import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
@@ -68,6 +74,8 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
   'Observer state management': (_) => Controller.observer = const ControllerObserver(),
   'Connect to database': (dependencies) =>
       dependencies.database = AppDatabase.defaults(name: 'app_database'),
+  // The native drop view of the window (macos/Runner/DropZone.swift).
+  'Listen to file drops': (dependencies) => dependencies.dropZone = DropZone.platform(),
   'Resolve shell environment': (dependencies) async =>
       dependencies.shellEnvironment = await ShellEnvironment.resolve(),
   // The devices and the runs are real (`flutter daemon`, `flutter run --machine`); the widget
@@ -119,6 +127,13 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
               l.w('Agent options | could not save the options of $agentId: $error', stackTrace),
         ),
   ),
+  // In memory; quitting asks first while a chat still has queued messages.
+  'Create chat queues': (dependencies) => dependencies.chatQueues = ChatQueueRegistry(
+    create: (sessionId) => ChatQueueController(
+      sessionId: sessionId,
+      repository: PromptSendingRepositoryImpl(hub: dependencies.agentHub),
+    ),
+  ),
   // Waits for the first list, so a chat of a custom agent opened at startup finds its agent.
   'Follow custom agents': (dependencies) async {
     final hub = dependencies.agentHub;
@@ -161,6 +176,13 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.chatSkillsRepository = ChatSkillsRepositoryImpl(database: dependencies.database),
   'Create run config repository': (dependencies) =>
       dependencies.runConfigRepository = RunConfigRepositoryImpl(database: dependencies.database),
+  'Create code view repositories': (dependencies) => dependencies
+    ..codeFilesRepository = CodeFilesRepositoryImpl(environment: dependencies.shellEnvironment)
+    ..codeViewStateRepository = CodeViewStateRepositoryImpl(database: dependencies.database),
+  'Create code views': (dependencies) => dependencies.codeViews = CodeViewRegistry(
+    files: dependencies.codeFilesRepository,
+    state: dependencies.codeViewStateRepository,
+  ),
   // The SDK path, the Flutter version and the fvm version are real; the doctor report is made up.
   'Create Flutter SDK repository': (dependencies) =>
       dependencies.flutterSdkRepository = FlutterSdkRepositoryImpl(

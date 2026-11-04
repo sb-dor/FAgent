@@ -7,13 +7,19 @@ import 'package:flutter_code_agent/src/feature/agents/controller/agents_controll
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_queue_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_unsaved_files_bar.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
@@ -45,6 +51,16 @@ class _ChatScreenState extends State<ChatScreen> {
         ? null
         : () => _scope.answerPermission(pending.requestId, option.optionId);
   }
+
+  /// Whether the chat takes a prompt now.
+  static bool _canSend(ChatView view) =>
+      !view.bypassBlocked &&
+      // A removed agent cannot take a message: it would be lost.
+      view.problem?.kind != SessionProblemKind.removed &&
+      switch (view.status) {
+        SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
+        _ => false,
+      };
 
   @override
   Widget build(BuildContext context) => StateConsumer<ChatController, ChatState>(
@@ -97,6 +113,27 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           ChatStatusLine(status: view.status, preparing: view.preparingTurn),
           if (view.bypassBlocked) BypassGateBanner(onAllow: _scope.allowBypass),
+          StateConsumer<ChatQueueController, ChatQueueState>(
+            controller: _scope.queueController,
+            builder: (context, queue, _) => ChatQueueView(
+              items: queue.items,
+              paused: queue.paused,
+              onEdit: _scope.editQueued,
+              onRemove: _scope.removeQueued,
+              // While the agent works "Send next" resumes the queue for the end of the turn.
+              onSendNext: _canSend(view) || view.status.isBusy ? _scope.sendNextQueued : null,
+            ),
+          ),
+          ValueListenableBuilder<int>(
+            valueListenable: _scope.unsavedGate.held,
+            builder: (context, held, _) => held == 0
+                ? const SizedBox.shrink()
+                : ChatUnsavedFilesBar(
+                    count: held,
+                    onSaveAll: () => _scope.unsavedGate.saveAll().ignore(),
+                    onSendAnyway: () => _scope.unsavedGate.sendAnyway().ignore(),
+                  ),
+          ),
           StateConsumer<FileMentionController, FileMentionState>(
             controller: _scope.fileMentionController,
             builder: (context, _, _) => ValueListenableBuilder<RunMentions?>(
@@ -106,64 +143,82 @@ class _ChatScreenState extends State<ChatScreen> {
                 builder: (context, chatSkills, _) =>
                     StateConsumer<ChatSkillsController, ChatSkillsState>(
                       controller: _scope.chatSkillsController,
-                      builder: (context, chatSkillsState, _) => PromptComposer(
-                        runContext: runContext,
-                        onAppCommand: _scope.widget.onAppCommand,
-                        // The `/` menu offers the skills this chat has on.
-                        chatSkills: chatSkills.forChat(_scope.chatSkillsController.states),
-                        controller: _scope.textController,
-                        focusNode: _scope.composerFocus,
-                        canSend:
-                            !view.bypassBlocked &&
-                            // A removed agent cannot take a message: it would be lost.
-                            view.problem?.kind != SessionProblemKind.removed &&
-                            switch (view.status) {
-                              SessionStatus.cold ||
-                              SessionStatus.idle ||
-                              SessionStatus.error => true,
-                              _ => false,
-                            },
-                        canStop:
-                            view.status == SessionStatus.running ||
-                            view.status == SessionStatus.awaitingPermission,
-                        onSend: _scope.send,
-                        onStop: _scope.stop,
-                        mentionFiles: _scope.fileMentionController.files,
-                        onMentionStart: _scope.refreshFiles,
-                        commands: view.commands,
-                        onAcceptPending: _answerPending(view.pendingPermission, accept: true),
-                        onRejectPending: _answerPending(view.pendingPermission, accept: false),
-                        onCycleMode:
-                            view.canChangeConfig && permissionModeOf(view.configOptions) != null
-                            ? _scope.cycleMode
-                            : null,
-                        toolbar: <Widget>[
-                          // Rebuilt when an agent's check changes its status.
-                          StateConsumer<AgentsController, AgentsState>(
-                            controller: _scope.agentsController,
-                            builder: (context, _, _) => ComposerToolbar(
-                              agentName: agentDisplayName(
-                                view.agentId,
-                                _scope.agentsController.agents,
-                                Localization.of(context),
-                              ),
-                              agentId: view.agentId,
-                              agents: _scope.agentsController.agents,
-                              onAgentSelected: _scope.setAgent,
-                              agentLocked: !view.agentChangeable,
-                              options: view.configOptions,
-                              enabled: view.canChangeConfig,
-                              onChanged: _scope.setConfig,
-                              onAttach: _scope.attachFile,
-                              onMakeDefault: _scope.makeDefault,
-                              chatSkills: chatSkills,
-                              chatSkillStates: _scope.chatSkillsController.states,
-                              onToggleChatSkill: _scope.setChatSkill,
-                              onOpenSkillLibrary: _scope.canOpenSkills ? _scope.openSkills : null,
-                            ),
+                      builder: (context, chatSkillsState, _) =>
+                          ValueListenableBuilder<List<ComposerImage>>(
+                            valueListenable: _scope.images,
+                            builder: (context, images, _) =>
+                                ValueListenableBuilder<List<ComposerFile>>(
+                                  valueListenable: _scope.files,
+                                  builder: (context, files, _) => PromptComposer(
+                                    images: images,
+                                    onRemoveImage: _scope.removeImage,
+                                    files: files,
+                                    onRemoveFile: _scope.removeFile,
+                                    onPasteImage: _scope.pasteImage,
+                                    runContext: runContext,
+                                    onAppCommand: _scope.widget.onAppCommand,
+                                    // The `/` menu offers the skills this chat has on.
+                                    chatSkills: chatSkills.forChat(
+                                      _scope.chatSkillsController.states,
+                                    ),
+                                    controller: _scope.textController,
+                                    focusNode: _scope.composerFocus,
+                                    canSend: _canSend(view),
+                                    canStop:
+                                        view.status == SessionStatus.running ||
+                                        view.status == SessionStatus.awaitingPermission,
+                                    stopping: view.status == SessionStatus.cancelling,
+                                    busy: view.status.isBusy,
+                                    onQueue: _scope.queue,
+                                    onSend: _scope.send,
+                                    onStop: _scope.stop,
+                                    mentionFiles: _scope.fileMentionController.files,
+                                    onMentionStart: _scope.refreshFiles,
+                                    commands: view.commands,
+                                    onAcceptPending: _answerPending(
+                                      view.pendingPermission,
+                                      accept: true,
+                                    ),
+                                    onRejectPending: _answerPending(
+                                      view.pendingPermission,
+                                      accept: false,
+                                    ),
+                                    onCycleMode:
+                                        view.canChangeConfig &&
+                                            permissionModeOf(view.configOptions) != null
+                                        ? _scope.cycleMode
+                                        : null,
+                                    toolbar: <Widget>[
+                                      // Rebuilt when an agent's check changes its status.
+                                      StateConsumer<AgentsController, AgentsState>(
+                                        controller: _scope.agentsController,
+                                        builder: (context, _, _) => ComposerToolbar(
+                                          agentName: agentDisplayName(
+                                            view.agentId,
+                                            _scope.agentsController.agents,
+                                            Localization.of(context),
+                                          ),
+                                          agentId: view.agentId,
+                                          agents: _scope.agentsController.agents,
+                                          onAgentSelected: _scope.setAgent,
+                                          agentLocked: !view.agentChangeable,
+                                          options: view.configOptions,
+                                          enabled: view.canChangeConfig,
+                                          onChanged: _scope.setConfig,
+                                          onAttach: _scope.attachFile,
+                                          onMakeDefault: _scope.makeDefault,
+                                          chatSkills: chatSkills,
+                                          chatSkillStates: _scope.chatSkillsController.states,
+                                          onToggleChatSkill: _scope.setChatSkill,
+                                          onOpenSkillLibrary: _scope.canOpenSkills
+                                              ? _scope.openSkills
+                                              : null,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                           ),
-                        ],
-                      ),
                     ),
               ),
             ),

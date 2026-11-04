@@ -51,7 +51,9 @@ void main() {
     await tester.runAsync(chat.attachFile);
     await tester.pump();
 
-    expect(chat.textController.text, 'read @notes.md  now');
+    // The space after the caret separates the mention: no second one is added, and the caret
+    // goes past it, ready for the next word.
+    expect(chat.textController.text, 'read @notes.md now');
     expect(chat.textController.selection, const TextSelection.collapsed(offset: 15));
     expect(find.byType(SnackBar), findsNothing);
   });

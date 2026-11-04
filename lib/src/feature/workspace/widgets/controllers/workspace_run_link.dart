@@ -87,7 +87,8 @@ class WorkspaceRunLink extends ChangeNotifier {
   /// Whether there is a device to start the app on: one is chosen, listed and running.
   bool get canStart => _projectId != null && _selectedDevice()?.kind == DeviceKind.running;
 
-  /// Starts the app of the selected project on the chosen device.
+  /// Starts the app of the selected project on the chosen device, with the selected launch
+  /// configuration (read again now) or Default.
   void start() {
     final projectId = _projectId;
     final state = _run.state;
@@ -97,8 +98,7 @@ class WorkspaceRunLink extends ChangeNotifier {
       projectId,
       device: device,
       mode: state.mode,
-      target: state.target,
-      arguments: state.arguments,
+      arguments: () => _run.startArgumentsFor(projectId),
     );
   }
 

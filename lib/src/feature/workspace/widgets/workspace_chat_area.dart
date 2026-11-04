@@ -2,7 +2,10 @@ import 'package:control/control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/common/widget/segmented_control.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/code_view/models/code_view_state.dart';
+import 'package:flutter_code_agent/src/feature/code_view/widgets/code_view.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
@@ -38,57 +41,103 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: <Widget>[
-      Expanded(
-        child: StateConsumer<ProjectsController, ProjectsState>(
-          controller: _scope.projectsController,
-          builder: (context, _, _) => ListenableBuilder(
-            listenable: _scope.dataController,
-            builder: (context, _) {
-              final project = _scope.selectedProject;
-              final sessionId = _scope.dataController.sessionId;
-              if (project == null || sessionId == null) {
-                // Without any project the way forward is to open one; with projects, to pick or
-                // start a chat.
-                final hasProjects = switch (_scope.projectsController.state) {
-                  Projects$CompletedState(:final projects) => projects.isNotEmpty,
-                  _ => false,
-                };
-                return _Hint(
-                  text: hasProjects
-                      ? Localization.of(context).selectChat
-                      : Localization.of(context).chatPlaceholder,
-                );
-              }
-              return ListenableBuilder(
-                // The devices too: what `/run` can do changes when the chosen emulator has booted
-                // without the run changing.
-                listenable: Listenable.merge(<Listenable>[
-                  _scope.runController,
-                  _scope.devicesController,
-                  _scope.runLink,
-                  _scope.skillLibraryController,
-                ]),
-                builder: (context, _) => ChatConfigWidget(
-                  key: ValueKey<int>(sessionId),
-                  sessionId: sessionId,
-                  project: project,
-                  onHandle: _scope.dataController.publishChatHandle,
-                  onOpenChange: _scope.openChange,
-                  runContext: _scope.runLink.mentions,
-                  onAppCommand: _scope.runLink.runCommand,
-                  chatSkills: _chatSkills(project),
-                  onOpenSkills: _scope.dataController.openSkills,
+  Widget build(BuildContext context) => StateConsumer<ProjectsController, ProjectsState>(
+    controller: _scope.projectsController,
+    builder: (context, _, _) => ListenableBuilder(
+      listenable: _scope.dataController,
+      builder: (context, _) {
+        final workspace = _scope.codeWorkspace;
+        if (workspace == null) return _buildChat(context);
+        return ListenableBuilder(
+          listenable: workspace.tabs,
+          builder: (context, _) {
+            final code = workspace.tabs.mode == CodeViewMode.code;
+            final localization = Localization.of(context);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Center(
+                    child: SegmentedControl<CodeViewMode>(
+                      key: const ValueKey<String>('code-view-switch'),
+                      segments: <(CodeViewMode, String)>[
+                        (CodeViewMode.chat, localization.codeViewChat),
+                        (CodeViewMode.code, localization.codeViewCode),
+                      ],
+                      selected: workspace.tabs.mode,
+                      onChanged: workspace.tabs.setMode,
+                    ),
+                  ),
                 ),
-              );
-            },
-          ),
-        ),
-      ),
-    ],
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      // The chat stays mounted under the Code view, so its draft, scroll and drop
+                      // target come back as they were; hidden, it takes no drop or focus.
+                      Offstage(
+                        offstage: code,
+                        child: TickerMode(
+                          enabled: !code,
+                          child: ExcludeFocus(excluding: code, child: _buildChat(context)),
+                        ),
+                      ),
+                      if (code)
+                        CodeView(
+                          key: ValueKey<int>(workspace.projectId),
+                          workspace: workspace,
+                          onOpenExternally: (path) => _scope.openPath(path).ignore(),
+                          listFiles: () => _scope.listProjectFiles(workspace.root),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ),
   );
+
+  Widget _buildChat(BuildContext context) {
+    final project = _scope.selectedProject;
+    final sessionId = _scope.dataController.sessionId;
+    if (project == null || sessionId == null) {
+      // Without any project the way forward is to open one; with projects, to pick or start a chat.
+      final hasProjects = switch (_scope.projectsController.state) {
+        Projects$CompletedState(:final projects) => projects.isNotEmpty,
+        _ => false,
+      };
+      return _Hint(
+        text: hasProjects
+            ? Localization.of(context).selectChat
+            : Localization.of(context).chatPlaceholder,
+      );
+    }
+    return ListenableBuilder(
+      // The devices too: what `/run` can do changes when the chosen emulator has booted without the
+      // run changing.
+      listenable: Listenable.merge(<Listenable>[
+        _scope.runController,
+        _scope.devicesController,
+        _scope.runLink,
+        _scope.skillLibraryController,
+      ]),
+      builder: (context, _) => ChatConfigWidget(
+        key: ValueKey<int>(sessionId),
+        sessionId: sessionId,
+        project: project,
+        onHandle: _scope.dataController.publishChatHandle,
+        onOpenChange: _scope.openChange,
+        runContext: _scope.runLink.mentions,
+        onAppCommand: _scope.runLink.runCommand,
+        chatSkills: _chatSkills(project),
+        onOpenSkills: _scope.dataController.openSkills,
+      ),
+    );
+  }
 }
 
 class _Hint extends StatelessWidget {
