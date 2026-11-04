@@ -290,6 +290,11 @@ final class AgentHub {
           status != SessionStatus.error) {
         throw StateError('Cannot send a prompt while the session is ${status.name}');
       }
+      // A ready session whose mode waits for the user's consent takes no prompt, and the one it
+      // holds back (the one Allow repeats) stays the last prompt.
+      if (status == SessionStatus.idle && live.bypassBlocked) {
+        throw const BypassNotAllowedException();
+      }
       live
         ..lastPrompt = <Map<String, Object?>>[
           if (text.isNotEmpty) <String, Object?>{'type': 'text', 'text': text},
@@ -418,33 +423,37 @@ final class AgentHub {
     } on Object catch (error) {
       await _failOnce(live, SessionProblem(SessionProblemKind.transient, '$error'));
     } finally {
-      live.preparingTurn.value = false;
-      // Stop arrived before the prompt went out: nothing to wait for.
-      if (!sent && live.status.value == SessionStatus.cancelling) _move(live, SessionStatus.idle);
-      live
-        ..cancelTimer?.cancel()
-        ..cancelTimer = null
-        ..canForceStop.value = false;
-      if (live.problem.value?.kind == SessionProblemKind.stuck) live.problem.value = null;
-      permissions.cancelSession(live.id, 'turn ended');
-      await live.store.flush().catchError((Object _) {});
-      for (final (index, token) in tokens.indexed) {
-        final result = await _observers[index].afterTurn(live, token).catchError((Object error) {
-          l.w('AgentHub | turn observer failed: $error');
-          return null;
-        });
-        if (result != null && !live.store.isClosed) {
-          await live.store
-              .addDurable(SessionEventOrigin.app, SessionEventKind.turnFiles, result)
-              .then<void>(
-                (_) {},
-                onError: (Object error) => _notice(live, 'Could not save changed files: $error'),
-              );
+      // Whatever the clean-up throws, the turn is closed: the next one waits for it.
+      try {
+        live.preparingTurn.value = false;
+        // Stop arrived before the prompt went out: nothing to wait for.
+        if (!sent && live.status.value == SessionStatus.cancelling) _move(live, SessionStatus.idle);
+        live
+          ..cancelTimer?.cancel()
+          ..cancelTimer = null
+          ..canForceStop.value = false;
+        if (live.problem.value?.kind == SessionProblemKind.stuck) live.problem.value = null;
+        permissions.cancelSession(live.id, 'turn ended');
+        await live.store.flush().catchError((Object _) {});
+        for (final (index, token) in tokens.indexed) {
+          final result = await _observers[index].afterTurn(live, token).catchError((Object error) {
+            l.w('AgentHub | turn observer failed: $error');
+            return null;
+          });
+          if (result != null && !live.store.isClosed) {
+            await live.store
+                .addDurable(SessionEventOrigin.app, SessionEventKind.turnFiles, result)
+                .then<void>(
+                  (_) {},
+                  onError: (Object error) => _notice(live, 'Could not save changed files: $error'),
+                );
+          }
         }
+      } finally {
+        // A later turn may already have taken its place.
+        if (identical(live.turn, turn.future)) live.turn = null;
+        turn.complete();
       }
-      // A later turn may already have taken its place.
-      if (identical(live.turn, turn.future)) live.turn = null;
-      turn.complete();
     }
   }
 

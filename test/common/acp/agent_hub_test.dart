@@ -357,6 +357,20 @@ void main() {
     expect(_agentText(live).join(), 'hi');
   });
 
+  test('a prompt while one is held for bypass is refused and keeps the held one', () async {
+    final hub = newHub();
+    final chat = await newChat(acpSessionId: 'bypass-held');
+    final live = await hub.session(chat);
+    await expectLater(hub.prompt(chat, 'echo first'), throwsA(isA<BypassNotAllowedException>()));
+
+    await expectLater(hub.prompt(chat, 'echo second'), throwsA(isA<BypassNotAllowedException>()));
+
+    expect(live.canRetryPrompt.value, isTrue);
+    await hub.acknowledgeBypass(chat);
+    await hub.retryPrompt(chat);
+    expect(_agentText(live).join(), 'first');
+  });
+
   test('bypass consent is stored with the chat and survives a restart', () async {
     final chat = await newChat(acpSessionId: 'bypass-2');
     await newHub().acknowledgeBypass(chat);
@@ -803,6 +817,21 @@ void main() {
       expect(_agentText(live).join(), contains('second'));
     });
 
+    test('an observer whose afterTurn throws does not block the next turn', () async {
+      final hub = newHub(observers: <TurnObserver>[_ThrowingAfterObserver()]);
+      final chat = await newChat();
+      final live = await hub.session(chat);
+
+      await expectLater(hub.prompt(chat, 'echo first'), throwsA(isA<StateError>()));
+      expect(live.turn, isNull);
+
+      await hub
+          .prompt(chat, 'echo second')
+          .catchError((Object _) {})
+          .timeout(const Duration(seconds: 10));
+      expect(_agentText(live).join(), 'firstsecond');
+    });
+
     test(
       'the end of the previous turn does not forget the next one: dispose waits for it',
       () async {
@@ -970,6 +999,16 @@ final class _GateObserver implements TurnObserver {
 
   @override
   Future<Map<String, Object?>?> afterTurn(LiveSession session, Object? beforeToken) async => null;
+}
+
+/// Throws synchronously after every turn (not a failed future: `catchError` never sees it).
+final class _ThrowingAfterObserver implements TurnObserver {
+  @override
+  Future<Object?> beforeTurn(LiveSession session) async => null;
+
+  @override
+  Future<Map<String, Object?>?> afterTurn(LiveSession session, Object? beforeToken) =>
+      throw StateError('afterTurn failed');
 }
 
 /// Records the changed files of each turn; the first turn's recording waits for [_gate].

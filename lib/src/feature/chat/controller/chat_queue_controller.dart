@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:control/control.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
@@ -171,9 +172,10 @@ final class ChatQueueController extends StateController<ChatQueueState> {
         if (--_inFlight == 0) setState(state.copyWith(sending: false));
       },
       error: (error, stackTrace) async {
-        // The chat did not take it (it was busy again): nothing was sent, so it goes back.
-        // Any other failure is the chat's own (its status pauses the rest).
-        if (error is StateError) {
+        // The chat did not take it (it was busy again, or its mode waits for the user's consent):
+        // nothing was sent, so it goes back. Any other failure is the chat's own (its status
+        // pauses the rest).
+        if (error is StateError || error is BypassNotAllowedException) {
           setState(state.copyWith(items: <QueuedPrompt>[prompt, ...state.items], paused: true));
         } else if (state.items.isNotEmpty) {
           setState(state.copyWith(paused: true));

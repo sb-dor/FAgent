@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
@@ -14,7 +15,7 @@ typedef _Sent = ({int sessionId, String text, List<Map<String, Object?>> resourc
 /// [failWith] once.
 final class _RecordingSending implements IPromptSendingRepository {
   final List<_Sent> sent = <_Sent>[];
-  Error? failWith;
+  Object? failWith;
 
   /// While set, a send waits for it (the turn runs).
   Completer<void>? hold;
@@ -338,6 +339,19 @@ void main() {
       ..add(_prompt('first'))
       ..add(_prompt('second'));
     sending.failWith = StateError('Cannot send a prompt while the session is running');
+
+    status.value = SessionStatus.idle;
+    await settle();
+
+    expect(queue.state.items.map((p) => p.text), <String>['first', 'second']);
+    expect(queue.state.paused, isTrue);
+  });
+
+  test('a prompt held back by the bypass gate goes back to the front, paused', () async {
+    queue
+      ..add(_prompt('first'))
+      ..add(_prompt('second'));
+    sending.failWith = const BypassNotAllowedException();
 
     status.value = SessionStatus.idle;
     await settle();
