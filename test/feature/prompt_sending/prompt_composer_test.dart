@@ -30,6 +30,8 @@ void main() {
     required bool canSend,
     required bool canStop,
     bool stopping = false,
+    bool busy = false,
+    VoidCallback? onQueue,
     VoidCallback? onSend,
     VoidCallback? onStop,
     List<String>? mentionFiles,
@@ -48,6 +50,8 @@ void main() {
       canSend: canSend,
       canStop: canStop,
       stopping: stopping,
+      busy: busy,
+      onQueue: onQueue,
       onSend: onSend ?? () {},
       onStop: onStop ?? () {},
       mentionFiles: mentionFiles,
@@ -268,6 +272,135 @@ void main() {
   testWidgets('the hint mentions files and commands', (tester) async {
     await tester.pumpWidget(composer(canSend: true, canStop: false));
     expect(find.text('Ask the agent… @ file · / command'), findsOneWidget);
+  });
+
+  group('the queue', () {
+    Future<void> commandEnter(WidgetTester tester) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.metaLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.metaLeft);
+    }
+
+    testWidgets('⌘↵ while busy queues and plain Enter does nothing', (tester) async {
+      var queued = 0;
+      var sent = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: false,
+          canStop: true,
+          busy: true,
+          onQueue: () => queued++,
+          onSend: () => sent++,
+        ),
+      );
+      await tester.enterText(find.byType(TextField), 'next');
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      expect((queued, sent), (0, 0));
+      expect(text.text, 'next');
+
+      await commandEnter(tester);
+      expect((queued, sent), (1, 0));
+    });
+
+    testWidgets('⌘↵ with an empty or blank field queues nothing', (tester) async {
+      var queued = 0;
+      await tester.pumpWidget(
+        composer(canSend: false, canStop: true, busy: true, onQueue: () => queued++),
+      );
+      await tester.tap(find.byType(TextField));
+
+      await commandEnter(tester);
+      await tester.enterText(find.byType(TextField), '   ');
+      await commandEnter(tester);
+
+      expect(queued, 0);
+    });
+
+    testWidgets('⌘↵ when idle sends', (tester) async {
+      var queued = 0;
+      var sent = 0;
+      await tester.pumpWidget(
+        composer(canSend: true, canStop: false, onQueue: () => queued++, onSend: () => sent++),
+      );
+      await tester.enterText(find.byType(TextField), 'hello');
+
+      await commandEnter(tester);
+
+      expect((queued, sent), (0, 1));
+    });
+
+    testWidgets('⌘↵ during awaitingPermission queues and does not accept the permission', (
+      tester,
+    ) async {
+      var queued = 0;
+      var accepted = 0;
+      await tester.pumpWidget(
+        composer(
+          canSend: false,
+          canStop: true,
+          busy: true,
+          onQueue: () => queued++,
+          onAcceptPending: () => accepted++,
+        ),
+      );
+      await tester.tap(find.byType(TextField));
+
+      // An empty field: ⌘↵ neither answers nor queues.
+      await commandEnter(tester);
+      expect((queued, accepted), (0, 0));
+
+      await tester.enterText(find.byType(TextField), 'and then this');
+      await commandEnter(tester);
+      expect((queued, accepted), (1, 0));
+    });
+
+    testWidgets('the hint shows only while busy with text', (tester) async {
+      await tester.pumpWidget(composer(canSend: true, canStop: false));
+      await tester.enterText(find.byType(TextField), 'hello');
+      await tester.pump();
+      expect(find.text('⌘↵ Queue'), findsNothing);
+
+      await tester.pumpWidget(composer(canSend: false, canStop: true, busy: true));
+      await tester.pump();
+      expect(find.text('⌘↵ Queue'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), '  ');
+      await tester.pump();
+      expect(find.text('⌘↵ Queue'), findsNothing);
+    });
+
+    testWidgets('the busy placeholder', (tester) async {
+      await tester.pumpWidget(composer(canSend: false, canStop: true, busy: true));
+      expect(find.text('The agent is working — ⌘↵ queues your message'), findsOneWidget);
+      expect(find.text('Ask the agent… @ file · / command'), findsNothing);
+
+      await tester.pumpWidget(composer(canSend: true, canStop: false));
+      expect(find.text('The agent is working — ⌘↵ queues your message'), findsNothing);
+    });
+
+    testWidgets('the Russian hint and placeholder', (tester) async {
+      await tester.pumpWidget(
+        testApp(
+          locale: const Locale('ru'),
+          PromptComposer(
+            controller: text,
+            focusNode: focus,
+            canSend: false,
+            canStop: true,
+            busy: true,
+            onQueue: () {},
+            onSend: () {},
+            onStop: () {},
+          ),
+        ),
+      );
+      expect(find.text('Агент работает — ⌘↵ поставит сообщение в очередь'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'дальше');
+      await tester.pump();
+      expect(find.text('⌘↵ В очередь'), findsOneWidget);
+    });
   });
 
   group('Shift+Tab', () {

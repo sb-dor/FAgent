@@ -2,6 +2,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
@@ -153,8 +154,10 @@ void main() {
   late _RecordingPicker picker;
   late AgentHub hub;
   late List<String> creationEvents;
+  late _FixedQueuedChats queued;
 
   setUp(() {
+    queued = _FixedQueuedChats();
     database = AppDatabase(NativeDatabase.memory());
     events = <String>[];
     creationEvents = <String>[];
@@ -176,7 +179,20 @@ void main() {
       mcpProbe: _RecordingProbe(events, database),
       agentProbe: _RecordingAgentProbe(events, database),
       projectCreation: _RecordingCreation(creationEvents),
+      queuedChats: queued,
     );
+  });
+
+  group('AppCloseRepositoryImpl.busyChats', () {
+    test('no work and no queue is not busy', () async {
+      expect(await repository.busyChats(), 0);
+    });
+
+    test('queued messages count as busy', () async {
+      queued.sessionIds = <int>{3, 8};
+
+      expect(await repository.busyChats(), 2);
+    });
   });
 
   group('AppCloseRepositoryImpl.shutdown', () {
@@ -254,6 +270,7 @@ void main() {
         agentProbe: _RecordingAgentProbe(events, database),
         projectCreation: _RecordingCreation(creationEvents),
         stopAgentList: () async => events.add('agents:stop'),
+        queuedChats: queued,
       );
 
       await repository.shutdown();
@@ -282,6 +299,7 @@ void main() {
             creationEvents,
             error: StateError('the process would not die'),
           ),
+          queuedChats: queued,
         );
 
         await repository.shutdown();
@@ -292,6 +310,12 @@ void main() {
       },
     );
   });
+}
+
+/// The chats whose queue holds messages, as the test sets them.
+final class _FixedQueuedChats implements IQueuedChats {
+  @override
+  Set<int> sessionIds = const <int>{};
 }
 
 /// Records when it is disposed.

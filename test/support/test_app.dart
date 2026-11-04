@@ -17,6 +17,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -24,6 +25,7 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -94,12 +96,19 @@ Dependencies testDependencies({
         runProcess: flutterVersionRunner,
         step: Duration.zero,
       );
+  final hub = AgentHub(database: database, environment: environment);
   return Dependencies()
     ..database = database
     ..shellEnvironment = environment
     ..agentOptionsCatalog = AgentOptionsCatalogImpl(database: database)
     ..customAgentsRepository = CustomAgentsRepositoryImpl(database: database)
-    ..agentHub = AgentHub(database: database, environment: environment)
+    ..agentHub = hub
+    ..chatQueues = ChatQueueRegistry(
+      create: (sessionId) => ChatQueueController(
+        sessionId: sessionId,
+        repository: PromptSendingRepositoryImpl(hub: hub),
+      ),
+    )
     ..stopFollowingCustomAgents = () async {}
     ..agentProbe = AgentProbeImpl(environment: environment)
     ..agentsRepository = agentsRepository ?? MemoryAgentsRepository()

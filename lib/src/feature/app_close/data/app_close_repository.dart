@@ -4,6 +4,7 @@ import 'dart:io' as io;
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
@@ -22,7 +23,7 @@ abstract interface class IAppCloseRepository {
   /// that.
   Stream<void> closeRequests();
 
-  /// Chats with a turn or setup in flight, plus a running login.
+  /// Chats with a turn or setup in flight or with queued messages, plus a running login.
   Future<int> busyChats();
 
   /// Whether quitting while agents work asks the user first (a setting).
@@ -54,6 +55,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     required this._mcpProbe,
     required this._agentProbe,
     required this._projectCreation,
+    required this._queuedChats,
     this._stopAgentList,
   });
 
@@ -67,6 +69,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   final IMcpProbe _mcpProbe;
   final IAgentProbe _agentProbe;
   final IProjectCreationRepository _projectCreation;
+  final IQueuedChats _queuedChats;
 
   /// Stops feeding the agent list into the hub; called before the hub is disposed.
   final Future<void> Function()? _stopAgentList;
@@ -94,8 +97,14 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
   }
 
   @override
-  Future<int> busyChats() async =>
-      (await _hub.busySessions()).length + (_hub.auth.isRunning ? 1 : 0);
+  Future<int> busyChats() async {
+    // A busy chat with queued messages is one chat.
+    final chats = <int>{
+      for (final session in await _hub.busySessions()) session.id,
+      ..._queuedChats.sessionIds,
+    };
+    return chats.length + (_hub.auth.isRunning ? 1 : 0);
+  }
 
   @override
   Future<bool> askBeforeQuit() async => (await _settings.watch().first).askBeforeQuit;

@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/dependencies_scope.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
@@ -56,6 +57,9 @@ class Dependencies {
   /// Stops feeding the built-in and custom agents into [agentHub]; called before the hub is
   /// disposed.
   late final Future<void> Function() stopFollowingCustomAgents;
+
+  /// The message queues of the chats; a queue with messages outlives its chat's widget.
+  late final ChatQueueRegistry chatQueues;
 
   /// Checks agents with a short ACP handshake; stopped when the app closes.
   late final IAgentProbe agentProbe;

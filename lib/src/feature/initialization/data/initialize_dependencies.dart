@@ -22,6 +22,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -31,6 +32,7 @@ import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
@@ -118,6 +120,13 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
           (Object error, StackTrace stackTrace) =>
               l.w('Agent options | could not save the options of $agentId: $error', stackTrace),
         ),
+  ),
+  // In memory; quitting asks first while a chat still has queued messages.
+  'Create chat queues': (dependencies) => dependencies.chatQueues = ChatQueueRegistry(
+    create: (sessionId) => ChatQueueController(
+      sessionId: sessionId,
+      repository: PromptSendingRepositoryImpl(hub: dependencies.agentHub),
+    ),
   ),
   // Waits for the first list, so a chat of a custom agent opened at startup finds its agent.
   'Follow custom agents': (dependencies) async {

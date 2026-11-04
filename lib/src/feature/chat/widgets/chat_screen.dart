@@ -7,11 +7,14 @@ import 'package:flutter_code_agent/src/feature/agents/controller/agents_controll
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_feed.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_queue_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_status_line.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
@@ -45,6 +48,16 @@ class _ChatScreenState extends State<ChatScreen> {
         ? null
         : () => _scope.answerPermission(pending.requestId, option.optionId);
   }
+
+  /// Whether the chat takes a prompt now.
+  static bool _canSend(ChatView view) =>
+      !view.bypassBlocked &&
+      // A removed agent cannot take a message: it would be lost.
+      view.problem?.kind != SessionProblemKind.removed &&
+      switch (view.status) {
+        SessionStatus.cold || SessionStatus.idle || SessionStatus.error => true,
+        _ => false,
+      };
 
   @override
   Widget build(BuildContext context) => StateConsumer<ChatController, ChatState>(
@@ -97,6 +110,17 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           ChatStatusLine(status: view.status, preparing: view.preparingTurn),
           if (view.bypassBlocked) BypassGateBanner(onAllow: _scope.allowBypass),
+          StateConsumer<ChatQueueController, ChatQueueState>(
+            controller: _scope.queueController,
+            builder: (context, queue, _) => ChatQueueView(
+              items: queue.items,
+              paused: queue.paused,
+              onEdit: _scope.editQueued,
+              onRemove: _scope.removeQueued,
+              // While the agent works "Send next" resumes the queue for the end of the turn.
+              onSendNext: _canSend(view) || view.status.isBusy ? _scope.sendNextQueued : null,
+            ),
+          ),
           StateConsumer<FileMentionController, FileMentionState>(
             controller: _scope.fileMentionController,
             builder: (context, _, _) => ValueListenableBuilder<RunMentions?>(
@@ -113,20 +137,13 @@ class _ChatScreenState extends State<ChatScreen> {
                         chatSkills: chatSkills.forChat(_scope.chatSkillsController.states),
                         controller: _scope.textController,
                         focusNode: _scope.composerFocus,
-                        canSend:
-                            !view.bypassBlocked &&
-                            // A removed agent cannot take a message: it would be lost.
-                            view.problem?.kind != SessionProblemKind.removed &&
-                            switch (view.status) {
-                              SessionStatus.cold ||
-                              SessionStatus.idle ||
-                              SessionStatus.error => true,
-                              _ => false,
-                            },
+                        canSend: _canSend(view),
                         canStop:
                             view.status == SessionStatus.running ||
                             view.status == SessionStatus.awaitingPermission,
                         stopping: view.status == SessionStatus.cancelling,
+                        busy: view.status.isBusy,
+                        onQueue: _scope.queue,
                         onSend: _scope.send,
                         onStop: _scope.stop,
                         mentionFiles: _scope.fileMentionController.files,

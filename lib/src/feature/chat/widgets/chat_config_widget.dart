@@ -6,11 +6,13 @@ import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_login_methods_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_screen.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
@@ -127,6 +129,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final ChatSkillsController chatSkillsController;
   late final ChatSkillActionsController chatSkillActionsController;
   late final SkillTextController skillTextController;
+
+  /// The chat's message queue; it outlives this widget while it holds messages.
+  late final ChatQueueController queueController;
+  late final ChatQueueRegistry _queues;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
 
@@ -148,10 +154,15 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     super.initState();
     final dependencies = Dependencies.of(context);
     final hub = dependencies.agentHub;
+    _queues = dependencies.chatQueues;
+    queueController = _queues.acquire(sessionId);
+    // Assigned before it opens: [_followStatus] reads it on the first change.
     chatController = ChatController(
       repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
-    )
+    );
+    chatController
       ..addListener(_schedulePublish)
+      ..addListener(_followStatus)
       ..open(sessionId);
     final chatRepository = ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository);
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
@@ -186,7 +197,10 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   void dispose() {
     chatController
       ..removeListener(_schedulePublish)
+      ..removeListener(_followStatus)
       ..dispose();
+    // The queue keeps sending into this chat while it holds messages.
+    _queues.release(sessionId);
     recoveryController.dispose();
     agentsController.dispose();
     sessionAgentController
@@ -227,6 +241,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         );
       case _:
     }
+  }
+
+  /// Lets the queue follow the chat's live status (again, after the runtime state was replaced).
+  void _followStatus() {
+    if (chatController.status case final status?) queueController.follow(status);
   }
 
   /// Makes [agentId] run this chat; only possible before the first message.
@@ -337,7 +356,42 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     promptController.send(sessionId, prompt.text, resources: prompt.resources);
   }
 
-  void stop() => promptController.stop(sessionId).ignore();
+  /// Queues the composer text ([promptFor], as it is now) to go after the running turn; the
+  /// first prompt in a folder asks for trust.
+  Future<void> queue() async {
+    final draft = textController.text.trim();
+    if (draft.isEmpty) return;
+    if (!widget.project.isTrusted) {
+      final trusted = await ProjectTrustDialog.show(context, widget.project);
+      if (!trusted || !mounted) return;
+    }
+    final prompt = await promptFor(draft);
+    if (!mounted) return;
+    textController.clear();
+    queueController.add(
+      QueuedPrompt(
+        text: prompt.text,
+        resources: prompt.resources,
+        draft: prompt.text == draft ? null : draft,
+      ),
+    );
+  }
+
+  /// Takes the queued message at [index] out of the queue and back into the composer.
+  void editQueued(int index) {
+    final prompt = queueController.edit(index);
+    if (prompt != null) insertDraft(prompt.typed);
+  }
+
+  void removeQueued(int index) => queueController.remove(index);
+
+  void sendNextQueued() => queueController.sendNext();
+
+  /// Stops the turn; its end pauses the queue.
+  void stop() {
+    queueController.pauseAfterStop();
+    promptController.stop(sessionId).ignore();
+  }
 
   void forceStop(String agentId) => promptController.forceStop(agentId).ignore();
 

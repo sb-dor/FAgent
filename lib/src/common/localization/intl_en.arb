@@ -19,6 +19,20 @@
   "selectChat": "Pick a chat or start a new one",
   "somethingWentWrong": "Something went wrong",
   "promptHint": "Ask the agent… @ file · / command",
+  "promptBusyHint": "The agent is working — ⌘↵ queues your message",
+  "queueHint": "⌘↵ Queue",
+  "queuePaused": "Queue paused",
+  "queueSendNext": "Send next",
+  "queueEdit": "Back to the field",
+  "queueRemove": "Remove from the queue",
+  "queueAttachments": "{count, plural, =1{1 attachment} other{{count} attachments}}",
+  "@queueAttachments": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "send": "Send",
   "stop": "Stop",
   "forceStop": "Force stop",

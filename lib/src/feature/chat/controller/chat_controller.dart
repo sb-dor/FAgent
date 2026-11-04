@@ -4,6 +4,7 @@ import 'package:control/control.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
+import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_transcript.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
@@ -42,6 +43,9 @@ final class ChatController extends StateController<ChatState> with SequentialCon
 
   LiveSession? _session;
   StreamSubscription<SessionEvent>? _events;
+
+  /// The live status of the open chat; `null` until it is open.
+  ValueListenable<SessionStatus>? get status => _session?.status;
   Timer? _refold;
 
   // The agent's commands are mapped once per change, not once per refold.
