@@ -108,6 +108,10 @@ abstract class AgentInfo with _$AgentInfo {
 
     /// Settings the agent reported on earlier runs (model, mode, effort, …).
     @Default(<ConfigOption>[]) List<ConfigOption> options,
+
+    /// The agent takes images in a prompt. The built-in agents do; a custom one says so in its
+    /// check (`promptCapabilities.image`) and counts as taking them until it is checked.
+    @Default(true) bool acceptsImages,
   }) = _AgentInfo;
 
   const AgentInfo._();

@@ -48,6 +48,7 @@
 // With FAKE_AGENT_AUTH_STATUS=<kind>:<label> (for example `account:ChatGPT Plus`) the agent
 // pushes an `_auth/status_update` notification right after answering `initialize`,
 // like codex-acp does for clients that advertise `_meta.authStatus`.
+// With FAKE_AGENT_IMAGE=1 the agent says it takes images (`promptCapabilities.image`).
 
 import 'dart:async';
 import 'dart:convert';
@@ -127,7 +128,7 @@ Future<void> main(List<String> arguments) async {
             capabilities: AgentCapabilities(
               loadSession: true,
               promptCapabilities: PromptCapabilities(
-                image: false,
+                image: Platform.environment['FAKE_AGENT_IMAGE'] == '1',
                 audio: false,
                 embeddedContext: true,
               ),

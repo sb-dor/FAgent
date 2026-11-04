@@ -163,6 +163,7 @@ abstract final class ChatTranscript {
         _list(payload['prompt']) ?? _list(_map(payload['params'])?['prompt']) ?? const <Object?>[];
     final text = StringBuffer();
     final resources = <String>[];
+    final images = <MessageImage>[];
     for (final block in blocks.map(_map).whereType<Map<String, Object?>>()) {
       // `resource` blocks (a skill the user picked, the rules a new agent session starts with)
       // are context for the agent, not part of what the user wrote.
@@ -171,9 +172,16 @@ abstract final class ChatTranscript {
           text.write(_string(block['text']) ?? '');
         case 'resource_link':
           if (_string(block['uri']) case final String uri) resources.add(uri);
+        case 'image':
+          if ((_string(block['mimeType']), _string(block['data'])) case (
+            final String mimeType,
+            final String data,
+          )) {
+            images.add(MessageImage(mimeType: mimeType, data: data));
+          }
       }
     }
-    return UserMessageItem(seq, text: text.toString(), resources: resources);
+    return UserMessageItem(seq, text: text.toString(), resources: resources, images: images);
   }
 
   static void _appendText(

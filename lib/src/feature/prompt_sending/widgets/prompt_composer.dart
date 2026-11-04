@@ -7,10 +7,12 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/models/file_mention.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_commands.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 
@@ -24,7 +26,8 @@ import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 /// the same way. While a permission request waits, Enter and Escape
 /// (without Shift, Command, Alt or Control) in an empty field call [onAcceptPending] and
 /// [onRejectPending]. ⌘↵ with text calls [onQueue] while the agent is [busy] (plain Enter does
-/// nothing then) and [onSend] otherwise; it never answers a permission request.
+/// nothing then) and [onSend] otherwise; it never answers a permission request. [images] show as
+/// chips above the text; ⌘V calls [onPasteImage] and still pastes text as usual.
 /// {@endtemplate}
 class PromptComposer extends StatefulWidget {
   /// {@macro prompt_composer}
@@ -48,6 +51,9 @@ class PromptComposer extends StatefulWidget {
     this.runContext,
     this.onAppCommand,
     this.chatSkills = ChatSkills.empty,
+    this.images = const <ComposerImage>[],
+    this.onRemoveImage,
+    this.onPasteImage,
     super.key,
   });
 
@@ -109,6 +115,15 @@ class PromptComposer extends StatefulWidget {
 
   /// The skills of the chat's project for the `/` menu (shown before the app's commands).
   final ChatSkills chatSkills;
+
+  /// The images that go with the message, as chips above the text.
+  final List<ComposerImage> images;
+
+  /// Removes the image at the index (its chip's ✕); `null` hides the ✕.
+  final ValueChanged<int>? onRemoveImage;
+
+  /// ⌘V was pressed: the clipboard may hold an image. `null` pastes text only.
+  final VoidCallback? onPasteImage;
 
   @override
   State<PromptComposer> createState() => _PromptComposerState();
@@ -318,6 +333,17 @@ class _PromptComposerState extends State<PromptComposer> {
       if (event is KeyDownEvent) widget.onCycleMode?.call();
       return KeyEventResult.handled;
     }
+    if (event is KeyDownEvent && key == LogicalKeyboardKey.keyV) {
+      final keyboard = HardwareKeyboard.instance;
+      if (keyboard.isMetaPressed &&
+          !keyboard.isShiftPressed &&
+          !keyboard.isAltPressed &&
+          !keyboard.isControlPressed) {
+        widget.onPasteImage?.call();
+      }
+      // The field pastes the text, if there is any.
+      return KeyEventResult.ignored;
+    }
     // A waiting permission request is answered from an empty field only (any text, even a
     // space, is a draft the key must not skip over).
     // Only the bare key answers: ⌘↵, ⇧↵ and the like are something else.
@@ -409,6 +435,11 @@ class _PromptComposerState extends State<PromptComposer> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
+                // In the field's tap region too: removing an image keeps the caret.
+                if (widget.images.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: ImageChips(images: widget.images, onRemove: widget.onRemoveImage),
+                  ),
                 // Part of the field's tap region: a click keeps the caret.
                 if (_count > 0)
                   TextFieldTapRegion(

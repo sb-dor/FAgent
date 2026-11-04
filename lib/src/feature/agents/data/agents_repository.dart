@@ -387,6 +387,8 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
       account: signIn?.account,
       methods: agentLoginMethods(definition, result.authMethods, environment),
       canSignOut: result.canLogout,
+      // The built-in agents take images (checked against their adapters); a custom one as it says.
+      acceptsImages: definition.source == AgentSource.builtin || result.image,
     );
   }
 

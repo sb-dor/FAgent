@@ -1,3 +1,4 @@
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'queued_prompt.freezed.dart';
@@ -19,6 +20,10 @@ abstract class QueuedPrompt with _$QueuedPrompt {
     /// The composer text as the user typed it, when it differs from [text] (a `/skill` command):
     /// shown in the queue and put back into the field by ✎.
     String? draft,
+
+    /// The composer's images when the message was queued (their blocks are in [resources]): ✎
+    /// puts them back as chips.
+    @Default(<ComposerImage>[]) List<ComposerImage> images,
   }) = _QueuedPrompt;
 
   const QueuedPrompt._();

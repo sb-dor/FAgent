@@ -12,13 +12,44 @@ sealed class ChatItem {
 /// A prompt the user sent.
 final class UserMessageItem extends ChatItem {
   /// Creates a user message.
-  const UserMessageItem(super.seq, {required this.text, this.resources = const <String>[]});
+  const UserMessageItem(
+    super.seq, {
+    required this.text,
+    this.resources = const <String>[],
+    this.images = const <MessageImage>[],
+  });
 
   /// Prompt text.
   final String text;
 
   /// Paths or URIs of attached files (`resource_link`).
   final List<String> resources;
+
+  /// The images sent with the prompt (ACP `image` blocks), in order.
+  final List<MessageImage> images;
+}
+
+/// {@template message_image}
+/// An image of a user message, as its ACP `image` block carries it.
+/// {@endtemplate}
+@immutable
+final class MessageImage {
+  /// {@macro message_image}
+  const MessageImage({required this.mimeType, required this.data});
+
+  /// `image/png`, `image/jpeg`, …
+  final String mimeType;
+
+  /// The image, base64-encoded; decoded only where it is shown (the feed is folded again on every
+  /// event).
+  final String data;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MessageImage && other.mimeType == mimeType && other.data == data;
+
+  @override
+  int get hashCode => Object.hash(mimeType, data);
 }
 
 /// Agent reply text (Markdown), merged from chunks with the same message id.

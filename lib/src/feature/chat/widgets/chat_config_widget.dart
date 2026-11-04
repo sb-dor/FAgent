@@ -1,5 +1,9 @@
+import 'dart:io';
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
@@ -12,7 +16,9 @@ import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/drop_classification.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
+import 'package:flutter_code_agent/src/feature/chat/widgets/chat_drop_target.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_screen.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/controller/file_mention_controller.dart';
 import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
@@ -24,6 +30,7 @@ import 'package:flutter_code_agent/src/feature/project_trust/widgets/project_tru
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_sending_controller.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/skill_prompt.dart';
 import 'package:flutter_code_agent/src/feature/session_config/controller/session_config_controller.dart';
@@ -37,6 +44,7 @@ import 'package:flutter_code_agent/src/feature/skills/controller/chat_skills_con
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_text_controller.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as p;
 
 /// Gives the chat widgets access to [ChatConfigWidgetState].
@@ -61,6 +69,16 @@ typedef FilePicker = Future<String?> Function(String initialDirectory);
 Future<String?> _pickWithDialog(String initialDirectory) async =>
     (await openFile(initialDirectory: initialDirectory))?.path;
 
+/// Reads the image on the clipboard; `null` when it holds none (or holds text, which the field
+/// pastes).
+typedef ClipboardImageReader = Future<Uint8List?> Function();
+
+Future<Uint8List?> _readPasteboardImage() async {
+  // Copied text can come with a picture of itself (a PDF or TIFF of the selection): text wins.
+  if (await Clipboard.hasStrings()) return null;
+  return Pasteboard.image;
+}
+
 /// {@template chat_config_widget}
 /// One chat: owns its controllers and the composer text.
 /// {@endtemplate}
@@ -70,6 +88,7 @@ class ChatConfigWidget extends StatefulWidget {
     required this.sessionId,
     required this.project,
     this.pickFile = _pickWithDialog,
+    this.readClipboardImage = _readPasteboardImage,
     this.onHandle,
     this.onOpenChange,
     this.runContext,
@@ -87,6 +106,9 @@ class ChatConfigWidget extends StatefulWidget {
 
   /// Opens the file dialog for the attach button.
   final FilePicker pickFile;
+
+  /// Reads an image from the clipboard for ⌘V.
+  final ClipboardImageReader readClipboardImage;
 
   /// Called with a [ChatHandle] for every new view of the chat, after the frame (never during
   /// build).
@@ -135,6 +157,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   late final ChatQueueRegistry _queues;
   final TextEditingController textController = TextEditingController();
   final FocusNode composerFocus = FocusNode();
+
+  /// The images that go with the next message (dropped or pasted), as chips of the composer.
+  final ValueNotifier<List<ComposerImage>> images = ValueNotifier<List<ComposerImage>>(
+    const <ComposerImage>[],
+  );
 
   /// [ChatConfigWidget.runContext], as something the composer can listen to.
   late final ValueNotifier<RunMentions?> runContext = ValueNotifier<RunMentions?>(
@@ -216,6 +243,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     skillTextController.dispose();
     textController.dispose();
     composerFocus.dispose();
+    images.dispose();
     runContext.dispose();
     chatSkills.dispose();
     super.dispose();
@@ -322,9 +350,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// text (or `Use the <name> skill.`) with `SKILL.md` embedded as a resource: the agent does not
   /// find those skills on disk. The project's own skills (`.claude/skills`) and every other text
   /// go as typed, as does a command whose `SKILL.md` cannot be read. Mentioned files follow as
-  /// `resource_link`s ([resourcesFor]).
+  /// `resource_link`s ([resourcesFor]), then the composer's [images] as `image` blocks.
   Future<({String text, List<Map<String, Object?>> resources})> promptFor(String text) async {
-    final files = await resourcesFor(text);
+    // Taken now: the caller clears the images it sent.
+    final pictures = <Map<String, Object?>>[for (final image in images.value) image.toBlock()];
+    final files = <Map<String, Object?>>[...await resourcesFor(text), ...pictures];
     final command = leadingCommand(text);
     final skill = command == null ? null : skillsOfChat.runnable(command.name);
     if (command == null || skill == null || skill.source == SkillSource.project) {
@@ -342,17 +372,35 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     );
   }
 
+  /// Takes [sent] out of [images]; one added while the message was prepared stays.
+  void _clearImages(List<ComposerImage> sent) {
+    if (sent.isEmpty) return;
+    images.value = <ComposerImage>[
+      for (final image in images.value)
+        if (!sent.contains(image)) image,
+    ];
+  }
+
+  /// The images cannot go to the chat's agent: says so and returns `true`.
+  bool _refuseImagesForAgent() {
+    if (images.value.isEmpty || _agentAcceptsImages) return false;
+    _tell(Localization.of(context).imagesNotAccepted);
+    return true;
+  }
+
   /// Sends the composer text ([promptFor]); the first prompt in a folder asks for trust.
   Future<void> send() async {
     final text = textController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _refuseImagesForAgent()) return;
     if (!widget.project.isTrusted) {
       final trusted = await ProjectTrustDialog.show(context, widget.project);
       if (!trusted || !mounted) return;
     }
+    final attached = images.value;
     final prompt = await promptFor(text);
     if (!mounted) return;
     textController.clear();
+    _clearImages(attached);
     promptController.send(sessionId, prompt.text, resources: prompt.resources);
   }
 
@@ -361,21 +409,24 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   Future<void> queue() async {
     final draft = textController.text.trim();
     // A second ⌘↵ while the first is being prepared would queue the same text again.
-    if (draft.isEmpty || _queueing) return;
+    if (draft.isEmpty || _queueing || _refuseImagesForAgent()) return;
     _queueing = true;
     try {
       if (!widget.project.isTrusted) {
         final trusted = await ProjectTrustDialog.show(context, widget.project);
         if (!trusted || !mounted) return;
       }
+      final attached = images.value;
       final prompt = await promptFor(draft);
       if (!mounted) return;
       textController.clear();
+      _clearImages(attached);
       queueController.add(
         QueuedPrompt(
           text: prompt.text,
           resources: prompt.resources,
           draft: prompt.text == draft ? null : draft,
+          images: attached,
         ),
       );
     } finally {
@@ -386,10 +437,18 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// [queue] is preparing a message.
   bool _queueing = false;
 
-  /// Takes the queued message at [index] out of the queue and back into the composer.
+  /// Takes the queued message at [index] out of the queue and back into the composer, its images
+  /// back into the chips.
   void editQueued(int index) {
     final prompt = queueController.edit(index);
-    if (prompt != null) insertDraft(prompt.typed);
+    if (prompt == null) return;
+    insertDraft(prompt.typed);
+    if (prompt.images.isNotEmpty) {
+      images.value = <ComposerImage>[
+        ...images.value,
+        ...prompt.images,
+      ].take(kMaxComposerImages).toList();
+    }
   }
 
   void removeQueued(int index) => queueController.remove(index);
@@ -455,24 +514,127 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final inside = await fileMentionController.insideProject(root, <String>[relative]);
     if (!mounted) return;
     if (inside.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(Localization.of(context).attachOutsideProject)));
+      _tell(Localization.of(context).attachOutsideProject);
       return;
     }
+    _insertAtCaret('@${inside.single}');
+    // The file list decides at send time which mentions become attachments.
+    refreshFiles();
+    composerFocus.requestFocus();
+  }
+
+  /// Puts [inserted] at the caret (in place of the selection), with a space before it when it
+  /// would be glued to a word and one after it, and moves the caret behind it.
+  void _insertAtCaret(String inserted) {
     final text = textController.text;
     final selection = textController.selection;
     final start = selection.isValid ? selection.start : text.length;
     final end = selection.isValid ? selection.end : text.length;
     final separator = start > 0 && !RegExp(r'\s').hasMatch(text[start - 1]) ? ' ' : '';
-    final inserted = '$separator@${inside.single} ';
+    final piece = '$separator$inserted ';
     textController.value = TextEditingValue(
-      text: text.replaceRange(start, end, inserted),
-      selection: TextSelection.collapsed(offset: start + inserted.length),
+      text: text.replaceRange(start, end, piece),
+      selection: TextSelection.collapsed(offset: start + piece.length),
     );
-    // The file list decides at send time which mentions become attachments.
-    refreshFiles();
-    composerFocus.requestFocus();
   }
+
+  /// Files and folders dropped on the chat: project ones become `@mentions` and outside ones
+  /// their absolute path, at the caret in drop order; images become chips.
+  Future<void> drop(List<String> paths) async {
+    final dropped = classifyDrop(paths, projectRoot: projectRoot);
+    final texts = <String>[for (final path in dropped) ?path.text];
+    if (texts.isNotEmpty) _insertAtCaret(texts.join(' '));
+    if (dropped.any((path) => path is DropMention)) refreshFiles();
+    composerFocus.requestFocus();
+    await _attachImageFiles(<String>[
+      for (final path in dropped)
+        if (path is DropImage) path.path,
+    ]);
+  }
+
+  /// Adds the image files at [paths] as chips; the first refusal is told in one line.
+  Future<void> _attachImageFiles(List<String> paths) async {
+    if (paths.isEmpty) return;
+    final localization = Localization.of(context);
+    String? refusal;
+    for (final path in paths) {
+      final name = p.basename(path);
+      String? reason;
+      try {
+        final file = File(path);
+        reason = _imageRefusal(localization, name, await file.length());
+        if (reason == null) {
+          final bytes = await file.readAsBytes();
+          if (!mounted) return;
+          reason = _addImage(
+            localization,
+            ComposerImage(name: name, mimeType: composerImageType(path)!, bytes: bytes),
+          );
+        }
+      } on FileSystemException {
+        reason = localization.imageUnreadable(name);
+      }
+      refusal ??= reason;
+    }
+    if (refusal != null && mounted) _tell(refusal);
+  }
+
+  /// ⌘V in the composer: the clipboard's image, if it holds one, becomes a chip.
+  Future<void> pasteImage() async {
+    final Uint8List? bytes;
+    try {
+      bytes = await widget.readClipboardImage();
+    } on Object {
+      return;
+    }
+    if (bytes == null || !mounted) return;
+    final localization = Localization.of(context);
+    final refusal = _addImage(
+      localization,
+      ComposerImage(name: 'clipboard.png', mimeType: 'image/png', bytes: bytes),
+    );
+    if (refusal != null) _tell(refusal);
+  }
+
+  /// Takes the chip of the image at [index] away.
+  void removeImage(int index) {
+    final list = images.value;
+    if (index < 0 || index >= list.length) return;
+    images.value = <ComposerImage>[...list]..removeAt(index);
+  }
+
+  /// The chat's agent takes images; an agent the app knows nothing about is not held back.
+  bool get _agentAcceptsImages {
+    final agentId = _view?.agentId;
+    return agentsController.agents
+            .where((agent) => agent.id == agentId)
+            .firstOrNull
+            ?.acceptsImages ??
+        true;
+  }
+
+  /// Why an image of [size] bytes cannot be added now; `null` when it can.
+  String? _imageRefusal(GeneratedLocalization localization, String name, int size) {
+    if (!_agentAcceptsImages) return localization.imagesNotAccepted;
+    if (images.value.length >= kMaxComposerImages) {
+      return localization.imageLimit(kMaxComposerImages);
+    }
+    if (size > kMaxComposerImageBytes) {
+      return localization.imageTooLarge(name, kMaxComposerImageBytes ~/ (1024 * 1024));
+    }
+    return null;
+  }
+
+  /// Adds [image] unless [_imageRefusal] says no; returns the refusal.
+  String? _addImage(GeneratedLocalization localization, ComposerImage image) {
+    final refusal = _imageRefusal(localization, image.name, image.bytes.length);
+    if (refusal == null) images.value = <ComposerImage>[...images.value, image];
+    return refusal;
+  }
+
+  /// One line at the bottom of the window.
+  void _tell(String message) =>
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
 
   /// Allows bypass for this chat and sends the prompt that was held back.
   Future<void> allowBypass() async {
@@ -522,5 +684,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   }
 
   @override
-  Widget build(BuildContext context) => ChatConfigInhWidget(state: this, child: const ChatScreen());
+  Widget build(BuildContext context) => ChatConfigInhWidget(
+    state: this,
+    child: ChatDropTarget(onDropped: drop, child: const ChatScreen()),
+  );
 }

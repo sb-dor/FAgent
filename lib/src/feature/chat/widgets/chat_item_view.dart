@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
@@ -9,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/expandable_row.dart'
 import 'package:flutter_code_agent/src/feature/chat/widgets/plan_card.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/tool_call_card.dart';
 import 'package:flutter_code_agent/src/feature/permission_request/widgets/permission_card.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/turn_files/widgets/turn_files_card.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
@@ -62,7 +66,7 @@ class ChatItemView extends StatelessWidget {
     final colors = context.colors;
     final muted = theme.textTheme.bodySmall?.copyWith(color: colors.muted);
     return switch (item) {
-      UserMessageItem(:final text, :final resources) => Align(
+      UserMessageItem(:final text, :final resources, :final images) => Align(
         alignment: Alignment.centerRight,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 560),
@@ -74,17 +78,27 @@ class ChatItemView extends StatelessWidget {
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: SelectableText.rich(
-                TextSpan(
-                  children: mentionSpans(
-                    text,
-                    resources,
-                    pill: AppText.mono(
-                      context,
-                      size: 13,
-                    ).copyWith(color: colors.accent, backgroundColor: colors.accentSoft),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SelectableText.rich(
+                    TextSpan(
+                      children: mentionSpans(
+                        text,
+                        resources,
+                        pill: AppText.mono(
+                          context,
+                          size: 13,
+                        ).copyWith(color: colors.accent, backgroundColor: colors.accentSoft),
+                      ),
+                    ),
                   ),
-                ),
+                  if (images.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 8),
+                    _MessageImages(images: images),
+                  ],
+                ],
               ),
             ),
           ),
@@ -148,4 +162,42 @@ class ChatItemView extends StatelessWidget {
       UnknownItem(:final kind) => Text(localization.unknownEvent(kind), style: muted),
     };
   }
+}
+
+/// The thumbnails of a user message's images; each is decoded once, not on every fold of the feed.
+class _MessageImages extends StatefulWidget {
+  const _MessageImages({required this.images});
+
+  final List<MessageImage> images;
+
+  @override
+  State<_MessageImages> createState() => _MessageImagesState();
+}
+
+class _MessageImagesState extends State<_MessageImages> {
+  final Map<String, Uint8List?> _decoded = <String, Uint8List?>{};
+
+  @override
+  void didUpdateWidget(_MessageImages oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final data = <String>{for (final image in widget.images) image.data};
+    _decoded.removeWhere((key, _) => !data.contains(key));
+  }
+
+  Uint8List? _bytes(String data) => _decoded.putIfAbsent(data, () {
+    try {
+      return base64Decode(data);
+    } on FormatException {
+      return null;
+    }
+  });
+
+  @override
+  Widget build(BuildContext context) => Wrap(
+    spacing: 8,
+    runSpacing: 8,
+    children: <Widget>[
+      for (final image in widget.images) ImageThumbnail(bytes: _bytes(image.data) ?? Uint8List(0)),
+    ],
+  );
 }

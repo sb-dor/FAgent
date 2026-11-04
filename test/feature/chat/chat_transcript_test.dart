@@ -251,6 +251,35 @@ void main() {
     expect(item.resources, <String>['file:///p/lib/main.dart']);
   });
 
+  test('image blocks of a prompt become the images of the user message', () {
+    final item =
+        ChatTranscript.fold(<SessionEvent>[
+              SessionEvent(
+                seq: 0,
+                origin: SessionEventOrigin.user,
+                kind: SessionEventKind.prompt,
+                payload: const <String, Object?>{
+                  'sessionId': 's',
+                  'prompt': <Object?>[
+                    <String, Object?>{'type': 'text', 'text': 'What is wrong here?'},
+                    <String, Object?>{'type': 'image', 'mimeType': 'image/png', 'data': 'AAAA'},
+                    <String, Object?>{'type': 'image', 'mimeType': 'image/jpeg', 'data': 'BBBB'},
+                    // Not an image the app can show.
+                    <String, Object?>{'type': 'image', 'mimeType': 'image/png'},
+                  ],
+                },
+                createdAt: DateTime(2026),
+              ),
+            ]).single
+            as UserMessageItem;
+
+    expect(item.text, 'What is wrong here?');
+    expect(item.images, const <MessageImage>[
+      MessageImage(mimeType: 'image/png', data: 'AAAA'),
+      MessageImage(mimeType: 'image/jpeg', data: 'BBBB'),
+    ]);
+  });
+
   test('rules resource hidden from the user message', () {
     final item =
         ChatTranscript.fold(<SessionEvent>[

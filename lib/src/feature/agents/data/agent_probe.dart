@@ -193,6 +193,7 @@ final class AgentProbeImpl implements IAgentProbe {
       loadSession: capabilities['loadSession'] == true,
       systemPrompt: _object(capabilities['sessionCapabilities'])['systemPrompt'] != null,
       canLogout: _object(capabilities['auth'])['logout'] != null,
+      image: _object(capabilities['promptCapabilities'])['image'] == true,
     );
   }
 

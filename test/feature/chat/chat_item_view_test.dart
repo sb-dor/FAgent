@@ -75,6 +75,34 @@ void main() {
     expect(find.text('@a.dart'), findsNothing);
   });
 
+  testWidgets('the images of a user message are thumbnails under its text', (tester) async {
+    useDesktopView(tester);
+    const png =
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    await tester.pumpWidget(
+      _item(
+        const UserMessageItem(
+          0,
+          text: 'look',
+          images: <MessageImage>[
+            MessageImage(mimeType: 'image/png', data: png),
+            MessageImage(mimeType: 'image/png', data: png),
+          ],
+        ),
+      ),
+    );
+
+    final thumbnails = find.descendant(
+      of: find.byType(ChatItemView),
+      matching: find.byType(Image),
+    );
+    expect(thumbnails, findsNWidgets(2));
+    expect(
+      tester.getTopLeft(thumbnails.first).dy,
+      greaterThan(tester.getTopLeft(find.text('look')).dy),
+    );
+  });
+
   group('clicking an edit row', () {
     const edit = ToolCallItem(
       0,

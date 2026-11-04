@@ -110,6 +110,17 @@ void main() {
     expect(result.systemPrompt, isFalse);
     expect(result.canLogout, isTrue);
     expect(result.authStatus, isNull);
+    expect(result.image, isFalse);
+  });
+
+  test('promptCapabilities.image is read', () async {
+    final probe = createProbe();
+    addTearDown(probe.dispose);
+
+    final result = await probe.probe(withEnvironment(<String, String>{'FAKE_AGENT_IMAGE': '1'}));
+
+    expect(result.failure, isNull);
+    expect(result.image, isTrue);
   });
 
   test('auth status notification is read, without the account', () async {
