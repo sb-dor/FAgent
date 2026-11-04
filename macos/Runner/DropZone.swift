@@ -14,8 +14,8 @@ import FlutterMacOS
 /// `NSTemporaryDirectory()/flutter_code_agent/drops/<uuid>/` (image data as `.png`), and the drop
 /// is sent once every promise has arrived or failed.
 ///
-/// `hitTest` returns nil, so clicks, scrolls and hovers go through to the Flutter view; AppKit
-/// finds drag destinations by their registered types.
+/// It keeps the default `hitTest`, as desktop_drop's view did: AppKit picks a drag destination by
+/// hit-testing, and the mouse events the view does not handle go on to the Flutter view.
 final class DropZoneView: NSView, FlutterStreamHandler {
   static let channelName = "flutter_code_agent/drop_zone"
 
@@ -57,8 +57,6 @@ final class DropZoneView: NSView, FlutterStreamHandler {
   required init?(coder: NSCoder) {
     fatalError("init(coder:) has not been implemented")
   }
-
-  override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
   // MARK: FlutterStreamHandler
 
