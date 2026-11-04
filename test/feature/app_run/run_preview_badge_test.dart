@@ -2,8 +2,10 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/picked_widget_card.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_mode_chip.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
@@ -106,6 +108,25 @@ void main() {
         await disposeTestApp(tester, dependencies);
       });
     }
+
+    testWidgets('choose the build mode with their mode chip', (tester) async {
+      final dependencies = testDependencies();
+      final state = await pump(tester, dependencies);
+      final chip = find.descendant(
+        of: find.byType(WorkspaceRunControls),
+        matching: find.byType(RunModeChip),
+      );
+
+      expect(chip, findsOneWidget);
+      await tester.tap(chip);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('profile').last);
+      await tester.pumpAndSettle();
+
+      expect(state.runController.state.mode, BuildMode.profile);
+      expect(find.descendant(of: chip, matching: find.text('profile')), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
   });
 
   group('the Run tab with a real run', () {

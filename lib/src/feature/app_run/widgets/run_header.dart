@@ -4,15 +4,14 @@ import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
-import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_mode_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_reload_switch.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_split_button.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_status.dart';
@@ -204,23 +203,7 @@ class RunHeader extends StatelessWidget {
                     onEditArguments: onEditArguments,
                   ),
                 },
-                SelectorChip<BuildMode>(
-                  label: state.mode.name,
-                  menuWidth: 160,
-                  sections: <AppMenuSection<BuildMode>>[
-                    AppMenuSection<BuildMode>(
-                      items: <AppMenuItem<BuildMode>>[
-                        for (final mode in BuildMode.values)
-                          AppMenuItem<BuildMode>(
-                            value: mode,
-                            title: mode.name,
-                            selected: mode == state.mode,
-                          ),
-                      ],
-                    ),
-                  ],
-                  onSelected: onMode,
-                ),
+                RunModeChip(mode: state.mode, onSelected: onMode),
                 Tooltip(
                   message: state.target,
                   child: DecoratedBox(
