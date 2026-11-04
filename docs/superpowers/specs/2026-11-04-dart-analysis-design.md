@@ -102,8 +102,8 @@ hover-документация, переход к определению и фо
 
 - `LspConnection`: кадры (несколько сообщений в одном чанке, сообщение по частям, кириллица в
   `Content-Length` байтах), запрос-ответ, ошибка, тайм-аут, уведомления, запрос сервера, закрытие.
-- Сервер и репозиторий — на поддельном LSP-сервере (Dart-скрипт в `test/support`, отвечает
-  сценарием): `initialize`, `didOpen`/`didChange` с версиями, `complete`, `diagnostics`,
+- Сервер и репозиторий — на поддельном LSP-процессе (`ScriptedLspProcess` в `test/support`, как
+  `ScriptedDaemonProcess`; отвечает сценарием): `initialize`, `didOpen`/`didChange` с версиями, `complete`, `diagnostics`,
   `$/analyzerStatus`, падение → `unavailable`, `restart`, `dispose` убивает процесс.
 - Сниппеты: разбор, Tab/⇧Tab, зеркала, `$0`, выход из режима; применение правки дополнения и
   `additionalTextEdits` (импорт сверху сдвигает строки).
