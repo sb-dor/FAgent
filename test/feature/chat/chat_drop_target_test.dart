@@ -153,7 +153,8 @@ void main() {
       await dropFiles(tester, <String>[p.join(root.path, 'notes.md')]);
 
       expect(chat.textController.text, 'read @notes.md now');
-      expect(chat.textController.selection, const TextSelection.collapsed(offset: 14));
+      // The caret goes past the space that follows the mention.
+      expect(chat.textController.selection, const TextSelection.collapsed(offset: 15));
     });
 
     testWidgets('a drop just before a space adds no second one', (tester) async {
@@ -166,7 +167,8 @@ void main() {
       await dropFiles(tester, <String>[p.join(root.path, 'notes.md')]);
 
       expect(chat.textController.text, 'read @notes.md now');
-      expect(chat.textController.selection, const TextSelection.collapsed(offset: 14));
+      // The caret goes past the space that follows the mention.
+      expect(chat.textController.selection, const TextSelection.collapsed(offset: 15));
     });
 
     testWidgets('a drop glued to a word gets a space before it, several go in order', (

@@ -533,7 +533,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   }
 
   /// Puts [inserted] at the caret (in place of the selection), with a space before and after it
-  /// unless one is already there, and moves the caret behind it.
+  /// unless one is already there, and moves the caret behind it and the space after it.
   void _insertAtCaret(String inserted) {
     final text = textController.text;
     final selection = textController.selection;
@@ -541,11 +541,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     final end = selection.isValid ? selection.end : text.length;
     final space = RegExp(r'\s');
     final before = start > 0 && !space.hasMatch(text[start - 1]) ? ' ' : '';
-    final after = end < text.length && space.hasMatch(text[end]) ? '' : ' ';
-    final piece = '$before$inserted$after';
+    final spaceFollows = end < text.length && space.hasMatch(text[end]);
+    final piece = '$before$inserted${spaceFollows ? '' : ' '}';
     textController.value = TextEditingValue(
       text: text.replaceRange(start, end, piece),
-      selection: TextSelection.collapsed(offset: start + piece.length),
+      // The caret goes past the space that was already there, as past the one added.
+      selection: TextSelection.collapsed(offset: start + piece.length + (spaceFollows ? 1 : 0)),
     );
   }
 
