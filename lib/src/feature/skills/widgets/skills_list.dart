@@ -104,6 +104,24 @@ class _SkillsListState extends State<SkillsList> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   Expanded(child: _items(context)),
+                  ValueListenableBuilder<Set<int>>(
+                    valueListenable: _scope.projectsWithoutRules,
+                    builder: (context, without, _) => switch (_scope.project) {
+                      final project? when without.contains(project.id) => Align(
+                        alignment: Alignment.centerLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: TextButton.icon(
+                            key: const ValueKey<String>('skills-add-project-rules'),
+                            icon: const Icon(Icons.rule_folder_outlined, size: 16),
+                            label: Text(localization.projectRulesButton),
+                            onPressed: _scope.offerProjectRules,
+                          ),
+                        ),
+                      ),
+                      _ => const SizedBox.shrink(),
+                    },
+                  ),
                   _RulesNote(text: localization.skillsRulesNote),
                 ],
               ),

@@ -31,13 +31,18 @@ const String _dartServerId = 'builtin:dart';
 const String _dartServerName = 'dart';
 
 /// The rules of [library] whose text goes into the rules prompt, in library order: the enabled
-/// ones, without the project's `AGENTS.md` ([KnowledgeItem.alwaysOn]; the file goes in as
+/// ones, without the built-in rules (they live in the project's `docs/rules`, which `AGENTS.md`
+/// points to) and without the project's `AGENTS.md` ([KnowledgeItem.alwaysOn]; the file goes in as
 /// `agentsMd`). With [agentReadsProjectRules] the project's rules are left out too
 /// ([KnowledgeItem.readByClaude]): the agent loads `.claude/rules` itself, so their text would
 /// reach it twice.
 List<KnowledgeItem> promptRules(SkillLibrary library, {required bool agentReadsProjectRules}) => [
   for (final rule in library.rules)
-    if (rule.enabled && !rule.alwaysOn && !(agentReadsProjectRules && rule.readByClaude)) rule,
+    if (rule.enabled &&
+        rule.source != SkillSource.builtin &&
+        !rule.alwaysOn &&
+        !(agentReadsProjectRules && rule.readByClaude))
+      rule,
 ];
 
 /// Builds the [SessionContext] of a chat.

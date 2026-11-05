@@ -36,7 +36,9 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repo
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
+import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
@@ -173,6 +175,15 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         builtin: AssetBuiltinKnowledge(bundle: rootBundle),
         userRoot: (await getApplicationSupportDirectory()).path,
       ),
+  'Create project rules repository': (dependencies) =>
+      dependencies.projectRulesRepository = ProjectRulesRepositoryImpl(
+        skills: dependencies.skillsRepository,
+        projects: ProjectsRepositoryImpl(
+          database: dependencies.database,
+          hub: dependencies.agentHub,
+          queuedChats: dependencies.chatQueues,
+        ),
+      ),
   'Create chat skills repository': (dependencies) =>
       dependencies.chatSkillsRepository = ChatSkillsRepositoryImpl(database: dependencies.database),
   'Create run config repository': (dependencies) =>
@@ -259,6 +270,7 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         environment: dependencies.shellEnvironment,
         projectOpening: ProjectOpeningRepositoryImpl(database: dependencies.database),
         projectTrust: ProjectTrustRepositoryImpl(database: dependencies.database),
+        projectRules: dependencies.projectRulesRepository,
         loadAsset: rootBundle.loadString,
       ),
 };

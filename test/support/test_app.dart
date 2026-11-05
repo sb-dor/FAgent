@@ -30,12 +30,14 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'fake_project_rules.dart';
 import 'flutter_version_runner.dart';
 import 'memory_agents_repository.dart';
 import 'memory_code_view_state_repository.dart';
@@ -91,6 +93,7 @@ Dependencies testDependencies({
   IAppMcpServer? appMcpServer,
   IMcpProbe? mcpProbe,
   DropZone? dropZone,
+  IProjectRulesRepository? projectRulesRepository,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
@@ -113,7 +116,7 @@ Dependencies testDependencies({
   final hub = AgentHub(database: database, environment: environment);
   final codeFiles = codeFilesRepository ?? CodeFilesRepositoryImpl(environment: environment);
   final codeState = codeViewStateRepository ?? MemoryCodeViewStateRepository();
-  return Dependencies()
+  final dependencies = Dependencies()
     ..database = database
     ..dropZone = dropZone ?? DropZone.fromStream(const Stream<DropZoneEvent>.empty())
     ..shellEnvironment = environment
@@ -164,6 +167,9 @@ Dependencies testDependencies({
             'rule:builtin:dart-style': '# dart-style\n',
           },
         );
+  return dependencies
+    // Every project has its rules: no test sees the offer unless it passes its own.
+    ..projectRulesRepository = projectRulesRepository ?? FakeProjectRules(allHaveRules: true);
 }
 
 /// Wraps [child] in the app's localizations, [theme] (light by default) and [dependencies].

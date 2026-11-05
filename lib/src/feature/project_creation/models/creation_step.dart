@@ -18,6 +18,9 @@ enum CreationStepKind {
   /// `flutter analyze`.
   analyze,
 
+  /// The app's rules: `docs/rules`, `AGENTS.md` and `CLAUDE.md`.
+  rules,
+
   /// The first commit.
   firstCommit,
 }
@@ -93,5 +96,6 @@ List<CreationStepKind> creationStepsFor(NewProjectRequest request) => <CreationS
   if (request.gitInit) CreationStepKind.gitInit,
   if (request.template == NewProjectTemplate.architecture) CreationStepKind.skeleton,
   CreationStepKind.analyze,
+  CreationStepKind.rules,
   if (request.gitInit) CreationStepKind.firstCommit,
 ];

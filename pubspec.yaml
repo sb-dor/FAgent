@@ -91,19 +91,6 @@ flutter:
   # listed.
   assets:
     - assets/knowledge/rules/
-    - assets/knowledge/skills/feature-architecture/
-    - assets/knowledge/skills/feature-architecture/templates/
-    - assets/knowledge/skills/repository-streams/
-    - assets/knowledge/skills/repository-streams/templates/
-    - assets/knowledge/skills/paginated-controller/
-    - assets/knowledge/skills/paginated-controller/templates/
-    - assets/knowledge/skills/controller-patterns/
-    - assets/knowledge/skills/controller-patterns/templates/
-    - assets/knowledge/skills/dependency-injection/
-    - assets/knowledge/skills/dependency-injection/templates/
-    - assets/knowledge/skills/drift-migration/
-    - assets/knowledge/skills/pub-freshness/
-    - assets/knowledge/skills/widget-test/
     - assets/project_template/architecture/
     - assets/project_template/architecture/lib/
     - assets/project_template/architecture/lib/src/common/utils/

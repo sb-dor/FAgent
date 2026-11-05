@@ -185,7 +185,12 @@ void main() {
       useDesktopView(tester);
       await pumpScreen(tester);
 
-      expect(find.text('Rules apply to new and reopened chats'), findsOneWidget);
+      expect(
+        find.text(
+          'Your rules apply to new and reopened chats; built-in rules are added to projects in docs/rules',
+        ),
+        findsOneWidget,
+      );
       await disposeTestApp(tester, dependencies);
     });
 
@@ -193,7 +198,12 @@ void main() {
       useDesktopView(tester);
       await pumpScreen(tester, locale: const Locale('ru'));
 
-      expect(find.text('Правила применятся к новым и заново открытым чатам'), findsOneWidget);
+      expect(
+        find.text(
+          'Ваши правила применятся к новым и заново открытым чатам; встроенные добавляются в проект в docs/rules',
+        ),
+        findsOneWidget,
+      );
       await disposeTestApp(tester, dependencies);
     });
 

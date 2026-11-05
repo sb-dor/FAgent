@@ -24,4 +24,8 @@ class ProjectsTable extends Table {
   /// When the user allowed agents to run this folder's settings and hooks.
   /// No agent session starts in the project while this is `null`.
   DateTimeColumn get trustedAt => dateTime().nullable()();
+
+  /// Whether the app already offered to write its rules into the project's `docs/rules` (the
+  /// user added them, declined, or the app created the project with them).
+  BoolColumn get rulesOffered => boolean().withDefault(const Constant(false))();
 }

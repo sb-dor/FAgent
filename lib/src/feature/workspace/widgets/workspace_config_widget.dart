@@ -30,6 +30,9 @@ import 'package:flutter_code_agent/src/feature/project_creation/controller/proje
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/controller/project_rules_controller.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/models/project_rule.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/widgets/project_rules_dialog.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/project_removal_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
@@ -90,6 +93,22 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
 
   /// Renames and deletes chats from the sidebar.
   late final ChatActionsController chatActionsController;
+
+  /// Offers the app's rules to projects without `docs/rules`.
+  late final ProjectRulesController projectRulesController;
+
+  /// The projects known to have no `docs/rules` (the Rules section offers them).
+  final ValueNotifier<Set<int>> projectsWithoutRules = ValueNotifier<Set<int>>(const <int>{});
+
+  /// The project whose rules were last checked on selection, so a project is checked once.
+  int? _rulesCheckedFor;
+
+  /// A project the user asked to add the rules to (the Rules button): its offer shows even when
+  /// it is not the selected one.
+  int? _rulesAskedFor;
+
+  /// Whether the rules dialog is open.
+  bool _rulesDialogOpen = false;
 
   /// The agents and where they stand: the sidebar names the agent of a chat after them.
   late final AgentsController agentsController;
@@ -164,6 +183,8 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
         queuedChats: dependencies.chatQueues,
       ),
     )..addListener(_onChatAction);
+    projectRulesController = ProjectRulesController(repository: dependencies.projectRulesRepository)
+      ..addListener(_onProjectRules);
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionCreationController = SessionCreationController(
       repository: SessionCreationRepositoryImpl(database: dependencies.database),
@@ -190,28 +211,35 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       isPreview: runIsPreview,
     );
     skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
-    projectsController.addListener(_followSkills);
+    projectsController
+      ..addListener(_followSkills)
+      ..addListener(_followRules);
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
     dataController
       ..addListener(_followSelectedProject)
       ..addListener(_followSkills)
       ..addListener(_carryCodeMode)
+      ..addListener(_followRules)
       ..addListener(_draft.onSelectionChanged)
       ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
     _followSkills();
+    _followRules();
     dependencies.codeViews.formatOnSave = () => settingsController.settings.formatOnSave;
   }
 
   @override
   void dispose() {
     runLink.dispose();
-    projectsController.removeListener(_followSkills);
+    projectsController
+      ..removeListener(_followSkills)
+      ..removeListener(_followRules);
     dataController
       ..removeListener(_followSelectedProject)
       ..removeListener(_followSkills)
       ..removeListener(_carryCodeMode)
+      ..removeListener(_followRules)
       ..removeListener(_draft.onSelectionChanged)
       ..chatHandle.removeListener(_draft.onHandleChanged)
       ..dispose();
@@ -237,6 +265,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     chatActionsController
       ..removeListener(_onChatAction)
       ..dispose();
+    projectRulesController
+      ..removeListener(_onProjectRules)
+      ..dispose();
+    projectsWithoutRules.dispose();
     projectsController.dispose();
     sessionsController.dispose();
     agentsController.dispose();
@@ -724,6 +756,69 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
         _showError();
       default:
         break;
+    }
+  }
+
+  /// A selected project is checked once for `docs/rules`: without them, it is offered the rules.
+  void _followRules() {
+    final project = selectedProject;
+    if (project == null || project.id == _rulesCheckedFor) return;
+    _rulesCheckedFor = project.id;
+    projectRulesController.check(project);
+  }
+
+  /// Checks [project] for `docs/rules` (the Skills screen shows another project than the sidebar).
+  void checkProjectRules(Project project) => projectRulesController.check(project);
+
+  /// Offers the rules to [project] because the user asked for it.
+  void offerProjectRules(Project project) {
+    _rulesAskedFor = project.id;
+    projectRulesController.offer(project);
+  }
+
+  void _markRules(int projectId, {required bool missing}) {
+    final ids = <int>{...projectsWithoutRules.value};
+    if (missing ? ids.add(projectId) : ids.remove(projectId)) projectsWithoutRules.value = ids;
+  }
+
+  void _onProjectRules() {
+    switch (projectRulesController.state) {
+      case ProjectRules$OfferState(:final projectId, :final root, :final rules):
+        _markRules(projectId, missing: true);
+        final asked = _rulesAskedFor == projectId;
+        _rulesAskedFor = null;
+        // Only for the project in view: an answer never goes to another one.
+        if (_rulesDialogOpen || (!asked && selectedProject?.id != projectId)) return;
+        _askRules(projectId, root, rules).ignore();
+      case ProjectRules$PresentState(:final projectId) ||
+          ProjectRules$WrittenState(:final projectId):
+        _markRules(projectId, missing: false);
+      case ProjectRules$MissingState(:final projectId):
+        _markRules(projectId, missing: true);
+      case ProjectRules$FailedState(:final error):
+        _showMessage(
+          error is io.FileSystemException
+              ? '${Localization.of(context).somethingWentWrong}: ${error.osError?.message ?? error.message}'
+              : Localization.of(context).somethingWentWrong,
+        );
+      case ProjectRules$IdleState() || ProjectRules$WritingState():
+        break;
+    }
+  }
+
+  Future<void> _askRules(int projectId, String root, List<ProjectRule> rules) async {
+    _rulesDialogOpen = true;
+    final List<ProjectRule>? chosen;
+    try {
+      chosen = await ProjectRulesDialog.show(context, rules);
+    } finally {
+      _rulesDialogOpen = false;
+    }
+    if (!mounted) return;
+    if (chosen == null) {
+      projectRulesController.dismiss(projectId);
+    } else {
+      projectRulesController.add(projectId, root, chosen);
     }
   }
 

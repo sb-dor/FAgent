@@ -13,6 +13,8 @@ import 'package:flutter_code_agent/src/feature/project_creation/data/project_tem
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/models/project_rule.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -75,6 +77,33 @@ final class _StubTrust implements IProjectTrustRepository {
   Future<void> trust(int projectId) async => trusted.add(projectId);
 }
 
+final class _StubRules implements IProjectRulesRepository {
+  List<ProjectRule> rules = const <ProjectRule>[
+    ProjectRule(id: 'rule:builtin:a', name: 'a', description: 'A', enabled: true),
+    ProjectRule(id: 'rule:builtin:b', name: 'b', description: 'B', enabled: false),
+  ];
+  final List<(String, List<String>)> written = <(String, List<String>)>[];
+  final List<int> offered = <int>[];
+
+  @override
+  Future<bool> hasRules(String projectRoot) async => false;
+
+  @override
+  Future<bool> canHaveRules(String projectRoot) async => true;
+
+  @override
+  Future<List<ProjectRule>> builtinRules() async => rules;
+
+  @override
+  Future<void> write(String projectRoot, List<ProjectRule> rules) async {
+    written.add((projectRoot, <String>[for (final rule in rules) rule.name]));
+    Directory(p.join(projectRoot, 'docs', 'rules')).createSync(recursive: true);
+  }
+
+  @override
+  Future<void> markOffered(int projectId) async => offered.add(projectId);
+}
+
 void main() {
   late Directory root;
   late Directory parent;
@@ -83,6 +112,7 @@ void main() {
   late _StubSdk sdk;
   late _StubOpening opening;
   late _StubTrust trust;
+  late _StubRules rules;
   late List<ScriptedDaemonProcess> started;
   late ShellEnvironment environment;
 
@@ -113,6 +143,7 @@ void main() {
       environment: environment,
       projectOpening: opening,
       projectTrust: trust,
+      projectRules: rules,
       loadAsset: (key) => File(key).readAsString(),
       startProcess: (executable, arguments, {workingDirectory, environment}) async {
         final process = await inner(
@@ -139,6 +170,7 @@ void main() {
     sdk = _StubSdk();
     opening = _StubOpening();
     trust = _StubTrust();
+    rules = _StubRules();
     started = <ScriptedDaemonProcess>[];
     script = finish;
   });
@@ -241,6 +273,7 @@ void main() {
         CreationStepKind.gitInit,
         CreationStepKind.skeleton,
         CreationStepKind.analyze,
+        CreationStepKind.rules,
         CreationStepKind.firstCommit,
       ]);
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
@@ -265,6 +298,7 @@ void main() {
       expect(runs.last.steps.map((step) => step.kind), <CreationStepKind>[
         CreationStepKind.flutterCreate,
         CreationStepKind.analyze,
+        CreationStepKind.rules,
       ]);
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
     });
@@ -363,6 +397,7 @@ void main() {
         environment: environment,
         projectOpening: opening,
         projectTrust: trust,
+        projectRules: rules,
         loadAsset: (key) => File(key).readAsString(),
         startProcess: (executable, arguments, {workingDirectory, environment}) =>
             throw const ProcessException('flutter', <String>[], 'No such file or directory'),
@@ -524,6 +559,44 @@ void main() {
       expect(kCreationOutputKept, 200);
       expect(output.first, 'line 801');
       expect(output.last, 'line 1000');
+    });
+
+    test('the rules step writes the enabled rules before the first commit', () async {
+      bool? rulesAtAdd;
+      script = (process) {
+        if (process.executable == git() && process.arguments.first == 'add') {
+          rulesAtAdd = Directory(p.join(path(), 'docs', 'rules')).existsSync();
+        }
+        finish(process);
+      };
+
+      final runs = await build().create(request()).toList();
+
+      expect(rules.written.single.$1, path());
+      expect(rules.written.single.$2, <String>['a']);
+      expect(rulesAtAdd, isTrue);
+      final kinds = runs.last.steps.map((step) => step.kind).toList();
+      expect(
+        kinds.indexOf(CreationStepKind.rules),
+        kinds.indexOf(CreationStepKind.firstCommit) - 1,
+      );
+    });
+
+    test('no enabled rule writes nothing', () async {
+      rules.rules = const <ProjectRule>[
+        ProjectRule(id: 'rule:builtin:b', name: 'b', description: 'B', enabled: false),
+      ];
+
+      final runs = await build().create(request()).toList();
+
+      expect(rules.written, isEmpty);
+      expect(step(runs.last, CreationStepKind.rules).status, CreationStepStatus.done);
+    });
+
+    test('a created project is marked as offered', () async {
+      await build().create(request()).toList();
+
+      expect(rules.offered, <int>[_projectId]);
     });
 
     test('success adds and trusts the project', () async {

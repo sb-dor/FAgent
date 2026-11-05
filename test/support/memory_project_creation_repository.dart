@@ -10,6 +10,7 @@ const Map<CreationStepKind, Duration> _stepDurations = <CreationStepKind, Durati
   CreationStepKind.gitInit: Duration(seconds: 1),
   CreationStepKind.skeleton: Duration(seconds: 3),
   CreationStepKind.analyze: Duration(seconds: 2),
+  CreationStepKind.rules: Duration(milliseconds: 200),
   CreationStepKind.firstCommit: Duration(seconds: 1),
 };
 
@@ -23,6 +24,7 @@ List<String> _stepOutput(CreationStepKind kind, String name) => switch (kind) {
     '⌁ dart run build_runner build',
   ],
   CreationStepKind.analyze => const <String>['No issues found!'],
+  CreationStepKind.rules => const <String>['✎ docs/rules/architecture.md'],
   CreationStepKind.gitInit || CreationStepKind.firstCommit => const <String>[],
 };
 

@@ -13,6 +13,7 @@ class Project {
     required this.name,
     required this.isFlutter,
     this.trustedAt,
+    this.rulesOffered = false,
   });
 
   /// Maps a database row.
@@ -22,6 +23,7 @@ class Project {
     name: row.name,
     isFlutter: row.isFlutter,
     trustedAt: row.trustedAt,
+    rulesOffered: row.rulesOffered,
   );
 
   /// `projects.id`.
@@ -39,6 +41,9 @@ class Project {
   /// When the user allowed agents to run the folder's settings and hooks.
   final DateTime? trustedAt;
 
+  /// Whether the app already offered to write its rules into the project's `docs/rules`.
+  final bool rulesOffered;
+
   /// Whether agent sessions may start here.
   bool get isTrusted => trustedAt != null;
 
@@ -49,8 +54,9 @@ class Project {
       other.path == path &&
       other.name == name &&
       other.isFlutter == isFlutter &&
-      other.trustedAt == trustedAt;
+      other.trustedAt == trustedAt &&
+      other.rulesOffered == rulesOffered;
 
   @override
-  int get hashCode => Object.hash(id, path, name, isFlutter, trustedAt);
+  int get hashCode => Object.hash(id, path, name, isFlutter, trustedAt, rulesOffered);
 }
