@@ -1,4 +1,5 @@
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
@@ -167,6 +168,22 @@ class SkillsConfigWidgetState extends State<SkillsConfigWidget> {
     }
     final current = project;
     library.watch(projectId: current?.id, projectRoot: current?.path);
+    // Once per project of the screen: whether it has `docs/rules` (the Rules section asks).
+    if (current != null && current.id != _rulesCheckedFor) {
+      _rulesCheckedFor = current.id;
+      _workspace.checkProjectRules(current);
+    }
+  }
+
+  int? _rulesCheckedFor;
+
+  /// The projects known to have no `docs/rules`.
+  ValueListenable<Set<int>> get projectsWithoutRules => _workspace.projectsWithoutRules;
+
+  /// Offers the app's rules to the project of the screen.
+  void offerProjectRules() {
+    final current = project;
+    if (current != null) _workspace.offerProjectRules(current);
   }
 
   /// Tells the user about a failed action, and opens the item a finished one made.

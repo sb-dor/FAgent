@@ -28,6 +28,25 @@ class SkillScope extends StatelessWidget {
     final localization = Localization.of(context);
     // Claude Code loads `.claude/rules` itself, so a switch here would change nothing.
     if (item.readByClaude) return Text(localization.skillClaudeReadsRule);
+    final scope = _scopeSwitches(context);
+    // A built-in rule is not sent to agents: its switch picks it for the project's docs/rules.
+    if (item.kind != KnowledgeKind.rule || item.source != SkillSource.builtin) return scope;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        scope,
+        const SizedBox(height: 6),
+        Text(
+          localization.skillsBuiltinRuleHint,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(color: context.colors.muted),
+        ),
+      ],
+    );
+  }
+
+  Widget _scopeSwitches(BuildContext context) {
+    final localization = Localization.of(context);
     final scope = SkillsConfigInhWidget.of(context);
     return ListenableBuilder(
       listenable: scope.projectsListenable,
