@@ -54,7 +54,7 @@ void main() {
   late AppMcpServerImpl server;
   late AgentHub hub;
   late int projectId;
-  late List<String> builtinSkills;
+  late List<String> knownSkills;
 
   setUpAll(() async {
     if (!enabled) return;
@@ -70,10 +70,13 @@ void main() {
       builtin: _DiskKnowledge(),
       userRoot: p.join(temp.path, 'support'),
     );
-    builtinSkills = [
-      for (final directory in Directory('assets/knowledge/skills').listSync())
-        if (directory is Directory) p.basename(directory.path),
-    ];
+    // The app ships no built-in skills: the user's own one is what list_skills finds.
+    File(p.join(temp.path, 'support', 'skills', 'probe-skill', 'SKILL.md'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(
+        '---\nname: probe-skill\ndescription: "A skill the test looks for."\n---\n\n# Probe\n',
+      );
+    knownSkills = <String>['probe-skill'];
     final chatSkills = ChatSkillsRepositoryImpl(database: database);
     final catalog = ChatSkillCatalog(skills: skills, chatSkills: chatSkills);
     tokens = AppMcpTokens(database: database);
@@ -178,7 +181,7 @@ void main() {
   );
 
   test(
-    'Claude calls list_skills without asking and names a built-in skill',
+    'Claude calls list_skills without asking and names the user skill',
     () async {
       final chat = await newChat();
 
@@ -188,7 +191,7 @@ void main() {
       expect(calls, isNotEmpty, reason: 'list_skills was not called: ${reply(events)}');
       // The server only speaks the legacy protocol: a completed call means the tools were listed.
       expect(completed(calls), isTrue, reason: '$calls');
-      expect(builtinSkills.any(reply(events).contains), isTrue, reason: reply(events));
+      expect(knownSkills.any(reply(events).contains), isTrue, reason: reply(events));
     },
     skip: enabled ? false : 'Talks to the real Claude adapter; set FLUTTER_AGENT_TEST=1',
     timeout: const Timeout(Duration(minutes: 10)),
@@ -211,7 +214,7 @@ void main() {
       final calls = toolEvents(events, 'list_skills');
       expect(calls, isNotEmpty, reason: 'list_skills was not called: ${reply(events)}');
       expect(completed(calls), isTrue, reason: '$calls');
-      expect(builtinSkills.any(reply(events).contains), isTrue, reason: reply(events));
+      expect(knownSkills.any(reply(events).contains), isTrue, reason: reply(events));
       expect(
         events.where(
           (e) => jsonEncode(e.payload).contains('mcp__${appMcpServerName}__authenticate'),
