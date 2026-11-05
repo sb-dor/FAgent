@@ -7,9 +7,11 @@ import 'dart:io' as io;
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_format.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:re_editor/re_editor.dart';
 
 /// Opt-in: `DART_LSP_TEST=1 flutter test --tags dart_analysis test/integration/dart_analysis_test.dart`.
 ///
@@ -79,5 +81,82 @@ void main() {
     final error = diagnostics.diagnostics.firstWhere((d) => d.severity == DartSeverity.error);
     expect(error.range.start, const LspPosition(line: 0, character: 14));
     expect(error.code, isNotNull);
+  }, skip: enabled ? false : 'Runs the real dart language-server; set DART_LSP_TEST=1');
+
+  /// Asks [request] until [done] holds or a minute passes (the server may still be analyzing).
+  Future<T> eventually<T>(Future<T> Function() request, bool Function(T value) done) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 1));
+    var value = await request();
+    while (!done(value) && DateTime.now().isBefore(deadline)) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      value = await request();
+    }
+    return value;
+  }
+
+  const widget =
+      "import 'package:flutter/widgets.dart';\n\n"
+      'class Probe extends StatelessWidget {\n'
+      '  const Probe({super.key});\n\n'
+      '  @override\n'
+      '  Widget build(BuildContext context) => const SizedBox();\n'
+      '}\n';
+  // `StatelessWidget` on line 2, from column 20.
+  const onStateless = LspPosition(line: 2, character: 22);
+
+  test('hover on StatelessWidget gives its docs', () async {
+    analysis.open(file, widget);
+    await ready();
+
+    final hover = await eventually(
+      () => analysis.hover(file, widget, onStateless),
+      (hover) => hover != null,
+    );
+
+    expect(hover?.markdown, contains('StatelessWidget'));
+  }, skip: enabled ? false : 'Runs the real dart language-server; set DART_LSP_TEST=1');
+
+  test('the definition of StatelessWidget is in the Flutter SDK', () async {
+    analysis.open(file, widget);
+    await ready();
+
+    final locations = await eventually(
+      () => analysis.definition(file, widget, onStateless),
+      (locations) => locations.isNotEmpty,
+    );
+
+    expect(locations.single.path, endsWith('framework.dart'));
+    expect(p.isWithin(root, locations.single.path), isFalse);
+  }, skip: enabled ? false : 'Runs the real dart language-server; set DART_LSP_TEST=1');
+
+  test('references to a local function include its declaration and its call', () async {
+    const text = 'void foo() {}\n\nvoid main() {\n  foo();\n}\n';
+    analysis.open(file, text);
+    await ready();
+
+    final locations = await eventually(
+      () => analysis.references(file, text, const LspPosition(line: 3, character: 3)),
+      (locations) => locations.length >= 2,
+    );
+
+    expect(locations.map((l) => (l.path, l.range.start.line)).toSet(), <(String, int)>{
+      (file, 0),
+      (file, 3),
+    });
+  }, skip: enabled ? false : 'Runs the real dart language-server; set DART_LSP_TEST=1');
+
+  test('formatting void  main( ){} gives void main() {}', () async {
+    const text = 'void  main( ){}\n';
+    analysis.open(file, text);
+    await ready();
+
+    final edits = await eventually(
+      () => analysis.format(file, text),
+      (edits) => edits != null && edits.isNotEmpty,
+    );
+    final editing = CodeLineEditingController(codeLines: CodeLines.fromText(text));
+    applyTextEdits(editing, edits!);
+
+    expect(editing.text, 'void main() {}\n');
   }, skip: enabled ? false : 'Runs the real dart language-server; set DART_LSP_TEST=1');
 }
