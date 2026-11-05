@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/dart_analysis/dart_analysis_server
 import 'package:flutter_code_agent/src/common/dart_analysis/lsp_process.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/scripted_lsp_process.dart';
@@ -368,5 +369,127 @@ void main() {
     await process.exit(1);
 
     await analysis.exited.timeout(const Duration(seconds: 1));
+  });
+
+  group('navigation', () {
+    const position = LspPosition(line: 2, character: 4);
+    const rangeJson = <String, Object?>{
+      'start': <String, Object?>{'line': 3, 'character': 6},
+      'end': <String, Object?>{'line': 3, 'character': 9},
+    };
+    const range = LspRange(
+      start: LspPosition(line: 3, character: 6),
+      end: LspPosition(line: 3, character: 9),
+    );
+    const target = LspLocation(path: '/p/lib/a.dart', range: range);
+
+    test('initialize declares hover, definition, references and formatting', () async {
+      process = server();
+      final analysis = await start();
+      addTearDown(analysis.dispose);
+
+      final params = sent('initialize')['params']! as Map<String, Object?>;
+      final document = (params['capabilities']! as Map)['textDocument'] as Map;
+      expect((document['hover'] as Map)['contentFormat'], <String>['markdown', 'plaintext']);
+      expect(document.keys, containsAll(<String>['definition', 'references', 'formatting']));
+    });
+
+    test('hover reads markdown contents and range', () async {
+      Object? answer = <String, Object?>{
+        'contents': <String, Object?>{'kind': 'markdown', 'value': '```dart\nint x\n```\nDoc.'},
+        'range': rangeJson,
+      };
+      process = server(
+        answers: <String, Object? Function(Map<String, Object?>)>{
+          'textDocument/hover': (_) => answer,
+        },
+      );
+      final analysis = await start();
+      addTearDown(analysis.dispose);
+
+      final hover = await analysis.hover(file, position);
+
+      expect(hover?.markdown, '```dart\nint x\n```\nDoc.');
+      expect(hover?.range, range);
+      expect(sent('textDocument/hover')['params'], <String, Object?>{
+        'textDocument': <String, Object?>{'uri': uri},
+        'position': position.toJson(),
+      });
+      answer = null;
+      expect(await analysis.hover(file, position), isNull);
+    });
+
+    test('definition reads Location and LocationLink', () async {
+      Object? answer;
+      process = server(
+        answers: <String, Object? Function(Map<String, Object?>)>{
+          'textDocument/definition': (_) => answer,
+        },
+      );
+      final analysis = await start();
+      addTearDown(analysis.dispose);
+
+      answer = <Object?>[
+        <String, Object?>{'uri': 'file:///p/lib/a.dart', 'range': rangeJson},
+      ];
+      expect(await analysis.definition(file, position), <LspLocation>[target]);
+      answer = <Object?>[
+        <String, Object?>{
+          'targetUri': 'file:///p/lib/a.dart',
+          'targetRange': <String, Object?>{
+            'start': <String, Object?>{'line': 1, 'character': 0},
+            'end': <String, Object?>{'line': 5, 'character': 1},
+          },
+          'targetSelectionRange': rangeJson,
+        },
+      ];
+      expect(await analysis.definition(file, position), <LspLocation>[target]);
+      answer = <String, Object?>{'uri': 'file:///p/lib/a.dart', 'range': rangeJson};
+      expect(await analysis.definition(file, position), <LspLocation>[target]);
+      answer = null;
+      expect(await analysis.definition(file, position), isEmpty);
+    });
+
+    test('references sends includeDeclaration', () async {
+      process = server(
+        answers: <String, Object? Function(Map<String, Object?>)>{
+          'textDocument/references': (_) => <Object?>[
+            <String, Object?>{'uri': 'file:///p/lib/a.dart', 'range': rangeJson},
+          ],
+        },
+      );
+      final analysis = await start();
+      addTearDown(analysis.dispose);
+
+      expect(await analysis.references(file, position), <LspLocation>[target]);
+      expect(sent('textDocument/references')['params'], <String, Object?>{
+        'textDocument': <String, Object?>{'uri': uri},
+        'position': position.toJson(),
+        'context': <String, Object?>{'includeDeclaration': true},
+      });
+    });
+
+    test('format returns edits, null on a null result', () async {
+      Object? answer = <Object?>[
+        <String, Object?>{'range': rangeJson, 'newText': ' '},
+      ];
+      process = server(
+        answers: <String, Object? Function(Map<String, Object?>)>{
+          'textDocument/formatting': (_) => answer,
+        },
+      );
+      final analysis = await start();
+      addTearDown(analysis.dispose);
+
+      expect(await analysis.format(file), <LspTextEdit>[
+        const LspTextEdit(range: range, newText: ' '),
+      ]);
+      expect(sent('textDocument/formatting')['params'], <String, Object?>{
+        'textDocument': <String, Object?>{'uri': uri},
+        'options': <String, Object?>{'tabSize': 2, 'insertSpaces': true},
+      });
+      answer = null;
+      expect(await analysis.format(file), isNull);
+    });
   });
 }

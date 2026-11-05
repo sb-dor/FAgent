@@ -4,6 +4,8 @@ import 'package:flutter_code_agent/src/common/dart_analysis/lsp_connection.dart'
 import 'package:flutter_code_agent/src/common/dart_analysis/lsp_process.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
@@ -71,6 +73,12 @@ final class DartAnalysisServer {
               'contextSupport': true,
             },
             'publishDiagnostics': <String, Object?>{},
+            'hover': <String, Object?>{
+              'contentFormat': <String>['markdown', 'plaintext'],
+            },
+            'definition': <String, Object?>{'linkSupport': true},
+            'references': <String, Object?>{},
+            'formatting': <String, Object?>{},
           },
         },
       }, timeout: initializeTimeout);
@@ -165,6 +173,46 @@ final class DartAnalysisServer {
     return result is Map<String, Object?>
         ? completion.withResolved(DartCompletion.fromJson(result))
         : completion;
+  }
+
+  Map<String, Object?> _at(String path, LspPosition position) => <String, Object?>{
+    'textDocument': <String, Object?>{'uri': _uri(path)},
+    'position': position.toJson(),
+  };
+
+  /// The declaration and dartdoc of the name at [position] of [path]; `null` where there is none.
+  Future<DartHover?> hover(String path, LspPosition position) async =>
+      DartHover.fromJson(await _connection.request('textDocument/hover', _at(path, position)));
+
+  /// Where the name at [position] of [path] is declared.
+  Future<List<LspLocation>> definition(String path, LspPosition position) async =>
+      LspLocation.listFromJson(
+        await _connection.request('textDocument/definition', _at(path, position)),
+      );
+
+  /// Every use of the name at [position] of [path], its declaration included.
+  Future<List<LspLocation>> references(String path, LspPosition position) async =>
+      LspLocation.listFromJson(
+        await _connection.request('textDocument/references', <String, Object?>{
+          ..._at(path, position),
+          'context': <String, Object?>{'includeDeclaration': true},
+        }),
+      );
+
+  /// The edits that format [path]; `null` when the server cannot (a syntax error).
+  Future<List<LspTextEdit>?> format(
+    String path, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final result = await _connection.request('textDocument/formatting', <String, Object?>{
+      'textDocument': <String, Object?>{'uri': _uri(path)},
+      'options': <String, Object?>{'tabSize': 2, 'insertSpaces': true},
+    }, timeout: timeout);
+    if (result is! List) return null;
+    return <LspTextEdit>[
+      for (final edit in result)
+        if (edit is Map) LspTextEdit.fromJson(edit),
+    ];
   }
 
   void _onNotification(LspNotification notification) {
