@@ -4,8 +4,8 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
-import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_range.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
@@ -315,4 +315,54 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testCode('completion cannot edit a read-only tab', (tester) async {
+    analysis.onComplete = (path, text, position) => const <DartCompletion>[
+      DartCompletion(label: 'int', kind: DartCompletionKind.keyword, insertText: 'int'),
+    ];
+    await pump(tester);
+    await tester.runAsync(() => workspace.tabs.open(outside));
+    await settle(tester);
+    await tester.tap(find.byType(CodeEditor));
+    await tester.pump();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await settle(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await settle(tester);
+
+    expect(workspace.tabs.active?.path, outside);
+    expect(workspace.tabs.active?.editing.text, 'class A {}\nvoid other() {}\n');
+  });
+
+  testCode('a read-only tab shows its package label on the tab', (tester) async {
+    await pump(tester);
+    await tester.runAsync(() => workspace.tabs.open(outside));
+    await settle(tester);
+
+    // No package_config.json here: the label is the path.
+    expect(find.text(outside), findsOneWidget);
+  });
+
+  testCode('↓ past the visible rows scrolls the highlighted one into view', (tester) async {
+    analysis.onReferences = (path, text, position) => <LspLocation>[
+      for (var i = 0; i < 30; i++) at('$root/lib/f${'$i'.padLeft(2, '0')}.dart', 0, 0, 1),
+    ];
+    await pump(tester);
+    await caretOnOther(tester);
+    await press(tester, LogicalKeyboardKey.f12, shift: true);
+
+    for (var i = 0; i < 25; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+    }
+    await settle(tester);
+
+    final dialog = tester.getRect(find.byType(CodeReferencesDialog));
+    final row = find.text('lib/f25.dart:1');
+    expect(row, findsOneWidget);
+    expect(tester.getRect(row).bottom, lessThanOrEqualTo(dialog.bottom));
+    expect(tester.getRect(row).top, greaterThanOrEqualTo(dialog.top));
+  });
 }

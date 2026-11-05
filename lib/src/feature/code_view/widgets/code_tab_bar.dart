@@ -246,11 +246,17 @@ class _TabState extends State<_Tab> {
                       ),
                       const SizedBox(width: 4),
                     ],
-                    Text(
-                      p.basename(document.path),
-                      style: textTheme.bodySmall?.copyWith(
-                        color: widget.active ? colors.text : colors.muted,
-                        decoration: document.deleted ? TextDecoration.lineThrough : null,
+                    ConstrainedBox(
+                      // A read-only file shows its `package:` name, which can be long.
+                      constraints: const BoxConstraints(maxWidth: 320),
+                      child: Text(
+                        document.readOnly ? widget.tooltip : p.basename(document.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: widget.active ? colors.text : colors.muted,
+                          decoration: document.deleted ? TextDecoration.lineThrough : null,
+                        ),
                       ),
                     ),
                     if (document.errorCount > 0) ...<Widget>[

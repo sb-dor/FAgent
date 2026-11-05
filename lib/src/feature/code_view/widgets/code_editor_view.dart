@@ -149,8 +149,12 @@ class _CodeEditorViewState extends State<CodeEditorView> {
   void _attach() {
     final analysis = widget.analysis;
     if (analysis == null || !widget.document.path.endsWith('.dart')) return;
-    _completion = DartCompletionController(document: widget.document, analysis: analysis)
-      ..addListener(_onCompletion);
+    // A read-only file is never edited: no completion, which inserts text past the editor's own
+    // read-only gate.
+    if (!widget.document.readOnly) {
+      _completion = DartCompletionController(document: widget.document, analysis: analysis)
+        ..addListener(_onCompletion);
+    }
     _navigation = CodeNavigationController(document: widget.document, analysis: analysis)
       ..addListener(_onNavigation);
     final document = widget.document;
@@ -412,24 +416,17 @@ class _CodeEditorViewState extends State<CodeEditorView> {
             return null;
           },
         ),
-        CodeShortcutEscIntent: _WhenAction<CodeShortcutEscIntent>(
-          enabled: () => _dismissible(completion),
-          onInvoke: (_) {
-            _dismiss(completion);
-            return null;
-          },
-        ),
       };
 
   /// Esc has something to close: the list, a snippet or the hover card.
-  bool _dismissible(DartCompletionController completion) =>
-      completion.open || completion.snippet != null || _navigation?.hover != null;
+  bool _dismissible(DartCompletionController? completion) =>
+      (completion?.open ?? false) || completion?.snippet != null || _navigation?.hover != null;
 
-  void _dismiss(DartCompletionController completion) {
-    if (completion.open) {
+  void _dismiss(DartCompletionController? completion) {
+    if (completion != null && completion.open) {
       completion.dismiss();
-    } else if (completion.snippet != null) {
-      completion.endSnippet();
+    } else if (completion?.snippet != null) {
+      completion!.endSnippet();
     } else {
       _navigation?.dismissHover();
     }
@@ -486,7 +483,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
         ),
       },
     );
-    if (completion == null) return KeyedSubtree(key: _editorKey, child: editor);
+    if (_navigation == null) return KeyedSubtree(key: _editorKey, child: editor);
     // The editor asks the nearest `Actions` above it before its own handling, so these take ↑↓,
     // Enter, Tab, ⇧Tab and Esc only while the list or a snippet is there.
     return Shortcuts(
@@ -499,13 +496,23 @@ class _CodeEditorViewState extends State<CodeEditorView> {
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
-          ..._completionActions(completion),
-          _CompleteIntent: CallbackAction<_CompleteIntent>(
+          if (completion != null) ...<Type, Action<Intent>>{
+            ..._completionActions(completion),
+            _CompleteIntent: CallbackAction<_CompleteIntent>(
+              onInvoke: (_) {
+                completion.trigger();
+                return null;
+              },
+            ),
+          },
+          CodeShortcutEscIntent: _WhenAction<CodeShortcutEscIntent>(
+            enabled: () => _dismissible(completion),
             onInvoke: (_) {
-              completion.trigger();
+              _dismiss(completion);
               return null;
             },
           ),
+
           _FormatIntent: CallbackAction<_FormatIntent>(
             onInvoke: (_) {
               if (widget.analysis case final analysis?) {

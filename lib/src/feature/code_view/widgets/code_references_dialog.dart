@@ -48,8 +48,25 @@ class CodeReferencesDialog extends StatefulWidget {
 
 class _CodeReferencesDialogState extends State<CodeReferencesDialog> {
   final TextEditingController _query = TextEditingController();
+  final ScrollController _scroll = ScrollController();
   late List<CodeReference> _matches = widget.references;
   int _highlighted = 0;
+
+  /// Height of a row: the file line and the code line.
+  static const double _rowExtent = 44;
+
+  /// Scrolls the list so the highlighted row is fully visible.
+  void _reveal() {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    final top = _highlighted * _rowExtent;
+    final bottom = top + _rowExtent;
+    if (top < position.pixels) {
+      _scroll.jumpTo(top);
+    } else if (bottom > position.pixels + position.viewportDimension) {
+      _scroll.jumpTo((bottom - position.viewportDimension).clamp(0, position.maxScrollExtent));
+    }
+  }
 
   @override
   void initState() {
@@ -76,12 +93,14 @@ class _CodeReferencesDialogState extends State<CodeReferencesDialog> {
     };
     if (step == 0 || _matches.isEmpty) return KeyEventResult.ignored;
     setState(() => _highlighted = (_highlighted + step).clamp(0, _matches.length - 1));
+    _reveal();
     return KeyEventResult.handled;
   }
 
   @override
   void dispose() {
     _query.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
@@ -126,6 +145,8 @@ class _CodeReferencesDialogState extends State<CodeReferencesDialog> {
             ),
             Flexible(
               child: ListView.builder(
+                controller: _scroll,
+                itemExtent: _rowExtent,
                 shrinkWrap: true,
                 padding: const EdgeInsets.only(bottom: 8),
                 itemCount: _matches.length,
@@ -140,8 +161,9 @@ class _CodeReferencesDialogState extends State<CodeReferencesDialog> {
                           ? colors.accentSoft
                           : colors.bg.withValues(alpha: 0),
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(
