@@ -3,8 +3,10 @@ import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
@@ -161,6 +163,58 @@ final class CodeWorkspace {
 
   Future<void> _openAt(String path, LspPosition? at) =>
       tabs.open(path, line: at == null ? null : at.line + 1, column: at?.character ?? 0);
+
+  /// The rows of [locations] for the references list: each file read once (from its tab when it
+  /// is open), files of the project first, then by path and line.
+  Future<List<CodeReference>> referencesFor(List<LspLocation> locations) async {
+    final labels = await this.labels;
+    final lines = <String, List<String>>{};
+    for (final path in locations.map((location) => location.path).toSet()) {
+      final open = tabs.tabs.where((tab) => tab.path == path && tab.kind == CodeDocumentKind.text);
+      final lineBreak = RegExp(r'\r\n|\r|\n');
+      if (open.firstOrNull case final document?) {
+        // The whole text, folded blocks included.
+        lines[path] = document.editing.text.split(lineBreak);
+        continue;
+      }
+      try {
+        lines[path] = (await _files.read(path)).text.split(lineBreak);
+      } on Object {
+        lines[path] = const <String>[];
+      }
+    }
+    final references = <CodeReference>[
+      for (final location in locations)
+        () {
+          final fileLines = lines[location.path]!;
+          final line = location.range.start.line;
+          final raw = line < fileLines.length ? fileLines[line] : '';
+          final indent = raw.length - raw.trimLeft().length;
+          final column = location.range.start.character;
+          final end = location.range.end.line == line ? location.range.end.character : raw.length;
+          return (
+            path: location.path,
+            label: p.isWithin(root, location.path)
+                ? p.relative(location.path, from: root)
+                : labels.labelFor(location.path),
+            line: line,
+            column: column,
+            start: (column - indent).clamp(0, raw.trim().length),
+            end: (end - indent).clamp(0, raw.trim().length),
+            text: raw.trim(),
+          );
+        }(),
+    ];
+    int rank(CodeReference reference) => p.isWithin(root, reference.path) ? 0 : 1;
+    references.sort(
+      (a, b) => rank(a) != rank(b)
+          ? rank(a).compareTo(rank(b))
+          : a.path != b.path
+          ? a.path.compareTo(b.path)
+          : a.line.compareTo(b.line),
+    );
+    return references;
+  }
 
   /// Goes to the place the last jump left; a place whose file is gone is skipped.
   Future<void> goBack() => _walk(history.back);

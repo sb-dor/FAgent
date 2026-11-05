@@ -1,7 +1,12 @@
+import 'dart:async';
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/dart_completion_controller.dart';
@@ -16,7 +21,8 @@ import 'package:re_editor/re_editor.dart';
 
 /// {@template code_editor_view}
 /// The editor on one text [document]: line numbers, folding, highlighting in the app's colors and
-/// find (⌘F); for a Dart file with an [analysis], completion at the caret and the hover card. [find] and [scroll]
+/// find (⌘F); for a Dart file with an [analysis], completion at the caret, the hover card, and
+/// go to definition (F12, ⌘-click) and find references (⇧F12) through [onJump]. [find] and [scroll]
 /// belong to the document's tab, so they outlive this widget when another tab is shown.
 /// {@endtemplate}
 class CodeEditorView extends StatefulWidget {
@@ -27,6 +33,7 @@ class CodeEditorView extends StatefulWidget {
     required this.scroll,
     required this.onSave,
     this.analysis,
+    this.onJump,
     super.key,
   });
 
@@ -45,6 +52,13 @@ class CodeEditorView extends StatefulWidget {
   /// The project's Dart analysis; completion needs it and a `.dart` file.
   final IDartAnalysisRepository? analysis;
 
+  /// Opens what go to definition ([references] `false`) or find references found; `false` when
+  /// nothing could be opened (the file is gone), so the editor says nothing was found.
+  final Future<bool> Function(CodeJump jump, {required bool references})? onJump;
+
+  /// How long "No definition found" stays.
+  static const Duration messageDuration = Duration(seconds: 2);
+
   /// Font size of the code.
   static const double fontSize = 13;
 
@@ -61,6 +75,16 @@ class CodeEditorView extends StatefulWidget {
 /// ⌃Space: open the completion list.
 final class _CompleteIntent extends Intent {
   const _CompleteIntent();
+}
+
+/// F12: go to definition.
+final class _DefinitionIntent extends Intent {
+  const _DefinitionIntent();
+}
+
+/// ⇧F12: find references.
+final class _ReferencesIntent extends Intent {
+  const _ReferencesIntent();
 }
 
 /// Esc outside the editor's own handling: close the list or end the snippet.
@@ -93,6 +117,10 @@ class _CodeEditorViewState extends State<CodeEditorView> {
   final OverlayPortalController _hoverOverlay = OverlayPortalController();
   DartCompletionController? _completion;
   CodeNavigationController? _navigation;
+
+  /// "No definition found" at the bottom of the editor, for [CodeEditorView.messageDuration].
+  String? _message;
+  Timer? _messageTimer;
 
   @override
   void initState() {
@@ -138,6 +166,42 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           colors: context.colors,
         );
     document.editing.forceRepaint();
+  }
+
+  void _showMessage(String message) {
+    if (!mounted) return;
+    _messageTimer?.cancel();
+    setState(() => _message = message);
+    _messageTimer = Timer(CodeEditorView.messageDuration, () {
+      if (mounted) setState(() => _message = null);
+    });
+  }
+
+  /// Go to definition, or find references, for the name at the caret.
+  Future<void> _jump({required bool references}) async {
+    final navigation = _navigation;
+    final onJump = widget.onJump;
+    if (navigation == null || onJump == null) return;
+    final jump = references
+        ? await navigation.referencesAtCaret()
+        : await navigation.definitionAtCaret();
+    if (!mounted || jump == null) return;
+    final localization = Localization.of(context);
+    final missing = references ? localization.codeNoReferences : localization.codeNoDefinition;
+    if (jump.locations.isEmpty) {
+      _showMessage(missing);
+      return;
+    }
+    final opened = await onJump(jump, references: references);
+    if (!opened) _showMessage(missing);
+  }
+
+  /// A ⌘-click: the editor has put the caret on the clicked name by the next frame.
+  void _onPointerUp(PointerUpEvent event) {
+    if (event.kind != PointerDeviceKind.mouse || !HardwareKeyboard.instance.isMetaPressed) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _jump(references: false).ignore();
+    });
   }
 
   void _onNavigation() {
@@ -239,6 +303,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
 
   @override
   void dispose() {
+    _messageTimer?.cancel();
     _detach();
     super.dispose();
   }
@@ -422,6 +487,8 @@ class _CodeEditorViewState extends State<CodeEditorView> {
       shortcuts: const <ShortcutActivator, Intent>{
         SingleActivator(LogicalKeyboardKey.space, control: true): _CompleteIntent(),
         SingleActivator(LogicalKeyboardKey.escape): _DismissIntent(),
+        SingleActivator(LogicalKeyboardKey.f12): _DefinitionIntent(),
+        SingleActivator(LogicalKeyboardKey.f12, shift: true): _ReferencesIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -429,6 +496,18 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           _CompleteIntent: CallbackAction<_CompleteIntent>(
             onInvoke: (_) {
               completion.trigger();
+              return null;
+            },
+          ),
+          _DefinitionIntent: CallbackAction<_DefinitionIntent>(
+            onInvoke: (_) {
+              _jump(references: false).ignore();
+              return null;
+            },
+          ),
+          _ReferencesIntent: CallbackAction<_ReferencesIntent>(
+            onInvoke: (_) {
+              _jump(references: true).ignore();
               return null;
             },
           ),
@@ -452,11 +531,55 @@ class _CodeEditorViewState extends State<CodeEditorView> {
             controller: _hoverOverlay,
             overlayChildBuilder: (overlayContext) =>
                 Positioned.fill(child: Stack(children: <Widget>[_buildHover(overlayContext)])),
-            child: MouseRegion(
-              onHover: _onPointerHover,
-              onExit: (_) => _navigation?.pointerLeft(),
-              child: KeyedSubtree(key: _editorKey, child: editor),
+            child: Stack(
+              children: <Widget>[
+                Positioned.fill(
+                  child: Listener(
+                    onPointerUp: _onPointerUp,
+                    child: MouseRegion(
+                      onHover: _onPointerHover,
+                      onExit: (_) => _navigation?.pointerLeft(),
+                      child: KeyedSubtree(key: _editorKey, child: editor),
+                    ),
+                  ),
+                ),
+                if (_message case final message?)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 12,
+                    child: Center(child: _EditorMessage(message: message)),
+                  ),
+              ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EditorMessage extends StatelessWidget {
+  const _EditorMessage({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    return IgnorePointer(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: colors.surface,
+          border: Border.all(color: colors.border),
+          borderRadius: BorderRadius.circular(AppRadius.small),
+          boxShadow: <BoxShadow>[BoxShadow(color: colors.shadow, blurRadius: 6)],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Text(
+            message,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.text),
           ),
         ),
       ),

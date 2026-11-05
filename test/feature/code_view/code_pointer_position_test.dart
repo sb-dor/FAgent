@@ -1,4 +1,3 @@
-
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_range.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_pointer_position.dart';
 import 'package:flutter_test/flutter_test.dart';

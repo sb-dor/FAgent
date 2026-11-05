@@ -2,10 +2,12 @@ import 'dart:io' as io;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_range.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_package_labels.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
@@ -14,6 +16,7 @@ import 'package:flutter_code_agent/src/feature/code_view/widgets/code_editor_vie
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_explorer.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_file_bars.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_quick_open.dart';
+import 'package:flutter_code_agent/src/feature/code_view/widgets/code_references_dialog.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_tab_bar.dart';
 import 'package:path/path.dart' as p;
 
@@ -135,6 +138,36 @@ class _CodeViewState extends State<CodeView> {
     }
   }
 
+  /// Opens what go to definition or find references found: one definition directly, the rest
+  /// through the list; `false` when the chosen file is gone.
+  Future<bool> _jump(CodeJump jump, {required bool references}) async {
+    Future<bool> go(String path, LspPosition at) async {
+      try {
+        await _workspace.navigateTo(path, at: at);
+        return true;
+      } on io.PathNotFoundException {
+        return false;
+      }
+    }
+
+    if (!references && jump.locations.length == 1) {
+      final location = jump.locations.single;
+      return go(location.path, location.range.start);
+    }
+    final rows = await _workspace.referencesFor(jump.locations);
+    if (!mounted) return true;
+    final localization = Localization.of(context);
+    final picked = await showCodeReferences(
+      context,
+      title: references
+          ? localization.codeReferencesTitle(jump.name, rows.length)
+          : localization.codeDefinitionsTitle(jump.name, rows.length),
+      references: rows,
+    );
+    if (picked == null) return true;
+    return go(picked.path, LspPosition(line: picked.line, character: picked.column));
+  }
+
   /// A question with [answers] as buttons, the last one the default.
   Future<T?> _ask<T>({required String title, required List<(T?, String)> answers}) => showDialog<T>(
     context: context,
@@ -229,6 +262,7 @@ class _CodeViewState extends State<CodeView> {
               scroll: _workspace.viewOf(active).scroll,
               onSave: () => _save(active).ignore(),
               analysis: _workspace.analysis,
+              onJump: _jump,
             ),
             CodeDocumentKind.image => CodeImageView(path: active.path),
             CodeDocumentKind.notText ||

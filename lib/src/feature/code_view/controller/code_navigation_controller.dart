@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:re_editor/re_editor.dart';
@@ -26,6 +27,22 @@ final class CodeHoverInfo {
   /// The pointer when the card was asked for, global.
   final Offset anchor;
 }
+
+/// What go to definition or find references found: the [name] at the caret and its places.
+typedef CodeJump = ({String name, List<LspLocation> locations});
+
+/// One use (or declaration) of a name: the file, its short [label], the 0-based [line], the name's
+/// column in the file ([column]), and the trimmed code [text] of that line with the name at
+/// [start]–[end] in it.
+typedef CodeReference = ({
+  String path,
+  String label,
+  int line,
+  int column,
+  int start,
+  int end,
+  String text,
+});
 
 /// Whether [position] is within [range] (an empty range holds its own start).
 bool lspRangeContains(LspRange range, LspPosition position) {
@@ -139,6 +156,43 @@ final class CodeNavigationController extends ChangeNotifier {
         (diagnostics.isEmpty ? null : diagnostics.first.range) ??
         LspRange(start: position, end: position);
     notifyListeners();
+  }
+
+  /// Where the name at the caret is declared; `null` when the text or the caret changed before the
+  /// answer came.
+  Future<CodeJump?> definitionAtCaret() =>
+      _jump((position) => _analysis.definition(_document.path, _editing.text, position));
+
+  /// Every use of the name at the caret, its declaration included; `null` when the text or the
+  /// caret changed before the answer came.
+  Future<CodeJump?> referencesAtCaret() =>
+      _jump((position) => _analysis.references(_document.path, _editing.text, position));
+
+  static final RegExp _wordChar = RegExp(r'[A-Za-z0-9_$]');
+
+  Future<CodeJump?> _jump(Future<List<LspLocation>> Function(LspPosition position) ask) async {
+    dismissHover();
+    final lines = _editing.codeLines;
+    final selection = _editing.selection;
+    final line = lines.index2lineIndex(selection.extentIndex);
+    final position = LspPosition(
+      line: line < 0 ? selection.extentIndex : line,
+      character: selection.extentOffset,
+    );
+    final text = lines[selection.extentIndex].text;
+    var start = selection.extentOffset.clamp(0, text.length);
+    var end = start;
+    while (start > 0 && _wordChar.hasMatch(text[start - 1])) {
+      start--;
+    }
+    while (end < text.length && _wordChar.hasMatch(text[end])) {
+      end++;
+    }
+    final locations = await ask(position);
+    if (_disposed || !identical(lines, _editing.codeLines) || selection != _editing.selection) {
+      return null;
+    }
+    return (name: text.substring(start, end), locations: locations);
   }
 
   void _onEditing() {
