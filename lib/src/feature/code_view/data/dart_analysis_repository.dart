@@ -5,6 +5,8 @@ import 'package:flutter_code_agent/src/common/dart_analysis/dart_analysis_server
 import 'package:flutter_code_agent/src/common/dart_analysis/lsp_process.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -50,6 +52,21 @@ abstract interface class IDartAnalysisRepository {
 
   /// [completion] with what the server sends only on demand (an `import`).
   Future<DartCompletion> resolve(DartCompletion completion);
+
+  /// The declaration and dartdoc of the name at [position] of [path] (whose text is [text] now);
+  /// `null` without one or without a server.
+  Future<DartHover?> hover(String path, String text, LspPosition position);
+
+  /// Where the name at [position] of [path] is declared; empty without a server.
+  Future<List<LspLocation>> definition(String path, String text, LspPosition position);
+
+  /// Every use of the name at [position] of [path], its declaration included; empty without a
+  /// server.
+  Future<List<LspLocation>> references(String path, String text, LspPosition position);
+
+  /// The edits that format [path] (whose text is [text] now); `null` when the server cannot within
+  /// 2 s (no server, a syntax error).
+  Future<List<LspTextEdit>?> format(String path, String text);
 
   /// The server's errors and warnings, a file at a time.
   Stream<DartFileDiagnostics> get diagnostics;
@@ -236,6 +253,41 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
       return completion;
     }
   }
+
+  /// Sends [text] of the open [path] and asks [request]; [fallback] without a server or on an
+  /// error.
+  Future<T> _ask<T>(
+    String path,
+    String text,
+    T fallback,
+    Future<T> Function(DartAnalysisServer server) request,
+  ) async {
+    final server = _server;
+    if (server == null || !_open.containsKey(path)) return fallback;
+    _flush(path, text);
+    try {
+      return await request(server);
+    } on Object catch (error) {
+      l.v('Dart analysis | request failed: $error');
+      return fallback;
+    }
+  }
+
+  @override
+  Future<DartHover?> hover(String path, String text, LspPosition position) =>
+      _ask<DartHover?>(path, text, null, (server) => server.hover(path, position));
+
+  @override
+  Future<List<LspLocation>> definition(String path, String text, LspPosition position) =>
+      _ask(path, text, const <LspLocation>[], (server) => server.definition(path, position));
+
+  @override
+  Future<List<LspLocation>> references(String path, String text, LspPosition position) =>
+      _ask(path, text, const <LspLocation>[], (server) => server.references(path, position));
+
+  @override
+  Future<List<LspTextEdit>?> format(String path, String text) =>
+      _ask<List<LspTextEdit>?>(path, text, null, (server) => server.format(path));
 
   /// Drops the current server without stopping it (it is gone or being stopped).
   void _forget() {
