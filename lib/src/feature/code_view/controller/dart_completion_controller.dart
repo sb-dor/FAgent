@@ -133,21 +133,6 @@ final class DartCompletionController extends ChangeNotifier {
     return line < 0 ? index : line;
   }
 
-  /// Opens every folded block, so visible lines are document lines again (LSP edits count the
-  /// latter).
-  void _unfoldAll() {
-    var folded = true;
-    while (folded) {
-      folded = false;
-      for (var i = _editing.codeLines.length - 1; i >= 0; i--) {
-        if (_editing.codeLines[i].chunkParent) {
-          _editing.expandChunk(i);
-          folded = true;
-        }
-      }
-    }
-  }
-
   void _narrow() {
     final word = _word().toLowerCase();
     final byStart = <DartCompletion>[];
@@ -195,7 +180,7 @@ final class DartCompletionController extends ChangeNotifier {
     if (_disposed) return;
     _applying = true;
     try {
-      _unfoldAll();
+      _document.unfoldAll();
     } finally {
       _applying = false;
     }

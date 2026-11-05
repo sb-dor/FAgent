@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_package_labels.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_analysis_footer.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_editor_view.dart';
@@ -44,6 +45,35 @@ class CodeView extends StatefulWidget {
 
 class _CodeViewState extends State<CodeView> {
   CodeWorkspace get _workspace => widget.workspace;
+
+  /// The project's package names, once read: the tooltips of read-only tabs.
+  CodePackageLabels? _labels;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLabels();
+  }
+
+  @override
+  void didUpdateWidget(CodeView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.workspace, widget.workspace)) {
+      _labels = null;
+      _loadLabels();
+    }
+  }
+
+  void _loadLabels() {
+    final workspace = _workspace;
+    workspace.labels.then((labels) {
+      if (mounted && identical(workspace, _workspace)) setState(() => _labels = labels);
+    }).ignore();
+  }
+
+  String _labelFor(CodeDocument document) => document.readOnly
+      ? _labels?.labelFor(document.path) ?? document.path
+      : p.relative(document.path, from: _workspace.root);
 
   Future<void> _open(String path) async {
     try {
@@ -170,7 +200,7 @@ class _CodeViewState extends State<CodeView> {
         CodeTabBar(
           tabs: tabs.tabs,
           active: active,
-          root: _workspace.root,
+          labelFor: _labelFor,
           onActivate: (document) => tabs.activate(document.path),
           onClose: (document) => _close(document).ignore(),
           onOpenExternally: widget.onOpenExternally,

@@ -229,10 +229,7 @@ void main() {
     final detail = List<String>.filled(200, 'boom').join(' ');
     await pumpCard(
       tester,
-      RunPickState(
-        projectId: 1,
-        problem: PickFailed(PickFailure.inspectorError, detail: detail),
-      ),
+      RunPickState(projectId: 1, problem: PickFailed(PickFailure.inspectorError, detail: detail)),
     );
 
     final text = tester.widget<Text>(find.textContaining('The widget inspector failed: boom'));

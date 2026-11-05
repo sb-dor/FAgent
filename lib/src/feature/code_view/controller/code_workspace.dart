@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
@@ -7,8 +8,10 @@ import 'package:flutter_code_agent/src/feature/code_view/controller/code_documen
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_package_labels.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
+import 'package:path/path.dart' as p;
 import 'package:re_editor/re_editor.dart';
 
 /// {@template code_workspace}
@@ -23,7 +26,7 @@ final class CodeWorkspace {
     required ICodeFilesRepository files,
     required ICodeViewStateRepository state,
     this.analysis,
-  }) {
+  }) : _files = files {
     // One watch for both; it stops once both stopped listening.
     final changes = files
         .watch(root)
@@ -45,6 +48,24 @@ final class CodeWorkspace {
 
   /// The Dart analysis of the project; `null` without one (tests).
   final IDartAnalysisRepository? analysis;
+
+  final ICodeFilesRepository _files;
+
+  /// Short names of files outside the project, from its `.dart_tool/package_config.json`; read
+  /// once, on first use.
+  Future<CodePackageLabels> get labels => _labels ??= _loadLabels();
+  Future<CodePackageLabels>? _labels;
+
+  Future<CodePackageLabels> _loadLabels() async {
+    final home = io.Platform.environment['HOME'] ?? '';
+    final configDir = p.join(root, '.dart_tool');
+    try {
+      final content = await _files.read(p.join(configDir, 'package_config.json'));
+      return CodePackageLabels.parse(content.text, configDir: configDir, home: home);
+    } on Object {
+      return CodePackageLabels.none(home: home);
+    }
+  }
 
   /// The last diagnostics the analysis published, by file (it analyzes the whole project).
   final Map<String, List<DartDiagnostic>> _published = <String, List<DartDiagnostic>>{};

@@ -281,6 +281,25 @@ void main() {
     expect(workspace.tabs.active?.path, main);
   });
 
+  testCode('a read-only tab cannot be edited, find works, replace is hidden', (tester) async {
+    const outside = '/sdk/lib/a.dart';
+    files.put(outside, 'class A {}\n', notify: false);
+    await pump(tester, open: <String>[outside]);
+
+    expect(find.byIcon(Icons.lock_outline), findsOneWidget);
+    expect(find.byTooltip('Read-only'), findsOneWidget);
+    expect(find.byTooltip(outside), findsOneWidget);
+    await focusEditor(tester);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyX);
+    await tester.sendKeyEvent(LogicalKeyboardKey.backspace);
+    await settle(tester);
+    expect(document(outside).editing.text, 'class A {}\n');
+
+    await shortcut(tester, LogicalKeyboardKey.keyF);
+    expect(find.byKey(const ValueKey<String>('code-find-panel')), findsOneWidget);
+    expect(find.byTooltip('Toggle replace'), findsNothing);
+  });
+
   testCode('Esc with find open closes find and stays in Code', (tester) async {
     await pump(tester);
     await focusEditor(tester);

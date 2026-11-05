@@ -428,7 +428,10 @@ void main() {
       await rightClick(tester, 'Booking screen');
       await tester.tap(find.text('Rename'));
       await tester.pumpAndSettle();
-      final field = find.descendant(of: find.byType(WorkspaceSidebar), matching: find.byType(TextField));
+      final field = find.descendant(
+        of: find.byType(WorkspaceSidebar),
+        matching: find.byType(TextField),
+      );
       expect(field, findsOneWidget);
       expect(tester.widget<TextField>(field).controller!.text, 'Booking screen');
 
@@ -450,7 +453,10 @@ void main() {
         chat = await addChat(await addProject('avera-hotel'), 'Booking screen');
       });
       await pumpSidebar(tester);
-      final field = find.descendant(of: find.byType(WorkspaceSidebar), matching: find.byType(TextField));
+      final field = find.descendant(
+        of: find.byType(WorkspaceSidebar),
+        matching: find.byType(TextField),
+      );
 
       await rightClick(tester, 'Booking screen');
       await tester.tap(find.text('Rename'));
@@ -482,7 +488,10 @@ void main() {
       await rightClick(tester, 'Booking screen');
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
-      expect(find.text('Delete the chat “Booking screen”? Its history is deleted.'), findsOneWidget);
+      expect(
+        find.text('Delete the chat “Booking screen”? Its history is deleted.'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(await tester.runAsync(() => titleOf(chat)), 'Booking screen');

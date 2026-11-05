@@ -9,14 +9,15 @@ import 'package:path/path.dart' as p;
 
 /// {@template code_tab_bar}
 /// The open files of the Code view: the file name, ● while unsaved (✕ on hover), «Deleted» for a
-/// file gone from disk; a click shows the file, ✕ or a middle click closes it.
+/// file gone from disk, 🔒 for a read-only file; a click shows the file, ✕ or a middle click
+/// closes it.
 /// {@endtemplate}
 class CodeTabBar extends StatelessWidget {
   /// {@macro code_tab_bar}
   const CodeTabBar({
     required this.tabs,
     required this.active,
-    required this.root,
+    required this.labelFor,
     required this.onActivate,
     required this.onClose,
     required this.onOpenExternally,
@@ -29,8 +30,8 @@ class CodeTabBar extends StatelessWidget {
   /// The shown file.
   final CodeDocument? active;
 
-  /// The project's folder, for the relative path in the tooltip.
-  final String root;
+  /// The tab's tooltip: the path relative to the project, or `package:…` outside it.
+  final String Function(CodeDocument document) labelFor;
 
   /// Shows a file.
   final ValueChanged<CodeDocument> onActivate;
@@ -58,7 +59,7 @@ class CodeTabBar extends StatelessWidget {
               _Tab(
                 document: tab,
                 active: identical(tab, active),
-                tooltip: p.relative(tab.path, from: root),
+                tooltip: labelFor(tab),
                 onActivate: () => onActivate(tab),
                 onClose: () => onClose(tab),
                 onOpenExternally: () => onOpenExternally(tab.path),
@@ -176,6 +177,13 @@ class _TabState extends State<_Tab> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
+                    if (document.readOnly) ...<Widget>[
+                      Tooltip(
+                        message: Localization.of(context).codeReadOnly,
+                        child: Icon(Icons.lock_outline, size: 14, color: colors.muted),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     Text(
                       p.basename(document.path),
                       style: textTheme.bodySmall?.copyWith(

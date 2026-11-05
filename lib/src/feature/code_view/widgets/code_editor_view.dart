@@ -348,6 +348,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
     final completion = _completion;
     final editor = CodeEditor(
       controller: widget.document.editing,
+      readOnly: widget.document.readOnly,
       findController: widget.find,
       scrollController: widget.scroll,
       wordWrap: false,

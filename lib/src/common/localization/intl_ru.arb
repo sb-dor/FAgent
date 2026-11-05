@@ -611,6 +611,7 @@
   "codeReplaceAll": "Заменить все",
   "codeFindNoResults": "Нет совпадений",
   "codeFindToggleReplace": "Показать замену",
+  "codeReadOnly": "Только для чтения",
   "codeMatchCase": "С учётом регистра",
   "codeRegex": "Регулярное выражение",
   "quitUnsavedTitle": "Несохранённые изменения",

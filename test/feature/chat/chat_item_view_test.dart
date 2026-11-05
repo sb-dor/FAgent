@@ -53,9 +53,7 @@ void main() {
   // Every test builds its own in-memory database.
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
-  testWidgets('outside files of a user message show as cards, mentions stay pills', (
-    tester,
-  ) async {
+  testWidgets('outside files of a user message show as cards, mentions stay pills', (tester) async {
     useDesktopView(tester);
     await tester.pumpWidget(
       _item(
@@ -76,9 +74,7 @@ void main() {
   testWidgets('a user message of cards alone shows them', (tester) async {
     useDesktopView(tester);
     await tester.pumpWidget(
-      _item(
-        const UserMessageItem(0, text: '', resources: <String>['file:///Users/me/Downloads/']),
-      ),
+      _item(const UserMessageItem(0, text: '', resources: <String>['file:///Users/me/Downloads/'])),
     );
 
     expect(find.byType(FileCard), findsOneWidget);

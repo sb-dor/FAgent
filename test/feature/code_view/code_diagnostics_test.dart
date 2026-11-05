@@ -45,7 +45,10 @@ List<(String, Color?)> _leaves(InlineSpan span) {
     if (span is! TextSpan) return;
     final style = inherited?.merge(span.style) ?? span.style;
     if (span.text case final text? when text.isNotEmpty) {
-      leaves.add((text, style?.decoration == TextDecoration.underline ? style?.decorationColor : null));
+      leaves.add((
+        text,
+        style?.decoration == TextDecoration.underline ? style?.decorationColor : null,
+      ));
     }
     for (final child in span.children ?? const <InlineSpan>[]) {
       visit(child, style);
@@ -117,7 +120,10 @@ void main() {
     test('a multi-line range underlines each line part', () {
       final diagnostic = _diagnostic(DartSeverity.error, start: 7, end: 2, endLine: 2);
 
-      expect(_leaves(spans(<DartDiagnostic>[diagnostic], index: 1)).map((leaf) => leaf.$2), everyElement(colors.danger));
+      expect(
+        _leaves(spans(<DartDiagnostic>[diagnostic], index: 1)).map((leaf) => leaf.$2),
+        everyElement(colors.danger),
+      );
       expect(_leaves(spans(<DartDiagnostic>[diagnostic], index: 2)), <(String, Color?)>[
         ('vo', colors.danger),
         ('id ', null),
@@ -183,7 +189,11 @@ void main() {
       );
       await tester.pumpWidget(
         testApp(
-          CodeView(workspace: workspace, onOpenExternally: (_) {}, listFiles: () async => <String>[]),
+          CodeView(
+            workspace: workspace,
+            onOpenExternally: (_) {},
+            listFiles: () async => <String>[],
+          ),
           locale: locale,
           theme: dark ? AppTheme.dark() : AppTheme.light(),
         ),
@@ -194,16 +204,12 @@ void main() {
     }
 
     void testCode(String description, Future<void> Function(WidgetTester tester) body) =>
-        testWidgets(
-          description,
-          (tester) async {
-            await body(tester);
-            await tester.pumpWidget(const SizedBox.shrink());
-            workspace.dispose();
-            await tester.pump(const Duration(seconds: 1));
-          },
-          variant: TargetPlatformVariant.only(TargetPlatform.macOS),
-        );
+        testWidgets(description, (tester) async {
+          await body(tester);
+          await tester.pumpWidget(const SizedBox.shrink());
+          workspace.dispose();
+          await tester.pump(const Duration(seconds: 1));
+        }, variant: TargetPlatformVariant.only(TargetPlatform.macOS));
 
     void publish(String path, List<DartDiagnostic> diagnostics) =>
         analysis.push(DartFileDiagnostics(path, diagnostics));
@@ -262,11 +268,9 @@ void main() {
       );
       final hover = span.children!.whereType<MouseTrackerAnnotationTextSpan>().single;
 
-      hover.onEnterWithRect(
-        const PointerEnterEvent(position: Offset(300, 200)),
-        0,
-        const <Rect>[Rect.fromLTWH(300, 190, 10, 18)],
-      );
+      hover.onEnterWithRect(const PointerEnterEvent(position: Offset(300, 200)), 0, const <Rect>[
+        Rect.fromLTWH(300, 190, 10, 18),
+      ]);
       await tester.pump();
 
       expect(find.text("Undefined name 'x'. (undefined_identifier)"), findsOneWidget);
@@ -286,11 +290,19 @@ void main() {
       ]);
       await settle(tester);
 
-      expect(find.descendant(of: find.byType(CodeTabBar), matching: find.text('ⓧ 2')), findsOneWidget);
-      expect(find.descendant(of: find.byType(CodeTabBar), matching: find.text('⚠ 1')), findsOneWidget);
+      expect(
+        find.descendant(of: find.byType(CodeTabBar), matching: find.text('ⓧ 2')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: find.byType(CodeTabBar), matching: find.text('⚠ 1')),
+        findsOneWidget,
+      );
     });
 
-    testCode('the explorer shows a file with errors in danger, and not once they are gone', (tester) async {
+    testCode('the explorer shows a file with errors in danger, and not once they are gone', (
+      tester,
+    ) async {
       await pump(tester);
       workspace.tree.toggle('$root/lib');
       await settle(tester);
@@ -300,7 +312,9 @@ void main() {
           ?.color;
       final context = tester.element(find.byType(CodeExplorer));
 
-      publish('$root/lib/other.dart', <DartDiagnostic>[_diagnostic(DartSeverity.error, start: 0, end: 1)]);
+      publish('$root/lib/other.dart', <DartDiagnostic>[
+        _diagnostic(DartSeverity.error, start: 0, end: 1),
+      ]);
       await settle(tester);
       expect(colorOf('other.dart'), context.colors.danger);
       expect(colorOf('main.dart'), context.colors.text);
@@ -365,7 +379,8 @@ void main() {
             _diagnostic(DartSeverity.warning, start: 2, end: 3),
           ]);
           analysis.status.value = const DartAnalysisStatus.unavailable(
-            reason: 'ProcessException: No such file or directory, the command was dart language-server',
+            reason:
+                'ProcessException: No such file or directory, the command was dart language-server',
           );
           await settle(tester);
 

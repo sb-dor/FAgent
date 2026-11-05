@@ -191,16 +191,13 @@ void main() {
       for (final size in const <Size>[Size(900, 600), Size(1280, 800)]) {
         for (final locale in const <Locale>[Locale('en'), Locale('ru')]) {
           for (final dark in const <bool>[false, true]) {
-            testWidgets(
-              '$section fits ${size.width.toInt()}×${size.height.toInt()} in '
-              '${locale.languageCode}, ${dark ? 'dark' : 'light'}',
-              (tester) async {
-                await openSettings(tester, section, locale: locale, dark: dark, size: size);
-                expect(_pageContent(), findsOneWidget);
-                expect(tester.takeException(), isNull);
-                await disposeTestApp(tester, dependencies);
-              },
-            );
+            testWidgets('$section fits ${size.width.toInt()}×${size.height.toInt()} in '
+                '${locale.languageCode}, ${dark ? 'dark' : 'light'}', (tester) async {
+              await openSettings(tester, section, locale: locale, dark: dark, size: size);
+              expect(_pageContent(), findsOneWidget);
+              expect(tester.takeException(), isNull);
+              await disposeTestApp(tester, dependencies);
+            });
           }
         }
       }

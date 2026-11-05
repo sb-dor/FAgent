@@ -39,21 +39,28 @@ final class CodeDocument extends ChangeNotifier {
     required this.kind,
     required this._files,
     required this.editing,
+    this.readOnly = false,
     this.stamp,
     this._error,
   }) : _saved = editing.codeLines {
     editing.addListener(_onEdit);
   }
 
-  /// Opens [path]: reads a text file, classifies the rest.
+  /// Opens [path]: reads a text file, classifies the rest. A [readOnly] document is never edited,
+  /// saved or reloaded (a file outside the project).
   ///
   /// Throws [io.PathNotFoundException] when the file does not exist.
-  static Future<CodeDocument> open(String path, {required ICodeFilesRepository files}) async {
+  static Future<CodeDocument> open(
+    String path, {
+    required ICodeFilesRepository files,
+    bool readOnly = false,
+  }) async {
     CodeDocument other(CodeDocumentKind kind, [String? error]) => CodeDocument._(
       path: path,
       kind: kind,
       files: files,
       editing: CodeLineEditingController(),
+      readOnly: readOnly,
       error: error,
     );
 
@@ -97,6 +104,7 @@ final class CodeDocument extends ChangeNotifier {
                 ) ??
                 textSpan,
       ),
+      readOnly: readOnly,
       stamp: content.stamp,
     );
   }
@@ -146,6 +154,24 @@ final class CodeDocument extends ChangeNotifier {
   /// How the file is shown.
   final CodeDocumentKind kind;
 
+  /// A file outside the project: shown to read and navigate, never edited, saved or reloaded.
+  final bool readOnly;
+
+  /// Opens every folded block, so visible lines are document lines again (LSP positions count
+  /// the latter).
+  void unfoldAll() {
+    var folded = true;
+    while (folded) {
+      folded = false;
+      for (var i = editing.codeLines.length - 1; i >= 0; i--) {
+        if (editing.codeLines[i].chunkParent) {
+          editing.expandChunk(i);
+          folded = true;
+        }
+      }
+    }
+  }
+
   /// The editor's text, selection and undo history.
   final CodeLineEditingController editing;
 
@@ -183,6 +209,7 @@ final class CodeDocument extends ChangeNotifier {
   bool _disposed = false;
 
   void _onEdit() {
+    if (readOnly) return;
     final codeLines = editing.codeLines;
     final dirty = !identical(codeLines, _saved) && codeLines != _saved;
     if (dirty == _dirty) return;
@@ -197,7 +224,7 @@ final class CodeDocument extends ChangeNotifier {
   /// failures are kept in [error] and the document stays unsaved. A document without edits that is
   /// still on disk is not written.
   Future<void> save({bool overwrite = false}) async {
-    if (kind != CodeDocumentKind.text || _saving) return;
+    if (kind != CodeDocumentKind.text || readOnly || _saving) return;
     if (!_dirty && !_deleted && !overwrite) return;
     _saving = true;
     final codeLines = editing.codeLines;
@@ -301,7 +328,7 @@ final class CodeDocument extends ChangeNotifier {
   /// The file changed on disk: a document without edits follows it, one with edits is marked
   /// [changedOnDisk]; the app's own write (same stamp) changes nothing.
   Future<void> onDiskChange(FileChangeKind change) async {
-    if (kind != CodeDocumentKind.text) return;
+    if (kind != CodeDocumentKind.text || readOnly) return;
     if (_saving) {
       _changeDuringSave = change;
       return;

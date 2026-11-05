@@ -312,4 +312,3 @@ final class _RecordingQueuedChats implements IQueuedChats {
   @override
   void dispose() {}
 }
-

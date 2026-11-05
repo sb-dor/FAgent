@@ -662,6 +662,7 @@
   "codeReplaceAll": "Replace all",
   "codeFindNoResults": "No results",
   "codeFindToggleReplace": "Toggle replace",
+  "codeReadOnly": "Read-only",
   "codeMatchCase": "Match case",
   "codeRegex": "Regular expression",
   "quitUnsavedTitle": "Unsaved changes",
