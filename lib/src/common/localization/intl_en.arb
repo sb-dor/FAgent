@@ -663,6 +663,8 @@
   "codeFindNoResults": "No results",
   "codeFindToggleReplace": "Toggle replace",
   "codeReadOnly": "Read-only",
+  "codeNavigateBack": "Back (⌃-)",
+  "codeNavigateForward": "Forward (⌃⇧-)",
   "codeMatchCase": "Match case",
   "codeRegex": "Regular expression",
   "quitUnsavedTitle": "Unsaved changes",

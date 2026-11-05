@@ -127,7 +127,12 @@ class _CodeViewState extends State<CodeView> {
 
   Future<void> _quickOpen() async {
     final relative = await showCodeQuickOpen(context, files: widget.listFiles);
-    if (relative != null) await _open(p.join(_workspace.root, relative));
+    if (relative == null) return;
+    try {
+      await _workspace.navigateTo(p.join(_workspace.root, relative));
+    } on io.PathNotFoundException {
+      // Gone since it was listed.
+    }
   }
 
   /// A question with [answers] as buttons, the last one the default.
@@ -156,6 +161,10 @@ class _CodeViewState extends State<CodeView> {
       const SingleActivator(LogicalKeyboardKey.keyS, meta: true): () => _save().ignore(),
       const SingleActivator(LogicalKeyboardKey.keyW, meta: true): () => _close().ignore(),
       const SingleActivator(LogicalKeyboardKey.keyP, meta: true): () => _quickOpen().ignore(),
+      const SingleActivator(LogicalKeyboardKey.minus, control: true): () =>
+          _workspace.goBack().ignore(),
+      const SingleActivator(LogicalKeyboardKey.minus, control: true, shift: true): () =>
+          _workspace.goForward().ignore(),
     },
     child: FocusScope(
       child: ListenableBuilder(
@@ -201,6 +210,9 @@ class _CodeViewState extends State<CodeView> {
           tabs: tabs.tabs,
           active: active,
           labelFor: _labelFor,
+          history: _workspace.history,
+          onBack: () => _workspace.goBack().ignore(),
+          onForward: () => _workspace.goForward().ignore(),
           onActivate: (document) => tabs.activate(document.path),
           onClose: (document) => _close(document).ignore(),
           onOpenExternally: widget.onOpenExternally,

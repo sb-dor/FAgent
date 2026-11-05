@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
@@ -130,6 +131,56 @@ final class CodeWorkspace {
   /// The open files.
   late final CodeTabsController tabs;
 
+  /// The places jumps left: back and forward walk them.
+  final CodeNavigationHistory history = CodeNavigationHistory();
+
+  /// The caret of the active text tab as a document position; `null` without one.
+  CodePlace? get _here {
+    final document = tabs.active;
+    if (document == null || document.kind != CodeDocumentKind.text) return null;
+    final editing = document.editing;
+    final selection = editing.selection;
+    final line = editing.codeLines.index2lineIndex(selection.extentIndex);
+    return (
+      path: document.path,
+      position: LspPosition(
+        line: line < 0 ? selection.extentIndex : line,
+        character: selection.extentOffset,
+      ),
+    );
+  }
+
+  /// Opens [path] (at [at], a document position, when given) and records the place it leaves.
+  ///
+  /// Throws [io.PathNotFoundException] when the file does not exist; nothing is recorded then.
+  Future<void> navigateTo(String path, {LspPosition? at}) async {
+    final from = _here;
+    await _openAt(path, at);
+    if (from != null) history.record(from);
+  }
+
+  Future<void> _openAt(String path, LspPosition? at) =>
+      tabs.open(path, line: at == null ? null : at.line + 1, column: at?.character ?? 0);
+
+  /// Goes to the place the last jump left; a place whose file is gone is skipped.
+  Future<void> goBack() => _walk(history.back);
+
+  /// Goes to the place [goBack] left.
+  Future<void> goForward() => _walk(history.forward);
+
+  Future<void> _walk(CodePlace? Function(CodePlace? current) move) async {
+    var current = _here;
+    for (var place = move(current); place != null; place = move(current)) {
+      try {
+        await _openAt(place.path, place.position);
+        return;
+      } on io.PathNotFoundException {
+        // Gone: the next one, without keeping the place left again.
+        current = null;
+      }
+    }
+  }
+
   final Map<CodeDocument, CodeTabView> _views = <CodeDocument, CodeTabView>{};
 
   /// The find and scroll state of [document]'s tab: kept while the tab is open, so switching tabs,
@@ -164,6 +215,7 @@ final class CodeWorkspace {
     _views.clear();
     tree.dispose();
     tabs.dispose();
+    history.dispose();
     await analysis?.dispose();
   }
 }
