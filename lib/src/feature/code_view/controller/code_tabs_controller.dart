@@ -96,24 +96,33 @@ final class CodeTabsController extends ChangeNotifier {
   }
 
   /// Opens [path] in a tab (or the one it already has) and activates it; with [line] (1-based)
-  /// the caret goes to the start of that line.
+  /// the caret goes to that line at [column] (0-based, UTF-16), every fold opened. A file outside
+  /// the project opens read-only.
   ///
   /// Throws [io.PathNotFoundException] when the file does not exist.
-  Future<CodeDocument> open(String path, {int? line}) async {
+  Future<CodeDocument> open(String path, {int? line, int column = 0}) async {
     final document =
         _tabs.where((tab) => tab.path == path).firstOrNull ??
-        await (_opening[path] ??= CodeDocument.open(path, files: _files).whenComplete(() {
-          // A block, not an arrow: `remove` returns this very future, and whenComplete would wait
-          // for it.
-          _opening.remove(path);
-        }));
+        await (_opening[path] ??=
+            CodeDocument.open(path, files: _files, readOnly: !p.isWithin(_root, path)).whenComplete(
+              () {
+                // A block, not an arrow: `remove` returns this very future, and whenComplete would wait
+                // for it.
+                _opening.remove(path);
+              },
+            ));
     if (_disposed) return document;
     if (!_tabs.contains(document)) _add(document);
     _active = document;
     if (line != null && document.kind == CodeDocumentKind.text) {
-      final index = (line - 1).clamp(0, document.editing.lineCount - 1);
-      document.editing
-        ..selection = CodeLineSelection.collapsed(index: index, offset: 0)
+      document.unfoldAll();
+      final editing = document.editing;
+      final index = (line - 1).clamp(0, editing.lineCount - 1);
+      editing
+        ..selection = CodeLineSelection.collapsed(
+          index: index,
+          offset: column.clamp(0, editing.codeLines[index].text.length),
+        )
         ..makeCursorCenterIfInvisible();
     }
     _changed();
@@ -168,13 +177,29 @@ final class CodeTabsController extends ChangeNotifier {
     _changed();
   }
 
+  /// Runs before every [save] (formatting); a failure there does not stop the save.
+  Future<void> Function(CodeDocument document)? beforeSave;
+
+  /// Saves [document] after [beforeSave].
+  ///
+  /// Throws [FileChangedOnDiskException] as [CodeDocument.save] does.
+  Future<void> save(CodeDocument document, {bool overwrite = false}) async {
+    if (document.kind != CodeDocumentKind.text || document.readOnly) return;
+    try {
+      await beforeSave?.call(document);
+    } on Object {
+      // Saving matters more than formatting.
+    }
+    await document.save(overwrite: overwrite);
+  }
+
   /// Saves every unsaved tab; `false` when one stays unsaved (changed on disk or a failed write).
   Future<bool> saveAll() async {
     var all = true;
     for (final document in List<CodeDocument>.of(_tabs)) {
       if (!document.dirty) continue;
       try {
-        await document.save();
+        await save(document);
       } on FileChangedOnDiskException {
         all = false;
         continue;
@@ -206,8 +231,13 @@ final class CodeTabsController extends ChangeNotifier {
           _projectId,
           CodeViewState(
             mode: _mode,
-            tabs: <String>[for (final tab in _tabs) p.relative(tab.path, from: _root)],
-            activeTab: _active == null ? null : p.relative(_active!.path, from: _root),
+            tabs: <String>[
+              for (final tab in _tabs)
+                if (!tab.readOnly) p.relative(tab.path, from: _root),
+            ],
+            activeTab: _active == null || _active!.readOnly
+                ? null
+                : p.relative(_active!.path, from: _root),
             explorerWidth: _explorerWidth,
           ),
         )

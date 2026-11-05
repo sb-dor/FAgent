@@ -256,12 +256,9 @@ void main() {
       });
     });
 
-    test(
-      'a relative --dart-define-from-file is passed unchanged and the working directory is the '
-      'project',
-      () async {
-        final read = parseLaunchConfigs(
-          r'''
+    test('a relative --dart-define-from-file is passed unchanged and the working directory is the '
+        'project', () async {
+      final read = parseLaunchConfigs(r'''
 {"configurations": [{
             "name": "Prod",
             "type": "dart",
@@ -269,39 +266,34 @@ void main() {
             "program": "lib/main_prod.dart",
             "cwd": "${workspaceFolder}",
             "args": ["--flavor", "prod", "--dart-define-from-file=config/avera/production.json"],
-          }]}''',
-          projectRoot: paths[1]!,
-        );
-        final start = RunStartArguments.fromLaunchConfig(
-          (read as LaunchConfigsRead).configs.single,
-        );
+          }]}''', projectRoot: paths[1]!);
+      final start = RunStartArguments.fromLaunchConfig((read as LaunchConfigsRead).configs.single);
 
-        await repository.start(
-          1,
-          device: _macos,
-          mode: BuildMode.debug,
-          target: start.target,
-          arguments: start.arguments,
-          environment: start.environment,
-        );
-        await pumpEventQueue();
+      await repository.start(
+        1,
+        device: _macos,
+        mode: BuildMode.debug,
+        target: start.target,
+        arguments: start.arguments,
+        environment: start.environment,
+      );
+      await pumpEventQueue();
 
-        final process = started.single;
-        expect(process.arguments, <String>[
-          'run',
-          '--machine',
-          '-d',
-          'macos',
-          '--debug',
-          '-t',
-          'lib/main_prod.dart',
-          '--flavor',
-          'prod',
-          '--dart-define-from-file=config/avera/production.json',
-        ]);
-        expect(process.workingDirectory, paths[1]);
-      },
-    );
+      final process = started.single;
+      expect(process.arguments, <String>[
+        'run',
+        '--machine',
+        '-d',
+        'macos',
+        '--debug',
+        '-t',
+        'lib/main_prod.dart',
+        '--flavor',
+        'prod',
+        '--dart-define-from-file=config/avera/production.json',
+      ]);
+      expect(process.workingDirectory, paths[1]);
+    });
 
     test('events move the run from building to running with the three addresses', () async {
       final seen = states(1);

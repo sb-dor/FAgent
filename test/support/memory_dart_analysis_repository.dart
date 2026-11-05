@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 
 /// [IDartAnalysisRepository] in memory: every call lands in [calls], completions come from
@@ -17,6 +19,20 @@ final class MemoryDartAnalysisRepository implements IDartAnalysisRepository {
 
   /// Answers [resolve]; the item itself when `null`.
   FutureOr<DartCompletion> Function(DartCompletion completion)? onResolve;
+
+  /// Answers [hover]; `null` when not set.
+  FutureOr<DartHover?> Function(String path, String text, LspPosition position)? onHover;
+
+  /// Answers [definition]; empty when not set.
+  FutureOr<List<LspLocation>> Function(String path, String text, LspPosition position)?
+  onDefinition;
+
+  /// Answers [references]; empty when not set.
+  FutureOr<List<LspLocation>> Function(String path, String text, LspPosition position)?
+  onReferences;
+
+  /// Answers [format]; `null` when not set.
+  FutureOr<List<LspTextEdit>?> Function(String path, String text)? onFormat;
 
   /// `open`, `change`, `close` and `complete` calls in order, with their path and text.
   final List<(String, String, String?)> calls = <(String, String, String?)>[];
@@ -60,6 +76,22 @@ final class MemoryDartAnalysisRepository implements IDartAnalysisRepository {
   @override
   Future<DartCompletion> resolve(DartCompletion completion) async =>
       await onResolve?.call(completion) ?? completion;
+
+  @override
+  Future<DartHover?> hover(String path, String text, LspPosition position) async =>
+      await onHover?.call(path, text, position);
+
+  @override
+  Future<List<LspLocation>> definition(String path, String text, LspPosition position) async =>
+      await onDefinition?.call(path, text, position) ?? const <LspLocation>[];
+
+  @override
+  Future<List<LspLocation>> references(String path, String text, LspPosition position) async =>
+      await onReferences?.call(path, text, position) ?? const <LspLocation>[];
+
+  @override
+  Future<List<LspTextEdit>?> format(String path, String text) async =>
+      await onFormat?.call(path, text);
 
   @override
   Stream<DartFileDiagnostics> get diagnostics => _diagnostics.stream;

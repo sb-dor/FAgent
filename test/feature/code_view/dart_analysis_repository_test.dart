@@ -15,7 +15,11 @@ void main() {
   late String file;
   late List<ScriptedLspProcess> processes;
 
+  /// Whether the scripted server leaves `textDocument/formatting` unanswered.
+  var silentFormat = false;
+
   setUp(() {
+    silentFormat = false;
     // A fake Flutter SDK whose bin holds `flutter` (found on PATH) and `dart` next to it.
     sdk = io.Directory.systemTemp.createTempSync('fake_sdk');
     io.File(p.join(sdk.path, 'bin', 'flutter')).createSync(recursive: true);
@@ -40,6 +44,20 @@ void main() {
           process.reply(message, <Object?>[
             <String, Object?>{'label': 'int', 'kind': 7},
           ]);
+        case 'textDocument/hover':
+          process.reply(message, <String, Object?>{'contents': 'int'});
+        case 'textDocument/definition' || 'textDocument/references':
+          process.reply(message, <Object?>[
+            <String, Object?>{
+              'uri': Uri.file(file).toString(),
+              'range': <String, Object?>{
+                'start': <String, Object?>{'line': 0, 'character': 0},
+                'end': <String, Object?>{'line': 0, 'character': 3},
+              },
+            },
+          ]);
+        case 'textDocument/formatting':
+          if (!silentFormat) process.reply(message, <Object?>[]);
       }
     },
   );
@@ -245,5 +263,56 @@ void main() {
 
     expect(processes.single.stopped, isTrue);
     expect(methods(processes.single), containsAllInOrder(<String>['shutdown', 'exit']));
+  });
+
+  group('navigation', () {
+    const position = LspPosition(line: 0, character: 1);
+
+    test('navigation requests send the unsent text first', () async {
+      final repository = create()..open(file, 'i');
+      await settle();
+      final requests = <String, Future<Object?> Function(String text)>{
+        'textDocument/hover': (text) => repository.hover(file, text, position),
+        'textDocument/definition': (text) => repository.definition(file, text, position),
+        'textDocument/references': (text) => repository.references(file, text, position),
+        'textDocument/formatting': (text) => repository.format(file, text),
+      };
+      var count = 0;
+      for (final MapEntry(key: method, value: request) in requests.entries) {
+        final text = 'int x${count++}';
+        repository.change(file, text);
+
+        final answer = await request(text);
+
+        expect(answer, isNotNull, reason: method);
+        final received = processes.single.received;
+        final asked = received.lastIndexWhere((m) => m['method'] == method);
+        final changed = received.lastIndexWhere(
+          (m) =>
+              m['method'] == 'textDocument/didChange' &&
+              ((m['params']! as Map)['contentChanges'] as List).single['text'] == text,
+        );
+        expect(changed, allOf(isNonNegative, lessThan(asked)), reason: method);
+      }
+    });
+
+    test('navigation requests are empty without a server', () async {
+      final repository = create();
+
+      expect(await repository.hover(file, 'x', position), isNull);
+      expect(await repository.definition(file, 'x', position), isEmpty);
+      expect(await repository.references(file, 'x', position), isEmpty);
+      expect(await repository.format(file, 'x'), isNull);
+    });
+
+    test('format gives null when the server does not answer in 2 s', () async {
+      silentFormat = true;
+      final repository = create()..open(file, 'x');
+      await settle();
+      final watch = Stopwatch()..start();
+
+      expect(await repository.format(file, 'x'), isNull);
+      expect(watch.elapsed, greaterThanOrEqualTo(const Duration(seconds: 2)));
+    });
   });
 }

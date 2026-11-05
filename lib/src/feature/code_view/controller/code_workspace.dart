@@ -1,14 +1,21 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_format.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/code_package_labels.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
+import 'package:path/path.dart' as p;
 import 'package:re_editor/re_editor.dart';
 
 /// {@template code_workspace}
@@ -23,7 +30,9 @@ final class CodeWorkspace {
     required ICodeFilesRepository files,
     required ICodeViewStateRepository state,
     this.analysis,
-  }) {
+    bool Function()? formatOnSave,
+  }) : _files = files,
+       _formatOnSave = formatOnSave ?? _always {
     // One watch for both; it stops once both stopped listening.
     final changes = files
         .watch(root)
@@ -37,6 +46,7 @@ final class CodeWorkspace {
       changes: changes,
     );
     _diagnostics = analysis?.diagnostics.listen(_onDiagnostics);
+    tabs.beforeSave = _formatBeforeSave;
     tabs
       ..addListener(_dropClosedViews)
       ..addListener(_syncAnalysis)
@@ -45,6 +55,35 @@ final class CodeWorkspace {
 
   /// The Dart analysis of the project; `null` without one (tests).
   final IDartAnalysisRepository? analysis;
+
+  final ICodeFilesRepository _files;
+
+  /// Whether saving formats Dart files (the app setting).
+  final bool Function() _formatOnSave;
+
+  static bool _always() => true;
+
+  Future<void> _formatBeforeSave(CodeDocument document) async {
+    final analysis = this.analysis;
+    if (analysis == null || !_formatOnSave()) return;
+    await formatDocument(document, analysis);
+  }
+
+  /// Short names of files outside the project, from its `.dart_tool/package_config.json`; read
+  /// once, on first use.
+  Future<CodePackageLabels> get labels => _labels ??= _loadLabels();
+  Future<CodePackageLabels>? _labels;
+
+  Future<CodePackageLabels> _loadLabels() async {
+    final home = io.Platform.environment['HOME'] ?? '';
+    final configDir = p.join(root, '.dart_tool');
+    try {
+      final content = await _files.read(p.join(configDir, 'package_config.json'));
+      return CodePackageLabels.parse(content.text, configDir: configDir, home: home);
+    } on Object {
+      return CodePackageLabels.none(home: home);
+    }
+  }
 
   /// The last diagnostics the analysis published, by file (it analyzes the whole project).
   final Map<String, List<DartDiagnostic>> _published = <String, List<DartDiagnostic>>{};
@@ -109,6 +148,108 @@ final class CodeWorkspace {
   /// The open files.
   late final CodeTabsController tabs;
 
+  /// The places jumps left: back and forward walk them.
+  final CodeNavigationHistory history = CodeNavigationHistory();
+
+  /// The caret of the active text tab as a document position; `null` without one.
+  CodePlace? get _here {
+    final document = tabs.active;
+    if (document == null || document.kind != CodeDocumentKind.text) return null;
+    final editing = document.editing;
+    final selection = editing.selection;
+    final line = editing.codeLines.index2lineIndex(selection.extentIndex);
+    return (
+      path: document.path,
+      position: LspPosition(
+        line: line < 0 ? selection.extentIndex : line,
+        character: selection.extentOffset,
+      ),
+    );
+  }
+
+  /// Opens [path] (at [at], a document position, when given) and records the place it leaves.
+  ///
+  /// Throws [io.PathNotFoundException] when the file does not exist; nothing is recorded then.
+  Future<void> navigateTo(String path, {LspPosition? at}) async {
+    final from = _here;
+    await _openAt(path, at);
+    if (from != null) history.record(from);
+  }
+
+  Future<void> _openAt(String path, LspPosition? at) =>
+      tabs.open(path, line: at == null ? null : at.line + 1, column: at?.character ?? 0);
+
+  /// The rows of [locations] for the references list: each file read once (from its tab when it
+  /// is open), files of the project first, then by path and line.
+  Future<List<CodeReference>> referencesFor(List<LspLocation> locations) async {
+    final labels = await this.labels;
+    final lines = <String, List<String>>{};
+    for (final path in locations.map((location) => location.path).toSet()) {
+      final open = tabs.tabs.where((tab) => tab.path == path && tab.kind == CodeDocumentKind.text);
+      final lineBreak = RegExp(r'\r\n|\r|\n');
+      if (open.firstOrNull case final document?) {
+        // The whole text, folded blocks included.
+        lines[path] = document.editing.text.split(lineBreak);
+        continue;
+      }
+      try {
+        lines[path] = (await _files.read(path)).text.split(lineBreak);
+      } on Object {
+        lines[path] = const <String>[];
+      }
+    }
+    final references = <CodeReference>[
+      for (final location in locations)
+        () {
+          final fileLines = lines[location.path]!;
+          final line = location.range.start.line;
+          final raw = line < fileLines.length ? fileLines[line] : '';
+          final indent = raw.length - raw.trimLeft().length;
+          final column = location.range.start.character;
+          final end = location.range.end.line == line ? location.range.end.character : raw.length;
+          return (
+            path: location.path,
+            label: p.isWithin(root, location.path)
+                ? p.relative(location.path, from: root)
+                : labels.labelFor(location.path),
+            line: line,
+            column: column,
+            start: (column - indent).clamp(0, raw.trim().length),
+            end: (end - indent).clamp(0, raw.trim().length),
+            text: raw.trim(),
+          );
+        }(),
+    ];
+    int rank(CodeReference reference) => p.isWithin(root, reference.path) ? 0 : 1;
+    references.sort(
+      (a, b) => rank(a) != rank(b)
+          ? rank(a).compareTo(rank(b))
+          : a.path != b.path
+          ? a.path.compareTo(b.path)
+          : a.line.compareTo(b.line),
+    );
+    return references;
+  }
+
+  /// Goes to the place the last jump left; a place whose file is gone is skipped.
+  Future<void> goBack() => _walk(history.back);
+
+  /// Goes to the place [goBack] left.
+  Future<void> goForward() => _walk(history.forward);
+
+  Future<void> _walk(CodePlace? Function(CodePlace? current) move) async {
+    var current = _here;
+    for (var place = move(current); place != null; place = move(current)) {
+      try {
+        await _openAt(place.path, place.position);
+        return;
+      } on io.PathNotFoundException {
+        // Gone: the next one, without keeping the place left again.
+        current = null;
+      }
+    }
+  }
+
   final Map<CodeDocument, CodeTabView> _views = <CodeDocument, CodeTabView>{};
 
   /// The find and scroll state of [document]'s tab: kept while the tab is open, so switching tabs,
@@ -143,6 +284,7 @@ final class CodeWorkspace {
     _views.clear();
     tree.dispose();
     tabs.dispose();
+    history.dispose();
     await analysis?.dispose();
   }
 }
@@ -183,6 +325,10 @@ final class CodeViewRegistry extends ChangeNotifier implements IUnsavedFiles {
 
   /// Makes the Dart analysis of a project's folder; none when `null`.
   final IDartAnalysisRepository Function(String root)? _analysisFor;
+
+  /// Whether saving a Dart file formats it first; the workspace scope points it at the app's
+  /// setting.
+  bool Function() formatOnSave = () => true;
   final Map<int, CodeWorkspace> _workspaces = <int, CodeWorkspace>{};
 
   /// The Code view of [projectId] if one was made in this run.
@@ -200,6 +346,7 @@ final class CodeViewRegistry extends ChangeNotifier implements IUnsavedFiles {
       files: _files,
       state: _state,
       analysis: _analysisFor?.call(root),
+      formatOnSave: () => formatOnSave(),
     );
     workspace.tabs.addListener(_onTabs);
     return _workspaces[projectId] = workspace;

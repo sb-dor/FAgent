@@ -107,7 +107,8 @@ void main() {
   Finder inExplorer(String name) =>
       find.descendant(of: find.byType(CodeExplorer), matching: find.text(name));
 
-  Finder tab(String name) => find.descendant(of: find.byType(CodeTabBar), matching: find.text(name));
+  Finder tab(String name) =>
+      find.descendant(of: find.byType(CodeTabBar), matching: find.text(name));
 
   testWidgets('in Code, a chat of another project shows its files and its own tabs; the first '
       "project's tabs come back on return", (tester) async {

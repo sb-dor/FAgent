@@ -236,6 +236,59 @@ void main() {
     expect(state.states[1]?.mode, CodeViewMode.code);
   });
 
+  test('a file outside the project opens read-only and is not restored', () async {
+    const outside = '/outside/a.dart';
+    files.put(outside, 'class A {}\n', notify: false);
+    final tabs = create();
+    await tabs.restore();
+    final readOnly = await tabs.open(outside);
+    final own = await tabs.open(main);
+
+    expect(readOnly.readOnly, isTrue);
+    expect(own.readOnly, isFalse);
+    readOnly.editing.replaceSelection('x');
+    expect(readOnly.dirty, isFalse);
+    expect(tabs.unsavedCount, 0);
+    await readOnly.save();
+    expect(files.files[outside], 'class A {}\n');
+    tabs.activate(outside);
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    expect(state.states[1]?.tabs, <String>['lib/main.dart']);
+    expect(state.states[1]?.activeTab, isNull);
+
+    final again = create();
+    await again.restore();
+
+    expect(again.tabs.map((tab) => tab.path), <String>[main]);
+  });
+
+  test('a read-only tab ignores changes on disk', () async {
+    const outside = '/outside/a.dart';
+    files.put(outside, 'class A {}\n', notify: false);
+    final tabs = create();
+    final document = await tabs.open(outside);
+
+    files.put(outside, 'class B {}\n', notify: false);
+    changes.add(const FileChange(path: outside, kind: FileChangeKind.modified));
+    await settle();
+    await settle();
+
+    expect(document.editing.text, 'class A {}\n');
+  });
+
+  test('open with line and column unfolds and places the caret', () async {
+    files.put(main, 'void a() {\n  1;\n  2;\n}\nvoid b() {}\n', notify: false);
+    final tabs = create();
+    final document = await tabs.open(main);
+    document.editing.collapseChunk(0, 3);
+    expect(document.editing.codeLines.length, lessThan(6));
+
+    await tabs.open(main, line: 5, column: 5);
+
+    expect(document.editing.selection, const CodeLineSelection.collapsed(index: 4, offset: 5));
+    expect(document.editing.codeLines[4].text, 'void b() {}');
+  });
+
   test('a document turning dirty notifies the tabs', () async {
     final tabs = create();
     final document = await tabs.open(main);

@@ -282,7 +282,9 @@ void main() {
   });
 
   group('final review', () {
-    testCode('C1: with a fold above, completion asks for the real line and inserts there', (tester) async {
+    testCode('C1: with a fold above, completion asks for the real line and inserts there', (
+      tester,
+    ) async {
       files.put(main, 'void a() {\n  x;\n}\nfoo\n', notify: false);
       analysis.onComplete = (path, text, position) => <DartCompletion>[
         const DartCompletion(
@@ -341,7 +343,9 @@ void main() {
       expect(rows(), findsNothing);
     });
 
-    testCode('I3: an answer in flight when a row is accepted does not reopen the list', (tester) async {
+    testCode('I3: an answer in flight when a row is accepted does not reopen the list', (
+      tester,
+    ) async {
       final later = Completer<List<DartCompletion>>();
       var calls = 0;
       analysis.onComplete = (path, text, position) => ++calls == 1 ? answer : later.future;

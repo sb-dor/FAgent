@@ -1,7 +1,6 @@
 import 'package:flutter/painting.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
-import 'package:re_editor/re_editor.dart';
 
 /// The color of a [severity] underline.
 Color diagnosticColor(AppColors colors, DartSeverity severity) => switch (severity) {
@@ -11,15 +10,13 @@ Color diagnosticColor(AppColors colors, DartSeverity severity) => switch (severi
 };
 
 /// [textSpan] (the highlighted text of [line]) with a wavy underline under the part of every
-/// diagnostic on that line, in its severity's color; each part reports the pointer to [onEnter]
-/// and [onExit]. A line without diagnostics comes back as it is.
+/// diagnostic on that line, in its severity's color (the hover card shows their messages). A line
+/// without diagnostics comes back as it is.
 TextSpan diagnosticSpans({
   required TextSpan textSpan,
   required int line,
   required List<DartDiagnostic> diagnostics,
   required AppColors colors,
-  required void Function(DartDiagnostic diagnostic, Offset position) onEnter,
-  required void Function() onExit,
 }) {
   // Each diagnostic's columns on this line; the worst severity first, so it wins where they meet.
   final parts = <(int, int, DartDiagnostic)>[
@@ -90,15 +87,13 @@ TextSpan diagnosticSpans({
       continue;
     }
     children.add(
-      MouseTrackerAnnotationTextSpan(
+      TextSpan(
         text: text,
         style: (style ?? const TextStyle()).copyWith(
           decoration: TextDecoration.underline,
           decorationStyle: TextDecorationStyle.wavy,
           decorationColor: diagnosticColor(colors, diagnostic.severity),
         ),
-        onEnterWithRect: (event, id, rects) => onEnter(diagnostic, event.position),
-        onExitWithRect: (event, id, rects) => onExit(),
       ),
     );
   }

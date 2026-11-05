@@ -50,6 +50,7 @@ final class AppSettings {
     this.projectOrg = defaultProjectOrg,
     this.projectTemplate = NewProjectTemplate.architecture,
     this.devToolsTarget = DevToolsTarget.browser,
+    this.formatOnSave = true,
   });
 
   /// Reads settings from stored JSON. Never throws: anything unreadable becomes the default.
@@ -64,6 +65,7 @@ final class AppSettings {
     final reloadAfterTurn = json['reloadAfterTurn'];
     final askBeforeQuit = json['askBeforeQuit'];
     final projectOrg = json['projectOrg'];
+    final formatOnSave = json['formatOnSave'];
     return AppSettings(
       themeMode: ThemeMode.values.firstWhere(
         (mode) => mode.name == themeName,
@@ -98,6 +100,7 @@ final class AppSettings {
         (target) => target.name == json['devToolsTarget'],
         orElse: () => DevToolsTarget.browser,
       ),
+      formatOnSave: formatOnSave is! bool || formatOnSave,
     );
   }
 
@@ -180,6 +183,9 @@ final class AppSettings {
   /// Where Flutter DevTools opens.
   final DevToolsTarget devToolsTarget;
 
+  /// Whether saving a Dart file in the Code view formats it first.
+  final bool formatOnSave;
+
   /// The JSON stored in `app_settings`.
   Map<String, Object?> toJson() => <String, Object?>{
     'themeMode': themeMode.name,
@@ -195,6 +201,7 @@ final class AppSettings {
     'projectOrg': projectOrg,
     'projectTemplate': projectTemplate.name,
     'devToolsTarget': devToolsTarget.name,
+    'formatOnSave': formatOnSave,
   };
 
   /// A copy with the given fields replaced.
@@ -216,6 +223,7 @@ final class AppSettings {
     String? projectOrg,
     NewProjectTemplate? projectTemplate,
     DevToolsTarget? devToolsTarget,
+    bool? formatOnSave,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     locale: resetLocale ? null : locale ?? this.locale,
@@ -234,6 +242,7 @@ final class AppSettings {
     projectOrg: projectOrg ?? this.projectOrg,
     projectTemplate: projectTemplate ?? this.projectTemplate,
     devToolsTarget: devToolsTarget ?? this.devToolsTarget,
+    formatOnSave: formatOnSave ?? this.formatOnSave,
   );
 
   @override
@@ -252,6 +261,7 @@ final class AppSettings {
           other.projectOrg == projectOrg &&
           other.projectTemplate == projectTemplate &&
           other.devToolsTarget == devToolsTarget &&
+          other.formatOnSave == formatOnSave &&
           const DeepCollectionEquality().equals(other.sessionDefaults, sessionDefaults);
 
   @override
@@ -269,6 +279,7 @@ final class AppSettings {
     projectOrg,
     projectTemplate,
     devToolsTarget,
+    formatOnSave,
   );
 
   @override

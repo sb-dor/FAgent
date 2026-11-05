@@ -5,18 +5,23 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
 import 'package:path/path.dart' as p;
 
 /// {@template code_tab_bar}
 /// The open files of the Code view: the file name, ● while unsaved (✕ on hover), «Deleted» for a
-/// file gone from disk; a click shows the file, ✕ or a middle click closes it.
+/// file gone from disk, 🔒 for a read-only file; a click shows the file, ✕ or a middle click
+/// closes it. ← and → at the right end walk the [history].
 /// {@endtemplate}
 class CodeTabBar extends StatelessWidget {
   /// {@macro code_tab_bar}
   const CodeTabBar({
     required this.tabs,
     required this.active,
-    required this.root,
+    required this.labelFor,
+    required this.history,
+    required this.onBack,
+    required this.onForward,
     required this.onActivate,
     required this.onClose,
     required this.onOpenExternally,
@@ -29,8 +34,17 @@ class CodeTabBar extends StatelessWidget {
   /// The shown file.
   final CodeDocument? active;
 
-  /// The project's folder, for the relative path in the tooltip.
-  final String root;
+  /// The tab's tooltip: the path relative to the project, or `package:…` outside it.
+  final String Function(CodeDocument document) labelFor;
+
+  /// Where back and forward go.
+  final CodeNavigationHistory history;
+
+  /// Goes back.
+  final VoidCallback onBack;
+
+  /// Goes forward.
+  final VoidCallback onForward;
 
   /// Shows a file.
   final ValueChanged<CodeDocument> onActivate;
@@ -51,23 +65,72 @@ class CodeTabBar extends StatelessWidget {
       ),
       child: SizedBox(
         height: 34,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
+        child: Row(
           children: <Widget>[
-            for (final tab in tabs)
-              _Tab(
-                document: tab,
-                active: identical(tab, active),
-                tooltip: p.relative(tab.path, from: root),
-                onActivate: () => onActivate(tab),
-                onClose: () => onClose(tab),
-                onOpenExternally: () => onOpenExternally(tab.path),
+            Expanded(
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: <Widget>[
+                  for (final tab in tabs)
+                    _Tab(
+                      document: tab,
+                      active: identical(tab, active),
+                      tooltip: labelFor(tab),
+                      onActivate: () => onActivate(tab),
+                      onClose: () => onClose(tab),
+                      onOpenExternally: () => onOpenExternally(tab.path),
+                    ),
+                ],
               ),
+            ),
+            ListenableBuilder(
+              listenable: history,
+              builder: (context, _) {
+                final localization = Localization.of(context);
+                return Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    _HistoryButton(
+                      icon: Icons.arrow_back,
+                      tooltip: localization.codeNavigateBack,
+                      onPressed: history.canGoBack ? onBack : null,
+                    ),
+                    _HistoryButton(
+                      icon: Icons.arrow_forward,
+                      tooltip: localization.codeNavigateForward,
+                      onPressed: history.canGoForward ? onForward : null,
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),
     );
   }
+}
+
+class _HistoryButton extends StatelessWidget {
+  const _HistoryButton({required this.icon, required this.tooltip, required this.onPressed});
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+    tooltip: tooltip,
+    icon: Icon(icon),
+    iconSize: 16,
+    color: context.colors.muted,
+    disabledColor: context.colors.muted.withValues(alpha: 0.4),
+    padding: EdgeInsets.zero,
+    constraints: const BoxConstraints.tightFor(width: 26, height: 26),
+    visualDensity: VisualDensity.compact,
+    onPressed: onPressed,
+  );
 }
 
 enum _TabAction { close, openExternally }
@@ -176,11 +239,24 @@ class _TabState extends State<_Tab> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: <Widget>[
-                    Text(
-                      p.basename(document.path),
-                      style: textTheme.bodySmall?.copyWith(
-                        color: widget.active ? colors.text : colors.muted,
-                        decoration: document.deleted ? TextDecoration.lineThrough : null,
+                    if (document.readOnly) ...<Widget>[
+                      Tooltip(
+                        message: Localization.of(context).codeReadOnly,
+                        child: Icon(Icons.lock_outline, size: 14, color: colors.muted),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    ConstrainedBox(
+                      // A read-only file shows its `package:` name, which can be long.
+                      constraints: const BoxConstraints(maxWidth: 320),
+                      child: Text(
+                        document.readOnly ? widget.tooltip : p.basename(document.path),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: widget.active ? colors.text : colors.muted,
+                          decoration: document.deleted ? TextDecoration.lineThrough : null,
+                        ),
                       ),
                     ),
                     if (document.errorCount > 0) ...<Widget>[
