@@ -76,6 +76,10 @@ class WorkspaceChatTile extends StatefulWidget {
 }
 
 class _WorkspaceChatTileState extends State<WorkspaceChatTile> {
+  /// The ⋯ button's side.
+  static const double _menuSize = 22;
+
+  /// Whether the pointer is over the row: only the ⋯ shows then.
   bool _hovered = false;
   TextEditingController? _name;
   final FocusNode _field = FocusNode();
@@ -125,20 +129,24 @@ class _WorkspaceChatTileState extends State<WorkspaceChatTile> {
       button: true,
       selected: widget.selected,
       child: MouseRegion(
+        cursor: name == null ? SystemMouseCursors.click : MouseCursor.defer,
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
-        child: Material(
-          color: widget.selected ? colors.accentSoft : Colors.transparent,
-          clipBehavior: Clip.antiAlias,
-          borderRadius: BorderRadius.circular(AppRadius.small),
-          child: InkWell(
-            onTap: name == null ? widget.onTap : null,
-            onSecondaryTapUp: widget.onMenu == null
-                ? null
-                : (details) => _menuAt(
-                    Rect.fromLTWH(details.globalPosition.dx, details.globalPosition.dy, 0, 0),
-                  ),
-            hoverColor: colors.border.withValues(alpha: 0.5),
+        // No ink: a click only changes the row's color, so nothing animates.
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: name == null ? widget.onTap : null,
+          onSecondaryTapUp: widget.onMenu == null
+              ? null
+              : (details) => _menuAt(
+                  Rect.fromLTWH(details.globalPosition.dx, details.globalPosition.dy, 0, 0),
+                ),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              // Only the selection colors the row: hovering changes nothing.
+              color: widget.selected ? colors.accentSoft : colors.accentSoft.withValues(alpha: 0),
+              borderRadius: BorderRadius.circular(AppRadius.small),
+            ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
@@ -192,19 +200,37 @@ class _WorkspaceChatTileState extends State<WorkspaceChatTile> {
                       ),
                     ),
                   ],
-                  if (_hovered && name == null && widget.onMenu != null)
-                    Builder(
-                      builder: (buttonContext) => IconButton(
-                        tooltip: localization.chatActions,
-                        icon: const Icon(Icons.more_horiz),
-                        iconSize: 16,
-                        color: colors.muted,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints.tightFor(width: 22, height: 22),
-                        onPressed: () {
-                          final box = buttonContext.findRenderObject()! as RenderBox;
-                          _menuAt(box.localToGlobal(Offset.zero) & box.size);
-                        },
+                  // The ⋯ has its place even while hidden, so showing it moves nothing.
+                  if (name == null && widget.onMenu != null)
+                    SizedBox.square(
+                      dimension: _menuSize,
+                      child: Visibility(
+                        visible: _hovered,
+                        maintainSize: true,
+                        maintainAnimation: true,
+                        maintainState: true,
+                        child: Builder(
+                          builder: (buttonContext) => IconButton(
+                            tooltip: localization.chatActions,
+                            icon: const Icon(Icons.more_horiz),
+                            iconSize: 16,
+                            color: colors.muted,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints.tightFor(
+                              width: _menuSize,
+                              height: _menuSize,
+                            ),
+                            style: IconButton.styleFrom(
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              splashFactory: NoSplash.splashFactory,
+                              overlayColor: colors.muted.withValues(alpha: 0),
+                            ),
+                            onPressed: () {
+                              final box = buttonContext.findRenderObject()! as RenderBox;
+                              _menuAt(box.localToGlobal(Offset.zero) & box.size);
+                            },
+                          ),
+                        ),
                       ),
                     ),
                 ],
