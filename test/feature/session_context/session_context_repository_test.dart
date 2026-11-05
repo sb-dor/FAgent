@@ -394,7 +394,7 @@ void main() {
 
       expect(result.servers, isEmpty);
       expect(appendOf(result), isNot(contains('Skills from flutter_code_agent')));
-      expect(appendOf(result), contains('Base rule text'));
+      expect(appendOf(result), contains('Style rule text'));
       expect(optionsOf(result).containsKey('allowedTools'), isFalse);
     });
 
@@ -456,11 +456,6 @@ void main() {
         buildRulesPrompt(
           rules: [
             (
-              source: SkillSource.builtin,
-              name: 'base',
-              text: '---\nname: base\ndescription: Base\n---\nBase rule text',
-            ),
-            (
               source: SkillSource.user,
               name: 'style',
               text: '---\nname: style\ndescription: Style\n---\nStyle rule text',
@@ -476,6 +471,13 @@ void main() {
       );
       expect(appendOf(result), isNot(contains('AGENTS rule item text')));
       expect('Agents file text'.allMatches(appendOf(result)), hasLength(1));
+    });
+
+    test('built-in rules are not in the prompt; own rules are', () async {
+      final append = appendOf(await context());
+
+      expect(append, isNot(contains('Base rule text')));
+      expect(append, contains('Style rule text'));
     });
 
     test('project rules are left to Claude, which reads .claude/rules itself', () async {
@@ -521,10 +523,10 @@ void main() {
       skills = MemorySkillsRepository(
         // `unreadable` has no text, so reading it fails.
         items: [
-          memoryRule('base'),
+          memoryRule('base', source: SkillSource.user),
           memoryRule('unreadable', source: SkillSource.user),
         ],
-        texts: {'rule:builtin:base': 'Base rule text'},
+        texts: {'rule:user:base': 'Base rule text'},
       );
 
       final append = appendOf(await context());
@@ -585,7 +587,7 @@ void main() {
       expect(result.meta, isNull);
       expect(result.firstMessageRules, isNull);
       final rules = result.systemPrompt!;
-      expect(rules, contains('Base rule text'));
+      expect(rules, isNot(contains('Base rule text')));
       expect(rules, contains('Style rule text'));
       expect(rules, contains('Team rule text'));
       expect(rules, isNot(contains('Agents file text')));
@@ -598,7 +600,7 @@ void main() {
       expect(result.meta, isNull);
       expect(result.systemPrompt, isNull);
       final rules = result.firstMessageRules!;
-      expect(rules, contains('Base rule text'));
+      expect(rules, isNot(contains('Base rule text')));
       expect(rules, contains('Team rule text'));
       expect(rules, contains('Agents file text'));
       expect(rules, contains('- arch — Architecture'));
@@ -658,11 +660,11 @@ void main() {
 
       expect(
         [for (final it in promptRules(library, agentReadsProjectRules: true)) it.name],
-        ['base', 'style'],
+        ['style'],
       );
       expect(
         [for (final it in promptRules(library, agentReadsProjectRules: false)) it.name],
-        ['base', 'style', 'team', 'AGENTS'],
+        ['style', 'team', 'AGENTS'],
       );
     });
 
