@@ -56,6 +56,9 @@ abstract interface class IProjectsRepository {
   /// Throws [OpenPathRefusedException], and starts nothing, when [path] is not absolute or does
   /// not exist.
   Future<void> openPath(String path);
+
+  /// Remembers that the app offered its rules to project [projectId], so it does not ask again.
+  Future<void> markRulesOffered(int projectId);
 }
 
 /// Drift-backed [IProjectsRepository].
@@ -107,6 +110,12 @@ final class ProjectsRepositoryImpl implements IProjectsRepository {
       throw ProcessException('open', <String>['-R', path], '${result.stderr}', result.exitCode);
     }
   }
+
+  @override
+  Future<void> markRulesOffered(int projectId) =>
+      (_database.update(_database.projectsTable)..where((p) => p.id.equals(projectId))).write(
+        const ProjectsTableCompanion(rulesOffered: Value<bool>(true)),
+      );
 
   @override
   Future<void> openPath(String path) async {

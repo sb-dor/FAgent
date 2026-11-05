@@ -1775,6 +1775,216 @@ i1.GeneratedColumn<double> _column_39(String aliasedName) =>
       $customConstraints: 'NOT NULL DEFAULT 240.0',
       defaultValue: const i1.CustomExpression('240.0'),
     );
+
+final class Schema12 extends i0.VersionedSchema {
+  Schema12({required super.database}) : super(version: 12);
+  @override
+  late final List<i1.DatabaseSchemaEntity> entities = [
+    projects,
+    sessions,
+    sessionEvents,
+    appSettings,
+    skillStates,
+    mcpServers,
+    mcpServerStates,
+    runConfigs,
+    chatSkillStates,
+    customAgents,
+    codeViewState,
+  ];
+  late final Shape13 projects = Shape13(
+    source: i0.VersionedTable(
+      entityName: 'projects',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: [],
+      columns: [
+        _column_0,
+        _column_1,
+        _column_2,
+        _column_3,
+        _column_4,
+        _column_5,
+        _column_6,
+        _column_40,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape3 sessions = Shape3(
+    source: i0.VersionedTable(
+      entityName: 'sessions',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: [],
+      columns: [
+        _column_0,
+        _column_7,
+        _column_8,
+        _column_9,
+        _column_10,
+        _column_17,
+        _column_3,
+        _column_11,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape2 sessionEvents = Shape2(
+    source: i0.VersionedTable(
+      entityName: 'session_events',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['UNIQUE(session_id, seq)'],
+      columns: [
+        _column_0,
+        _column_12,
+        _column_13,
+        _column_14,
+        _column_15,
+        _column_16,
+        _column_3,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape4 appSettings = Shape4(
+    source: i0.VersionedTable(
+      entityName: 'app_settings',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY("key")'],
+      columns: [_column_18, _column_19, _column_11],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape5 skillStates = Shape5(
+    source: i0.VersionedTable(
+      entityName: 'skill_states',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['UNIQUE(skill_id, project_id)'],
+      columns: [_column_0, _column_20, _column_21, _column_22],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape6 mcpServers = Shape6(
+    source: i0.VersionedTable(
+      entityName: 'mcp_servers',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: [],
+      columns: [
+        _column_0,
+        _column_23,
+        _column_24,
+        _column_25,
+        _column_26,
+        _column_3,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape7 mcpServerStates = Shape7(
+    source: i0.VersionedTable(
+      entityName: 'mcp_server_states',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['UNIQUE(server_key, project_id)'],
+      columns: [_column_0, _column_27, _column_7, _column_22],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape11 runConfigs = Shape11(
+    source: i0.VersionedTable(
+      entityName: 'run_configs',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(project_id)'],
+      columns: [_column_7, _column_28, _column_29, _column_30, _column_35],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape9 chatSkillStates = Shape9(
+    source: i0.VersionedTable(
+      entityName: 'chat_skill_states',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(session_id, skill_id)'],
+      columns: [_column_12, _column_20, _column_22],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape10 customAgents = Shape10(
+    source: i0.VersionedTable(
+      entityName: 'custom_agents',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: [],
+      columns: [
+        _column_0,
+        _column_2,
+        _column_31,
+        _column_32,
+        _column_33,
+        _column_34,
+        _column_3,
+      ],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+  late final Shape12 codeViewState = Shape12(
+    source: i0.VersionedTable(
+      entityName: 'code_view_state',
+      withoutRowId: false,
+      isStrict: false,
+      tableConstraints: ['PRIMARY KEY(project_id)'],
+      columns: [_column_7, _column_36, _column_37, _column_38, _column_39],
+      attachedDatabase: database,
+    ),
+    alias: null,
+  );
+}
+
+class Shape13 extends i0.VersionedTable {
+  Shape13({required super.source, required super.alias}) : super.aliased();
+  i1.GeneratedColumn<int> get id =>
+      columnsByName['id']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<String> get path =>
+      columnsByName['path']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<String> get name =>
+      columnsByName['name']! as i1.GeneratedColumn<String>;
+  i1.GeneratedColumn<int> get createdAt =>
+      columnsByName['created_at']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get lastOpenedAt =>
+      columnsByName['last_opened_at']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get isFlutter =>
+      columnsByName['is_flutter']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get trustedAt =>
+      columnsByName['trusted_at']! as i1.GeneratedColumn<int>;
+  i1.GeneratedColumn<int> get rulesOffered =>
+      columnsByName['rules_offered']! as i1.GeneratedColumn<int>;
+}
+
+i1.GeneratedColumn<int> _column_40(String aliasedName) =>
+    i1.GeneratedColumn<int>(
+      'rules_offered',
+      aliasedName,
+      false,
+      type: i1.DriftSqlType.int,
+      $customConstraints: 'NOT NULL DEFAULT 0 CHECK (rules_offered IN (0, 1))',
+      defaultValue: const i1.CustomExpression('0'),
+    );
 i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema2 schema) from1To2,
   required Future<void> Function(i1.Migrator m, Schema3 schema) from2To3,
@@ -1786,6 +1996,7 @@ i0.MigrationStepWithVersion migrationSteps({
   required Future<void> Function(i1.Migrator m, Schema9 schema) from8To9,
   required Future<void> Function(i1.Migrator m, Schema10 schema) from9To10,
   required Future<void> Function(i1.Migrator m, Schema11 schema) from10To11,
+  required Future<void> Function(i1.Migrator m, Schema12 schema) from11To12,
 }) {
   return (currentVersion, database) async {
     switch (currentVersion) {
@@ -1839,6 +2050,11 @@ i0.MigrationStepWithVersion migrationSteps({
         final migrator = i1.Migrator(database, schema);
         await from10To11(migrator, schema);
         return 11;
+      case 11:
+        final schema = Schema12(database: database);
+        final migrator = i1.Migrator(database, schema);
+        await from11To12(migrator, schema);
+        return 12;
       default:
         throw ArgumentError.value('Unknown migration from $currentVersion');
     }
@@ -1856,6 +2072,7 @@ i1.OnUpgrade stepByStep({
   required Future<void> Function(i1.Migrator m, Schema9 schema) from8To9,
   required Future<void> Function(i1.Migrator m, Schema10 schema) from9To10,
   required Future<void> Function(i1.Migrator m, Schema11 schema) from10To11,
+  required Future<void> Function(i1.Migrator m, Schema12 schema) from11To12,
 }) => i0.VersionedSchema.stepByStepHelper(
   step: migrationSteps(
     from1To2: from1To2,
@@ -1868,5 +2085,6 @@ i1.OnUpgrade stepByStep({
     from8To9: from8To9,
     from9To10: from9To10,
     from10To11: from10To11,
+    from11To12: from11To12,
   ),
 );

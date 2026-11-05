@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../generated_migrations/schema.dart';
 import '../../generated_migrations/schema_v1.dart' as v1;
 import '../../generated_migrations/schema_v10.dart' as v10;
+import '../../generated_migrations/schema_v11.dart' as v11;
 import '../../generated_migrations/schema_v2.dart' as v2;
 import '../../generated_migrations/schema_v3.dart' as v3;
 import '../../generated_migrations/schema_v4.dart' as v4;
@@ -33,10 +34,13 @@ void main() {
     addTearDown(database.close);
     await verifier.migrateAndValidate(database, 2);
 
-    final project = await database.select(database.projectsTable).getSingle();
-    expect(project.path, '/work/app');
-    expect(project.isFlutter, isFalse);
-    expect(project.trustedAt, isNull);
+    // Columns of v2 only: today's table class has columns later versions added.
+    final project = await database
+        .customSelect('SELECT path, is_flutter, trusted_at FROM projects')
+        .getSingle();
+    expect(project.read<String>('path'), '/work/app');
+    expect(project.read<bool>('is_flutter'), isFalse);
+    expect(project.readNullable<DateTime>('trusted_at'), isNull);
   });
 
   test('v2 → v3 matches the v3 schema and keeps chats without bypass consent', () async {
@@ -130,8 +134,8 @@ void main() {
     addTearDown(database.close);
     await verifier.migrateAndValidate(database, 7);
 
-    final project = await database.select(database.projectsTable).getSingle();
-    expect(project.path, '/work/app');
+    final project = await database.customSelect('SELECT path FROM projects').getSingle();
+    expect(project.read<String>('path'), '/work/app');
     expect((await database.select(database.mcpServersTable).getSingle()).name, 'figma');
     expect(await database.select(database.runConfigsTable).get(), isEmpty);
   });
@@ -231,5 +235,22 @@ void main() {
 
     expect((await database.select(database.runConfigsTable).getSingle()).selectedConfig, 'Dev');
     expect(await database.select(database.codeViewStateTable).get(), isEmpty);
+  });
+
+  test('v11 → v12 adds rules_offered false and keeps projects', () async {
+    final schema = await verifier.schemaAt(11);
+    final old = v11.DatabaseAtV11(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 12);
+
+    final project = await database.select(database.projectsTable).getSingle();
+    expect(project.path, '/work/app');
+    expect(project.rulesOffered, isFalse);
   });
 }
