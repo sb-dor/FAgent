@@ -95,14 +95,28 @@ void main() {
     testWidgets('ask before quit switch', (tester) async {
       await openSettings(tester, 'general');
       expect(_settings(tester).settings.askBeforeQuit, isTrue);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isTrue);
 
-      await tester.tap(find.byType(Switch));
+      await tester.tap(find.byType(Switch).first);
       await tester.pump();
       await _settle(tester);
 
       expect(_settings(tester).settings.askBeforeQuit, isFalse);
-      expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+      expect(tester.widget<Switch>(find.byType(Switch).first).value, isFalse);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('format on save switch', (tester) async {
+      await openSettings(tester, 'general');
+      expect(find.text('Format Dart files on save'), findsOneWidget);
+      expect(_settings(tester).settings.formatOnSave, isTrue);
+
+      await tester.tap(find.byType(Switch).last);
+      await tester.pump();
+      await _settle(tester);
+
+      expect(_settings(tester).settings.formatOnSave, isFalse);
+      expect(tester.widget<Switch>(find.byType(Switch).last).value, isFalse);
       await disposeTestApp(tester, dependencies);
     });
   });

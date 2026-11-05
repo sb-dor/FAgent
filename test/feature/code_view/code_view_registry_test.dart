@@ -128,4 +128,24 @@ void main() {
       expect(analyses.values.every((analysis) => analysis.disposed), isTrue);
     });
   });
+
+  test('saving formats only while formatOnSave says so', () async {
+    var formats = 0;
+    final workspace = registry.workspaceFor(projectId: 1, root: '/a');
+    analyses['/a']!.onFormat = (path, text) {
+      formats++;
+      return null;
+    };
+    final document = await workspace.tabs.open('/a/main.dart');
+
+    document.editing.replaceSelection('x');
+    await workspace.tabs.save(document);
+    expect(formats, 1);
+
+    registry.formatOnSave = () => false;
+    document.editing.replaceSelection('y');
+    await workspace.tabs.save(document);
+    expect(formats, 1);
+    expect(files.files['/a/main.dart'], startsWith('xy'));
+  });
 }

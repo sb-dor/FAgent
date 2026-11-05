@@ -25,6 +25,20 @@ enum CodeDocumentKind {
   unreadable,
 }
 
+/// Opens every folded block of [editing], so visible lines are document lines again.
+void unfoldAllChunks(CodeLineEditingController editing) {
+  var folded = true;
+  while (folded) {
+    folded = false;
+    for (var i = editing.codeLines.length - 1; i >= 0; i--) {
+      if (editing.codeLines[i].chunkParent) {
+        editing.expandChunk(i);
+        folded = true;
+      }
+    }
+  }
+}
+
 /// Extensions shown as pictures.
 const Set<String> codeImageExtensions = <String>{'png', 'jpg', 'jpeg', 'gif', 'webp'};
 
@@ -159,18 +173,7 @@ final class CodeDocument extends ChangeNotifier {
 
   /// Opens every folded block, so visible lines are document lines again (LSP positions count
   /// the latter).
-  void unfoldAll() {
-    var folded = true;
-    while (folded) {
-      folded = false;
-      for (var i = editing.codeLines.length - 1; i >= 0; i--) {
-        if (editing.codeLines[i].chunkParent) {
-          editing.expandChunk(i);
-          folded = true;
-        }
-      }
-    }
-  }
+  void unfoldAll() => unfoldAllChunks(editing);
 
   /// The editor's text, selection and undo history.
   final CodeLineEditingController editing;

@@ -91,7 +91,7 @@ class _CodeViewState extends State<CodeView> {
     final target = document ?? _workspace.tabs.active;
     if (target == null) return;
     try {
-      await target.save();
+      await _workspace.tabs.save(target);
     } on FileChangedOnDiskException {
       if (!mounted) return;
       final localization = Localization.of(context);
@@ -99,7 +99,7 @@ class _CodeViewState extends State<CodeView> {
         title: localization.codeOverwriteQuestion,
         answers: <(bool?, String)>[(null, localization.cancel), (true, localization.codeOverwrite)],
       );
-      if (overwrite ?? false) await target.save(overwrite: true);
+      if (overwrite ?? false) await _workspace.tabs.save(target, overwrite: true);
     }
   }
 

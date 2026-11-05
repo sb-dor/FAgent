@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnost
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_format.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
@@ -29,7 +30,9 @@ final class CodeWorkspace {
     required ICodeFilesRepository files,
     required ICodeViewStateRepository state,
     this.analysis,
-  }) : _files = files {
+    bool Function()? formatOnSave,
+  }) : _files = files,
+       _formatOnSave = formatOnSave ?? _always {
     // One watch for both; it stops once both stopped listening.
     final changes = files
         .watch(root)
@@ -43,6 +46,7 @@ final class CodeWorkspace {
       changes: changes,
     );
     _diagnostics = analysis?.diagnostics.listen(_onDiagnostics);
+    tabs.beforeSave = _formatBeforeSave;
     tabs
       ..addListener(_dropClosedViews)
       ..addListener(_syncAnalysis)
@@ -53,6 +57,17 @@ final class CodeWorkspace {
   final IDartAnalysisRepository? analysis;
 
   final ICodeFilesRepository _files;
+
+  /// Whether saving formats Dart files (the app setting).
+  final bool Function() _formatOnSave;
+
+  static bool _always() => true;
+
+  Future<void> _formatBeforeSave(CodeDocument document) async {
+    final analysis = this.analysis;
+    if (analysis == null || !_formatOnSave()) return;
+    await formatDocument(document, analysis);
+  }
 
   /// Short names of files outside the project, from its `.dart_tool/package_config.json`; read
   /// once, on first use.
@@ -310,6 +325,10 @@ final class CodeViewRegistry extends ChangeNotifier implements IUnsavedFiles {
 
   /// Makes the Dart analysis of a project's folder; none when `null`.
   final IDartAnalysisRepository Function(String root)? _analysisFor;
+
+  /// Whether saving a Dart file formats it first; the workspace scope points it at the app's
+  /// setting.
+  bool Function() formatOnSave = () => true;
   final Map<int, CodeWorkspace> _workspaces = <int, CodeWorkspace>{};
 
   /// The Code view of [projectId] if one was made in this run.
@@ -327,6 +346,7 @@ final class CodeViewRegistry extends ChangeNotifier implements IUnsavedFiles {
       files: _files,
       state: _state,
       analysis: _analysisFor?.call(root),
+      formatOnSave: () => formatOnSave(),
     );
     workspace.tabs.addListener(_onTabs);
     return _workspaces[projectId] = workspace;

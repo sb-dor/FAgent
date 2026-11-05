@@ -295,4 +295,15 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
   });
+
+  test('formatOnSave defaults to true, round-trips, and a non-bool is true', () {
+    expect(const AppSettings().formatOnSave, isTrue);
+    final off = const AppSettings().copyWith(formatOnSave: false);
+    expect(AppSettings.fromJson(off.toJson()).formatOnSave, isFalse);
+    expect(
+      AppSettings.fromJson(const <String, Object?>{'formatOnSave': 'no'}).formatOnSave,
+      isTrue,
+    );
+    expect(off, isNot(const AppSettings()));
+  });
 }

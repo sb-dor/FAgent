@@ -177,13 +177,29 @@ final class CodeTabsController extends ChangeNotifier {
     _changed();
   }
 
+  /// Runs before every [save] (formatting); a failure there does not stop the save.
+  Future<void> Function(CodeDocument document)? beforeSave;
+
+  /// Saves [document] after [beforeSave].
+  ///
+  /// Throws [FileChangedOnDiskException] as [CodeDocument.save] does.
+  Future<void> save(CodeDocument document, {bool overwrite = false}) async {
+    if (document.kind != CodeDocumentKind.text || document.readOnly) return;
+    try {
+      await beforeSave?.call(document);
+    } on Object {
+      // Saving matters more than formatting.
+    }
+    await document.save(overwrite: overwrite);
+  }
+
   /// Saves every unsaved tab; `false` when one stays unsaved (changed on disk or a failed write).
   Future<bool> saveAll() async {
     var all = true;
     for (final document in List<CodeDocument>.of(_tabs)) {
       if (!document.dirty) continue;
       try {
-        await document.save();
+        await save(document);
       } on FileChangedOnDiskException {
         all = false;
         continue;

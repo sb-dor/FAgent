@@ -110,6 +110,14 @@ class GeneralSettingsSection extends StatelessWidget {
                 ],
               ),
             ),
+            SettingsRow(
+              label: localization.settingsFormatOnSave,
+              hint: localization.settingsFormatOnSaveHint,
+              control: Switch(
+                value: settings.formatOnSave,
+                onChanged: (value) => controller.update((s) => s.copyWith(formatOnSave: value)),
+              ),
+            ),
           ],
         );
       },

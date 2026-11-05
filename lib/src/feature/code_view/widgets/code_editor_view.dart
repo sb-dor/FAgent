@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_format.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/dart_completion_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
@@ -80,6 +81,11 @@ final class _CompleteIntent extends Intent {
 /// F12: go to definition.
 final class _DefinitionIntent extends Intent {
   const _DefinitionIntent();
+}
+
+/// ⇧⌥F: format the file.
+final class _FormatIntent extends Intent {
+  const _FormatIntent();
 }
 
 /// ⇧F12: find references.
@@ -489,6 +495,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
         SingleActivator(LogicalKeyboardKey.escape): _DismissIntent(),
         SingleActivator(LogicalKeyboardKey.f12): _DefinitionIntent(),
         SingleActivator(LogicalKeyboardKey.f12, shift: true): _ReferencesIntent(),
+        SingleActivator(LogicalKeyboardKey.keyF, shift: true, alt: true): _FormatIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -496,6 +503,14 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           _CompleteIntent: CallbackAction<_CompleteIntent>(
             onInvoke: (_) {
               completion.trigger();
+              return null;
+            },
+          ),
+          _FormatIntent: CallbackAction<_FormatIntent>(
+            onInvoke: (_) {
+              if (widget.analysis case final analysis?) {
+                formatDocument(widget.document, analysis).ignore();
+              }
               return null;
             },
           ),

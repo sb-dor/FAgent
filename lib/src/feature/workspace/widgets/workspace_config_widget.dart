@@ -201,6 +201,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       ..chatHandle.addListener(_draft.onHandleChanged);
     _followSelectedProject();
     _followSkills();
+    dependencies.codeViews.formatOnSave = () => settingsController.settings.formatOnSave;
   }
 
   @override

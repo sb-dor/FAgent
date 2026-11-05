@@ -344,6 +344,8 @@
   "settingsQuit": "При закрытии, пока агенты работают",
   "settingsQuitHint": "Выключено: приложение закроется сразу и остановит агентов.",
   "settingsQuitAsk": "Спрашивать",
+  "settingsFormatOnSave": "Форматировать Dart-файлы при сохранении",
+  "settingsFormatOnSaveHint": "⇧⌥F форматирует без сохранения",
   "settingsTheme": "Тема",
   "settingsThemeSystem": "Системная",
   "settingsThemeLight": "Светлая",
