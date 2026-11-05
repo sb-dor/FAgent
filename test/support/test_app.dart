@@ -30,6 +30,8 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
@@ -91,6 +93,7 @@ Dependencies testDependencies({
   IAppMcpServer? appMcpServer,
   IMcpProbe? mcpProbe,
   DropZone? dropZone,
+  IProjectRulesRepository? projectRulesRepository,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
@@ -113,7 +116,7 @@ Dependencies testDependencies({
   final hub = AgentHub(database: database, environment: environment);
   final codeFiles = codeFilesRepository ?? CodeFilesRepositoryImpl(environment: environment);
   final codeState = codeViewStateRepository ?? MemoryCodeViewStateRepository();
-  return Dependencies()
+  final dependencies = Dependencies()
     ..database = database
     ..dropZone = dropZone ?? DropZone.fromStream(const Stream<DropZoneEvent>.empty())
     ..shellEnvironment = environment
@@ -163,6 +166,17 @@ Dependencies testDependencies({
             'skill:builtin:feature-architecture': '# feature-architecture\n',
             'rule:builtin:dart-style': '# dart-style\n',
           },
+        );
+  return dependencies
+    ..projectRulesRepository =
+        projectRulesRepository ??
+        ProjectRulesRepositoryImpl(
+          skills: dependencies.skillsRepository,
+          projects: ProjectsRepositoryImpl(
+            database: database,
+            hub: hub,
+            queuedChats: dependencies.chatQueues,
+          ),
         );
 }
 
