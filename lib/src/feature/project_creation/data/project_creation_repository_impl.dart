@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/data/project_tem
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
@@ -37,6 +38,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required this._environment,
     required this._projectOpening,
     required this._projectTrust,
+    required this._projectRules,
     required this._loadAsset,
     this._startProcess = startGroupedDaemonProcess,
     String? home,
@@ -47,6 +49,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   final ShellEnvironment _environment;
   final IProjectOpeningRepository _projectOpening;
   final IProjectTrustRepository _projectTrust;
+  final IProjectRulesRepository _projectRules;
   final Future<String> Function(String key) _loadAsset;
   final DaemonProcessStarter _startProcess;
   final String _home;
@@ -172,6 +175,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     final project = await _projectOpening.open(run.request.path);
     if (run.cancelled) return;
     await _projectTrust.trust(project.id);
+    // It has the rules (or the user turned them all off): the app does not offer them again.
+    await _projectRules.markOffered(project.id);
     run.emit(projectId: project.id);
   }
 
@@ -215,6 +220,15 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         await _command(run, index, await _flutter(run), const <String>[
           'analyze',
         ], workingDirectory: path);
+      case CreationStepKind.rules:
+        final rules = [
+          for (final rule in await _projectRules.builtinRules())
+            if (rule.enabled) rule,
+        ];
+        if (rules.isNotEmpty) await _projectRules.write(path, rules);
+        for (final rule in rules) {
+          run.addLine(index, '✎ docs/rules/${rule.name}.md');
+        }
       case CreationStepKind.firstCommit:
         final git = _git();
         await _command(run, index, git, const <String>['add', '-A'], workingDirectory: path);

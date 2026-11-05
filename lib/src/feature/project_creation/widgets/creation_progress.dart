@@ -185,6 +185,7 @@ class _StepRow extends StatelessWidget {
     CreationStepKind.gitInit => Localization.of(context).newProjectStepGitInit,
     CreationStepKind.skeleton => Localization.of(context).newProjectStepSkeleton,
     CreationStepKind.analyze => Localization.of(context).newProjectStepAnalyze,
+    CreationStepKind.rules => Localization.of(context).creationStepRules,
     CreationStepKind.firstCommit => Localization.of(context).newProjectStepFirstCommit,
   };
 

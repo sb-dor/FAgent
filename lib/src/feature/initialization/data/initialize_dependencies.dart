@@ -270,6 +270,7 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         environment: dependencies.shellEnvironment,
         projectOpening: ProjectOpeningRepositoryImpl(database: dependencies.database),
         projectTrust: ProjectTrustRepositoryImpl(database: dependencies.database),
+        projectRules: dependencies.projectRulesRepository,
         loadAsset: rootBundle.loadString,
       ),
 };

@@ -626,6 +626,7 @@
   "newProjectStepSkeleton": "Architecture skeleton",
   "newProjectStepAnalyze": "flutter analyze",
   "newProjectStepFirstCommit": "First commit",
+  "creationStepRules": "Project rules",
   "newProjectStepTook": "{seconds} s",
   "@newProjectStepTook": {"placeholders": {"seconds": {"type": "int"}}},
   "newProjectMinimize": "Minimize",

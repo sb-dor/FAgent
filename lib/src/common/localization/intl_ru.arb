@@ -575,6 +575,7 @@
   "newProjectStepSkeleton": "Скелет архитектуры",
   "newProjectStepAnalyze": "flutter analyze",
   "newProjectStepFirstCommit": "Первый коммит",
+  "creationStepRules": "Правила проекта",
   "newProjectStepTook": "{seconds} с",
   "@newProjectStepTook": {"placeholders": {"seconds": {"type": "int"}}},
   "newProjectMinimize": "Свернуть",

@@ -11,6 +11,8 @@ import 'package:flutter_code_agent/src/feature/project_creation/data/project_cre
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/models/project_rule.dart';
 import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -45,6 +47,7 @@ void main() {
         environment: environment,
         projectOpening: ProjectOpeningRepositoryImpl(database: database),
         projectTrust: ProjectTrustRepositoryImpl(database: database),
+        projectRules: _NoRules(),
         loadAsset: (key) => io.File(key).readAsString(),
       );
       addTearDown(repository.dispose);
@@ -90,4 +93,19 @@ void main() {
     skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
     timeout: const Timeout(Duration(minutes: 10)),
   );
+}
+
+/// No built-in rules: the skeleton is what this test checks.
+final class _NoRules implements IProjectRulesRepository {
+  @override
+  Future<bool> hasRules(String projectRoot) async => false;
+
+  @override
+  Future<List<ProjectRule>> builtinRules() async => const <ProjectRule>[];
+
+  @override
+  Future<void> write(String projectRoot, List<ProjectRule> rules) async {}
+
+  @override
+  Future<void> markOffered(int projectId) async {}
 }

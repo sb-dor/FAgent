@@ -163,13 +163,14 @@ void main() {
     expect(find.text('flutter create'), findsOneWidget);
     expect(find.text('git init'), findsOneWidget);
     expect(find.text('flutter analyze'), findsOneWidget);
+    expect(find.text('Project rules'), findsOneWidget);
     expect(find.text('First commit'), findsOneWidget);
     expect(inProgress(find.byType(CircularProgressIndicator)), findsNothing);
-    expect(inProgress(find.text('○')), findsNWidgets(5));
+    expect(inProgress(find.text('○')), findsNWidgets(6));
 
     await _elapse(tester, _step);
     expect(inProgress(find.byType(CircularProgressIndicator)), findsOneWidget);
-    expect(inProgress(find.text('○')), findsNWidgets(4));
+    expect(inProgress(find.text('○')), findsNWidgets(5));
 
     await _elapse(tester, const Duration(milliseconds: 300));
     expect(inProgress(find.text('Wrote 130 files.')), findsOneWidget);
@@ -179,7 +180,7 @@ void main() {
     await _elapse(tester, const Duration(seconds: 3));
 
     expect(inProgress(find.text('avera_booking: done')), findsOneWidget);
-    expect(inProgress(find.text('✓')), findsNWidgets(5));
+    expect(inProgress(find.text('✓')), findsNWidgets(6));
     expect(inProgress(find.byType(CircularProgressIndicator)), findsNothing);
     expect(inProgress(find.text('Architecture skeleton')), findsOneWidget);
     expect(find.text('✎ lib/src/common/localization/intl_en.arb'), findsOneWidget);
@@ -199,12 +200,12 @@ void main() {
 
     expect(find.byType(NewProjectDialog), findsNothing);
     expect(chip(), findsOneWidget);
-    expect(find.text('Creating avera_booking · 0/5'), findsOneWidget);
+    expect(find.text('Creating avera_booking · 0/6'), findsOneWidget);
 
     await _elapse(tester, const Duration(milliseconds: 250));
-    expect(find.text('Creating avera_booking · 1/5'), findsOneWidget);
+    expect(find.text('Creating avera_booking · 1/6'), findsOneWidget);
     await _elapse(tester, const Duration(milliseconds: 250));
-    expect(find.text('Creating avera_booking · 2/5'), findsOneWidget);
+    expect(find.text('Creating avera_booking · 2/6'), findsOneWidget);
 
     await tester.tap(chip());
     await _elapse(tester, const Duration(milliseconds: 300));
@@ -426,7 +427,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('plain template shows two steps', (tester) async {
+  testWidgets('plain template shows three steps', (tester) async {
     await pumpWindow(tester);
     await openFromMenu(tester);
     await tester.enterText(find.byKey(_nameField), 'avera_booking');
@@ -436,13 +437,14 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('new-project-create')));
     await tester.pump();
 
-    expect(inProgress(find.text('○')), findsNWidgets(2));
+    expect(inProgress(find.text('○')), findsNWidgets(3));
+    expect(find.text('Project rules'), findsOneWidget);
     expect(find.text('git init'), findsNothing);
     expect(find.text('First commit'), findsNothing);
 
     await tester.tap(minimize(false));
     await _elapse(tester, const Duration(milliseconds: 300));
-    expect(find.text('Creating avera_booking · 0/2'), findsOneWidget);
+    expect(find.text('Creating avera_booking · 0/3'), findsOneWidget);
 
     await _elapse(tester, const Duration(seconds: 1));
     expect(find.text('avera_booking: done'), findsOneWidget);
