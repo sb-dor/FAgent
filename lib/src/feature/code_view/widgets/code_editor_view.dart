@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
-import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/dart_completion_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_completion_list.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_diagnostic_spans.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_find_panel.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_highlight.dart';
+import 'package:flutter_code_agent/src/feature/code_view/widgets/code_hover_card.dart';
+import 'package:flutter_code_agent/src/feature/code_view/widgets/code_pointer_position.dart';
 import 'package:re_editor/re_editor.dart';
 
 /// {@template code_editor_view}
 /// The editor on one text [document]: line numbers, folding, highlighting in the app's colors and
-/// find (⌘F); for a Dart file with an [analysis], completion at the caret. [find] and [scroll]
+/// find (⌘F); for a Dart file with an [analysis], completion at the caret and the hover card. [find] and [scroll]
 /// belong to the document's tab, so they outlive this widget when another tab is shown.
 /// {@endtemplate}
 class CodeEditorView extends StatefulWidget {
@@ -91,9 +92,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
   final OverlayPortalController _overlay = OverlayPortalController();
   final OverlayPortalController _hoverOverlay = OverlayPortalController();
   DartCompletionController? _completion;
-
-  /// The diagnostic under the pointer and where the pointer is (global).
-  (DartDiagnostic, Offset)? _hover;
+  CodeNavigationController? _navigation;
 
   @override
   void initState() {
@@ -118,6 +117,8 @@ class _CodeEditorViewState extends State<CodeEditorView> {
     if (analysis == null || !widget.document.path.endsWith('.dart')) return;
     _completion = DartCompletionController(document: widget.document, analysis: analysis)
       ..addListener(_onCompletion);
+    _navigation = CodeNavigationController(document: widget.document, analysis: analysis)
+      ..addListener(_onNavigation);
     final document = widget.document;
     document.decorator =
         ({
@@ -135,55 +136,72 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           },
           diagnostics: document.diagnostics.value,
           colors: context.colors,
-          onEnter: _showHover,
-          onExit: _hideHover,
         );
     document.editing.forceRepaint();
   }
 
-  void _showHover(DartDiagnostic diagnostic, Offset position) {
+  void _onNavigation() {
     if (!mounted) return;
-    setState(() => _hover = (diagnostic, position));
-    if (!_hoverOverlay.isShowing) _hoverOverlay.show();
+    final showing = _navigation?.hover != null;
+    if (showing && !_hoverOverlay.isShowing) {
+      _hoverOverlay.show();
+    } else if (!showing && _hoverOverlay.isShowing) {
+      _hoverOverlay.hide();
+    }
+    setState(() {});
   }
 
-  void _hideHover() {
-    if (!mounted || _hover == null) return;
-    setState(() => _hover = null);
-    if (_hoverOverlay.isShowing) _hoverOverlay.hide();
+  /// The pointer moved over the editor: the document position under it, for the hover card.
+  void _onPointerHover(PointerHoverEvent event) {
+    final navigation = _navigation;
+    final editor = _editorKey.currentContext?.findRenderObject() as RenderBox?;
+    if (navigation == null || editor == null || !editor.attached) return;
+    final metrics = TextPainter(
+      text: TextSpan(text: 'M', style: _codeStyle),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final gutter = _gutterKey.currentContext?.findRenderObject() as RenderBox?;
+    final vertical = widget.scroll.verticalScroller;
+    final horizontal = widget.scroll.horizontalScroller;
+    navigation.pointerAt(
+      codePositionAt(
+        widget.document.editing,
+        editor.globalToLocal(event.position),
+        gutterWidth: gutter?.size.width ?? 0,
+        charWidth: metrics.width,
+        lineHeight: metrics.height,
+        padding: CodeEditorView.padding,
+        scrollX: horizontal.hasClients ? horizontal.offset : 0,
+        scrollY: vertical.hasClients ? vertical.offset : 0,
+        topInset: codeFindPanelHeight(widget.find.value, readOnly: widget.document.readOnly),
+      ),
+      event.position,
+    );
   }
 
   Widget _buildHover(BuildContext overlayContext) {
-    final hover = _hover;
+    final navigation = _navigation;
+    final hover = navigation?.hover;
     final overlay = Overlay.of(overlayContext).context.findRenderObject() as RenderBox?;
-    if (hover == null || overlay == null) return const SizedBox.shrink();
-    final (diagnostic, position) = hover;
-    final colors = overlayContext.colors;
-    final at = overlay.globalToLocal(position);
-    const width = 420.0;
+    if (navigation == null || hover == null || overlay == null) return const SizedBox.shrink();
+    final at = overlay.globalToLocal(hover.anchor);
+    final left = at.dx.clamp(
+      0.0,
+      (overlay.size.width - CodeHoverCard.maxWidth).clamp(0.0, double.infinity),
+    );
+    // Below the pointer, above it when there is no room for the tallest card.
+    final below = at.dy + 18;
+    final top = below + CodeHoverCard.maxHeight > overlay.size.height
+        ? (at.dy - 6 - CodeHoverCard.maxHeight).clamp(0.0, double.infinity)
+        : below;
     return Positioned(
-      left: at.dx.clamp(0.0, (overlay.size.width - width).clamp(0.0, double.infinity)),
-      top: at.dy + 18,
-      child: IgnorePointer(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: width),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: colors.surface,
-              border: Border.all(color: diagnosticColor(colors, diagnostic.severity)),
-              borderRadius: BorderRadius.circular(AppRadius.small),
-              boxShadow: <BoxShadow>[BoxShadow(color: colors.shadow, blurRadius: 6)],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Text(
-                diagnostic.code == null
-                    ? diagnostic.message
-                    : '${diagnostic.message} (${diagnostic.code})',
-                style: Theme.of(overlayContext).textTheme.bodySmall?.copyWith(color: colors.text),
-              ),
-            ),
-          ),
+      left: left,
+      top: top,
+      child: CodeEditorTapRegion(
+        child: CodeHoverCard(
+          info: hover,
+          onEnter: navigation.keepHover,
+          onExit: navigation.pointerLeft,
         ),
       ),
     );
@@ -194,9 +212,12 @@ class _CodeEditorViewState extends State<CodeEditorView> {
       ?..removeListener(_onCompletion)
       ..dispose();
     _completion = null;
+    _navigation
+      ?..removeListener(_onNavigation)
+      ..dispose();
+    _navigation = null;
     if (_overlay.isShowing) _overlay.hide();
     if (_hoverOverlay.isShowing) _hoverOverlay.hide();
-    _hover = null;
     widget.document.decorator = null;
   }
 
@@ -247,8 +268,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
       textDirection: TextDirection.ltr,
     )..layout();
     final lineHeight = linePainter.height;
-    final find = widget.find.value;
-    final findHeight = find == null ? 0.0 : (find.replaceMode ? 72.0 : 36.0) + 8;
+    final findHeight = codeFindPanelHeight(widget.find.value, readOnly: widget.document.readOnly);
     final vertical = widget.scroll.verticalScroller;
     final horizontal = widget.scroll.horizontalScroller;
     final x =
@@ -322,7 +342,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           },
         ),
         CodeShortcutEscIntent: _WhenAction<CodeShortcutEscIntent>(
-          enabled: () => completion.open || completion.snippet != null,
+          enabled: () => _dismissible(completion),
           onInvoke: (_) {
             _dismiss(completion);
             return null;
@@ -330,11 +350,17 @@ class _CodeEditorViewState extends State<CodeEditorView> {
         ),
       };
 
+  /// Esc has something to close: the list, a snippet or the hover card.
+  bool _dismissible(DartCompletionController completion) =>
+      completion.open || completion.snippet != null || _navigation?.hover != null;
+
   void _dismiss(DartCompletionController completion) {
     if (completion.open) {
       completion.dismiss();
-    } else {
+    } else if (completion.snippet != null) {
       completion.endSnippet();
+    } else {
+      _navigation?.dismissHover();
     }
   }
 
@@ -407,7 +433,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
             },
           ),
           _DismissIntent: _WhenAction<_DismissIntent>(
-            enabled: () => completion.open || completion.snippet != null,
+            enabled: () => _dismissible(completion),
             onInvoke: (_) {
               _dismiss(completion);
               return null;
@@ -426,7 +452,11 @@ class _CodeEditorViewState extends State<CodeEditorView> {
             controller: _hoverOverlay,
             overlayChildBuilder: (overlayContext) =>
                 Positioned.fill(child: Stack(children: <Widget>[_buildHover(overlayContext)])),
-            child: KeyedSubtree(key: _editorKey, child: editor),
+            child: MouseRegion(
+              onHover: _onPointerHover,
+              onExit: (_) => _navigation?.pointerLeft(),
+              child: KeyedSubtree(key: _editorKey, child: editor),
+            ),
           ),
         ),
       ),

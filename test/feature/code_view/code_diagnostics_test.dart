@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
@@ -74,14 +73,7 @@ void main() {
 
   group('diagnosticSpans', () {
     TextSpan spans(List<DartDiagnostic> diagnostics, {int index = 0, TextSpan span = line}) =>
-        diagnosticSpans(
-          textSpan: span,
-          line: index,
-          diagnostics: diagnostics,
-          colors: colors,
-          onEnter: (_, _) {},
-          onExit: () {},
-        );
+        diagnosticSpans(textSpan: span, line: index, diagnostics: diagnostics, colors: colors);
 
     test('an error, a warning and a hint are underlined in danger, warn and muted', () {
       final result = spans(<DartDiagnostic>[
@@ -136,12 +128,6 @@ void main() {
         ('in', colors.danger),
         ('() {}', colors.danger),
       ]);
-    });
-
-    test('a range covers a MouseTrackerAnnotationTextSpan', () {
-      final result = spans(<DartDiagnostic>[_diagnostic(DartSeverity.error, start: 5, end: 9)]);
-
-      expect(result.children!.whereType<MouseTrackerAnnotationTextSpan>(), hasLength(1));
     });
 
     test('a line without diagnostics is the same span', () {
@@ -250,33 +236,6 @@ void main() {
       );
 
       expect(_leaves(span), contains(('y', context.colors.danger)));
-    });
-
-    testCode('hovering the range shows the message and code', (tester) async {
-      final document = await pump(tester);
-      publish(main, <DartDiagnostic>[
-        _diagnostic(DartSeverity.error, start: 14, end: 15, message: "Undefined name 'x'."),
-      ]);
-      await settle(tester);
-      final context = tester.element(find.byType(CodeEditor));
-      final span = document.decorator!(
-        context: context,
-        index: 0,
-        codeLine: document.editing.codeLines[0],
-        textSpan: const TextSpan(text: 'void main() { x; }'),
-        style: const TextStyle(),
-      );
-      final hover = span.children!.whereType<MouseTrackerAnnotationTextSpan>().single;
-
-      hover.onEnterWithRect(const PointerEnterEvent(position: Offset(300, 200)), 0, const <Rect>[
-        Rect.fromLTWH(300, 190, 10, 18),
-      ]);
-      await tester.pump();
-
-      expect(find.text("Undefined name 'x'. (undefined_identifier)"), findsOneWidget);
-      hover.onExitWithRect(const PointerExitEvent(), 0, const <Rect>[]);
-      await tester.pump();
-      expect(find.textContaining("Undefined name 'x'."), findsNothing);
     });
 
     testCode('the tab shows ⓧ 2 ⚠ 1', (tester) async {

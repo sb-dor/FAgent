@@ -5,6 +5,12 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:re_editor/re_editor.dart';
 
+/// The height the find panel takes above the text: none while closed, one row, or two with
+/// replace (never in a [readOnly] editor).
+double codeFindPanelHeight(CodeFindValue? value, {bool readOnly = false}) => value == null
+    ? 0
+    : (value.replaceMode && !readOnly ? CodeFindPanel.rowHeight * 2 : CodeFindPanel.rowHeight) + 8;
+
 /// {@template code_find_panel}
 /// Find (⌘F) and replace in the open file, in the editor's top right corner.
 /// {@endtemplate}
@@ -18,15 +24,12 @@ class CodeFindPanel extends StatelessWidget implements PreferredSizeWidget {
   /// A read-only editor offers no replace.
   final bool readOnly;
 
-  static const double _rowHeight = 36;
+  /// Height of one row of the panel.
+  static const double rowHeight = 36;
 
   @override
-  Size get preferredSize => Size(
-    double.infinity,
-    controller.value == null
-        ? 0
-        : (controller.value!.replaceMode && !readOnly ? _rowHeight * 2 : _rowHeight) + 8,
-  );
+  Size get preferredSize =>
+      Size(double.infinity, codeFindPanelHeight(controller.value, readOnly: readOnly));
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +61,7 @@ class CodeFindPanel extends StatelessWidget implements PreferredSizeWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
                   SizedBox(
-                    height: _rowHeight,
+                    height: rowHeight,
                     child: Row(
                       children: <Widget>[
                         if (!readOnly)
@@ -119,7 +122,7 @@ class CodeFindPanel extends StatelessWidget implements PreferredSizeWidget {
                   ),
                   if (value.replaceMode && !readOnly)
                     SizedBox(
-                      height: _rowHeight,
+                      height: rowHeight,
                       child: Row(
                         children: <Widget>[
                           const SizedBox(width: 28),
