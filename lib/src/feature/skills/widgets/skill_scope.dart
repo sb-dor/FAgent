@@ -67,6 +67,15 @@ class SkillScope extends StatelessWidget {
             ),
           );
         }
+        // A built-in rule only picks what goes into projects' docs/rules: no per-project switch.
+        if (item.kind == KnowledgeKind.rule && item.source == SkillSource.builtin) {
+          return _SwitchLabel(
+            key: const ValueKey<String>('skill-global-switch'),
+            label: localization.skillEnabled,
+            value: item.enabledGlobally,
+            onChanged: (enabled) => scope.actions.setEnabled(item.id, enabled: enabled),
+          );
+        }
         final byId = {for (final project in scope.projects) project.id: project};
         final exceptions = <Project>[for (final id in item.exceptions) ?byId[id]]
           ..sort((a, b) => a.name.compareTo(b.name));

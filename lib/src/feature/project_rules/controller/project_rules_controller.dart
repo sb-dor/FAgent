@@ -48,12 +48,15 @@ final class ProjectRulesController extends StateController<ProjectRulesState>
 
   final IProjectRulesRepository _repository;
 
-  /// Offers the rules to [project] unless it has `docs/rules` ([ProjectRulesState.present]) or was
-  /// offered them before ([ProjectRulesState.missing]).
+  /// Offers the rules to [project] unless it has `docs/rules` ([ProjectRulesState.present]), was
+  /// offered them before or is not a Flutter project ([ProjectRulesState.missing]: the Rules
+  /// section still offers them). A project whose folder is gone gets nothing.
   void check(Project project) => handle(() async {
-    if (await _repository.hasRules(project.path)) {
+    if (!await _repository.canHaveRules(project.path)) {
+      setState(const ProjectRulesState.idle());
+    } else if (await _repository.hasRules(project.path)) {
       setState(ProjectRulesState.present(projectId: project.id));
-    } else if (project.rulesOffered) {
+    } else if (project.rulesOffered || !project.isFlutter) {
       setState(ProjectRulesState.missing(projectId: project.id));
     } else {
       await _offer(project);
@@ -62,7 +65,9 @@ final class ProjectRulesController extends StateController<ProjectRulesState>
 
   /// Offers the rules to [project] (the user asked for it), unless it has `docs/rules`.
   void offer(Project project) => handle(() async {
-    if (await _repository.hasRules(project.path)) {
+    if (!await _repository.canHaveRules(project.path)) {
+      setState(const ProjectRulesState.idle());
+    } else if (await _repository.hasRules(project.path)) {
       setState(ProjectRulesState.present(projectId: project.id));
     } else {
       await _offer(project);

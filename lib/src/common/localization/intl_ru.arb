@@ -577,7 +577,7 @@
   "newProjectStepFirstCommit": "Первый коммит",
   "creationStepRules": "Правила проекта",
   "projectRulesTitle": "Добавить правила в проект?",
-  "projectRulesExplain": "Агент будет читать их из docs/rules — так они видны в проекте и меняются вместе с ним.",
+  "projectRulesExplain": "Агент будет читать их из docs/rules — так они видны в проекте и меняются вместе с ним. Без них агенты в этом проекте не получат встроенных правил.",
   "projectRulesAdd": "Добавить",
   "projectRulesNotNow": "Не сейчас",
   "projectRulesButton": "Добавить правила в проект",

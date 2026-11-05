@@ -42,10 +42,22 @@ void main() {
       final db = dependencies.database;
       first = await db
           .into(db.projectsTable)
-          .insert(ProjectsTableCompanion.insert(path: '/p', name: 'alpha'));
+          .insert(
+            ProjectsTableCompanion.insert(
+              path: '/p',
+              name: 'alpha',
+              isFlutter: const Value<bool>(true),
+            ),
+          );
       second = await db
           .into(db.projectsTable)
-          .insert(ProjectsTableCompanion.insert(path: '/q', name: 'beta'));
+          .insert(
+            ProjectsTableCompanion.insert(
+              path: '/q',
+              name: 'beta',
+              isFlutter: const Value<bool>(true),
+            ),
+          );
     });
     await tester.pumpWidget(
       testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
@@ -157,6 +169,8 @@ void main() {
     await settle(tester);
 
     expect(find.text('Added to new projects'), findsOneWidget);
+    // Per-project switches do nothing for a built-in rule: they are not shown.
+    expect(find.text('All projects'), findsNothing);
     await disposeTestApp(tester, dependencies);
   });
 }

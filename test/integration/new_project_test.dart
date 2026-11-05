@@ -101,6 +101,9 @@ final class _NoRules implements IProjectRulesRepository {
   Future<bool> hasRules(String projectRoot) async => false;
 
   @override
+  Future<bool> canHaveRules(String projectRoot) async => true;
+
+  @override
   Future<List<ProjectRule>> builtinRules() async => const <ProjectRule>[];
 
   @override

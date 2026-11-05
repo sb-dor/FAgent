@@ -13,12 +13,17 @@ abstract interface class IProjectRulesRepository {
   /// Whether the project in [projectRoot] has a `docs/rules` folder.
   Future<bool> hasRules(String projectRoot);
 
+  /// Whether the project folder [projectRoot] exists, so rules can be written into it.
+  Future<bool> canHaveRules(String projectRoot);
+
   /// The built-in rules, in library order, with their switches.
   Future<List<ProjectRule>> builtinRules();
 
   /// Writes [rules] into the project in [projectRoot] and updates its `AGENTS.md` and `CLAUDE.md`.
+  /// `docs/rules` appears only once everything else is written, so a failure leaves the project
+  /// without it (and the offer comes again).
   ///
-  /// Throws [FileSystemException] when a file cannot be written.
+  /// Throws [FileSystemException] when the folder is gone or a file cannot be written.
   Future<void> write(String projectRoot, List<ProjectRule> rules);
 
   /// Remembers that the rules were offered to project [projectId].
@@ -38,6 +43,10 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
       FileSystemEntity.isDirectorySync(p.join(projectRoot, projectRulesFolder));
 
   @override
+  Future<bool> canHaveRules(String projectRoot) async =>
+      FileSystemEntity.isDirectorySync(projectRoot);
+
+  @override
   Future<List<ProjectRule>> builtinRules() async {
     final library = await _skills.watch().first;
     return <ProjectRule>[
@@ -55,14 +64,35 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
 
   @override
   Future<void> write(String projectRoot, List<ProjectRule> rules) async {
-    final folder = Directory(p.join(projectRoot, projectRulesFolder));
-    await folder.create(recursive: true);
-    for (final rule in rules) {
-      final text = await _skills.read(rule.id);
-      await File(p.join(folder.path, '${rule.name}.md')).writeAsString(ruleBody(text));
+    if (!FileSystemEntity.isDirectorySync(projectRoot)) {
+      throw FileSystemException('The project folder does not exist', projectRoot);
     }
-    await _update(p.join(projectRoot, 'AGENTS.md'), (text) => agentsMdWithRules(text, rules));
-    await _update(p.join(projectRoot, 'CLAUDE.md'), claudeMdWithAgents);
+    final target = Directory(p.join(projectRoot, projectRulesFolder));
+    final staging = Directory(p.join(target.parent.path, '.rules-writing'));
+    if (staging.existsSync()) await staging.delete(recursive: true);
+    await staging.create(recursive: true);
+    try {
+      for (final rule in rules) {
+        final text = await _skills.read(rule.id);
+        await File(p.join(staging.path, '${rule.name}.md')).writeAsString(ruleBody(text));
+      }
+      final agents = p.join(projectRoot, 'AGENTS.md');
+      final claude = p.join(projectRoot, 'CLAUDE.md');
+      await _update(agents, (text) => agentsMdWithRules(text, rules));
+      // A CLAUDE.md that is a link to AGENTS.md would import itself.
+      // `identicalSync` does not follow links: compare where both paths lead.
+      final sameFile =
+          FileSystemEntity.typeSync(claude) != FileSystemEntityType.notFound &&
+          p.equals(
+            File(agents).resolveSymbolicLinksSync(),
+            File(claude).resolveSymbolicLinksSync(),
+          );
+      if (!sameFile) await _update(claude, claudeMdWithAgents);
+      await staging.rename(target.path);
+    } on Object {
+      if (staging.existsSync()) await staging.delete(recursive: true);
+      rethrow;
+    }
   }
 
   /// Rewrites the file at [path] (`null` text when it does not exist) with [change].

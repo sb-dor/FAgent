@@ -89,6 +89,9 @@ final class _StubRules implements IProjectRulesRepository {
   Future<bool> hasRules(String projectRoot) async => false;
 
   @override
+  Future<bool> canHaveRules(String projectRoot) async => true;
+
+  @override
   Future<List<ProjectRule>> builtinRules() async => rules;
 
   @override

@@ -16,8 +16,8 @@ void main() {
     addTearDown(controller.dispose);
   });
 
-  Project project({int id = 1, String path = '/p', bool offered = false}) =>
-      Project(id: id, path: path, name: 'p', isFlutter: true, rulesOffered: offered);
+  Project project({int id = 1, String path = '/p', bool offered = false, bool flutter = true}) =>
+      Project(id: id, path: path, name: 'p', isFlutter: flutter, rulesOffered: offered);
 
   Future<void> settle() => Future<void>.delayed(Duration.zero);
 
@@ -44,6 +44,28 @@ void main() {
     await settle();
 
     expect(controller.state, const ProjectRulesState.missing(projectId: 2));
+  });
+
+  test('check skips a project whose folder is gone, and offer does too', () async {
+    repository.goneFolders.add('/gone');
+
+    controller.check(project(path: '/gone'));
+    await settle();
+    expect(controller.state, const ProjectRulesState.idle());
+
+    controller.offer(project(path: '/gone'));
+    await settle();
+    expect(controller.state, const ProjectRulesState.idle());
+  });
+
+  test('check skips a project that is not Flutter; the button still offers it', () async {
+    controller.check(project(flutter: false));
+    await settle();
+    expect(controller.state, const ProjectRulesState.missing(projectId: 1));
+
+    controller.offer(project(flutter: false));
+    await settle();
+    expect(controller.state, isA<ProjectRules$OfferState>());
   });
 
   test('offer shows the rules even when already offered', () async {

@@ -51,6 +51,10 @@ void main() {
     await open(tester);
 
     expect(find.text('Add the project rules?'), findsOneWidget);
+    expect(
+      find.textContaining('Without them, agents in this project get no built-in rules.'),
+      findsOneWidget,
+    );
     expect(find.text('Layout.'), findsOneWidget);
     expect(checked(tester, 'architecture'), isTrue);
     expect(checked(tester, 'widgets'), isFalse);

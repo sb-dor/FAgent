@@ -87,6 +87,43 @@ void main() {
     );
   });
 
+  test('an AGENTS.md that cannot be written leaves no docs/rules', () async {
+    final agents = File(p.join(project.path, 'AGENTS.md'))..writeAsStringSync('# Ours\n');
+    await Process.run('chmod', <String>['444', agents.path]);
+    addTearDown(() => Process.runSync('chmod', <String>['644', agents.path]));
+
+    await expectLater(
+      repository.write(project.path, await repository.builtinRules()),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(Directory(p.join(project.path, 'docs', 'rules')).existsSync(), isFalse);
+    expect(await repository.hasRules(project.path), isFalse);
+  });
+
+  test('a CLAUDE.md that links to AGENTS.md gets no import of itself', () async {
+    File(p.join(project.path, 'AGENTS.md')).writeAsStringSync('# Shared\n');
+    Link(p.join(project.path, 'CLAUDE.md')).createSync('AGENTS.md');
+
+    await repository.write(project.path, await repository.builtinRules());
+
+    expect(read('AGENTS.md'), isNot(contains('@AGENTS.md')));
+    expect(read('AGENTS.md'), contains('<!-- flutter_code_agent:rules -->'));
+  });
+
+  test('a project folder that is gone is not created', () async {
+    final gone = p.join(project.path, 'gone');
+
+    await expectLater(
+      repository.write(gone, await repository.builtinRules()),
+      throwsA(isA<FileSystemException>()),
+    );
+
+    expect(Directory(gone).existsSync(), isFalse);
+    expect(await repository.canHaveRules(gone), isFalse);
+    expect(await repository.canHaveRules(project.path), isTrue);
+  });
+
   test('markOffered remembers the project', () async {
     await repository.markOffered(7);
 

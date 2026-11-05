@@ -628,7 +628,7 @@
   "newProjectStepFirstCommit": "First commit",
   "creationStepRules": "Project rules",
   "projectRulesTitle": "Add the project rules?",
-  "projectRulesExplain": "Agents will read them from docs/rules, so they live and change with the project.",
+  "projectRulesExplain": "Agents will read them from docs/rules, so they live and change with the project. Without them, agents in this project get no built-in rules.",
   "projectRulesAdd": "Add",
   "projectRulesNotNow": "Not now",
   "projectRulesButton": "Add rules to project",

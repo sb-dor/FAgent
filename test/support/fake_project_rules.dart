@@ -13,6 +13,9 @@ final class FakeProjectRules implements IProjectRulesRepository {
   /// Every project counts as having `docs/rules`.
   final bool allHaveRules;
 
+  /// Project folders that are gone.
+  final Set<String> goneFolders = <String>{};
+
   /// Project folders with `docs/rules`.
   final Set<String> withRules = <String>{};
 
@@ -39,6 +42,9 @@ final class FakeProjectRules implements IProjectRulesRepository {
     await hold?.future;
     return allHaveRules || withRules.contains(projectRoot);
   }
+
+  @override
+  Future<bool> canHaveRules(String projectRoot) async => !goneFolders.contains(projectRoot);
 
   @override
   Future<List<ProjectRule>> builtinRules() async => rules;
