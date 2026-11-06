@@ -249,7 +249,7 @@ knowledge/                        # Markdown: правила и skills, отда
 
 ### M7. Релиз (1–2 недели)
 
-- [ ] README: установка, требования (Flutter, Node для адаптеров), пример сессии, как писать свои правила
+- [x] README: установка, требования (Flutter, Node для адаптеров), скриншоты, как писать свои правила; CONTRIBUTING.md
 - [ ] CI GitHub Actions: `flutter analyze`, тесты; сборки macOS, Linux, Windows
 - [ ] Подпись и нотаризация macOS (нужен Apple Developer ID), DMG в GitHub Releases
 - [ ] Анонс в Flutter-сообществах
