@@ -219,6 +219,13 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           ...skeletonPubAddArguments,
         ], workingDirectory: path);
         await _command(run, index, flutter, const <String>['pub', 'get'], workingDirectory: path);
+        // The drift database (`lib/src/_core/database/`) needs its generated part to compile.
+        await _command(run, index, _dart(flutter), const <String>[
+          'run',
+          'build_runner',
+          'build',
+          '--delete-conflicting-outputs',
+        ], workingDirectory: path);
         // The template's imports are sorted for no package in particular; `directives_ordering`
         // (analysis_options.yaml) wants them sorted for this one.
         await _command(run, index, _dart(flutter), const <String>[
@@ -260,8 +267,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
 
   String _git() => _environment.which('git') ?? (throw const _StepFailure('git not found'));
 
-  /// Copies the template with the package name filled in, then turns gen-l10n on in
-  /// `pubspec.yaml`.
+  /// Copies the template with the package name filled in, then edits `pubspec.yaml`: gen-l10n
+  /// on, `packages/ui` as a workspace member, and the shader of its shimmer.
   Future<void> _writeSkeleton(_Run run, int index) async {
     final path = run.request.path;
     for (final relative in projectTemplateFiles) {
@@ -277,7 +284,21 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     final lines = (await pubspec.readAsString()).split('\n');
     final flutter = lines.indexOf('flutter:');
     if (flutter < 0) throw const _StepFailure('pubspec.yaml has no flutter: section');
-    lines.insert(flutter + 1, '  generate: true');
+    lines.insertAll(flutter + 1, const <String>[
+      '  generate: true',
+      '',
+      '  # The shimmer of packages/ui loads it as `packages/ui/shaders/shimmer.frag`.',
+      '  shaders:',
+      '    - packages/ui/shaders/shimmer.frag',
+    ]);
+    final dependencies = lines.indexOf('dependencies:');
+    if (dependencies < 0) throw const _StepFailure('pubspec.yaml has no dependencies: section');
+    lines.insertAll(dependencies, const <String>[
+      '# The packages of this repository: https://dart.dev/tools/pub/workspaces',
+      'workspace:',
+      '  - packages/ui',
+      '',
+    ]);
     await pubspec.writeAsString(lines.join('\n'));
   }
 
