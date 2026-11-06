@@ -65,12 +65,21 @@ description: "Widget conventions: ListenableBuilder, super.key, what goes in a s
 - Key presses go to the focused widget, then up its ancestors: a `Shortcuts` sees nothing until
   the focus is inside it, so put a `Focus(autofocus: true)` below it. See "Focus and keyboard".
 - A popup attached to a widget (a menu, a dropdown, a hint) is a framework widget (`MenuAnchor`,
-  `DropdownMenu`, `Autocomplete`, `Tooltip`) first, then an `OverlayPortal` placed by its layout
-  builder, then a `LayerLink`; never coordinates read through a `GlobalKey`. See "Anchored popups".
+  `DropdownMenu`, `Autocomplete`, `Tooltip`; `RawMenuAnchor`, `RawTooltip` for the app's own look)
+  first, then an `OverlayPortal` placed by its layout builder, then a `LayerLink`; never
+  coordinates read through a `GlobalKey`. A popup the app builds takes the focus when it opens and
+  closes on Escape and on a tap outside. See "Anchored popups".
+- `Opacity` is not a show/hide switch: at any value above 0, 1 included, it is a layer of its own,
+  and at 0 the widget still takes taps. Fade with `FadeTransition` or `AnimatedOpacity`, put a fixed
+  alpha into the color or the image. See "Opacity and filters".
+- Decode an image at the size it is shown (`cacheWidth`, `ResizeImage`): a photo decoded at full
+  size for a thumbnail holds megabytes. See "Image sizes".
 - A control the design repeats is a component of the project's UI kit, not a Material widget
   restyled where it is used. See "Components".
-- `Color.withOpacity` and `Radio(groupValue:, onChanged:)` are deprecated: `withValues(alpha:)` and
-  a `RadioGroup` ancestor. See "Replaced APIs".
+- No `flutter_hooks`: a `State` creates what it owns in `initState` and disposes it in `dispose`,
+  where the lifecycle can be read, instead of behind call order in `build`.
+- `Color.withOpacity`, `Radio(groupValue:, onChanged:)`, `OverlayPortal.targetsRootOverlay` and
+  `SemanticsService.announce` are deprecated. See "Replaced APIs".
 - A widget or `State` that shows data overrides `debugFillProperties`, so the DevTools inspector
   shows the data. See "Diagnostics".
 
@@ -89,7 +98,8 @@ it lags, the cause is in the code, and it is almost always one of these:
 - **No `RepaintBoundary`.** Something that repaints on its own (an animated header, a spinner, a
   ticking value) repaints its neighbours too unless it has a `RepaintBoundary` around it. A
   boundary is a layer of its own, which costs memory and compositing: add one where a part repaints
-  much more often than what surrounds it, not around every widget, and check the effect.
+  much more often than what surrounds it, not around every widget, and check the effect (see
+  "Repaint boundaries").
 - **Lists that measure every row.** A `ListView.builder` whose rows all have the same height gets
   `itemExtent` (or `prototypeItem`): the list then skips laying out rows just to find where it is.
   A long or growing list is a `ListView.builder` (`SliverList.builder`). `ListView(children: ...)`
@@ -108,6 +118,79 @@ it lags, the cause is in the code, and it is almost always one of these:
 
 Measure before fixing, and only in profile mode (`flutter run --profile`) with the DevTools
 performance view: debug mode is several times slower and lags where a real build does not.
+
+### Repaint boundaries
+
+A render object without a layer of its own paints into the picture of its nearest repaint boundary
+above it, so a repaint goes up to that boundary and everything recorded there is painted again.
+
+- The framework already puts boundaries in many places: every row of a builder list or grid
+  (`addRepaintBoundaries: true` by default), each route's page, every viewport and
+  `SingleChildScrollView`, every text field, `Flow`, an `Opacity` or `FadeTransition` while it is
+  above 0, and platform views. List rows need none of their own. A spinner without one repaints
+  what shares its page's layer, its neighbours on the screen (checked: a `CustomPaint` beside a
+  `CircularProgressIndicator` painted 10 times in 10 frames, and 0 times with a `RepaintBoundary`
+  around the spinner).
+- Check that a boundary pays off. In debug builds every `RenderRepaintBoundary` counts the frames
+  it painted together with its parent and alone, and `debugDumpRenderTree()` (or the render tree in
+  the inspector) prints the ratio with a verdict, such as "metrics: 90.9% useful (1 bad vs 10
+  good), diagnosis: this is an outstandingly useful repaint boundary and should definitely be kept"
+  (checked). Remove one it calls "not very effective" (10% useful or less).
+  `debugRepaintRainbowEnabled = true` is what "Highlight repaints" in DevTools turns on.
+- A boundary saves UI-thread work: its recorded layer is reused, and nothing inside is painted
+  again. It does not save GPU work. Impeller (the default renderer on iOS, macOS and most Android
+  devices) has no raster cache: the GPU draws the boundary's content again on every frame it is
+  composited. A static part that is costly to rasterize (a large blur, thousands of paths) is
+  cached as an image by the code (`toImageSync`, see "Large scenes on a canvas").
+
+### Opacity and filters
+
+- **`Opacity` is a layer whenever it is above 0**, at 1.0 too: it pushes an `OpacityLayer` and is a
+  repaint boundary. Only 0 skips the layer and the child's painting (checked). So
+  `Opacity(opacity: visible ? 1 : 0)` left around content is no switch: use `if` or `Visibility`
+  (see "Hiding a widget"), or a fade that ends at 0.
+- **A changing opacity does not repaint the child**: only the layer's alpha changes. What is
+  wasteful in an `AnimatedBuilder` around an `Opacity` is the rebuild of everything the builder
+  creates, on every tick (checked: 10 builds and 0 repaints in 10 ticks). `FadeTransition` and
+  `AnimatedOpacity` (which builds a `FadeTransition`) update the render object: no build and no
+  repaint per tick.
+- **The cost is on the GPU, and only for content that overlaps itself.** The engine passes the
+  alpha down to a single image, a rectangle or shapes that do not overlap. Text over a background,
+  a card with its children, `drawAtlas` and `drawPoints` are drawn into an offscreen texture and
+  blended, and under Impeller that texture is redrawn on every frame.
+- **Put the alpha where it is drawn** when the content is one color or one image:
+  `ColoredBox(color: color.withValues(alpha: .5))`, a `TextStyle` color, or
+  `Image(opacity: animation)`, which takes an `Animation<double>` (`AlwaysStoppedAnimation(.5)`
+  for a fixed value) and adds no layer (checked). Slivers have `SliverOpacity`,
+  `SliverFadeTransition` and `SliverAnimatedOpacity`.
+- **Blur one widget with `ImageFiltered`.** `BackdropFilter` filters everything behind it up to the
+  nearest clip and is among the costliest things to draw; its own documentation points to
+  `ImageFiltered` for a single widget. The backdrop is for a frosted overlay (see "Loading
+  overlay").
+- **Find out what a kind of layer costs**: set `debugDisableOpacityLayers`,
+  `debugDisableClipLayers` or `debugDisablePhysicalShapeLayers` (`package:flutter/rendering.dart`,
+  also switches in DevTools) and compare the raster time. They skip those layers when the scene is
+  built (a child at opacity 0 is still not painted). They are read inside `assert`, so they work in
+  debug builds only: compare in a debug run, confirm the fix in a profile build, and never commit
+  them.
+
+### Image sizes
+
+An image is decoded at its full pixel size unless told otherwise: a 4000×3000 photo holds 48 MB
+(4 bytes a pixel) in the `ImageCache`, even shown as a 100×100 avatar.
+
+- Decode it at the size it is shown: `cacheWidth` or `cacheHeight` on `Image.network`,
+  `Image.asset`, `Image.file` and `Image.memory`, or a `ResizeImage` around any provider. One of
+  the two keeps the aspect ratio. They are physical pixels: the logical size times
+  `MediaQuery.devicePixelRatioOf(context)`, rounded. `Image.network` ignores them on the web, where
+  the browser decodes.
+- Do not animate them: every new value decodes the image again. An image that grows from a
+  thumbnail is decoded at the thumbnail size, then once at the large size.
+- A smaller file is better still: an asset exported at the size it is shown, a thumbnail URL from
+  the server.
+- `debugInvertOversizedImages = true` (`package:flutter/painting.dart`, debug builds only) draws
+  inverted every image that takes more than 128 KB above what its display size needs, and reports
+  its decoded and display sizes.
 
 ### State in list rows
 
@@ -158,6 +241,9 @@ on an iPhone with ProMotion only after `CADisableMinimumFrameDurationOnPhone` is
 - **Keep the tree's shape.** Do not add and remove widgets while animating (`if (visible) ...` every
   few frames); animate the opacity, size or offset of widgets that stay, so Flutter reuses their
   elements and render objects.
+- **Stagger with one controller.** A title, then a list, then a button: one `AnimationController`
+  and a `CurvedAnimation(parent: controller, curve: Interval(0.2, 0.6))` per part, not several
+  controllers started by timers. An `Interval` is 0 before its start and 1 after its end.
 - **Isolate what repaints.** Wrap the animated part in a `RepaintBoundary` so the rest of the
   screen is not repainted with it; a custom render object can be a boundary itself
   (`bool get isRepaintBoundary => true`). Check with "Highlight repaints" in DevTools.
@@ -740,6 +826,11 @@ class _FlipDelegate extends FlowDelegate {
   `prefer_const_constructors`, `prefer_const_literals_to_create_immutables` and
   `prefer_const_declarations` from `flutter_lints` for that reason; a project may still turn them
   on, and then follows them.
+- Only a `const` expression is canonical: one written `const`, or inside a const context (a `const`
+  list). `A(1)` without `const` creates a new object every time, even when `A` has a `const`
+  constructor (checked: `identical(A(1), A(1))` is false, `identical(const A(1), const A(1))` is
+  true), and such a widget is updated like any other. Since `flutter_lints` dropped
+  `prefer_const_constructors`, nothing adds the `const` for you.
 - Never restructure code, or split widgets, just to make something `const`. Fix what the list
   above names instead.
 
@@ -757,6 +848,9 @@ guide: https://docs.flutter.dev/ui/adaptive-responsive.
 - **Do not lock the orientation.** Large Android devices and Apple's guidelines expect both, and
   Android can override the lock anyway.
 - **Do not stretch content across a wide window**: cap the width of forms and text, or use a grid.
+- **Do not scale sizes by the ratio of the screen to a design size** (`flutter_screenutil`'s `.w`,
+  `.h`, `.sp`): a larger window shows more content, not the same content bigger, and text already
+  follows the user's text scale (see "Text scaling").
 - **Support the mouse, the trackpad and the keyboard**: keyboard navigation for the main flows,
   shortcuts as accelerators. Material widgets already handle all three.
 - **Keep state across a resize or rotation**: the layout changes, the data and the scroll position
@@ -909,8 +1003,10 @@ for `prototypeItem`).
 - **Sections are widgets that return slivers.** Split a long `CustomScrollView` into widget classes
   named `...Sliver` (`SectionSliver`), as the SDK names its own. A header and its rows are one
   `SliverMainAxisGroup`; a `PinnedHeaderSliver` inside the group sticks to the top while the
-  section scrolls and leaves with its last row (checked). A small box widget stays a box, and the
-  parent wraps it in `SliverToBoxAdapter`.
+  section scrolls and leaves with its last row (checked). A pinned `SliverAppBar` in the group does
+  the same, with `primary: false`: by default every section's app bar adds the status-bar inset
+  to its height (checked: 80 instead of 56 with a 24 inset). A small box widget stays a box, and
+  the parent wraps it in `SliverToBoxAdapter`.
 - **A horizontal list inside a vertical one** needs a height:
   `SizedBox(height: 120, child: ListView(scrollDirection: Axis.horizontal, ...))`. A scroll view
   inside another on the same axis needs a bounded inner one; when an outer header should collapse
@@ -1027,7 +1123,13 @@ ancestor.
   `node.hasPrimaryFocus` is still `false`; it is `true` from the next microtask (checked). React to
   focus in a listener of the node, not on the line after the request.
 - **A `FocusNode` is owned like a controller**: created in a field or `initState`, disposed in
-  `dispose`, never created in `build`. Only the first `autofocus` in a scope takes effect.
+  `dispose`, never created in `build`.
+- **`autofocus` is an initial focus**: it takes effect only while nothing in the enclosing focus
+  scope is focused yet (checked: an `autofocus` shown after another node got the focus is
+  ignored). A pushed route is a scope of its own, so `autofocus` on a new screen works. Content
+  that appears later in a scope that already has the focus (a popup, an expanded panel, a field
+  shown after a toggle) calls `requestFocus()` on its own node after its first frame
+  (`anchored_popup.dart`).
 - **Moving through a form** needs no nodes: `textInputAction: TextInputAction.next` moves to the
   next field on submit, `TextInputAction.done` unfocuses. `FocusManager.instance.primaryFocus
   ?.unfocus()` closes the keyboard from elsewhere (a tap on the background).
@@ -1110,7 +1212,9 @@ widgets: "widget tree" is shorthand.
 - **`initState`**: once, when the `State` is inserted into the tree. Create what the `State` owns
   and subscribe to what it listens to. A scope can be read here with a lookup that does not
   subscribe (`DependenciesScope.of`); anything that must rebuild on an inherited change (`Theme`,
-  `MediaQuery`, localization) belongs in `didChangeDependencies` or `build`.
+  `MediaQuery`, localization) belongs in `didChangeDependencies` or `build`. A subscribing lookup
+  (`dependOnInheritedWidgetOfExactType`, which `Theme.of` and `MediaQuery.of` use) in `initState`
+  fails an assert: "... was called before ...initState() completed" (checked).
 - **`didChangeDependencies`**: right after `initState`, and again whenever an `InheritedWidget` this
   `State` depends on changes.
 - **`didUpdateWidget(oldWidget)`**: the parent rebuilt and gave a widget of the same type and key.
@@ -1140,17 +1244,31 @@ one is created.
   updated with the 6th widget, each later element moves up one widget, and the element that goes
   is the last. So every row of a list that can insert, remove or reorder gets a key from its
   data: `ValueKey(item.id)`, never the index.
+- The key goes on the parent's direct child, the outermost widget the item builder returns. A
+  `Column` or a sliver list matches only its own children by key: with `Padding(child:
+  Row(key: ValueKey(id)))` as each child, swapping two items recreated both `State`s; with the key
+  on the `Padding`, both moved with their items (checked).
+- `ValueKey(v)` compares `v` with `==`, and its type argument too: `ValueKey<int>(1)` and
+  `ValueKey<Object>(1)` differ (checked). `ObjectKey(o)` compares with `identical`, so a model
+  fetched again (a new object, equal by `==`) gets a new `State`; use it only for an object that
+  stays the same instance as long as its item lives.
+- A key must compare equal across rebuilds. A `ValueKey` from data can be created in `build`; a
+  `UniqueKey()` or `GlobalKey()` created there gives a new `State` on every build and loses
+  everything in it.
 - It also resets state on purpose: `ProfileForm(key: ValueKey(user.id))` builds a fresh form, with
   fresh text controllers, when another user is shown in the same place.
 - A `GlobalKey` must be unique in the whole app, not only among siblings, and it has one job: keep
-  an element and its `State` while the widget moves to another parent or depth, which the framework does by moving the subtree instead of recreating it. That is
-  expensive and almost never needed; keep the tree shape stable instead (see "Animations").
+  an element and its `State` while the widget moves to another parent or depth, which the
+  framework does by moving the subtree instead of recreating it. The move must happen within one
+  frame: a widget absent for a frame is unmounted at the end of it, and coming back creates a new
+  `State` (checked). To keep state while hidden, use `Visibility(maintainState: true)` (see
+  "Hiding a widget"). Moving is expensive and almost never needed; keep the tree shape stable
+  instead (see "Animations").
 - Do not use a `GlobalKey` to read a widget's size or position (`findRenderObject()`): see
   "Painters, clippers and layout delegates".
 - Do not use a `GlobalKey` to call a `State` or read its `context` from outside
   (`key.currentState!.open()`): give the widget a controller or a callback. When an API requires one,
-  create it once in a `State` field, never in `build` (a new key on every build means a new `State`
-  on every build).
+  create it once in a `State` field, never in `build`.
 
 ### Hiding a widget
 
@@ -1161,11 +1279,17 @@ one is created.
 | `Visibility(maintainState: true)` | kept | yes, takes no space (an `Offstage`) | no | excluded | paused (`TickerMode` off) |
 | `Visibility.maintain(visible: false)` | kept | yes, keeps its size | no | excluded | running |
 | `Offstage()` | kept | yes, takes no space | no | **still focusable** | running |
+| `Opacity(opacity: 0)` | kept | yes, keeps its size | not painted, **still takes taps** | **still focusable** | running |
 
 Hide with `if` or `Visibility` by default. Keep state only when coming back must be instant or keep
 what the user entered, and then prefer `Visibility(maintainState: true)`, which also pauses
 animations and takes focus away. A bare `Offstage` keeps laying out, keeps its tickers running
 (draining the battery), and what is inside it can still take keyboard focus.
+
+An invisible `Opacity` (and a `FadeTransition` or `AnimatedOpacity` faded to 0) still receives taps
+(checked) and keyboard focus; only its semantics are dropped, unless `alwaysIncludeSemantics:
+true`. A faded-out widget that must not react goes under `IgnorePointer(ignoring: hidden)` and
+`ExcludeFocus(excluding: hidden)`, or is removed (`if`, `AnimatedSwitcher`) once the fade ends.
 
 ## `BuildContext` after `await`
 
@@ -1500,8 +1624,23 @@ moving item) is never placed from coordinates read after layout (a `GlobalKey` a
 inserted and removed by hand. In this order:
 
 1. **A framework widget that does it**: `MenuAnchor`, `DropdownMenu`, `SearchAnchor`,
-   `Autocomplete`, `Tooltip`, `PopupMenuButton`, or `RawMenuAnchor` for a menu with the app's own
-   look. They already close on Escape and on a tap outside, and handle the keyboard.
+   `Autocomplete`, `Tooltip`, `PopupMenuButton`. They place the popup, close it on a tap outside
+   and handle the keyboard. A `MenuAnchor` (and `DropdownMenu`, built on it) closes on Escape only
+   while the focus is in the anchor or the menu: opened from code (`controller.open()`) with
+   nothing focused, it stays open on Escape (checked). For the app's own look the widgets layer
+   has the mechanisms without the design:
+   - `RawMenuAnchor` places a menu (`overlayBuilder` gets a `RawMenuOverlayInfo`: `anchorRect`,
+     `overlaySize`, `position`, `tapRegionGroupId`). It closes on Escape while the focus is inside
+     it, and when an ancestor `Scrollable` scrolls or the window is resized. It does not close the
+     root menu on a tap outside (checked): wrap the panel in `TapRegion(groupId:
+     info.tapRegionGroupId, onTapOutside: (_) => controller.close())`, which also makes taps on the
+     anchor and the panel count as inside. It manages neither focus nor semantics.
+   - `RawTooltip` is a tooltip (Material's `Tooltip` is a themed one), not an `OverlayPortal` with
+     a `MouseRegion` and timers: `tooltipBuilder: (context, animation) => ...` gets the show and
+     hide animation, `triggerMode` (long press, tap, manual) is for touch, since a mouse hover
+     always shows it (checked), `hoverDelay`, `touchDelay`, `dismissDelay`, `positionDelegate`,
+     `semanticsTooltip` for screen readers, and `RawTooltipState.ensureTooltipVisible()` to show it
+     from code (checked).
 2. **`OverlayPortal.overlayChildLayoutBuilder`** when the popup is placed from the anchor's size and
    position: below it, above it when there is no room, kept inside the window
    (`anchored_popup.dart`). The builder runs during layout and gets an `OverlayChildLayoutInfo`:
@@ -1526,9 +1665,27 @@ inserted and removed by hand. In this order:
 - Close it on a tap outside with `TapRegion`: the anchor and the popup share a `groupId`, so a tap
   on either is inside. Every pointer down outside closes it, the start of a scroll included
   (checked).
+- Close it on Escape with `Actions(actions: {DismissIntent: CallbackAction<DismissIntent>(...)})`
+  around its content; Escape is already `DismissIntent` in `WidgetsApp.defaultShortcuts`, so no
+  `Shortcuts` is needed. The intent reaches the action only from a focused node inside the popup,
+  so the popup takes the focus when it opens, with `requestFocus()` on its own `FocusScopeNode`
+  after the first frame (`_FocusOnOpen` below). `FocusScope(autofocus: true)` is not enough: a
+  keyboard user who opens it with Enter has the focus on the anchor, so the autofocus is dropped,
+  Escape does nothing and Tab cannot reach the items (checked). When the popup closes, the focus
+  goes back to the anchor by itself (checked). A hint that must leave the focus where it is (a
+  tooltip, suggestions under a field the user types in) is closed by its anchor instead.
+- An exit animation keeps the popup in the overlay until it ends: `controller.show()` before
+  `forward()`, `reverse().whenComplete(controller.hide)`, and a show that arrives during the
+  reverse calls `forward()` again instead of `show()`. `RawMenuAnchor`'s `onOpenRequested` /
+  `onCloseRequested` follow the same contract: call `hideOverlay` after the closing animation.
 - The `OverlayPortalController` belongs to the widget that opens the popup: a `State` field.
 - A popup needs an `Overlay` above it: what `MaterialApp.builder` puts above the navigator has
   none (see `docs/rules/navigation.md`).
+- A popup opens in the nearest `Overlay`. Inside a nested `Navigator` (a tab's own navigator, a
+  side panel) that is the nested navigator's, so the popup is confined to that area and can be
+  covered by what is outside it. There, use the root overlay: `useRootOverlay: true` on
+  `MenuAnchor` and `RawMenuAnchor`, `overlayLocation: OverlayChildLocation.rootOverlay` on
+  `OverlayPortal` (and `OverlayPortal.overlayChildLayoutBuilder`).
 
 ### `anchored_popup.dart`
 
@@ -1539,8 +1696,9 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 /// Shows [popup] under [child] while [controller] is showing, or above it when there is no room
-/// below; a tap outside both hides it. It follows [child] when it scrolls or moves: the layout
-/// builder runs again on every frame. No `GlobalKey`, no `findRenderObject`.
+/// below; a tap outside both, or Escape, hides it. The popup takes the keyboard focus when it
+/// opens and gives it back to [child] when it closes. It follows [child] when it scrolls or moves:
+/// the layout builder runs again on every frame. No `GlobalKey`, no `findRenderObject`.
 class AnchoredPopup extends StatefulWidget {
   const AnchoredPopup({
     required this.controller,
@@ -1566,7 +1724,7 @@ class _AnchoredPopupState extends State<AnchoredPopup> {
   /// Taps on the anchor and on the popup count as inside.
   final Object _tapGroup = Object();
 
-  void _hide(PointerDownEvent _) => widget.controller.hide();
+  void _hide([Object? _]) => widget.controller.hide();
 
   @override
   Widget build(BuildContext context) => OverlayPortal.overlayChildLayoutBuilder(
@@ -1579,11 +1737,57 @@ class _AnchoredPopupState extends State<AnchoredPopup> {
       );
       return CustomSingleChildLayout(
         delegate: _PopupLayout(anchor: anchor, gap: widget.gap),
-        child: TapRegion(groupId: _tapGroup, onTapOutside: _hide, child: widget.popup),
+        child: TapRegion(
+          groupId: _tapGroup,
+          onTapOutside: _hide,
+          // Escape is `DismissIntent` in the app's default shortcuts. It reaches this action only
+          // from a focused node inside the popup, hence `_FocusOnOpen`.
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              DismissIntent: CallbackAction<DismissIntent>(onInvoke: _hide),
+            },
+            child: _FocusOnOpen(child: widget.popup),
+          ),
+        ),
       );
     },
     child: TapRegion(groupId: _tapGroup, child: widget.child),
   );
+}
+
+/// Moves the focus into the popup when it opens. `FocusScope(autofocus: true)` is not enough:
+/// autofocus is dropped when the enclosing scope already has a focused node, and a keyboard user
+/// who opens the popup has the focus on the anchor. When the popup closes, the focus goes back to
+/// the anchor.
+class _FocusOnOpen extends StatefulWidget {
+  const _FocusOnOpen({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FocusOnOpen> createState() => _FocusOnOpenState();
+}
+
+class _FocusOnOpenState extends State<_FocusOnOpen> {
+  final FocusScopeNode _scope = FocusScopeNode(debugLabel: 'AnchoredPopup');
+
+  @override
+  void initState() {
+    super.initState();
+    // The overlay child is built each time the popup opens; its node is attached after this frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scope.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _scope.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => FocusScope(node: _scope, child: widget.child);
 }
 
 /// Places the popup from its own size, which only layout knows.
@@ -1760,7 +1964,8 @@ its colors, text styles and radii from the theme (see "Themes").
 
 - While the design is close to Material, keep `ColorScheme` and `TextTheme` and wrap Material
   widgets: they read those, and a parallel set of text styles would have to be kept in sync. A kit
-  of its own from the ground up is for a design that leaves Material.
+  of its own from the ground up is for a design that leaves Material. Either way it is widgets and
+  the theme, not a styling DSL in their place (the `mix` package).
 - A button with the app's look extends `ButtonStyleButton` and returns its `ButtonStyle` from
   `defaultStyleOf` (`ui_button.dart`). Focus, hover, ink, keyboard activation and semantics stay
   Material's (checked: Tab then Enter presses it, and it is a semantic button). The style resolves
@@ -1908,6 +2113,14 @@ Old snippets still use these; the analyzer reports them as deprecated:
   `RadioGroup<T>(groupValue: selected, onChanged: ..., child: ...)` and each `Radio` keeps only its
   `value`.
 - `MediaQueryData.fromWindow`, `textScaleFactor`: see "Text scaling".
+- `OverlayPortal.targetsRootOverlay(...)`: `OverlayPortal(overlayLocation:
+  OverlayChildLocation.rootOverlay, ...)`, which `OverlayPortal.overlayChildLayoutBuilder` takes
+  too.
+- `SemanticsService.announce(message, textDirection)` does not work with several windows:
+  `SemanticsService.sendAnnouncement(View.of(context), message, textDirection)`. Prefer
+  `Semantics` (a `liveRegion`, a changed label) to any announcement: Android has deprecated
+  announcement events, and `MediaQuery.supportsAnnounceOf(context)` says whether the platform
+  takes them at all.
 
 ## Listeners and dispose
 
@@ -1978,6 +2191,10 @@ Widget build(BuildContext context) => ValueListenableBuilder<Locale>(
   with `==` each time: `(name: s.name, count: s.items.length)` notifies only when one of them
   differs (checked). A version that compares with `identical` notifies on every change of the
   source as soon as the selector builds a new object. Pass `changed` for another comparison.
+- A `List` or `Map` compares by identity, also as a record field (`([1], 1) == ([1], 1)` is false,
+  checked): `(items: s.items)` notifies on every new list even when its contents are equal, and
+  never when the same list is changed in place. Select a value (`s.items.length`) or pass
+  `changed`.
 - It listens to the source only while it has listeners, so a selection nobody watches keeps
   nothing alive and needs no `dispose` (checked: the source has no listeners left after the
   builder is gone).

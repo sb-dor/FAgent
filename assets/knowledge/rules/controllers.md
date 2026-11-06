@@ -120,7 +120,10 @@ part of a feature. New code follows the project's package, with the rules below.
 - **`bloc`**: the same idea as a controller (events in, states out, `BlocObserver`). The cost is
   the learning curve, and blocs that depend on each other are awkward to wire. Events are not
   queued by default: every `on<E>` runs concurrently with the others, so use one handler with
-  `sequential()` (see "One queue per controller"). After its first `emit`, a bloc drops a state
+  `sequential()` (see "One queue per controller"). A global `Bloc.transformer = sequential()` does
+  not give a bloc one queue: the default is applied to each `on<E>` separately, over the events of
+  that type only, so different event types still overlap on the shared state (checked: `bloc`
+  9.2.1). After its first `emit`, a bloc drops a state
   that is `==` to the current one: no `onChange`, no `onTransition`, no observer call, no rebuild
   (checked: `bloc` 9.2.1, `if (state == _state && _emitted) return;`). With freezed states that is
   equality by value, so emitting the same `processing(data: x)` twice is one state, and re-emitting
@@ -143,10 +146,23 @@ part of a feature. New code follows the project's package, with the rules below.
   controllers. How long a provider lives (`keepAlive`) is decided by the widget that owns the
   screen, as with a config widget, not inside the provider. And one package that is the state
   management, the dependency injection and the local cache at once cannot be replaced one
-  concern at a time; **`provider`**: a wrapper around
+  concern at a time. Riverpod 3 retries a failing provider by itself: the default
+  (`ProviderContainer.defaultRetry`) retries any `Exception` up to 10 times, from 200 ms doubling
+  to 6.4 s, and does not retry an `Error` or a `ProviderException`. A request the server rejected
+  is sent again and again, and the screen shows loading meanwhile: set `retry:` on the root
+  `ProviderScope` (or the provider) to a function that returns `null` for the app's expected
+  exceptions, and never make a non-idempotent call in a provider's `build`. Reading a failed
+  provider's value (`requireValue`, or a provider that reads another one that threw) throws a
+  `ProviderException` wrapping the error, so `on ExpectedException catch` there never matches;
+  `await ref.watch(p.future)` and `AsyncValue.error` give the original (checked: `riverpod`
+  3.4.3); **`provider`**: a wrapper around
   `InheritedWidget` for passing dependencies, not state management. See `docs/rules/dependencies.md`.
 - **Elementary**: a widget–view model pair per screen (MVVM); a controller is not a view model (see
   "What a controller is").
+- **Stacked**: an MVVM framework that registers services in `get_it` and also hands them down with
+  `provider`: a service locator and a second DI path at once, and a view model per view, not a
+  controller per concern. Its `NavigationService` and `DialogService` open UI from anywhere (see
+  "No navigator key outside the widgets" in `docs/rules/navigation.md`).
 - **GetX**: no. It mixes state, navigation and dependencies behind globals.
 - **An event bus** (one app-wide stream everyone posts to and listens on): adding features is easy,
   but nobody can see who reacts to what. Connect controllers through the widget or a repository's
@@ -370,9 +386,9 @@ The `rethrow` does not crash anything and does not reach the widget:
 
 Not every failure is a bug. A wrong password, a taken email or a value the server rejected is the
 feature's answer: the user reads it and acts. A failed parse, a `StateError`, a server 500 or a
-lost connection is not the answer the feature promises: someone has to look at it. The observer
-(and the crash reporter behind it) is for the second kind only; filled with the first, it hides the
-bugs among thousands of mistyped passwords.
+lost connection (`APIClientException$Network`) is not the answer the feature promises: someone has
+to look at it. The observer (and the crash reporter behind it) is for the second kind only; filled
+with the first, it hides the bugs among thousands of mistyped passwords.
 
 - The data layer marks the expected kind when it translates an error at the boundary (see "Errors"
   in `docs/rules/repositories.md`): it throws a subtype of `ExpectedException`
@@ -383,8 +399,13 @@ bugs among thousands of mistyped passwords.
   same way, through `errorText`; only the unexpected kind reaches `Controller.observer.onError`.
   Checked by a test: an `ExpectedException` gives processing, error, idle and no observer call; a
   `StateError` gives the same states and one observer call.
-- A lost connection is reported too: it is not a bug, but how often it happens is worth knowing.
-  The observer may log it at a lower level by its type.
+- A lost connection (`APIClientException$Network`) is reported too: it is not a bug, but how often
+  it happens is worth knowing. The observer may log it at a lower level by its type.
+- An expired session (`APIClientException$Authorization`) is the authentication middleware's: it
+  refreshes the token, or signs the user out (see "HTTP middleware" in
+  `docs/rules/dependencies.md`). The controller sets `error` and rethrows it like any other, and
+  the crash reporter leaves it out: once a reporter is added, `$captureException`
+  (`lib/src/_core/utils/error_util/platform/` in a new project) returns early for it.
 - Never catch `on Object` without the rethrow line: that silences every bug of the action.
 - With `bloc`, the same split: for an `ExpectedException` emit the error state and return; let
   everything else reach `onError` (`BlocObserver.onError`).

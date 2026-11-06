@@ -475,20 +475,12 @@ list built at startup (an initialization step), not the callers.
 
 The merged implementation catches each service's error itself. `Future.wait` waits for every
 future and then throws the first error, so one failing service would otherwise fail the caller's
-action. Analytics never breaks what the user is doing.
+action. Analytics never breaks what the user is doing. (When the caller does need every failure,
+see "Waiting for several futures" in `docs/rules/dart.md`.)
 
 ```dart
 // file: analytics_reporter.dart
-import 'package:flutter/foundation.dart';
-
-/// An analytics event: a name and its parameters.
-@immutable
-final class AnalyticsEvent {
-  const AnalyticsEvent(this.name, [this.parameters = const <String, Object>{}]);
-
-  final String name;
-  final Map<String, Object> parameters;
-}
+import 'analytics_event.dart';
 
 /// Sends analytics to one service.
 abstract interface class IAnalyticsReporter {
@@ -519,6 +511,95 @@ final class MergedAnalyticsReporter implements IAnalyticsReporter {
       }
     }),
   );
+}
+```
+
+### Analytics events
+
+Each event the app sends is its own class, not `AnalyticsEvent('product_viewed', {...})` built at
+the call site. The class names the event once, its fields are the parameters it carries (typed,
+required), and its doc comment says when it is sent: a typo in a name or a missing parameter does
+not compile, and every place that sends the event can be found (`analytics_event.dart`). The
+Firebase implementation of `IAnalyticsReporter` is the only code that names `FirebaseAnalytics`:
+`FirebaseAnalytics.instance.logEvent(name: event.name, parameters: event.toParameters())`. A test
+checks what was sent with a reporter that records the events
+(`isA<ProductViewed>().having((e) => e.productId, 'productId', 'p1')`).
+
+Firebase Analytics rejects at run time what does not fit its limits, so `toParameters` checks them
+in debug builds (checked: `firebase_analytics` 13.0.0):
+
+- Parameter values are strings or numbers (`Map<String, Object>`, no `null`); a `bool` fails an
+  assert in debug builds. Send a flag as `'true'` / `'false'` (or `1` / `0`) and an enum as its
+  `name`.
+- Event and parameter names: 1 to 40 letters, digits and `_`, starting with a letter, and
+  case-sensitive; the prefixes `firebase_`, `google_` and `ga_` are reserved. At most 25
+  parameters; string values up to 100 characters.
+- Some event names are reserved, and `logEvent` throws an `ArgumentError` for them in every build:
+  among them `error`, `app_exception`, `session_start`, `first_open`, `user_engagement`,
+  `notification_open` and `app_update`. Name an app's failure events after what failed
+  (`checkout_failed`).
+- No personal data in an event or in `setUserId`: no email, phone, name or text the user typed.
+  Send the app's opaque user id (see "Rules" in `docs/rules/security.md`).
+
+```dart
+// file: analytics_event.dart
+import 'package:flutter/foundation.dart';
+
+/// An analytics event. Each event the app sends is a subclass: its fields say what it carries,
+/// and its doc comment says when it is sent.
+@immutable
+abstract base class AnalyticsEvent {
+  const AnalyticsEvent();
+
+  /// 1-40 letters, digits and `_`, starting with a letter; never `firebase_`, `google_`, `ga_`.
+  String get name;
+
+  /// Strings (up to 100 characters) and numbers only, at most 25. A `null` is left out.
+  Map<String, Object?> get parameters;
+
+  /// [parameters] without the `null`s, with every value checked in debug builds.
+  Map<String, Object> toParameters() {
+    assert(_validName.hasMatch(name) && !_reserved.hasMatch(name), 'Bad event name: $name');
+    final result = <String, Object>{
+      for (final MapEntry(:key, :value) in parameters.entries) key: ?value,
+    };
+    assert(result.length <= 25, '$name: more than 25 parameters');
+    assert(
+      result.entries.every(
+        (e) =>
+            _validName.hasMatch(e.key) &&
+            !_reserved.hasMatch(e.key) &&
+            (e.value is num || (e.value is String && (e.value as String).length <= 100)),
+      ),
+      '$name: a parameter is not a string of up to 100 characters or a number: $result',
+    );
+    return result;
+  }
+
+  static final RegExp _validName = RegExp(r'^[A-Za-z][A-Za-z0-9_]{0,39}$');
+  static final RegExp _reserved = RegExp('^(firebase_|google_|ga_)');
+}
+
+/// Where the user came to a product from.
+enum ProductSource { search, catalog, deepLink }
+
+/// The user opened a product's page.
+final class ProductViewed extends AnalyticsEvent {
+  const ProductViewed({required this.productId, required this.source, required this.discounted});
+
+  final String productId;
+  final ProductSource source;
+  final bool discounted;
+
+  @override
+  String get name => 'product_viewed';
+
+  @override
+  Map<String, Object?> get parameters => <String, Object?>{
+    'product_id': productId,
+    'source': source.name, // an enum is sent by its name
+    'discounted': discounted ? 'true' : 'false', // no booleans: a string (or 1 / 0)
+  };
 }
 ```
 

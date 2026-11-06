@@ -1,15 +1,17 @@
 ---
 name: isolates
-description: "Isolates: Isolate.run for one CPU-heavy job, a typed worker for a long-lived one, what can be sent, plugins in an isolate, and Android background work and foreground services."
+description: "Isolates: Isolate.run for one CPU-heavy job or native call, splitting work where no isolate is available, a typed worker for a long-lived one, what can be sent, plugins in an isolate, and Android background work and foreground services."
 ---
 
 # Isolates
 
 ## Rules
 
-- Move CPU-bound Dart work (decoding a large JSON, parsing, hashing, image work) off the UI isolate
-  with `Isolate.run` or `compute`. I/O needs no isolate. The web has no isolates: `compute` runs
-  the function on the main thread there. See "Choosing".
+- Move CPU-bound work (decoding a large JSON, parsing, hashing, image work, and synchronous FFI
+  calls into native code) off the UI isolate with `Isolate.run` or `compute`. I/O needs no
+  isolate. The web has no isolates: `compute` runs the function on the main thread there, so a
+  long loop yields with `await Future<void>.delayed(Duration.zero)` between chunks. See
+  "Choosing".
 - A job takes its data as arguments and captures nothing else. A closure written in an instance
   method captures `this`: copy the fields it needs into local variables first. See "Sending data".
 - Statics, top-level variables, `Dependencies`, error handlers and `Controller.observer` exist once
@@ -41,6 +43,27 @@ description: "Isolates: Isolate.run for one CPU-heavy job, a typed worker for a 
 - **A worker isolate** when the isolate keeps state between requests (a warm cache, a loaded
   model, an open native handle) or answers many small requests that would each pay for a spawn.
   See "A worker isolate".
+- **Synchronous native calls block too.** An FFI call (`@Native` or a `DynamicLibrary` lookup, as
+  in native image, crypto or database packages) runs on the calling isolate's thread and blocks
+  its event loop until it returns, however fast the native code is: no frames, timers or input
+  meanwhile (checked: a 10 ms periodic timer ticked 0 times during a 1 s native `sleep`, and 51
+  times in 500 ms while the same call ran inside `Isolate.run`). Run a heavy native job, from
+  decoding to encoding, inside one `Isolate.run` and return plain bytes (`Uint8List`): a native
+  handle is `Finalizable` and cannot be sent (see "Sending data"), so it is created, used and
+  disposed in the same isolate.
+- **Splitting work on the UI isolate**, where no isolate is available (the web) or the work needs
+  objects that cannot be sent. Only an event gives the event loop a turn:
+  `await Future<void>.delayed(Duration.zero)` between chunks (`map_in_chunks.dart` in Examples).
+  `await null`, `Future.microtask`, `Stream.fromIterable` and an `async*` generator continue in
+  microtasks, which all run before the next event, so a "lazy" stream over a list lets nothing in
+  (checked: a zero-duration timer scheduled before a 200-item loop fired after all 200 items with
+  each of these, and after the first 20 with `Future.delayed(Duration.zero)` every 20 items).
+  Frames and input wait the same way, since the engine delivers them as events. One synchronous
+  call (a single `jsonDecode`) cannot be split: only the work after it can.
+- **No `Isolate.spawnUri` in an app.** It starts a new isolate group from a URI, and in an AOT
+  build (every Flutter release build) the URI must point to a precompiled AOT snapshot (checked: a
+  `dart compile exe` program failed with "does not contain a valid AOT snapshot" for a `.dart`
+  file that the JIT ran). Use `Isolate.run` or `Isolate.spawn`.
 - **No isolate for I/O.** Files, sockets and `http` are already asynchronous: the waiting happens
   outside Dart and does not block the event loop. An isolate helps with the Dart code that runs
   long after the bytes arrive (decoding the response, not downloading it).
@@ -374,6 +397,40 @@ final class IsolateWorker<Request extends Object, Response extends Object?> {
       _fail(StateError('The worker is closed'));
     }
   }
+}
+```
+
+### `map_in_chunks.dart`
+
+Tested: a timer scheduled before the call runs after exactly the first 100 items; the same items
+through `Stream.fromIterable`, `await null` or `Future.microtask` let no timer in; a chunk size of
+0 throws `ArgumentError`.
+
+```dart
+// file: map_in_chunks.dart
+/// Maps [items] with [convert] on the current isolate, and lets the event loop run timers, input
+/// and frames after every [chunkSize] items.
+///
+/// For when no isolate is available (the web) or [convert] needs objects that cannot be sent;
+/// elsewhere use `Isolate.run`.
+Future<List<R>> mapInChunks<T, R>(
+  List<T> items,
+  R Function(T item) convert, {
+  int chunkSize = 100,
+}) async {
+  if (chunkSize < 1) {
+    throw ArgumentError.value(chunkSize, 'chunkSize', 'must be at least 1');
+  }
+  final results = <R>[];
+  for (var i = 0; i < items.length; i++) {
+    results.add(convert(items[i]));
+    if ((i + 1) % chunkSize == 0 && i + 1 < items.length) {
+      // An event, not a microtask: `await null`, `Future.microtask`, `Stream.fromIterable` and
+      // `async*` continue before any timer, input or frame gets its turn.
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
+  return results;
 }
 ```
 

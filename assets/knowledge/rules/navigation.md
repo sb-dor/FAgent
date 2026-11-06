@@ -25,6 +25,10 @@ description: "Declarative navigation in one widget: the screen stack is a list o
   `showDialog` opens above every page and stays there when a guard changes the stack. See "Dialogs
   and sheets".
 - The stack is never empty: a change that would empty it is ignored.
+- No navigator key outside the widgets: no `NavigationService` or `DialogService` that pushes a page
+  or shows a dialog through a global `GlobalKey<NavigatorState>` from a controller, repository or
+  service. A controller publishes a state, and the widget's `StateConsumer` listener navigates. See
+  "No navigator key outside the widgets".
 
 ## The navigator
 
@@ -152,6 +156,9 @@ What that means, checked in widget tests:
   going back to the page shows it again, and removing the page removes it.
 - Close a dialog with the context its `builder` gets. `Navigator.pop(context)` with the page's
   context, under a dialog on the root navigator, pops the page and leaves the dialog open.
+- On either navigator the dialog is a sibling of its page, not a child: it does not see the
+  scopes inside the page (a feature's config widget). Pass it what it needs; see "Global:
+  `Dependencies` and `DependenciesScope`" in `docs/rules/dependencies.md`.
 
 ## Tabs
 
@@ -173,6 +180,20 @@ in an `IndexedStack`:
 `AppNavigator.controlled(controller: ValueNotifier<List<AppPage>>)` lets code outside the widget
 tree read and set the stack: a deep link, a notification tap, a test. The navigator listens to the
 controller and writes every change back to it, so both always agree.
+
+## No navigator key outside the widgets
+
+A global `GlobalKey<NavigatorState>` read from a controller, a repository or a service
+(`navigatorKey.currentState!.push(...)`, `showDialog(context: navigatorKey.currentContext!)`, the
+`NavigationService` / `DialogService` of Stacked and similar packages) lets any code open UI at any
+time: dialogs appear from code the user did not touch, and nothing that uses it can be tested
+without the whole app. Nothing below the widgets holds a `BuildContext` (see "Rules" in
+`docs/rules/controllers.md`), and a navigator key is a `BuildContext` reached through a global.
+
+- A controller publishes a state; the `listener` of the screen's `StateConsumer` pushes the page or
+  shows the dialog.
+- Code outside the tree that must change the stack (a deep link, a notification tap) sets it
+  through `AppNavigator.controlled` (see "Controlled stack").
 
 ## System back
 

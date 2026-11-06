@@ -18,12 +18,17 @@ description: "Client-side security: nothing in the app stays secret, obfuscation
 - Password rules for sign-up are checked by the server; the app's check only explains them early.
   NIST SP 800-63B asks for length and a check against known-breached passwords rather than
   composition rules (an uppercase letter, a digit); `String.length` counts UTF-16 code units, not
-  the characters the user typed.
+  the characters the user typed: count those with `password.characters.length` (checked:
+  `'Ann👨‍👩‍👧'` has `length` 11 and 4 characters; see "Strings and text length" in
+  `docs/rules/dart.md`).
 - Never log passwords, tokens, card data or personal data: not to the console, a file, Crashlytics
-  or Sentry. Logs and crash reports are read by more people than the database.
-- Tokens are read from storage once, into memory; the HTTP interceptor takes them from memory and
-  never reads the storage or crosses a platform channel per request. See "Tokens".
-- One object owns the tokens (`AuthSession`); the interceptor and everything else ask it and keep
+  or Sentry. Logs and crash reports are read by more people than the database. Analytics too: no
+  email, phone, name or text the user typed in an event parameter or `setUserId` (Google Analytics'
+  policies forbid it); send the app's opaque user id.
+- Tokens are read from storage once, into memory; the HTTP client's authentication middleware takes
+  them from memory and never reads the storage or crosses a platform channel per request. See
+  "Tokens".
+- One object owns the tokens (`AuthSession`); the middleware and everything else ask it and keep
   no copy. The state widgets rebuild on holds the user, never the tokens. See "Tokens".
 - Sign-out forgets the tokens on the device first, always; telling the server is best-effort and
   never awaited. See "Tokens".
@@ -200,16 +205,16 @@ may read `exp` to refresh ahead of time; deciding what the user may do from the 
 server's job, which checks the signature (one call with Firebase: `verifyIdToken` in the Admin
 SDK). See "What the server checks".
 
-- One object owns the tokens in memory: `AuthSession`. The interceptor, the sign-in state and a
-  socket ask it for the token or are called back by it; none keeps a copy. A second copy (a cache
-  in the interceptor fed by a storage stream, the tokens in the controller's state) is stale after
-  the next refresh or sign-out.
+- One object owns the tokens in memory: `AuthSession`. The authentication middleware, the sign-in
+  state and a socket ask it for the token or are called back by it; none keeps a copy. A second
+  copy (a cache in the middleware fed by a storage stream, the tokens in the controller's state)
+  is stale after the next refresh or sign-out.
 - Keep the tokens out of the state that widgets rebuild on: a refresh every few minutes would
   make a new state and rebuild everything below its scope, for nothing the screen shows. The
   authentication state holds the user (see "Users, user info and sessions" in
   `docs/rules/architecture.md`).
-- The interceptor of the HTTP client gets callbacks, not the storage (see "Callbacks instead of
-  references" in `docs/rules/dependencies.md`): ask for the token, and report a 401.
+- The authentication middleware of the HTTP client gets callbacks, not the storage (see "Callbacks
+  instead of references" in `docs/rules/dependencies.md`): ask for the token, and report a 401.
 - Refresh before the token expires, not after the first 401: a minute of margin. A 401 still
   triggers a refresh (the server may revoke a token early), but refreshing ahead spares the
   requests near the expiry a failed first attempt and a second round trip.
@@ -248,14 +253,15 @@ SDK). See "What the server checks".
   the first screen, since that screen depends on it; anything that calls the network is not (see
   "Startup and creating dependencies" in `docs/rules/dependencies.md`).
 - When a vendor SDK owns sign-in (Firebase Auth, Supabase), it stores and refreshes the tokens
-  itself: do not store them again and do not write a second refresh. The interceptor asks the SDK
+  itself: do not store them again and do not write a second refresh. The middleware asks the SDK
   per request: `await user.getIdToken()` returns the cached token and refreshes it only when
   expired; with Supabase, `auth.currentSession?.accessToken`.
 - Ending a session (sign-out on another device, a ban, an unpaid account) is the server's: it
   deletes the refresh token, and keeps the access token on a deny list for the rest of its life.
 
-`auth_session.dart` (in Examples) does all of this; the interceptor calls `accessToken()` for every
-request and `onUnauthorized(token)` on a 401, then retries once.
+`auth_session.dart` (in Examples) does all of this; `ApiClient$AuthenticationMiddleware` (in "HTTP
+middleware" in `docs/rules/dependencies.md`) calls `accessToken()` for every request and
+`onUnauthorized(token)` on a 401, then retries once.
 
 ### What the server checks
 
@@ -305,11 +311,12 @@ page:
 ### Expected errors
 
 A wrong password, a taken email or a weak password is the server's answer, not a failure of the
-app. The data layer maps the server's error code to the app's exception (`RejectedException(code:
-'invalid_credentials')`, see "Errors" in `docs/rules/repositories.md`), the screen shows it through
-`errorText` (`docs/rules/localization.md`), and it is not reported. In the controller, catch it
-before the general case and do not rethrow it, since the rethrown error goes to the observer and
-the crash reporter (see "Where the rethrown error goes" in `docs/rules/controllers.md`):
+app. The data layer reads the server's error code from the `APIClientException`'s `data` and maps
+it to the app's exception (`RejectedException(code: 'invalid_credentials')`, see "Errors" in
+`docs/rules/repositories.md`), the screen shows it through `errorText`
+(`docs/rules/localization.md`), and it is not reported. In the controller, catch it before the
+general case and do not rethrow it, since the rethrown error goes to the observer and the crash
+reporter (see "Where the rethrown error goes" in `docs/rules/controllers.md`):
 
 ```dart
 void signIn(String email, String password) => handle(() async {
@@ -452,8 +459,8 @@ DateTime? jwtExpiry(String jwt) {
 /// Holds the tokens in memory, refreshes the access token shortly before it expires, and lets
 /// requests that need a refresh at the same time share one.
 ///
-/// The one owner of the tokens: the HTTP client's interceptor calls [accessToken] for every
-/// request and [onUnauthorized] on a 401, and keeps no copy; the storage is read once, in
+/// The one owner of the tokens: the HTTP client's authentication middleware calls [accessToken]
+/// for every request and [onUnauthorized] on a 401, and keeps no copy; the storage is read once, in
 /// [restore].
 final class AuthSession {
   AuthSession({

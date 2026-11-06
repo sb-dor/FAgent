@@ -1,6 +1,6 @@
 ---
 name: tooling
-description: "Dart scripts in tool/ (arguments, processes, exit codes) and CI: caching, format, analyze, sharded tests, a coverage floor, the build."
+description: "Dart scripts in tool/ (arguments, subcommands, processes, exit codes), shipping a CLI, pub workspaces and Melos, and CI: caching, format, analyze, sharded tests, a coverage floor, the build."
 ---
 
 # Tooling
@@ -23,6 +23,11 @@ description: "Dart scripts in tool/ (arguments, processes, exit codes) and CI: c
 - End a script by setting `exitCode` and returning from `main`, not with `exit()`: `exit` drops
   output that is not written yet. Use 0 for success, 1 for a failure, 64 for a wrong command line.
   See "Exit codes".
+- A script with subcommands uses `CommandRunner<int>`, awaits `run` and turns a `UsageException`
+  into exit code 64. See "Subcommands".
+- A repository with several packages is one pub workspace. One `pub get`,
+  `dart run build_runner build --workspace`, `flutter analyze` and `flutter test <members>` at the
+  root cover every member: no loop over packages. See "Pub workspaces".
 - Every pull request runs the format check, `flutter analyze`, the tests and a build; any failure
   blocks the merge. See "The pipeline".
 - CI gets dependencies with `flutter pub get --enforce-lockfile` (why: "Dependencies" in
@@ -99,6 +104,8 @@ Where things go:
   from `test/tool/`), so `flutter test` runs them with the rest.
 - Packages only the scripts need (`args`) go to `dev_dependencies`. In a pub workspace, a `tool`
   member package with its own `pubspec.yaml` keeps them out of the app's dependencies.
+- A package whose product is a command-line tool is laid out differently: see "Shipping a
+  command-line tool".
 
 ### Arguments
 
@@ -150,6 +157,73 @@ void _usageError(String message, ArgParser parser) {
 - Validate ranges (`0 <= index < total`) before doing any work, and print `parser.usage` with the
   error.
 
+### Subcommands
+
+A script with several tasks (`dart run tool/project.dart shard ...`) uses `CommandRunner<int>`
+from `package:args/command_runner.dart`, one `Command<int>` per task. In
+`tool/src/project_tool.dart`:
+
+```dart
+import 'dart:io';
+
+import 'package:args/command_runner.dart';
+
+import 'test_shards.dart';
+
+/// `dart run tool/project.dart shard --total N --index I [-- <flutter test args>]`
+final class ShardCommand extends Command<int> {
+  ShardCommand() {
+    argParser
+      ..addOption('total', help: 'Number of shards.')
+      ..addOption('index', help: 'This shard, counted from 0.');
+  }
+
+  @override
+  String get name => 'shard';
+
+  @override
+  String get description => 'Runs one shard of the test files.';
+
+  @override
+  Future<int> run() async {
+    final args = argResults!; // set by CommandRunner before run()
+    final total = int.tryParse(args.option('total') ?? '');
+    final index = int.tryParse(args.option('index') ?? '');
+    if (total == null || index == null || total < 1 || index < 0 || index >= total) {
+      usageException('Need --total N and --index I with 0 <= I < N.');
+    }
+    final shard = splitIntoShards(findTestFiles(Directory('test')), total)[index];
+    return runShard(shard, arguments: args.rest);
+  }
+}
+
+/// Runs the command line [arguments] and returns the exit code: the command's,
+/// 0 for help, 64 for a wrong command line.
+Future<int> runProjectTool(List<String> arguments) async {
+  final runner = CommandRunner<int>('project', 'Tasks of this project.')
+    ..addCommand(ShardCommand());
+  try {
+    // null for `--help` and `help <command>`, which only print the usage.
+    return await runner.run(arguments) ?? 0;
+  } on UsageException catch (error) {
+    stderr.writeln(error); // the message, then the usage of the command
+    return 64;
+  }
+}
+```
+
+`tool/project.dart` is `Future<void> main(List<String> arguments) async { exitCode = await
+runProjectTool(arguments); }`.
+
+- `run` returns the exit code. A wrong value is reported with `usageException(message)`, which
+  throws a `UsageException` carrying the command's usage.
+- `CommandRunner.run` throws `UsageException` for an unknown command or option. Without the
+  `try` (or without `await`), it is an unhandled exception with a stack trace and exit code 255
+  instead of a usage message with 64 (checked).
+- `run` returns `null` for `--help`, `<command> --help` and `help <command>`: treat it as 0.
+- Checked with `args` 2.7.0: unknown command, unknown option, missing and out-of-range options
+  gave 64 with the message and the command's usage on `stderr`; the three help forms gave 0.
+
 ### Running processes
 
 - `Process.run(executable, arguments)` waits and returns the exit code with the output as
@@ -182,6 +256,132 @@ void _usageError(String message, ArgParser parser) {
   command line: `dart` and `flutter` exit with 64 on an unknown option (checked).
 - Keep codes in 0 to 127. On Linux and macOS only the low 8 bits survive (`-1` becomes 255), and
   Dart itself exits with 254 for a compile error and 255 for an uncaught exception.
+
+### Shipping a command-line tool
+
+For a package whose product is a CLI (scripts in `tool/` stay `dart run tool/<name>.dart`):
+
+- The entry points are `bin/<name>.dart`, only `main`; the runner, the commands and the logic are
+  in `lib/src/`, where tests and other code can use them. A CLI that only some users of a library
+  need is its own package (a workspace member, see "Pub workspaces").
+- `executables:` in `pubspec.yaml` names the commands. Users install them with
+  `dart install <package>` (also `<package>@^1.0.0`, a git or a path descriptor) or
+  `dart pub global activate <package>`.
+- `dart compile exe bin/<name>.dart -o <name>` builds a self-contained executable for the host
+  OS. The only other target is Linux: from macOS, `--target-os=linux --target-arch=x64` gave an
+  x86-64 ELF binary, and `windows`, `android` and `ios` were refused (checked, Dart 3.13). Build
+  each other OS on its own CI runner. A Dart executable does not run on Android or iOS. A CLI
+  that uses native code assets is built with `dart build cli` (a bundle of `bin/` and `lib/`).
+- The tool's code does not import Flutter: `dart compile exe` of a file importing
+  `package:flutter/foundation.dart` failed with "Dart library 'dart:ui' is not available on this
+  platform". A dependency with build hooks (`shared_preferences` brings `objective_c`) stops it
+  with "'dart compile' does not support build hooks, use 'dart build' instead" (checked).
+
+## Pub workspaces
+
+A repository with several packages (the app, `packages/*`, a `tool` package) is one pub workspace
+(Dart 3.6 and Flutter 3.27 or later):
+
+```yaml
+# pubspec.yaml at the root
+name: shop_workspace
+publish_to: none
+environment:
+  sdk: ^3.11.0 # globs in `workspace:` need 3.11; without them ^3.6.0
+workspace:
+  - app
+  - packages/*
+
+# packages/shop_core/pubspec.yaml
+name: shop_core
+version: 1.0.0
+publish_to: none
+environment:
+  sdk: ^3.11.0
+resolution: workspace
+
+# app/pubspec.yaml
+name: shop_app
+publish_to: none
+environment:
+  sdk: ^3.11.0
+resolution: workspace
+dependencies:
+  flutter:
+    sdk: flutter
+  shop_core: ^1.0.0 # the member: found by name, no `path:`
+```
+
+Checked with Flutter 3.47 / Dart 3.13:
+
+- One `flutter pub get`, at the root or in any member, resolves the whole workspace into the
+  root's `pubspec.lock` and `.dart_tool/package_config.json`. A member gets only
+  `.dart_tool/pub/workspace_ref.json`. A member that depends on another by name and version uses
+  that member (`package_config.json` points at `../packages/shop_core`): no `path:` and no
+  `dependency_overrides` are needed.
+- Every pubspec of the workspace needs an SDK lower bound of at least 3.5 (with `^3.4.0`:
+  "`workspace` and `resolution` requires at least language version 3.5"). Globs (`packages/*`)
+  need 3.11 ("Glob syntax is only supported from language version 3.11"); a folder they match
+  without a `pubspec.yaml` is skipped. A listed member without `resolution: workspace` fails the
+  resolution.
+- There is one version of each package for all members: two members with incompatible
+  constraints fail the resolution for everyone. A pure Dart member is resolved together with the
+  versions the Flutter SDK pins through `flutter_test`. With Flutter 3.47.9, a member with `test`
+  in `dev_dependencies` and `build_runner` 2.17.1 in the workspace failed to resolve (the `test`
+  versions that fit the pinned `test_api` need an older analyzer than `build_runner`); with
+  `flutter_test` instead of `test` in that member's `dev_dependencies` it resolved, and its tests
+  ran with `flutter test`. The same holds in a single Flutter package: tests use `flutter_test`,
+  not `package:test`.
+- `dependency_overrides` in a member applies to the whole workspace (`direct overridden` in the
+  lockfile): keep overrides in the root pubspec, where they are visible.
+- Migrating: the first `pub get` deletes each member's old `pubspec.lock` and
+  `.dart_tool/package_config.json` ("Deleting old lock-file"). Delete them from git too.
+- `--enforce-lockfile` covers the members: after a new dependency was added to a member,
+  `flutter pub get --enforce-lockfile` exited with 65, at the root and in the member.
+- `dart pub get` resolves Flutter members too, when `dart` is the Flutter SDK's.
+
+### Commands at the root
+
+- Code generation: `dart run build_runner build --workspace -d` builds every member in one run,
+  with one compile of the builders (`-d` is `--delete-conflicting-outputs`). `--workspace` exists
+  since build_runner 2.11 and is stable since 2.14; `dart run build_runner clean --workspace`
+  clears its cache. It ran at the root with `build_runner` only in the members'
+  `dev_dependencies` (checked). See also `docs/rules/generated-files.md`.
+- Analysis: `flutter analyze --no-pub` (or `dart analyze`) at the root analyzes every member,
+  each with its own `analysis_options.yaml` (checked: an error set only in a member's file was
+  reported from the root).
+- Tests: since Flutter 3.32, `flutter test --no-pub --coverage app packages/shop_core` at the
+  root runs the tests of both members in one run and writes one `coverage/lcov.info` at the root,
+  with paths relative to the root (`SF:packages/shop_core/lib/shop_core.dart`). Pass the members
+  that have a `test/` folder (from `dart pub workspace list`): a plain `flutter test` at a root
+  without its own `test/` stops with 'Test directory "test" not found'. The working directory of
+  every test is then the root, not the member: a test reading `File('test/data.txt')` passed in
+  the member and failed from the root. Such a test finds its files another way, or its package is
+  tested on its own.
+- `flutter clean` cleans only the package it runs in.
+- So a workspace's `Makefile` runs `generate`, `analyze` and `test` once at the root, with the
+  commands above. Only commands that work per package (`flutter clean`, a build) need the list
+  of members.
+
+### Melos
+
+A workspace of local packages needs no Melos: the commands above cover resolution, code
+generation, analysis and tests. Melos is for publishing several packages (versions and
+changelogs from conventional commits with `melos version`, then `melos publish`) and for running a
+command only in the packages a change touched. When the project uses it (checked with melos
+8.10.1):
+
+- It is a dev dependency of the root, run with `dart run melos <command>` (see "Tools in CI"),
+  not an unpinned `dart pub global activate melos`.
+- Since Melos 7 its configuration is under `melos:` in the root `pubspec.yaml`; `melos.yaml` is
+  no longer read. Since Melos 8 a script has either `run:` (once, at the root) or `exec:` (in
+  every package: a command string, or a map with `command:` and the options); both together are
+  an error.
+- `--diff=<ref>` keeps only the packages changed since `<ref>`
+  (`dart run melos exec --diff=origin/main...HEAD -- flutter analyze --no-pub`). The ref must
+  exist in the clone: otherwise Melos stops with "is not an existing commit, tag or range of
+  commits" and exit code 1. A shallow CI clone has no `origin/main`; on GitHub Actions check out
+  with `fetch-depth: 0`.
 
 ## CI
 
@@ -225,9 +425,8 @@ A new push cancels the run it replaces (`concurrency: cancel-in-progress` on Git
   cache of the branch. `subosito/flutter-action` does this with `pub-cache: true` (key:
   `hashFiles('**/pubspec.lock')`). GitLab caches only paths inside the project: set
   `PUB_CACHE: "$CI_PROJECT_DIR/.pub-cache"` and cache `.pub-cache/`.
-- A repository with several packages uses a pub workspace: a root `pubspec.yaml` with
-  `workspace: [packages/a, packages/b]` and `resolution: workspace` in each member. One
-  `flutter pub get` at the root resolves all of them into one `pubspec.lock` (checked).
+- A repository with several packages is a pub workspace: one `flutter pub get --enforce-lockfile`
+  at the root resolves every member into one `pubspec.lock` (see "Pub workspaces").
 - Generated files are not committed (`docs/rules/generated-files.md`), so CI runs
   `dart run build_runner build --delete-conflicting-outputs` before analyzing or testing. On
   GitLab one prepare job can pass `.dart_tool/` and the generated files to later jobs as short-lived
@@ -273,8 +472,9 @@ list the test files, sort them (every shard job must compute the same split, and
 `flutter test`. Dealing in turn keeps shard sizes within one file of each other; cutting the list
 into chunks of `ceil(n / N)` leaves shards empty (4 files in 3 shards: 2, 2, 0).
 
-In a workspace, `flutter test` runs one package at a time: shard by package or by
-`package/test/file`, the same way. On GitHub Actions the shard is a `matrix` value
+In a workspace, `flutter test` at the root takes member folders and test files of any member
+(see "Commands at the root"): deal the `member/test/x_test.dart` paths of all members the same
+way. On GitHub Actions the shard is a `matrix` value
 (`shard: [0, 1, 2]`); GitLab's `parallel: 3` sets `CI_NODE_INDEX` from 1, so subtract one.
 
 ### Coverage
@@ -285,9 +485,11 @@ In a workspace, `flutter test` runs one package at a time: shard by package or b
 - Leave generated code out (`*.g.dart`, `*.freezed.dart`, `generated/`): it inflates or deflates
   the number without saying anything about the tests.
 - With shards, merge the reports file by file before computing the percentage: a file tested by
-  two shards appears in both, and adding up their `LF`/`LH` totals counts it twice. Paths are
-  relative to the package (`SF:lib/...`); prefix them with the package's folder before merging the
-  reports of several packages.
+  two shards appears in both, and adding up their `LF`/`LH` totals counts it twice.
+- In a workspace, one `flutter test --coverage <members>` run at the root writes paths relative
+  to the root (`SF:packages/shop_core/lib/...`), ready to merge. A run inside a package writes
+  paths relative to that package (`SF:lib/...`): prefix them with the package's folder before
+  merging the reports of separate per-package runs.
 - The floor is the current value, stored in the repository (an `--min` argument in the workflow),
   and raised when coverage rises. It is not lowered to merge a change. A fixed target such as 80%
   says nothing about the tests: coverage shows which lines ran, not what was checked.
