@@ -1,15 +1,13 @@
-include: package:flutter_lints/flutter.yaml
+# The examples of the rules are checked with the same analysis options as a new project (the
+# architecture template), so what the rules show passes in the projects that follow them.
+include: ../../../assets/project_template/architecture/analysis_options.yaml
 
 analyzer:
-  exclude:
-    - "**.freezed.dart"
-    - build/**
-    - android/**
-    - ios/**
-    - web/**
-    - windows/**
-    - macos/**
-    - linux/**
-  language:
-    strict-casts: true
-    strict-raw-types: true
+  errors:
+    # The examples are flat files in one lib/ that import each other by file name; a project
+    # imports them by package.
+    always_use_package_imports: ignore
+
+linter:
+  rules:
+    always_use_package_imports: false

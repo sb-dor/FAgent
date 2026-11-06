@@ -15,9 +15,18 @@ void main() {
         'rules/repositories.md',
         'rules/dependencies.md',
         'rules/widgets.md',
+        'rules/testing.md',
+        'rules/navigation.md',
+        'rules/configuration.md',
+        'rules/dart.md',
         'rules/localization.md',
         'rules/package-freshness.md',
         'rules/generated-files.md',
+        'rules/web.md',
+        'rules/security.md',
+        'rules/documentation.md',
+        'rules/isolates.md',
+        'rules/tooling.md',
       ]),
     );
 
