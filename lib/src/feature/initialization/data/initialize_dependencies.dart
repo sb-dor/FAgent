@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
@@ -79,6 +80,7 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
       dependencies.database = AppDatabase.defaults(name: 'app_database'),
   // The native drop view of the window (macos/Runner/DropZone.swift).
   'Listen to file drops': (dependencies) => dependencies.dropZone = DropZone.platform(),
+  'Open links in the browser': (dependencies) => dependencies.openUrl = openUrl,
   'Resolve shell environment': (dependencies) async =>
       dependencies.shellEnvironment = await ShellEnvironment.resolve(),
   // The devices and the runs are real (`flutter daemon`, `flutter run --machine`); the widget

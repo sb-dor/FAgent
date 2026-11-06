@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone_event.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
@@ -94,6 +95,7 @@ Dependencies testDependencies({
   IMcpProbe? mcpProbe,
   DropZone? dropZone,
   IProjectRulesRepository? projectRulesRepository,
+  UrlOpener? openUrl,
 }) {
   final database = AppDatabase(NativeDatabase.memory());
   const environment = ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'});
@@ -120,6 +122,8 @@ Dependencies testDependencies({
     ..database = database
     ..dropZone = dropZone ?? DropZone.fromStream(const Stream<DropZoneEvent>.empty())
     ..shellEnvironment = environment
+    // A test never opens the browser: a link it taps goes to the test's own [openUrl].
+    ..openUrl = openUrl ?? (_) async {}
     ..agentOptionsCatalog = AgentOptionsCatalogImpl(database: database)
     ..customAgentsRepository = CustomAgentsRepositoryImpl(database: database)
     ..agentHub = hub

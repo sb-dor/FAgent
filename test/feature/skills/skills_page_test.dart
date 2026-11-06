@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
@@ -78,8 +79,9 @@ void main() {
     Locale locale = const Locale('en'),
     ThemeData? theme,
     bool selectAvera = true,
+    UrlOpener? openUrl,
   }) async {
-    dependencies = testDependencies(skillsRepository: repository);
+    dependencies = testDependencies(skillsRepository: repository, openUrl: openUrl);
     await tester.runAsync(() async {
       final database = dependencies.database;
       if (projects > 0) {
@@ -346,6 +348,41 @@ void main() {
         repository.calls,
         contains('setEnabled skill:project:shop-deploy false project=$shopId'),
       );
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('the rules show where the built-in ones come from, with a link to the chat', (
+      tester,
+    ) async {
+      useDesktopView(tester);
+      final opened = <Uri>[];
+      await pumpScreen(tester, openUrl: (url) async => opened.add(url));
+      final link = find.byKey(const ValueKey<String>('skills-rules-source-link'));
+      expect(link, findsNothing, reason: 'the skills section does not show it');
+
+      _skills(tester).chooseKind(KnowledgeKind.rule);
+      await tester.pump();
+      expect(link, findsOneWidget);
+      expect(find.text('Flutter 🎯 Dart'), findsOneWidget);
+      expect(
+        find.text('The built-in rules are collected from the discussions in the community chat'),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              widget.properties.link == true &&
+              widget.properties.linkUrl == Uri.parse('https://t.me/ru_dart'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(link);
+      await tester.pump();
+      expect(opened, <Uri>[Uri.parse('https://t.me/ru_dart')]);
+      // Let the tooltip the tap showed time out.
+      await tester.pump(const Duration(seconds: 5));
       await disposeTestApp(tester, dependencies);
     });
 

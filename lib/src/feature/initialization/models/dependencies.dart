@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
@@ -52,6 +53,9 @@ class Dependencies {
 
   /// Login-shell environment for every child process (agents, `flutter`, `git`).
   late final ShellEnvironment shellEnvironment;
+
+  /// Opens a web address in the default browser (a link in the UI, such as the community chat).
+  late final UrlOpener openUrl;
 
   /// The settings (model, mode, …) the agents reported, kept between runs.
   late final IAgentOptionsCatalog agentOptionsCatalog;

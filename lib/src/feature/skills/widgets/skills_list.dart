@@ -3,10 +3,13 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
+import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skill_list_tile.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_add_menu.dart';
 import 'package:flutter_code_agent/src/feature/skills/widgets/skills_config_widget.dart';
+import 'package:l/l.dart';
 
 /// {@template skills_list}
 /// The middle column of the Skills screen: a search field over the items of the open section that
@@ -122,7 +125,10 @@ class _SkillsListState extends State<SkillsList> {
                       _ => const SizedBox.shrink(),
                     },
                   ),
-                  _RulesNote(text: localization.skillsRulesNote),
+                  _RulesNote(
+                    text: localization.skillsRulesNote,
+                    source: _scope.view.kind == KnowledgeKind.rule ? const _RulesSource() : null,
+                  ),
                 ],
               ),
             },
@@ -161,9 +167,12 @@ class _SkillsListState extends State<SkillsList> {
 
 /// Under the list: when a changed rule reaches the chats.
 class _RulesNote extends StatelessWidget {
-  const _RulesNote({required this.text});
+  const _RulesNote({required this.text, this.source});
 
   final String text;
+
+  /// Shown under [text] in the same footer: where the built-in rules come from.
+  final Widget? source;
 
   @override
   Widget build(BuildContext context) {
@@ -174,11 +183,81 @@ class _RulesNote extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Text(
-          text,
-          style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(text, style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.muted)),
+            if (source case final source?) ...<Widget>[const SizedBox(height: 6), source],
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// In the rules footer: where the built-in rules come from, with a link to the community chat.
+class _RulesSource extends StatelessWidget {
+  const _RulesSource();
+
+  /// The Telegram chat whose discussions the built-in rules are collected from.
+  static final Uri chat = Uri.parse('https://t.me/ru_dart');
+
+  /// The chat's name as Telegram shows it.
+  static const String chatName = 'Flutter 🎯 Dart';
+
+  Future<void> _open(BuildContext context) async {
+    try {
+      await Dependencies.of(context).openUrl(chat);
+    } on Object catch (error, stackTrace) {
+      l.w('Could not open $chat: $error', stackTrace);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final style = Theme.of(context).textTheme.bodySmall!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          Localization.of(context).skillsRulesSource,
+          style: style.copyWith(color: colors.muted),
+        ),
+        const SizedBox(height: 2),
+        Semantics(
+          link: true,
+          linkUrl: chat,
+          child: Tooltip(
+            message: chat.toString(),
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                key: const ValueKey<String>('skills-rules-source-link'),
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _open(context),
+                child: Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  children: <Widget>[
+                    Icon(Icons.forum_outlined, size: 14, color: colors.accent),
+                    Text(
+                      chatName,
+                      style: style.copyWith(
+                        color: colors.accent,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                        decorationColor: colors.accent,
+                      ),
+                    ),
+                    Text('t.me/ru_dart', style: style.copyWith(color: colors.muted)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
