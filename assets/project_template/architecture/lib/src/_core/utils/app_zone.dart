@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:{{package}}/src/common/utils/error_util.dart';
+import 'package:{{package}}/src/_core/utils/error_util.dart';
 import 'package:l/l.dart';
 
 /// Catch all application errors and logs.
 // ignore: experimental_member_use
 void appZone(Future<void> Function() fn) => l.capture<void>(
-  () => runZonedGuarded<void>(() => fn(), ErrorUtil.logError),
+  () => runZonedGuarded<void>(() => fn(), logError),
   const LogOptions(
     messageFormatting: _messageFormatting,
     handlePrint: true,

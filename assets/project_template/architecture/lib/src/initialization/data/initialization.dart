@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:{{package}}/src/common/utils/error_util.dart';
-import 'package:{{package}}/src/feature/initialization/data/initialize_dependencies.dart';
-import 'package:{{package}}/src/feature/initialization/models/dependencies.dart';
+import 'package:{{package}}/src/_core/utils/error_util.dart';
+import 'package:{{package}}/src/initialization/data/initialize_dependencies.dart';
+import 'package:{{package}}/src/initialization/models/dependencies.dart';
 
 /// Ephemerally initializes the app and prepares it for use.
 Future<Dependencies>? _$initializeApp;
@@ -25,7 +25,7 @@ Future<Dependencies> $initializeApp({
     return dependencies;
   } on Object catch (error, stackTrace) {
     onError?.call(error, stackTrace);
-    ErrorUtil.logError(error, stackTrace, hint: 'Failed to initialize app').ignore();
+    logError(error, stackTrace, hint: 'Failed to initialize app').ignore();
     rethrow;
   } finally {
     binding.addPostFrameCallback((_) {
@@ -45,17 +45,13 @@ Future<void> $disposeApp(Dependencies dependencies) async {
 Future<void> _catchExceptions() async {
   try {
     PlatformDispatcher.instance.onError = (error, stackTrace) {
-      ErrorUtil.logError(
-        error,
-        stackTrace,
-        hint: 'ROOT ERROR\r\n${Error.safeToString(error)}',
-      ).ignore();
+      logError(error, stackTrace, hint: 'ROOT ERROR\r\n${Error.safeToString(error)}').ignore();
       return true;
     };
 
     final sourceFlutterError = FlutterError.onError;
     FlutterError.onError = (details) {
-      ErrorUtil.logError(
+      logError(
         details.exception,
         details.stack ?? StackTrace.current,
         hint: 'FLUTTER ERROR\r\n$details',
@@ -63,6 +59,6 @@ Future<void> _catchExceptions() async {
       sourceFlutterError?.call(details);
     };
   } on Object catch (error, stackTrace) {
-    ErrorUtil.logError(error, stackTrace).ignore();
+    logError(error, stackTrace).ignore();
   }
 }

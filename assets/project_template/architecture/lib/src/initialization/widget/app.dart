@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:{{package}}/src/common/localization/localization.dart';
-import 'package:{{package}}/src/feature/home/widgets/home_screen.dart';
+import 'package:{{package}}/src/_core/localization/localization.dart';
+import 'package:{{package}}/src/home/widgets/home_screen.dart';
 
 /// {@template app}
 /// App widgets.

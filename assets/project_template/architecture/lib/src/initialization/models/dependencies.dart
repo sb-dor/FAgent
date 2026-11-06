@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:{{package}}/src/feature/initialization/widget/dependencies_scope.dart';
+import 'package:{{package}}/src/initialization/widget/dependencies_scope.dart';
 
 /// {@template dependencies}
 /// Application dependencies.

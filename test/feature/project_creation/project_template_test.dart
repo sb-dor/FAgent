@@ -18,7 +18,7 @@ void main() {
   ];
 
   test('every template file is an asset', () async {
-    expect(projectTemplateFiles, hasLength(14));
+    expect(projectTemplateFiles, hasLength(23));
     for (final path in projectTemplateFiles) {
       final text = await rootBundle.loadString('$projectTemplateRoot$path');
       expect(text, isNotEmpty, reason: path);
@@ -29,7 +29,7 @@ void main() {
     final packageImport = RegExp('package:([a-z_0-9]+)/');
     for (final path in projectTemplateFiles) {
       final text = await rootBundle.loadString('$projectTemplateRoot$path');
-      final filled = fillProjectTemplate(text, package: 'my_app');
+      final filled = fillProjectTemplate(text, package: 'my_app', date: DateTime(2026, 11, 6));
       expect(filled, isNot(contains('{{')), reason: path);
       if (!path.endsWith('.dart')) continue;
       for (final match in packageImport.allMatches(filled)) {
@@ -40,9 +40,31 @@ void main() {
 
   test('fill replaces every occurrence of the package', () {
     expect(
-      fillProjectTemplate('{{package}} and {{package}}', package: 'my_app'),
+      fillProjectTemplate('{{package}} and {{package}}', package: 'my_app', date: DateTime(2026)),
       'my_app and my_app',
     );
+  });
+
+  test('fill writes the date as YYYY-MM-DD', () {
+    expect(
+      fillProjectTemplate('## [1.0.0] - {{date}}', package: 'my_app', date: DateTime(2026, 3, 7)),
+      '## [1.0.0] - 2026-03-07',
+    );
+  });
+
+  test('shared code is in _core and features sit directly in lib/src', () {
+    for (final path in projectTemplateFiles.where((path) => path.startsWith('lib/src/'))) {
+      expect(path, isNot(contains('/common/')), reason: path);
+      expect(path, isNot(startsWith('lib/src/feature/')), reason: path);
+    }
+    expect(projectTemplateFiles, containsAll(<String>['Makefile', 'CHANGELOG.md']));
+  });
+
+  test('the Makefile is indented with tabs', () async {
+    final makefile = await rootBundle.loadString('${projectTemplateRoot}Makefile');
+    final recipes = makefile.split('\n').where((line) => line.startsWith('\t@'));
+    expect(recipes, isNotEmpty);
+    expect(makefile, isNot(contains('\n    @')));
   });
 
   test("control pin matches the app's pubspec", () {

@@ -31,7 +31,8 @@ const String _stoppedLine = 'Stopped';
 /// skeleton itself, one command at a time, each in its own process group.
 final class ProjectCreationRepositoryImpl implements IProjectCreationRepository {
   /// Creates the repository. [loadAsset] reads a file of the app's assets (`rootBundle.loadString`
-  /// in the app); [startProcess] starts the commands; [home] defaults to `$HOME`.
+  /// in the app); [startProcess] starts the commands; [home] defaults to `$HOME`; [now] gives the
+  /// date of the first `CHANGELOG.md` entry.
   ProjectCreationRepositoryImpl({
     required this._database,
     required this._flutterSdk,
@@ -41,6 +42,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required this._projectRules,
     required this._loadAsset,
     this._startProcess = startGroupedDaemonProcess,
+    this._now = DateTime.now,
     String? home,
   }) : _home = home ?? Platform.environment['HOME'] ?? p.separator;
 
@@ -52,6 +54,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   final IProjectRulesRepository _projectRules;
   final Future<String> Function(String key) _loadAsset;
   final DaemonProcessStarter _startProcess;
+  final DateTime Function() _now;
   final String _home;
 
   /// The creations being listened to.
@@ -216,6 +219,13 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           ...skeletonPubAddArguments,
         ], workingDirectory: path);
         await _command(run, index, flutter, const <String>['pub', 'get'], workingDirectory: path);
+        // The template's imports are sorted for no package in particular; `directives_ordering`
+        // (analysis_options.yaml) wants them sorted for this one.
+        await _command(run, index, _dart(flutter), const <String>[
+          'fix',
+          '--apply',
+          '--code=directives_ordering',
+        ], workingDirectory: path);
       case CreationStepKind.analyze:
         await _command(run, index, await _flutter(run), const <String>[
           'analyze',
@@ -244,6 +254,10 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   Future<String> _flutter(_Run run) async => run.flutter ??=
       (await _flutterSdk.pathFor(null)) ?? (throw const _StepFailure('Flutter SDK not found'));
 
+  /// The `dart` next to [flutter] in the SDK's `bin` folder.
+  String _dart(String flutter) =>
+      p.join(p.dirname(flutter), Platform.isWindows ? 'dart.bat' : 'dart');
+
   String _git() => _environment.which('git') ?? (throw const _StepFailure('git not found'));
 
   /// Copies the template with the package name filled in, then turns gen-l10n on in
@@ -254,7 +268,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       final text = await _loadAsset('$projectTemplateRoot$relative');
       final file = File(p.joinAll(<String>[path, ...relative.split('/')]));
       await file.parent.create(recursive: true);
-      await file.writeAsString(fillProjectTemplate(text, package: run.request.name));
+      await file.writeAsString(fillProjectTemplate(text, package: run.request.name, date: _now()));
       run
         ..addLine(index, '✎ $relative')
         ..checkLive();
