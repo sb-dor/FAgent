@@ -145,6 +145,7 @@ void main() {
       projectTrust: trust,
       projectRules: rules,
       loadAsset: (key) => File(key).readAsString(),
+      now: () => DateTime(2026, 11, 6),
       startProcess: (executable, arguments, {workingDirectory, environment}) async {
         final process = await inner(
           executable,
@@ -250,6 +251,11 @@ void main() {
             path(),
           ],
           <Object?>[
+            p.join(p.dirname(_flutter), 'dart'),
+            <String>['fix', '--apply', '--code=directives_ordering'],
+            path(),
+          ],
+          <Object?>[
             _flutter,
             <String>['analyze'],
             path(),
@@ -316,6 +322,15 @@ void main() {
         contains("import 'package:avera_booking/"),
       );
       expect(File(p.join(path(), 'l10n.yaml')).existsSync(), isTrue);
+      expect(File(p.join(path(), 'Makefile')).existsSync(), isTrue);
+      expect(
+        File(p.join(path(), 'CHANGELOG.md')).readAsStringSync(),
+        contains('## [1.0.0] - 2026-11-06'),
+      );
+      expect(
+        File(p.join(path(), 'lib', 'src', '_core', 'localization', 'intl_en.arb')).existsSync(),
+        isTrue,
+      );
       final output = step(runs.last, CreationStepKind.skeleton).output;
       expect(output, contains('✎ lib/main.dart'));
       expect(output.where((line) => line.startsWith('✎ ')), hasLength(projectTemplateFiles.length));

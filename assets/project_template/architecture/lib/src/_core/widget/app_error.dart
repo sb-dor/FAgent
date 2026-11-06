@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:{{package}}/src/common/localization/localization.dart';
+import 'package:{{package}}/src/_core/localization/localization.dart';
 
 /// {@template app_error}
 /// Shown instead of the app when initialization fails.

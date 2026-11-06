@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:l/l.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:{{package}}/src/feature/initialization/models/dependencies.dart';
+import 'package:{{package}}/src/initialization/models/dependencies.dart';
 
 /// Initializes the app and returns a [Dependencies] object
 Future<Dependencies> $initializeDependencies({

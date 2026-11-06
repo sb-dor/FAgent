@@ -1,5 +1,5 @@
-arb-dir: lib/src/common/localization
-output-dir: lib/src/common/localization/generated
+arb-dir: lib/src/_core/localization
+output-dir: lib/src/_core/localization/generated
 template-arb-file: intl_en.arb
 output-localization-file: generated_localization.dart
 output-class: GeneratedLocalization

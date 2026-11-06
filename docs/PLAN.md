@@ -141,7 +141,7 @@ knowledge/                        # Markdown: правила и skills, отда
 ### M4. Мастер нового проекта (1 неделя)
 
 - [x] Форма: имя, org, платформы, папка — форма и прогресс (UI этап 7) теперь с настоящим созданием: `flutter create`, `flutter analyze`, проект появляется в сайдбаре
-- [x] `flutter create`, затем приложение само раскладывает `lib/src/common` + `lib/src/feature` по правилам (шаблон скелета из `assets/project_template/architecture/`, без агента)
+- [x] `flutter create`, затем приложение само раскладывает `lib/src/_core` и папки фич прямо в `lib/src/` по правилам, плюс `Makefile`, `CHANGELOG.md`, строгий `analysis_options.yaml`, `build.yaml` (freezed только в `controller/`), `scripts/*.bash` и `tool/dart/rename_project.dart` (шаблон скелета из `assets/project_template/architecture/`, без агента)
 - [x] `git init` и первый коммит
 
 Решения M4 (спека `docs/superpowers/specs/2026-11-02-m4-new-project-design.md`):

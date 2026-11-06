@@ -93,14 +93,16 @@ flutter:
     - assets/knowledge/rules/
     - assets/project_template/architecture/
     - assets/project_template/architecture/lib/
-    - assets/project_template/architecture/lib/src/common/utils/
-    - assets/project_template/architecture/lib/src/common/widget/
-    - assets/project_template/architecture/lib/src/common/localization/
-    - assets/project_template/architecture/lib/src/feature/initialization/models/
-    - assets/project_template/architecture/lib/src/feature/initialization/widget/
-    - assets/project_template/architecture/lib/src/feature/initialization/data/
-    - assets/project_template/architecture/lib/src/feature/home/widgets/
+    - assets/project_template/architecture/lib/src/_core/utils/
+    - assets/project_template/architecture/lib/src/_core/widget/
+    - assets/project_template/architecture/lib/src/_core/localization/
+    - assets/project_template/architecture/lib/src/initialization/models/
+    - assets/project_template/architecture/lib/src/initialization/widget/
+    - assets/project_template/architecture/lib/src/initialization/data/
+    - assets/project_template/architecture/lib/src/home/widgets/
     - assets/project_template/architecture/test/
+    - assets/project_template/architecture/tool/dart/
+    - assets/project_template/architecture/scripts/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

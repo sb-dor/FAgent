@@ -1,0 +1,15 @@
+# What build_runner reads and where each generator runs. Limiting a generator to the files that use
+# it keeps `dart run build_runner build` fast; a file outside these globs is not generated, so add a
+# glob here when freezed (or another generator) is used somewhere new.
+targets:
+  $default:
+    sources:
+      - $package$
+      - pubspec.yaml
+      - lib/**
+      - test/**
+    builders:
+      freezed:
+        generate_for:
+          # States of the controllers (docs/rules/controllers.md, "One recipe for states").
+          - lib/src/**/controller/*.dart
