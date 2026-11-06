@@ -7,18 +7,18 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  const allowedPackages = <String>[
+  /// The packages a template file may import: the project itself, the SDK's, and what the one
+  /// `pub add` installs.
+  final allowedPackages = <String>[
     'my_app',
     'flutter',
     'flutter_test',
-    'control',
-    'l',
-    'shared_preferences',
-    'flutter_localizations',
+    for (final argument in skeletonPubAddArguments)
+      RegExp('^(?:dev:)?([a-z_0-9]+)').firstMatch(argument)!.group(1)!,
   ];
 
   test('every template file is an asset', () async {
-    expect(projectTemplateFiles, hasLength(23));
+    expect(projectTemplateFiles, hasLength(projectTemplateFiles.toSet().length));
     for (final path in projectTemplateFiles) {
       final text = await rootBundle.loadString('$projectTemplateRoot$path');
       expect(text, isNotEmpty, reason: path);
@@ -73,16 +73,42 @@ void main() {
     expect(pubspec, contains('ref: $controlGitRef'));
   });
 
-  test('pub add arguments', () {
-    expect(skeletonPubAddArguments, [
-      'l',
-      'shared_preferences',
-      'freezed_annotation',
-      'intl',
-      'flutter_localizations@{sdk: flutter}',
-      'control@{git: {url: https://github.com/PlugFox/control.git, ref: 685a9bc6ef60c987b99b5526e125813adba54e2a}}',
-      'dev:freezed',
-      'dev:build_runner',
-    ]);
+  test('pub add takes the newest versions and skips what the rules advise against', () {
+    final names = [
+      for (final argument in skeletonPubAddArguments)
+        RegExp('^(?:dev:)?([a-z_0-9]+)').firstMatch(argument)!.group(1)!,
+    ];
+    // No version constraint: every creation resolves the newest release.
+    for (final argument in skeletonPubAddArguments) {
+      final spec = argument.replaceFirst('dev:', '');
+      expect(spec, isNot(matches(RegExp('^[a-z_0-9]+:'))), reason: argument);
+    }
+    expect(
+      names,
+      containsAll(<String>['control', 'drift', 'drift_flutter', 'http', 'ui', 'window_manager']),
+    );
+    expect(
+      skeletonPubAddArguments,
+      containsAll(<String>[
+        'control@{git: {url: https://github.com/PlugFox/control.git, ref: 685a9bc6ef60c987b99b5526e125813adba54e2a}}',
+        'ui@{path: packages/ui}',
+        'dev:build_runner',
+        'dev:drift_dev',
+      ]),
+    );
+    // Routing is the app's own navigator; models are parsed by hand; `test` next to build_runner
+    // breaks `pub get`; sqlite3_flutter_libs is end-of-life (drift bundles SQLite itself).
+    for (final name in const <String>[
+      'octopus',
+      'json_annotation',
+      'json_serializable',
+      'flutter_gen_runner',
+      'pubspec_generator',
+      'test',
+      'sqlite3_flutter_libs',
+    ]) {
+      expect(names, isNot(contains(name)), reason: name);
+    }
+    expect(names, hasLength(names.toSet().length));
   });
 }

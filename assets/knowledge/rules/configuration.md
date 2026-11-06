@@ -16,7 +16,8 @@ description: "Build-time configuration with --dart-define, no .env assets, what 
 - No secret belongs on the client at all: anything compiled into or shipped with the app can be
   extracted. A key the app must have is restricted on the provider's side instead. See
   `docs/rules/security.md`.
-- Fonts go under `flutter: fonts:`, not `assets`.
+- Fonts go under `flutter: fonts:`, not `assets`. Google fonts too: ship the files, do not
+  fetch them at run time. See "Assets and fonts".
 - The version is `MAJOR.MINOR.PATCH+BUILD` in `pubspec.yaml`: semantic versioning for the name, and
   a build number that grows with every build, set by CI. See "Versioning".
 - Every change users or developers should know about adds an entry to `CHANGELOG.md` under
@@ -233,6 +234,16 @@ Secrets, obfuscation and what an installed app gives away: `docs/rules/security.
   tree-shaken in release builds (`--tree-shake-icons`, on by default): only the glyphs the code
   uses, through constant `IconData`, stay in `MaterialIcons` and other icon fonts. Text fonts ship
   whole: include only the weights the design uses.
+- A Google font is a font file like any other: download the weights the design uses, declare
+  them under `flutter: fonts:` and set `fontFamily` in the theme, with no package. `google_fonts`
+  downloads each font from `fonts.gstatic.com` the first time it is used
+  (`GoogleFonts.config.allowRuntimeFetching` is `true` by default): the first launch without a
+  network shows the fallback font, and every install calls Google's servers. If the project uses
+  the package, ship the files under `flutter: assets:` with the names the Google Fonts download
+  gives them (`Lato-Bold.ttf`; the package finds them in the asset manifest before fetching), and
+  set `GoogleFonts.config.allowRuntimeFetching = false` in `main`: a missing file then throws
+  ("allowRuntimeFetching is false but font ... was not found in the application assets")
+  instead of being fetched. (From the `google_fonts` 9.0.0 source and README.)
 - Prefer WebP to PNG and JPEG for raster images: often a third smaller or more at the same quality.
   It matters most on the web, where every asset the first screen needs is downloaded before it
   appears. Keep the PNG sources and convert at build time with the `webp` transformer (below), so
@@ -248,8 +259,10 @@ find . -name '*.png' -delete                            # only after checking th
 - Asset paths typed as strings fail only at run time. Generate them: `spider` (dev dependency,
   `dart run spider build`) reads `spider.yaml` and writes a class of `static const String` paths
   per group. Set `use_part_of: false` (the file `spider create` writes has `true`, and the rules
-  use no `part` files), and `generate_tests: true` for a test that each file exists (it imports
-  `package:test`, so add `test` to `dev_dependencies`). Checked with spider 4.2.3:
+  use no `part` files), and `generate_tests: true` for a test that each file exists. In a package
+  with `flutter` under `dependencies` the generated test imports `flutter_test`, so no `test`
+  dependency is needed; do not add `package:test` to a Flutter app, where it can make
+  `pub get` fail (see "Pub workspaces" in `docs/rules/tooling.md`). Checked with spider 4.2.3:
 
 ```yaml
 # spider.yaml

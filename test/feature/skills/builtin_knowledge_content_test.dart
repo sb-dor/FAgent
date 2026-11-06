@@ -123,6 +123,11 @@ void main() {
     'test_shards.dart',
     'ui_button.dart',
     'window_class.dart',
+    // Lazebny, page 2.
+    'analytics_event.dart',
+    'map_in_chunks.dart',
+    'profile_screen_data.dart',
+    'settings_model.dart',
   };
 
   /// The `dart` blocks of every rule that start with `// file: <name>.dart`, by name.
@@ -216,6 +221,11 @@ void main() {
         File(p.join(lib.path, fileName)).writeAsStringSync(code);
       }
       expect(seen, isNotEmpty);
+      // The rules build on the HTTP client a new project gets; their examples import it by name.
+      expect(seen, isNot(contains('api_client.dart')));
+      File(
+        'assets/project_template/architecture/lib/src/_core/utils/api_client.dart',
+      ).copySync(p.join(lib.path, 'api_client.dart'));
 
       Future<void> run(String executable, List<String> arguments) async {
         final result = await Process.run(executable, arguments, workingDirectory: fixture.path);
@@ -264,6 +274,7 @@ void main() {
         'Uncaught errors',
         'Callbacks instead of references',
         'Context shortcuts',
+        'Retrying a failed startup',
       ],
       'repositories': <String>[
         'Errors',
@@ -279,6 +290,7 @@ void main() {
         'Files and blobs',
         'A type for each failure the app acts on',
         'Cancelling a multi-step operation',
+        'Decoding response bodies',
       ],
       'configuration': <String>[
         'Build-time values',
@@ -302,6 +314,14 @@ void main() {
         'Cached futures',
         'Debug-only code',
         'Sorting',
+        'Errors and exceptions',
+        'Waiting for several futures',
+        'Class modifiers',
+        'Hooks for subclasses',
+        'Collections',
+        'Strings and text length',
+        'Null checks without `!`',
+        'Records',
       ],
       'architecture': <String>[
         'Law of Demeter',
@@ -317,6 +337,7 @@ void main() {
         'Changing shared code',
         'Several services behind one interface',
         'Cache and network as two methods',
+        'Analytics events',
       ],
       'widgets': <String>[
         'Performance',
@@ -349,6 +370,9 @@ void main() {
         'Rebuilding on one part of a notifier',
         'Diagnostics',
         'Window size classes',
+        'Repaint boundaries',
+        'Opacity and filters',
+        'Image sizes',
       ],
       'testing': <String>[
         'Testability',
@@ -391,6 +415,7 @@ void main() {
         'Returning after sign-in',
         'Dialogs and sheets',
         'Tabs',
+        'No navigator key outside the widgets',
       ],
       'localization': <String>['Error messages', 'Styled parts of a sentence'],
       'generated-files': <String>['Repository statistics', 'build.yaml'],
@@ -408,6 +433,7 @@ void main() {
         'Health and stopping',
         'Plugins in an isolate',
         'Android: background work and foreground services',
+        '`map_in_chunks.dart`',
       ],
       'tooling': <String>[
         'The Makefile',
@@ -417,6 +443,11 @@ void main() {
         'The pipeline',
         'Sharding tests',
         'Coverage',
+        'Subcommands',
+        'Shipping a command-line tool',
+        'Pub workspaces',
+        'Commands at the root',
+        'Melos',
       ],
     };
     for (final MapEntry(key: name, value: headings) in sections.entries) {

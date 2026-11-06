@@ -94,6 +94,12 @@ flutter:
     - assets/project_template/architecture/
     - assets/project_template/architecture/lib/
     - assets/project_template/architecture/lib/src/_core/utils/
+    - assets/project_template/architecture/lib/src/_core/utils/error_util/
+    - assets/project_template/architecture/lib/src/_core/utils/error_util/platform/
+    - assets/project_template/architecture/lib/src/_core/utils/middleware/
+    - assets/project_template/architecture/lib/src/_core/utils/platform/
+    - assets/project_template/architecture/lib/src/_core/utils/platform/availability/
+    - assets/project_template/architecture/lib/src/_core/model/
     - assets/project_template/architecture/lib/src/_core/widget/
     - assets/project_template/architecture/lib/src/_core/localization/
     - assets/project_template/architecture/lib/src/initialization/models/
@@ -103,6 +109,20 @@ flutter:
     - assets/project_template/architecture/test/
     - assets/project_template/architecture/tool/dart/
     - assets/project_template/architecture/scripts/
+    - assets/project_template/architecture/lib/src/_core/constant/
+    - assets/project_template/architecture/lib/src/_core/controller/
+    - assets/project_template/architecture/lib/src/_core/database/
+    - assets/project_template/architecture/lib/src/_core/database/tables/
+    - assets/project_template/architecture/lib/src/_core/utils/text_input_formatters/
+    - assets/project_template/architecture/packages/ui/
+    - assets/project_template/architecture/packages/ui/lib/
+    - assets/project_template/architecture/packages/ui/lib/src/components/
+    - assets/project_template/architecture/packages/ui/lib/src/components/charts/
+    - assets/project_template/architecture/packages/ui/lib/src/components/layout/
+    - assets/project_template/architecture/packages/ui/lib/src/components/placeholders/
+    - assets/project_template/architecture/packages/ui/lib/src/theme/
+    - assets/project_template/architecture/packages/ui/lib/src/theme/extensions/
+    - assets/project_template/architecture/packages/ui/shaders/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

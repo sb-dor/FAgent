@@ -13,6 +13,8 @@ description: "Check a package's latest version and status on pub.dev before addi
 - Add dependencies with `flutter pub add`, not a version typed from memory.
 - Generators (`build_runner`, `freezed`, `drift_dev`) go to `dev_dependencies`.
 - A dependency pinned to a git commit stays pinned until the reason for the pin is gone.
+- A package with a build hook (`hook/build.dart`) runs code on every build: read the hook before
+  adding it. See "Notes".
 
 ## Pub freshness
 
@@ -34,3 +36,10 @@ Do not add a package from memory: versions and maintenance status change.
 - Code generators (`build_runner`, `freezed`, `drift_dev`) go to `dev_dependencies`.
 - A package pinned to a git commit stays pinned; say in a comment why.
 - Mention the version you chose and why in the pull request.
+- A package with a build hook (`hook/build.dart`, for native code) runs that code whenever the app
+  is built. Read it before adding the package and check three things. Does it download binaries
+  during the build (then an offline or locked-down CI fails)? Does an option make it build from
+  source, needing a toolchain on every build machine? Does the web need manual steps? `pixer`
+  0.0.13 does all three: its hook downloads a prebuilt library and checks its hash; a custom
+  `formats:` list under `hooks: user_defines:` in `pubspec.yaml` builds it from source with Rust;
+  and on the web `pixer.wasm` must be copied into `web/` and `await Pixer.initialize()` called.

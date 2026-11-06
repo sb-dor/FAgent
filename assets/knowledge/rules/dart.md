@@ -1,6 +1,6 @@
 ---
 name: dart
-description: "Dart language: patterns for switch, if-case, destructuring and JSON, with sealed classes for exhaustive switches; cached futures, debug-only code and sorting."
+description: "Dart language: errors and exceptions, waiting for several futures, class modifiers, patterns for switch, if-case, destructuring and JSON, records, collections, text length; cached futures, debug-only code and sorting."
 ---
 
 # Dart
@@ -12,12 +12,35 @@ description: "Dart language: patterns for switch, if-case, destructuring and JSO
   casts.
 - A `switch` over a `sealed` class or an enum lists every case and has no `_` arm: the compiler
   then reports the case a new variant forgot.
+- Throw an `Exception` for a failure the caller cannot check for in advance (the network, a file,
+  the server's answer, input) and an `Error` only for a bug. Throw a named type, never
+  `Exception('text')`, a `String` or a map, and never catch an `Error` subtype to recover. See
+  "Errors and exceptions".
+- Run independent futures at once with `.wait` on a record (`await (a(), b()).wait`), which keeps
+  their types and every error; not `Future.wait`, and never start several futures and then await
+  them one by one. See "Waiting for several futures".
+- Pick a class modifier by the role: `abstract interface class` for a contract (a repository, a
+  data provider), `final class` for an implementation, a state or an exception that nothing
+  extends, `sealed class` for a closed family, `base` only when every subtype must inherit the
+  code. See "Class modifiers".
+- A method a subclass in another file implements is public and marked `@protected` and
+  `@visibleForOverriding`, never private: a private member cannot be implemented from another
+  library. See "Hooks for subclasses".
 - Parse JSON with map patterns (`if (json case {'id': final int id})`), not `json['id'] as int`.
   Write the parsing by hand: no `json_serializable` (or freezed's `fromJson`). A pattern is as
   short as the annotations it replaces, and there is no generator to run after every change.
 - `Object` is any value except `null`; `Object?` is any value at all. `dynamic` is not a type but
   the absence of type checks: calls on it compile and fail at run time. Use `Object?` (JSON is
   `Map<String, Object?>`) and narrow it with patterns; `dynamic` only for rare JS interop.
+- No `!` after a null check of a field or getter: bind the value with a pattern or a local
+  `final`. See "Null checks without `!`".
+- A record is for a few values returned together from one function; anything with behaviour, docs
+  per field, or a life beyond one call is a `final class`. See "Records".
+- Iterate with `for (final x in xs)`, not `forEach` with a function literal; copy a list with
+  `List.of` or `[...xs]`, not `List.from`; never change a collection the code did not create (a
+  `const []` default throws on `add`). See "Collections".
+- Count, limit and cut text the user sees with `characters` (grapheme clusters), not `length` and
+  `substring`, which count UTF-16 code units. See "Strings and text length".
 - A function that never returns normally (it always throws, calls `exit`, or ends the isolate with
   `Isolate.exit`) returns `Never`, not `void`. See "`Never`".
 - In UI code, check the platform with `defaultTargetPlatform` (or `Theme.of(context).platform`) and
@@ -76,6 +99,114 @@ Zones also carry values and replace a few core functions for the code they run:
 - `ZoneSpecification(print: ...)` captures `print` (in a test of a script that prints), and
   `createTimer`, `scheduleMicrotask` and `run` hooks wrap timers, microtasks and every callback,
   for profiling or tracing async work.
+
+## Errors and exceptions
+
+`Error` and `Exception` say whose fault a failure is. An `Error` is a bug the calling code could
+have avoided: a condition documented with "must" or "must not" that it could check before the
+call (`ArgumentError`, `StateError`, `RangeError`, `UnsupportedError`). A failure whose cause is
+outside the program and cannot be checked first (the network, a file, the server's answer, user
+input) is an `Exception`; the `Error` class doc says the same ("If the conditions are not
+detectable before calling a function, the called function should not throw an `Error`"). How the
+data layer and the controllers handle each is in "Errors" in `docs/rules/repositories.md` and
+"Expected and unexpected errors" in `docs/rules/controllers.md`.
+
+- Throw only subtypes of `Exception` or `Error`, never a `String`, a map or a record (the
+  `only_throw_errors` lint). `throw Exception('text')` creates the private `_Exception`
+  (checked), which no `on` clause can tell apart from any other: give a failure that code reacts
+  to a named type (`final class XException implements Exception`) with a `toString()`, and use
+  `FormatException` for bad input and `TimeoutException` for a timeout.
+- A class that `extends Error` records its stack trace when it is first thrown
+  (`error.stackTrace`); an `Exception`, or a class that only `implements Error`, records none
+  (checked). The trace of an exception exists only in `catch (error, stackTrace)`: bind it
+  wherever the error is logged or wrapped, and wrap with `Error.throwWithStackTrace`.
+- Do not catch an `Error` subtype by name (`on StateError`, `on TypeError`) to carry on: that hides
+  a bug, and the `avoid_catching_errors` lint reports it (checked). Only the places that catch
+  everything do, with `on Object`: the controller's action and `handle`, and the root handlers.
+  The one exception is an `Error` that only wraps real failures, `ParallelWaitError` (see "Waiting
+  for several futures"), caught with an `// ignore:` comment that says why.
+- `on` clauses are tried in order, so the specific type goes before its supertype. With
+  `on Exception` first, a later `on FormatException` never runs; the analyzer warns
+  `dead_code_on_catch_subtype` (checked).
+
+## Waiting for several futures
+
+```dart
+final (profile, unread) = await (repository.profile(), repository.unreadCount()).wait;
+```
+
+- `.wait` on a record of futures (Dart 3) runs them at once and keeps each type. On a list of
+  futures of one type, `await futures.wait` returns a `List<T>`.
+- `Future.wait([...])` over futures of different types returns `List<Object>` (checked). When
+  several fail, it throws the first error and drops the others: they reach neither the `catch`
+  nor the zone (checked). By default it waits for all of them before it fails
+  (`eagerError: false`).
+- When any future fails, `.wait` throws a `ParallelWaitError` that holds every result (`values`,
+  `null` where one failed) and every failure (`errors`, each an `AsyncError` with its own stack
+  trace). It is an `Error`, so a controller would report an expected failure inside it as a bug:
+  catch it and rethrow the real failure as itself (`profile_screen_data.dart` in Examples; tested:
+  a `StateError` or `FormatException` arrives as itself, with its own stack trace).
+- Never start futures and then await them one after another:
+  `final a = slow(); final b = failsFast(); (await a, await b)`. When `b` fails while the code is
+  still waiting for `a`, nothing listens to `b` yet: its error is reported as uncaught to the zone
+  (and the crash reporter) and is then caught as well (checked: both happened).
+- `Future.wait` is fine where every future catches its own errors, as in "Several services behind
+  one interface" in `docs/rules/architecture.md`.
+
+## Class modifiers
+
+The restrictions apply to code in other libraries. A library is a file with its `part` files; the
+rules use no `part`, so here it is one file.
+
+| Declaration | Construct | Extend | Implement | Use for |
+| --- | --- | --- | --- | --- |
+| `abstract interface class` | no | no | yes | a contract: a repository, a data provider, a service |
+| `final class` | yes | no | no | implementations, states, exceptions that nothing extends |
+| `sealed class` | no | no | no | a closed family, switched over exhaustively |
+| `base class` | yes | yes | no | a base whose code every subtype must inherit (`ExpectedException`) |
+| `interface class` | yes | no | yes | rarely: a concrete class others may only reimplement |
+| `mixin class` | yes | yes | yes | a class that is also mixed in with `with` |
+
+- A subtype of a `base` or `final` class must itself be `base`, `final` or `sealed`, inside its
+  own library too (`subtype_of_base_or_final_is_not_base_final_or_sealed`, checked). There, such
+  a subtype may still extend or implement a `final` class.
+- Every case of a `sealed` class is declared in its library; another file cannot add one
+  (checked). That is why a `switch` over it can be checked for exhaustiveness.
+- A test is another library, so it cannot implement a `final` or `base` class: mock the
+  `abstract interface class` (see "Mocks with mocktail" in `docs/rules/testing.md`).
+
+## Hooks for subclasses
+
+A private name belongs to its library: `_write` declared in another file is a different name. So
+a private abstract member of a base class cannot be implemented by a subclass in another file. It
+compiles with no diagnostic, and the call from the base class throws `NoSuchMethodError` at run
+time (checked). Make the hook public and mark it with the `package:meta` annotations, which
+`package:flutter/foundation.dart` re-exports:
+
+```dart
+abstract base class Exporter {
+  const Exporter();
+
+  /// Exports [rows]: the same checks for every exporter, then [write].
+  @nonVirtual
+  Future<void> export(List<String> rows) async {
+    if (rows.isEmpty) return;
+    await write(rows);
+  }
+
+  /// Writes [rows] to the target. Called by [export] only.
+  @protected
+  @visibleForOverriding
+  Future<void> write(List<String> rows);
+}
+```
+
+- A call to `write` through `Exporter` from outside a subclass is reported
+  (`invalid_use_of_protected_member`, `invalid_use_of_visible_for_overriding_member`; checked), and
+  `@nonVirtual` stops a subclass from overriding `export`. A call through the subclass's own type
+  is reported only when its override repeats the annotations.
+- Where no shared code is needed, an `abstract interface class` and composition are simpler (see
+  "Interfaces and constructor injection" in `docs/rules/dependencies.md`).
 
 ## Enums
 
@@ -201,6 +332,12 @@ two reads, one call, two errors).
   synchronous.
 - Lazy creation is for something expensive and rarely needed (a native library, a large model),
   held by its owner; it is not a reason for a global (see `docs/rules/dependencies.md`).
+- A top-level or static variable with an initializer runs it at the first read, not at startup,
+  once per isolate. If the initializer throws, nothing is stored and the next read runs it again,
+  as with a `late final` field that has an initializer (checked: the first read threw, the second
+  returned the value): the opposite of a stored `Future`, which keeps its failure. An initializer
+  that registers something (a handler, a plugin) therefore does nothing until code reads the
+  variable: do that work in an initialization step.
 
 ## Debug-only code
 
@@ -239,6 +376,80 @@ items.sort((a, b) => switch (a.priority.compareTo(b.priority)) {
   final order => order,
 });
 ```
+
+## Collections
+
+- **`const` collections cannot change.** A `const` list, map or set compiles with `add` or `[]=`
+  and throws `UnsupportedError` at run time. The usual trap is a default value:
+  `Filter({this.tags = const []})`, then `filter.tags.add(tag)` (checked: it throws, also for a
+  `Filter()` built without `const`). `final` only stops reassignment; a `final` list can still
+  change. Copy a collection the code did not create before changing it: `[...tags, tag]`.
+- **Copying.** `List.of(xs)`, `[...xs]` and `xs.toList()` keep the element type. `List.from(xs)`
+  takes an `Iterable<dynamic>`: without a type argument it returns a `List<dynamic>`, and
+  `List<int>.from(objects)` casts each element at run time and throws a `TypeError` at the first
+  one of another type (checked). Filter by type with `whereType<T>()`; `cast<T>()` gives a view.
+- **Loops.** `for (final x in xs)`. `forEach` does not wait for an `async` function literal
+  (checked: the code after `forEach` ran before either callback finished), and `break` or `return`
+  cannot leave it (`return` ends one callback). The template's lints agree:
+  `avoid_function_literals_in_foreach_calls` reports a literal, and `prefer_foreach` asks for
+  `xs.forEach(f)` when a `for` loop only calls a tear-off, the one place for `forEach`.
+- **Deep data.** Dart has no tail-call elimination. Recursion over data whose depth the program
+  does not control (a JSON tree from the server, a folder tree) can end in a `StackOverflowError`
+  (checked: a trivial recursive function overflowed at about 20,000 calls on the main isolate).
+  Walk such data with a loop and an explicit stack (a `List` or a `Queue`).
+
+## Strings and text length
+
+A `String` is a sequence of UTF-16 code units. `length`, indexes and `substring` count those, not
+what the user sees as one character (checked):
+
+| Text | `length` | `runes.length` | UTF-8 bytes | `characters.length` |
+| --- | --- | --- | --- | --- |
+| `'😀'` | 2 | 1 | 4 | 1 |
+| `'👨‍👩‍👧'` (three emoji joined) | 8 | 5 | 18 | 1 |
+
+- Anything the user sees or counts (a length limit, a counter, a shortened name or preview, the
+  first letter for an avatar) uses grapheme clusters through `characters`, which
+  `package:flutter/widgets.dart` re-exports: `text.characters.length`,
+  `text.characters.take(n).toString()`, `text.characters.first` on a non-empty text.
+  `TextField(maxLength:)` and `LengthLimitingTextInputFormatter` already count this way.
+- `length` and `substring` are for text the program controls: ids, ASCII codes, protocol fields.
+  Cut by code units, text can end in half a surrogate pair: `'Hi😀'.substring(0, 3)` does, and
+  `utf8.encode` turns the half into U+FFFD, so the data changes without an error (checked).
+- Bytes from outside are decoded as UTF-8 explicitly: see "Decoding response bodies" in
+  `docs/rules/repositories.md`.
+
+## Null checks without `!`
+
+A private final field is promoted after a null check (Dart 3.2): `_value != null ? _value + 1 :
+0` compiles. A public field or a getter is not ("refers to a public property so it couldn't be
+promoted"; checked), because another library could override it with a getter that answers
+differently on the second read. Do not add `!` to silence that:
+
+```dart
+if (widget.user case final user?) greet(user); // binds the non-null value
+final next = switch (state.count) { final count? => count + 1, null => 0 };
+final user = widget.user; // a local is promoted
+if (user != null) greet(user);
+```
+
+`!` is for a value that cannot be null because of an invariant the code itself keeps, not for one
+that "was checked above".
+
+## Records
+
+- A record is for a few values one function returns together: `(List<Product>, int total)` for a
+  page. Name the fields when there are more than two, or when the types do not say what they mean.
+  A record type used in more than one signature gets a `typedef` with a doc comment
+  (`typedef TokenPair = ({String access, String refresh});`).
+- Use a `final class` when the value has behaviour, needs a doc per field, crosses JSON or the
+  database, or travels through several layers.
+- `==` compares the fields with their own `==`, named fields in any order:
+  `(a: 1, b: 2) == (b: 2, a: 1)` is true. A `List` or `Map` field compares by identity:
+  `([1], 1) == ([1], 1)` is false (checked). So a selector record holding a list (see "Rebuilding
+  on one part of a notifier" in `docs/rules/widgets.md`) notifies for every new list, even an
+  equal one, and never for a list changed in place: select its length or a value.
+- Swap two variables with `(a, b) = (b, a);`.
 
 ## Platform-specific code
 
@@ -365,6 +576,15 @@ for (final MapEntry(:key, :value) in counts.entries) {
   widget class. The closure is rebuilt on every build and hides an unnamed branch.
 - A cast pattern (`as`) and the null-assert pattern (`!`) throw when they do not match: use them
   only where a mismatch is a bug, and the checking patterns (`final int id`, `?`) where it is input.
+- A record pattern matches only a record of exactly its shape: the same number of positional
+  fields and the same names, with no `...` rest as in a list pattern. `(String _, int age)` never
+  matches a record with three fields, so the `switch` always takes another arm, and the analyzer
+  only warns `pattern_never_matches_value_type` (checked): treat that warning as an error.
+- A `sealed` family is for a closed set of variants that many places handle (states, events, JSON
+  variants): a new variant is a compile error at every `switch`. An `is` chain over an open type
+  lets a new subtype compile and fall into the default branch (checked: no diagnostic). For an open
+  set that features add to (commands, handlers by name), put the behaviour on the type (a method
+  of the interface) or in a map from key to handler, so adding one changes no existing code.
 
 ### Examples
 
@@ -400,9 +620,12 @@ final class MapResponseBody extends ResponseBody {
 /// The body as JSON; no `_` arm, so a new body type fails to compile here until it is handled.
 Map<String, Object?> decode(ResponseBody data) => switch (data) {
   StringResponseBody(:final body) => _object(jsonDecode(body)),
-  BytesResponseBody(:final body) => _object(jsonDecode(utf8.decode(body))),
+  BytesResponseBody(:final body) => _object(_utf8Json.convert(body)),
   MapResponseBody(:final body) => body,
 };
+
+/// UTF-8 bytes to JSON in one pass, without an intermediate `String`.
+final Converter<List<int>, Object?> _utf8Json = utf8.decoder.fuse(json.decoder);
 
 Map<String, Object?> _object(Object? json) => switch (json) {
   final Map<String, Object?> map => map,
@@ -442,6 +665,43 @@ String summary(({String name, int age}) person, (int, int, int) point) {
   final (:name, :age) = person;
   final (x, _, z) = point;
   return '$name is $age years old; x = $x, z = $z';
+}
+```
+
+#### `profile_screen_data.dart`
+
+```dart
+// file: profile_screen_data.dart
+import 'dart:async';
+
+/// A user's profile.
+final class Profile {
+  /// Creates a profile.
+  const Profile(this.name);
+
+  /// The display name.
+  final String name;
+}
+
+/// The data of the profile screen.
+abstract interface class IProfileRepository {
+  /// The profile.
+  Future<Profile> profile();
+
+  /// The number of unread messages.
+  Future<int> unreadCount();
+}
+
+/// Loads both values at once, typed; a failure of either is rethrown as itself.
+Future<(Profile, int)> loadProfileScreen(IProfileRepository repository) async {
+  try {
+    return await (repository.profile(), repository.unreadCount()).wait;
+    // ignore: avoid_catching_errors, ParallelWaitError only wraps the real failures.
+  } on ParallelWaitError<(Profile?, int?), (AsyncError?, AsyncError?)> catch (error) {
+    // Every failure is here, each with its own stack trace; rethrow the first as itself.
+    final first = error.errors.$1 ?? error.errors.$2!;
+    Error.throwWithStackTrace(first.error, first.stackTrace);
+  }
 }
 ```
 

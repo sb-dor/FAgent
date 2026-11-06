@@ -24,8 +24,8 @@ description: "Tests: mocks of interfaces with mocktail, fakes, data providers (H
 - Generated test data (random names, long texts for layout tests) comes from a seeded
   `Random(42)`, passed in: a failure then happens again on the next run.
 - Every test leaves nothing running: controllers disposed, streams closed, no pending timers.
-- A data provider is tested against a mock of the app's own HTTP client interface (maps in, maps
-  or exceptions out), never of Dio or `package:http`; drift against `NativeDatabase.memory()`,
+- A data provider is tested with a real `ApiClient` over `MockClient` (`package:http/testing.dart`),
+  so the client's own error mapping runs; drift against `NativeDatabase.memory()`,
   closed after each test; `SharedPreferencesAsync` against `InMemorySharedPreferencesAsync`. See
   "Testing the data layer".
 - A slow suite is split across machines: with `flutter test --total-shards N --shard-index I` when
@@ -185,54 +185,84 @@ constructor call.
 ## Testing the data layer
 
 A data provider is tested against what it talks to: the real thing in memory when there is an
-in-memory form, otherwise a mock of the app's own client.
+in-memory form, otherwise the app's own client over a fake transport.
 
 ### HTTP
 
-Mock the client interface the provider receives (`IApiClient` in `payments_data_provider.dart`, in
-`docs/rules/repositories.md`), not Dio or `package:http`. That client already decodes the body and
-turns transport failures into the app's exceptions, so a test returns a map or throws, and never
-builds a `Response`, a status code or bytes. Cover, for each method: the expected answer, an answer
-of the wrong shape (a `FormatException`), each backend code the provider translates (its typed
-exception), and an unknown code (passed on unchanged). Checked: these tests pass against the
-example.
+Give the provider a real `ApiClient` (`api_client.dart`, see "HTTP clients" in
+`docs/rules/dependencies.md`) over `MockClient` from `package:http/testing.dart`, which answers each
+request with an `http.Response` the test sets. No `IApiClient` interface and no mock of
+`ApiClient`: the client's own mapping runs (a 402 with `{"code": ...}` becomes
+`APIClientException$Client` with that body in `data`, a 500 an `APIClientException$Network`), so
+the test checks the provider against what the client really throws, not against an exception
+written by hand in the test. A mocktail `Mock implements ApiClient` works too, but each answer
+then needs a whole `APIClientResponse` and each failure a guess of the client's exception. Cover,
+for each method: the expected answer and the request sent, an answer of the wrong shape (a
+`FormatException`), each backend code the provider translates (its typed exception or a
+`RejectedException`), and an unknown code (passed on unchanged). Checked: these tests pass against
+the example.
 
 ```dart
-class MockApiClient extends Mock implements IApiClient {}
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+http.Response json(Object body, int status) =>
+    http.Response(jsonEncode(body), status, headers: {'content-type': 'application/json'});
 
 void main() {
-  late MockApiClient client;
+  late http.Response answer;
+  late http.Request sent;
   late PaymentsDataProviderRemote provider;
 
   setUp(() {
-    client = MockApiClient();
+    final client = ApiClient(
+      baseUrl: 'https://api.test',
+      client: MockClient((request) async {
+        sent = request;
+        return answer;
+      }),
+    );
+    addTearDown(client.close);
     provider = PaymentsDataProviderRemote(client: client);
   });
 
-  When<Future<Map<String, Object?>>> whenPost() =>
-      when(() => client.post(any(), body: any(named: 'body')));
-
   test('a receipt', () async {
-    whenPost().thenAnswer((_) async => {'receipt': {'id': 'r1', 'total': 500}});
+    answer = json({'receipt': {'id': 'r1', 'total': 500}}, 200);
     final receipt = await provider.pay(orderId: 'o1');
     expect(receipt.total, 500);
-    verify(() => client.post('/payments', body: {'order_id': 'o1'})).called(1);
+    expect(sent.url.path, '/payments');
+    expect(jsonDecode(sent.body), {'order_id': 'o1'});
   });
 
   test('a receipt of the wrong shape is a FormatException', () async {
-    whenPost().thenAnswer((_) async => {'receipt': {'id': 1}});
+    answer = json({'receipt': {'id': 1}}, 200);
     await expectLater(provider.pay(orderId: 'o1'), throwsFormatException);
   });
 
   test('insufficient_funds becomes InsufficientFundsException', () async {
-    whenPost().thenThrow(const RejectedException(code: 'insufficient_funds'));
+    answer = json({'code': 'insufficient_funds'}, 402);
     await expectLater(provider.pay(orderId: 'o1'), throwsA(isA<InsufficientFundsException>()));
   });
 
+  test('order_closed becomes RejectedException with the message', () async {
+    answer = json({'code': 'order_closed', 'message': 'Closed.'}, 409);
+    await expectLater(
+      provider.pay(orderId: 'o1'),
+      throwsA(isA<RejectedException>().having((e) => e.message, 'message', 'Closed.')),
+    );
+  });
+
   test('an unknown code passes on unchanged', () async {
-    const rejected = RejectedException(code: 'order_closed');
-    whenPost().thenThrow(rejected);
-    await expectLater(provider.pay(orderId: 'o1'), throwsA(same(rejected)));
+    answer = json({'code': 'nobody_knows'}, 409);
+    await expectLater(
+      provider.pay(orderId: 'o1'),
+      throwsA(
+        isA<APIClientException$Client>().having((e) => e.data, 'data', {'code': 'nobody_knows'}),
+      ),
+    );
   });
 }
 ```
@@ -306,6 +336,9 @@ Test behaviour the user sees, not the widget tree layout.
 
 - Dispose controllers in `tearDown`; leave no timers or streams open.
 - Use `tester.runAsync` for real I/O such as assets or processes.
+- A test of what rebuilds changes state the way the app does (`setState`, a notifier) and calls
+  `tester.pump()`. A second `tester.pumpWidget` with the same `const` root built that root again
+  (checked), so build counts after re-pumping say nothing about rebuilds in the app.
 - Run with `flutter test test/<feature>/`.
 
 ## Integration tests

@@ -11,6 +11,11 @@ description: "All visible text is localized; add every key to every .arb file; o
   `intl_ru.arb`. Reuse an existing key first.
 - Regenerate the strings with the project's localization tool; never edit files under
   `lib/src/_core/localization/generated/`.
+- The tool is Flutter's `gen-l10n` (`l10n.yaml`, `flutter gen-l10n`, with `flutter_localizations`
+  and `intl`): it turns the `.arb` keys into typed getters, so a missing or mistyped key does not
+  compile. Not `easy_localization`: it reads the JSON files at run time and looks keys up by string
+  (`'title'.tr()`), so a mistyped key compiles and shows the raw key on screen (checked:
+  3.0.8 returns the key and logs a warning). Not `intl_utils`: discontinued on pub.dev.
 - Use ICU placeholders and plurals in the `.arb` text, not string concatenation.
 - Errors reach the user through one function, `errorText(lcl, error)`: never `error.toString()` in
   a widget. See "Error messages".
@@ -27,12 +32,12 @@ long on purpose: every kind of error is handled in one place, and a new one is o
 ```dart
 // lib/src/_core/localization/error_text.dart
 String errorText(Localization lcl, Object error) => switch (error) {
-  NetworkException() => lcl.errorNoConnection,
+  APIClientException$Network(code: 'internal_server_error') => lcl.errorServer,
+  APIClientException$Network() => lcl.errorNoConnection,
   TimeoutException() => lcl.errorTimeout,
-  UnauthorizedException() => lcl.errorSignedOut,
-  ForbiddenException() => lcl.errorForbidden,
-  NotFoundException() => lcl.errorNotFound,
-  ServerException() => lcl.errorServer,
+  APIClientException$Authorization(statusCode: 403) => lcl.errorForbidden,
+  APIClientException$Authorization() => lcl.errorSignedOut,
+  APIClientException$Client(statusCode: 404) => lcl.errorNotFound,
   RejectedException(code: 'email_taken') => lcl.errorEmailTaken,
   RejectedException(message: final String message) => message,
   RejectedException() => lcl.errorRejected,
@@ -42,14 +47,18 @@ String errorText(Localization lcl, Object error) => switch (error) {
 };
 ```
 
-- The cases go from specific to general: the app's own exceptions (made at the boundary by the
-  repositories: see "Errors" in `docs/rules/repositories.md`), the server's codes mapped to the
-  app's texts, a message the server wrote for the user (send `Accept-Language` so it comes in the
-  user's language), the SDK's and packages' exceptions by their codes, and last the fallback.
+- The cases go from specific to general: the HTTP client's exceptions (`APIClientException` from
+  `api_client.dart`, see "HTTP clients" in `docs/rules/dependencies.md`), each subtype after its
+  specific cases (`APIClientException$Network()` alone would also catch a 5xx), then the
+  `RejectedException`s the data providers make from the server's codes (see "Errors" in
+  `docs/rules/repositories.md`) mapped to the app's texts, a message the server wrote for the user
+  (send `Accept-Language` so it comes in the user's language), the SDK's and packages' exceptions
+  by their codes, and last the fallback.
 - The fallback is `toString()` in debug builds, to see what was missed, and a generic sentence in
   release: a raw `toString()` shows users class names, URLs and stack details.
 - It does not import `dart:io`: `SocketException` does not exist on the web. The HTTP client turns
-  transport errors into `NetworkException` before they leave it.
+  transport errors into `APIClientException$Network` before they leave it. Checked: these cases
+  against a real `ApiClient` over `MockClient` (503, 401, 403, 404, no connection).
 - When it grows, split it by family (`_apiText`, `_firebaseText`), behind the one entry point.
 - A helper that shows the error as a toast or SnackBar lives next to it:
   `showError(context, error)`.

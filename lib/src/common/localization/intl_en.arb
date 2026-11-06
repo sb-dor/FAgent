@@ -378,6 +378,7 @@
   "chatSkillsNote": "The agent loads the enabled skills when a task fits. A checkbox changes the skill for this chat only.",
   "chatSkillsAppliesOnReopen": "Applies when the chat is reopened",
   "skillsRulesNote": "Your rules apply to new and reopened chats; built-in rules are added to projects in docs/rules",
+  "skillsRulesSource": "The built-in rules are collected from the discussions in the community chat",
   "slashSectionSkills": "Skills",
   "skillUsed": "Skill",
   "skillUsedTooltip": "Open in the skill library",

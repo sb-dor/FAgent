@@ -72,6 +72,7 @@ void main() {
         CreationStepKind.flutterCreate,
         CreationStepKind.skeleton,
         CreationStepKind.analyze,
+        CreationStepKind.rules,
       ]);
       expect(
         last.steps.map((step) => step.status),
@@ -89,6 +90,16 @@ void main() {
         environment: environment.variables,
       );
       expect(tested.exitCode, 0, reason: '${tested.stdout}\n${tested.stderr}');
+
+      // The asset bundle compiles the shader of packages/ui: a wrong path in pubspec.yaml fails
+      // here, not in `analyze` or `test`.
+      final bundled = await io.Process.run(
+        flutter,
+        const <String>['build', 'bundle'],
+        workingDirectory: p.join(root.path, 'skeleton_probe'),
+        environment: environment.variables,
+      );
+      expect(bundled.exitCode, 0, reason: '${bundled.stdout}\n${bundled.stderr}');
     },
     skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
     timeout: const Timeout(Duration(minutes: 10)),

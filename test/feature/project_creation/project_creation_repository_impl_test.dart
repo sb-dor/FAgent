@@ -252,6 +252,11 @@ void main() {
           ],
           <Object?>[
             p.join(p.dirname(_flutter), 'dart'),
+            <String>['run', 'build_runner', 'build', '--delete-conflicting-outputs'],
+            path(),
+          ],
+          <Object?>[
+            p.join(p.dirname(_flutter), 'dart'),
             <String>['fix', '--apply', '--code=directives_ordering'],
             path(),
           ],
@@ -340,7 +345,16 @@ void main() {
       await build().create(request(gitInit: false)).toList();
 
       final pubspec = File(p.join(path(), 'pubspec.yaml')).readAsStringSync();
-      expect(pubspec, contains('\nflutter:\n  generate: true\n\n  # The following line'));
+      expect(
+        pubspec,
+        contains(
+          '\nflutter:\n  generate: true\n\n'
+          '  # The shimmer of packages/ui loads it as `packages/ui/shaders/shimmer.frag`.\n'
+          '  shaders:\n    - packages/ui/shaders/shimmer.frag\n\n  # The following line',
+        ),
+      );
+      // `packages/ui` is a workspace member, declared right before the dependencies.
+      expect(pubspec, contains('workspace:\n  - packages/ui\n\ndependencies:\n'));
       // The `flutter:` of the dependencies stays as it was.
       expect(pubspec, contains('dependencies:\n  flutter:\n    sdk: flutter\n'));
       expect('generate: true'.allMatches(pubspec), hasLength(1));

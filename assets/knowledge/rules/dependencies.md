@@ -18,14 +18,20 @@ description: "Pure DI: the graph is built by hand at startup, dependencies come 
 - Pure DI, no service locator: no `GetIt.instance`, no global or static holder of services, no DI
   container (`injectable`). Dependencies come through the constructor, and widgets read them only
   from `context`. See "Pure DI, not a service locator".
-- One HTTP client, configured once at startup (base URL, headers, interceptors), shared by every
-  repository and data provider; a second client only for a real difference. It returns decoded
-  JSON and throws the app's own exceptions, never the transport's. See "HTTP clients".
+- One HTTP client, the project's `ApiClient` (`lib/src/_core/utils/api_client.dart`), created once
+  at startup (base URL, middlewares) and shared by every data provider; no Dio, no second wrapper,
+  a second instance only for a real difference. It returns the decoded JSON and every failure as an
+  `APIClientException`, never the transport's. See "HTTP clients".
 - At startup, the stored session (a local read) is awaited before the first frame; checking it
   with the server is started and not awaited. See "Startup and creating dependencies".
 - Constructors are synchronous, always: no "async factory" for a controller or repository. Async work
   (loading, reading the disk) is a method the controller runs after it is built. See "Startup and
   creating dependencies".
+- A failed startup's "Retry" runs every step again: each attempt defers and allows the first frame
+  once, and a failing step first closes what the earlier steps opened. See "Retrying a failed
+  startup".
+- A dialog does not see the scopes inside the page that opened it: pass it what it needs. See
+  "Global: `Dependencies` and `DependenciesScope`".
 
 ## Dependency injection
 
@@ -39,7 +45,12 @@ Three things get called "DI" and are not the same:
 - **Service locator (SL)**: a box you register objects in and take them out of later, from
   anywhere (`get_it`). Reading dependencies from a global service locator instead of the
   constructor hides them: a class's constructor no longer says what it needs, any code can reach
-  any service, and a test has to remember to register everything first.
+  any service, and a test has to remember to register everything first. A dependency nobody
+  registered fails only when the code that asks for it runs, on whatever screen that is (`get_it`
+  throws `StateError: GetIt: Object/factory with type X is not registered inside GetIt`); a
+  missing constructor argument does not compile. The registry is global to the isolate, so tests
+  share it: each one must `await GetIt.I.reset()` in `tearDown`, or one test's registration leaks
+  into the next.
 - **DI container**: registers classes and builds them itself, passing each one the dependencies its
   constructor asks for, in the right order (`injectable` on top of `get_it`). It does DI for you,
   through a service locator, with code generation.
@@ -66,6 +77,14 @@ startup, in the steps of `initialize_dependencies.dart`, and handed down through
 - A scope whose readers must rebuild when a `Listenable` notifies is an `InheritedNotifier`: it is
   what `provider` does for a `ChangeNotifier`, without the package. Using a `ChangeNotifier` does
   not mean using `provider`.
+- A scope with independent parts (settings: locale, theme mode) whose readers each need one part is
+  an `InheritedModel<Aspect>`: a reader subscribes to its aspect with
+  `InheritedModel.inheritFrom<SettingsModel>(context, aspect: SettingsAspect.locale)`, and
+  `updateShouldNotifyDependent(oldWidget, aspects)` returns `true` only when one of that reader's
+  aspects changed (`settings_model.dart`). A reader subscribed without an aspect
+  (`dependOnInheritedWidgetOfExactType`) rebuilds on every change. For one part of a
+  `ChangeNotifier`, use `select` (see "Rebuilding on one part of a notifier" in
+  `docs/rules/widgets.md`).
 
 ### Global: `Dependencies` and `DependenciesScope`
 
@@ -80,6 +99,7 @@ class Dependencies {
   late final ApiClient apiClient;
   late final InternetConnectionController internetConnectionController;
   // ... other dependencies
+  final Disposer disposer = Disposer(); // what the steps opened, see "Retrying a failed startup"
 
   Widget inject({required Widget child, Key? key}) =>
       DependenciesScope(dependencies: this, key: key, child: child);
@@ -107,6 +127,24 @@ final deps = DependenciesScope.of(context);    // in widgets
 
 A new app-wide service is a new late field plus an initialization step that creates it before the
 app runs. If the project has an `initialize_dependencies` file, add the step there.
+
+Where a scope goes decides who sees it:
+
+- `DependenciesScope`, and any app-wide scope that needs nothing from `MaterialApp`, goes above
+  `MaterialApp`. A scope that reads `Theme`, `Localizations` or `Directionality` goes in
+  `MaterialApp.builder`: they exist there, and it is still above every navigator, so every page
+  and dialog sees it.
+- A scope inside a page (a feature's config widget) is not visible from a dialog or sheet opened
+  from that page: the dialog is a route of a navigator, a sibling of the page, not its child. With
+  the root navigator (the `showDialog` default) and with `useRootNavigator: false` alike,
+  `XConfigInhWidget.of(dialogContext)` finds nothing, or an outer scope of the same type. Pass the
+  dialog what it needs (the deletion dialog takes its controller), or create the dialog's own
+  config widget in the `builder` of `showDialog`.
+- Lookups go by the exact runtime type: `getInheritedWidgetOfExactType<BaseScope>()` does not find
+  a `SubScope extends BaseScope`, and `Scope<int>` is found only as `Scope<int>`, never as
+  `Scope<num>`. The nearest scope of a type hides the outer ones, which overrides a value for a
+  subtree. So a scope's `of` names its own private `InheritedWidget` class, and scopes are not
+  subclassed.
 
 ### Startup and creating dependencies
 
@@ -172,8 +210,14 @@ Startup is a list of named steps run in order, each filling in part of `Dependen
 ```dart
 final Map<String, InitializationStep> initializationSteps = <String, InitializationStep>{
   'Shared preferences': (d) async => d.sharedPreferences = await SharedPreferences.getInstance(),
-  'Database': (d) => d.database = Config.inMemoryDatabase ? AppDatabase.memory() : AppDatabase(),
-  'API client': (d) => d.apiClient = ApiClient(baseUrl: Config.apiUrl, middlewares: [...]),
+  'Database': (d) {
+    d.database = Config.inMemoryDatabase ? AppDatabase.memory() : AppDatabase();
+    d.disposer.defer('Close the database', d.database.close); // released if a later step fails
+  },
+  'API client': (d) {
+    d.apiClient = ApiClient(baseUrl: Config.apiUrl, middlewares: [...]);
+    d.disposer.defer('Close the API client', d.apiClient.close);
+  },
   'Authentication': (d) => d.authenticationController = AuthenticationController(
     repository: AuthenticationRepositoryImpl(database: d.database, apiClient: d.apiClient),
   ),
@@ -187,12 +231,15 @@ final Map<String, InitializationStep> initializationSteps = <String, Initializat
   },
 };
 
-Future<void> main() async {
+Future<void> main() => _start();
+
+Future<void> _start() async {
   try {
     final dependencies = await initializeApp(steps: initializationSteps);
     runApp(dependencies.inject(child: const App()));
   } on Object catch (error) {
-    runApp(InitializationFailedApp(error: error)); // a screen with the error and a retry
+    // A screen with the error; its "Retry" runs the whole startup again.
+    runApp(InitializationFailedApp(error: error, onRetry: _start));
   }
 }
 ```
@@ -213,8 +260,28 @@ Future<void> main() async {
   interface with final fields): nothing after startup can reassign a service, and there are no
   `late` fields to read too early.
 - Callbacks connect services created in different steps without making them depend on each other:
-  the API client reads the token and signs out on a 401 through closures over `Dependencies`, so
-  it never imports the authentication controller. See "Callbacks instead of references".
+  the API client's authentication middleware reads the token and reports a 401 through closures,
+  so it never imports the authentication controller. See "Callbacks instead of references".
+
+### Retrying a failed startup
+
+"Retry" on `InitializationFailedApp` runs `initializeApp` again from the start, into a new
+`Dependencies`. Three things make a second attempt safe (`initialization.dart` does all three;
+checked in a widget test: a failing attempt, then a retry):
+
+- **One `deferFirstFrame` and one `allowFirstFrame` per attempt.** `allowFirstFrame` asserts that a
+  deferral is pending, so deferring once before the first attempt and allowing in every attempt's
+  `finally` throws an `AssertionError` in debug builds when the user taps "Retry". A pair per
+  attempt is fine even after the first frame was sent: deferring then has no effect.
+- **A failed attempt closes what its earlier steps opened.** A step that opens something (the
+  database, an HTTP client, a socket) registers its close with `d.disposer.defer(...)` right after
+  creating it (`Disposer`, see "Release in reverse order" in `docs/rules/repositories.md`), and a
+  failing step disposes them, last first, before the error goes on. Otherwise the retry opens a
+  second database on the same file; drift warns in debug builds that two instances on one executor
+  race and can corrupt it.
+- **The error handlers are installed once.** `_catchErrors` keeps the previous
+  `FlutterError.onError` and calls it; run twice, it wraps its own handler and every error is
+  reported twice.
 
 ### Uncaught errors
 
@@ -222,7 +289,10 @@ Set the app's error handlers first thing in `main`, before anything else runs, a
 catch to the log and the crash reporter:
 
 - `FlutterError.onError`: errors the framework catches itself (in `build`, layout, paint, and
-  gesture callbacks).
+  gesture callbacks). The framework marks some as `FlutterErrorDetails.silent`: failures of the
+  environment, not of the code, such as an image that failed to load. Release builds do not print
+  them. Log a `silent` error as a warning (or a breadcrumb), never as a crash: one broken avatar URL
+  in a list otherwise fills the crash reporter.
 - `PlatformDispatcher.instance.onError`: errors nothing caught, such as a failed `Future` nobody
   awaited. Return `true` once it is reported. (`runZonedGuarded` around `runApp` does the same
   job; `WidgetsFlutterBinding.ensureInitialized()` must then run inside that zone.)
@@ -236,20 +306,24 @@ A constructor can take functions as well as interfaces. A class then reaches the
 (asks for a value, reports an event) without holding a reference to what answers:
 
 ```dart
-final users = StreamController<User>.broadcast();
 final client = ApiClient(
   baseUrl: Config.apiUrl,
-  getToken: session.accessToken, // from memory, see "Tokens" in docs/rules/security.md
-  onUnauthorized: () => authenticationController.signOut().ignore(),
-  onUser: users.add,
+  middlewares: <ApiClientMiddleware>[
+    ApiClient$AuthenticationMiddleware(
+      getToken: session.accessToken, // from memory, see "Tokens" in docs/rules/security.md
+      onUnauthorized: session.onUnauthorized, // a new token, or null once signed out
+      isPublic: (url) => publicPaths.contains(url.path),
+    ).call,
+  ],
 );
 ```
 
-- The client does not know the authentication controller, the preferences or the stream; whoever
-  creates it decides what the callbacks do. That breaks the cycle a client and an authentication
-  controller otherwise make (each needs the other).
+- The middleware (in "HTTP middleware") does not know the authentication controller, the storage
+  or the session; whoever creates it decides what the callbacks do. The session tells the
+  controller about a sign-out through its own callback. That breaks the cycle a client and an
+  authentication controller otherwise make (each needs the other).
 - It suits a package in plain Dart that a Flutter app will use: the package declares
-  `String? Function() getToken` and needs nothing from Flutter or the app.
+  `Future<String?> Function() getToken` and needs nothing from Flutter or the app.
 - With several related callbacks, declare a small interface instead (`ITokenStorage` with `read` and
   `clear`), which the app implements.
 
@@ -272,42 +346,53 @@ do not crowd the autocomplete of `BuildContext` itself, and the wrapper costs no
 
 ### HTTP clients
 
-Create the HTTP client once, as an app-wide dependency, with its base URL, default headers,
-interceptors and timeouts, and pass that instance to every repository or data provider through
-its constructor. Reusing it keeps one configuration and reuses open connections.
+A new project has its HTTP client: `ApiClient` in `lib/src/_core/utils/api_client.dart`. Use it.
+When it lacks something, add it in its pattern: a method next to `get` and `post`, or a middleware
+(see "HTTP middleware"). Do not add Dio or a second wrapper around `package:http`. Create it once,
+as an app-wide dependency, with its base URL and middlewares; close it with the app (`close()` in
+`$disposeApp`, or a `d.disposer.defer` step as above); and pass that instance to every data
+provider through its constructor. Reusing it keeps one configuration and reuses open connections.
 
 ```dart
 // initialize_dependencies.dart
-dependencies.apiClient = ApiClient(
-  baseUrl: config.apiUrl,
-  interceptors: <ApiInterceptor>[AuthInterceptor(tokens: dependencies.tokens)],
+d.apiClient = ApiClient(
+  baseUrl: Config.apiUrl,
+  middlewares: <ApiClientMiddleware>[
+    const ApiClient$LoggerMiddleware().call, // the project's own, in middleware/logger_mw.dart
+    const ApiClient$TimeoutMiddleware(Duration(seconds: 30)).call, // the client has none
+    ApiClient$AuthenticationMiddleware(/* ... */).call, // see "HTTP middleware"
+  ],
 );
 
-// Every repository gets the same instance.
-ProductsRepositoryImpl(apiClient: dependencies.apiClient);
-OrdersRepositoryImpl(apiClient: dependencies.apiClient);
+// Every data provider gets the same instance.
+ProductsDataProviderRemote(client: d.apiClient);
+OrdersDataProviderRemote(client: d.apiClient);
 ```
 
-The client class is the one place that knows the transport. Its methods (`get`, `post`, `put`,
-`patch`, `delete` with a path, a body, headers and query parameters) return the decoded JSON
-(`Map<String, Object?>`), and it makes the first translation of failures into the app's own
-exceptions, the ones `errorText` knows (see "Error messages" in `docs/rules/localization.md`):
+Its methods are `get(path, {query, headers})`, `post`, `put` and `patch(path, {headers, body})`,
+and `delete(path, {query, headers, body})`. `body` is a `Map<String, Object?>`, sent as UTF-8 JSON.
+Each returns an `APIClientResponse`: `body` is the decoded JSON object (`{}` for an empty body; a
+top-level JSON array fails as `decoding_error`), next to `statusCode` and `headers`.
 
-- no connection or a timeout: `NetworkException`, `TimeoutException`;
-- 401, 403, 404, 5xx: `UnauthorizedException`, `ForbiddenException`, `NotFoundException`,
-  `ServerException`;
-- an error body from the backend: `RejectedException` with its code and message;
-- a body that is not JSON: `FormatException`.
+Every failure leaves it as the sealed `APIClientException` (`statusCode`, `code`, `message`,
+`error`, `data`), never as `ClientException`, `SocketException` or a status code. It is an
+`Exception`, not an `ExpectedException`: what passes on unchanged is shown by `errorText` (see
+"Error messages" in `docs/rules/localization.md`) and reported. What the data provider does with
+each (see "Errors" in `docs/rules/repositories.md`):
 
-Each keeps the original stack trace (`Error.throwWithStackTrace`). Data providers then only turn
-the map into models and the backend's codes into their own meaning (see "Errors" in
-`docs/rules/repositories.md`); they never see `DioException`, `ClientException` or a status code.
-Swapping Dio for `package:http` or `cupertino_http` changes one class, and a provider's test
-fakes this client (return a map, or throw) instead of building responses and bytes.
+| Type | When (`code`) | The data provider |
+|---|---|---|
+| `APIClientException$Network` | not sent, no connection, `statusCode` 0 (`network_error`); 5xx (`internal_server_error`); the body could not be read (`body_stream_error`) | passes it on |
+| `APIClientException$Authorization` | 401 and 403 (`unauthorized_error`); `data` is the server's JSON error body, when it sent one | passes it on; maps the code only where a 401 is an answer (a wrong password on sign-in, sent without a token) |
+| `APIClientException$Client` | another 4xx (`bad_request_error`); `data` is the server's JSON error body, such as `{"code": "email_taken", "message": "..."}` | maps the codes it knows to a feature type or `RejectedException`, rethrows the rest |
+| `APIClientException$Client` | 3xx (`redirection_error`), a success body that is not JSON (`invalid_content_type_error`), a body that failed to decode (`decoding_error`, `data` holds the bytes), anything else (`unknown_error`) | passes it on |
+
+`TimeoutException` comes from a timeout middleware, not from the client. A provider's test gives it
+a real `ApiClient` over `MockClient` (see "Testing the data layer" in `docs/rules/testing.md`).
 
 A second client is for a real difference, not for every feature:
 
-- a different cache, cookie jar or set of interceptors (a public CDN next to the signed-in API);
+- a different cache, cookie jar or set of middlewares (a public CDN next to the signed-in API);
 - keep-alive on for the API and off elsewhere;
 - large downloads through the platform's own client (a background download), so they do not hold
   up API calls.
@@ -324,40 +409,127 @@ per host. A client limited to few connections, or a proxy that serialises them, 
 
 ### HTTP middleware
 
-Cross-cutting work around every request (the token, retries, logging, the connection state) is
-middleware of the one client, each kind in its own: a function that takes the next handler and
-returns a handler that wraps it (`ApiClientHandler call(ApiClientHandler next) => (request, ...)
-async { ... }`). The order of the list is the order of the wrapping: authentication inside retry
-retries with a fresh token; a connection-state middleware outside retry reports "offline" only
-after the last attempt.
+Cross-cutting work around every request (the token, retries, timeouts, logging, the connection
+state) is middleware of the one client, each kind in its own. A middleware
+(`ApiClientMiddleware`, in `api_client.dart`) takes the inner handler and returns a handler that
+wraps it; a handler (`ApiClientHandler`) is
+`Future<APIClientResponse> Function(APIClientRequest request, Map<String, Object?> context)`.
+`APIClientRequest` is the `package:http` request (headers can still be changed before it is
+sent), and `context` is a map that lives for one call and is shared by its middlewares.
+A middleware is a class with `ApiClientHandler call(ApiClientHandler innerHandler)` in
+`lib/src/_core/utils/middleware/`, like the logging one a project already has
+(`ApiClient$LoggerMiddleware` in `logger_mw.dart`); `ApiClientMiddlewareWrapper(onRequest:,
+onResponse:, onError:)` builds a small one from callbacks. The list takes their `.call` (the
+`implicit_call_tearoffs` lint asks for it, and an extension type has no implicit one).
+
+The list wraps in order, the first outermost. With connection state, retry and authentication in
+that order, each retry passes authentication again and gets a fresh token, and "offline" is
+reported only after the last attempt. The middlewares run outside the client's own error mapping:
+what one throws (a `TimeoutException`) reaches the caller as it is. Checked with `MockClient`: the
+order, the refresh and retry, and the timeout below.
+
+```dart
+// lib/src/_core/utils/middleware/authentication_mw.dart and timeout_mw.dart
+import 'dart:async';
+
+import 'package:http/http.dart' as http;
+import 'package:meta/meta.dart';
+
+import 'package:my_app/src/_core/utils/api_client.dart';
+
+/// Adds the access token to every protected request. On a 401 asks [onUnauthorized] for the token
+/// to retry with and sends a copy of the request once more, or rethrows once signed out.
+@immutable
+class ApiClient$AuthenticationMiddleware {
+  const ApiClient$AuthenticationMiddleware({
+    required this.getToken,
+    required this.onUnauthorized,
+    required this.isPublic,
+  });
+
+  final Future<String?> Function() getToken;
+  final Future<String?> Function(String failedToken) onUnauthorized;
+  final bool Function(Uri url) isPublic;
+
+  ApiClientHandler call(ApiClientHandler innerHandler) => (request, context) async {
+    if (isPublic(request.url)) return innerHandler(request, context);
+    final token = await getToken();
+    if (token == null) {
+      // Signed out: fail here instead of collecting a 401 from the server.
+      throw const APIClientException$Authorization(
+        code: 'unauthorized_error',
+        message: 'Not signed in.',
+        statusCode: 0,
+      );
+    }
+    request.headers['Authorization'] = 'Bearer $token';
+    try {
+      return await innerHandler(request, context);
+    } on APIClientException$Authorization catch (error) {
+      if (error.statusCode != 401) rethrow; // a 403 is a missing permission: no refresh
+      final fresh = await onUnauthorized(token);
+      if (fresh == null) rethrow;
+      final retry = _copy(request)..headers['Authorization'] = 'Bearer $fresh';
+      // To the inner handler: through the client it would pass this middleware again.
+      return innerHandler(APIClientRequest(retry), context);
+    }
+  };
+
+  /// A sent request cannot be sent again: the retry is a copy.
+  static http.Request _copy(APIClientRequest request) {
+    if (request case final http.Request sent) {
+      return http.Request(sent.method, sent.url)
+        ..headers.addAll(sent.headers)
+        ..maxRedirects = sent.maxRedirects
+        ..bodyBytes = sent.bodyBytes;
+    }
+    throw StateError('Cannot resend a ${request.runtimeType}');
+  }
+}
+
+/// Fails a call that takes longer than [timeout] with a [TimeoutException]. The request is not
+/// cancelled: it still runs, and its answer is dropped.
+@immutable
+class ApiClient$TimeoutMiddleware {
+  const ApiClient$TimeoutMiddleware(this.timeout);
+
+  final Duration timeout;
+
+  ApiClientHandler call(ApiClientHandler innerHandler) =>
+      (request, context) => innerHandler(request, context).timeout(timeout);
+}
+```
 
 - **Authentication**: adds the token from memory (see "Tokens" in `docs/rules/security.md`). On a
   401 it refreshes once and retries the request once, with a copy (a request whose body is a
   stream cannot be sent twice: fail instead). A 401 on a request sent without a token (sign-in,
   a one-time code) is a wrong code, not an expired session: no refresh. A 403 is a missing
   permission: never sign out on it.
-  - It passes the token the failed request carried (read back from its `Authorization` header)
-    to `onUnauthorized`, so a request that raced a refresh is retried with the new token.
-  - The retry goes to `next`, the handler inside it, not to the client: through the client it
-    would pass the authentication middleware again. The refresh call goes through a client (or a
-    request marked to skip it) without this middleware, so a 401 for the refresh cannot start
-    another refresh.
+  - It passes the token the failed request carried to `onUnauthorized`, so a request that raced a
+    refresh is retried with the new token.
+  - The retry goes to `innerHandler`, the handler inside it, not to the client: through the client
+    it would pass the authentication middleware again. The refresh call goes through a client
+    without this middleware (or to a path `isPublic` lets through), so a 401 for the refresh cannot
+    start another refresh.
   - Which requests are public (sign-in, sign-up, refresh) is an explicit list or a separate
     client, not "the token is null". A protected request with no token fails at once with
-    `UnauthorizedException` instead of going out to collect a 401.
+    `APIClientException$Authorization` instead of going out to collect a 401.
   - Concurrent requests share one refresh future; never serialize every request through the
     middleware to avoid duplicate refreshes.
 - **Retry**: only requests that are safe to repeat (`GET`, `HEAD`, `PUT`, `DELETE`, or a `POST`
   with an `Idempotency-Key` the server honours): a retried `POST` after a 500 or a timeout can
-  create the order twice. Only for timeouts, network errors, 408, 429 and 5xx; never for 4xx or a
-  parsing error. Wait longer each time (doubling, with some randomness), honour `Retry-After` on
-  429 and 503, stop after a few attempts, and skip streaming responses (SSE).
-- **Side effects**: a middleware may report to a controller (online after a response, offline on a
-  network error) and rethrow; it never swallows the error.
+  create the order twice. Only for a `TimeoutException`, an `APIClientException$Network` (no
+  connection, 5xx) and an `APIClientException$Client` with `statusCode` 408 or 429; never for
+  another 4xx or a `decoding_error`. Send a copy each time (`_copy` above). Wait longer each time
+  (doubling, with some randomness), stop after a few attempts, and skip streaming responses (SSE).
+  The client's exceptions carry no response headers: honouring `Retry-After` on 429 and 503 needs
+  `api_client.dart` to put it into the exception.
+- **Side effects**: a middleware may report to a controller (online after a response, offline on
+  `APIClientException$Network(code: 'network_error')`) and rethrow; it never swallows the error.
 - **Headers from memory**: values added to every request (the selected store, the warehouse) are
   read once and kept in memory, not parsed from preferences on every request.
-- **Logging**: log the method, the path, the status and the time, never the `Authorization`
-  header, cookies or bodies with personal data.
+- **Logging** (`ApiClient$LoggerMiddleware`): the method, the path, the status and the time, never
+  the `Authorization` header, cookies or bodies with personal data.
 
 ### Feature level: config widgets
 
@@ -518,6 +690,8 @@ Future<Dependencies> _runSteps(
     try {
       await step(dependencies);
     } on Object catch (error, stackTrace) {
+      // Close what the earlier steps opened: a retry runs every step again.
+      await dependencies.disposer.dispose();
       // The step's name travels with the error; the stack trace stays the original one.
       Error.throwWithStackTrace(StateError('Initialization failed at "$name": $error'), stackTrace);
     }
@@ -527,10 +701,26 @@ Future<Dependencies> _runSteps(
   return dependencies;
 }
 
+var _errorsCaught = false;
+
 void _catchErrors() {
+  // A retry runs initializeApp again: wrapping the handlers twice would report every error twice.
+  if (_errorsCaught) return;
+  _errorsCaught = true;
   final presentError = FlutterError.onError;
   FlutterError.onError = (details) {
-    _report(details.exception, details.stack ?? StackTrace.current, 'Flutter error');
+    if (details.silent) {
+      // An image that failed to load and the like: the environment, not a bug. A warning, no crash.
+      developer.log(
+        'Flutter warning',
+        error: details.exception,
+        stackTrace: details.stack,
+        name: 'app',
+        level: 900,
+      );
+    } else {
+      _report(details.exception, details.stack ?? StackTrace.current, 'Flutter error');
+    }
     presentError?.call(details); // keep the red screen and the console output in debug
   };
   PlatformDispatcher.instance.onError = (error, stackTrace) {
@@ -572,12 +762,16 @@ final class LoggingControllerObserver implements IControllerObserver {
 // file: dependencies.dart
 import 'package:flutter/widgets.dart';
 
+import 'disposer.dart';
 import 'example_repository.dart';
 
 /// App-wide services, created once at startup and shared through [DependenciesScope].
 class Dependencies {
   /// The shared service repositories are built on (an API client, a database, ...).
   late final ExampleService exampleService;
+
+  /// Closes, last first, what the initialization steps opened; a failing step runs it.
+  final Disposer disposer = Disposer();
 
   /// Wraps [child] so every descendant can reach these dependencies.
   Widget inject({required Widget child, Key? key}) =>
@@ -606,5 +800,47 @@ class DependenciesScope extends InheritedWidget {
   // Dependencies never change after startup, so nothing needs to rebuild.
   @override
   bool updateShouldNotify(covariant DependenciesScope oldWidget) => false;
+}
+```
+
+### `settings_model.dart`
+
+```dart
+// file: settings_model.dart
+import 'package:flutter/material.dart';
+
+/// The parts of [SettingsModel] a widget can depend on.
+enum SettingsAspect { locale, themeMode }
+
+/// The settings, each part rebuilding only the widgets that read it.
+class SettingsModel extends InheritedModel<SettingsAspect> {
+  const SettingsModel({
+    required this.locale,
+    required this.themeMode,
+    required super.child,
+    super.key,
+  });
+
+  final Locale locale;
+  final ThemeMode themeMode;
+
+  /// The locale; the reader rebuilds only when the locale changes.
+  static Locale localeOf(BuildContext context) =>
+      InheritedModel.inheritFrom<SettingsModel>(context, aspect: SettingsAspect.locale)!.locale;
+
+  /// The theme mode; the reader rebuilds only when the theme mode changes.
+  static ThemeMode themeModeOf(BuildContext context) => InheritedModel.inheritFrom<SettingsModel>(
+    context,
+    aspect: SettingsAspect.themeMode,
+  )!.themeMode;
+
+  @override
+  bool updateShouldNotify(SettingsModel oldWidget) =>
+      locale != oldWidget.locale || themeMode != oldWidget.themeMode;
+
+  @override
+  bool updateShouldNotifyDependent(SettingsModel oldWidget, Set<SettingsAspect> dependencies) =>
+      (dependencies.contains(SettingsAspect.locale) && locale != oldWidget.locale) ||
+      (dependencies.contains(SettingsAspect.themeMode) && themeMode != oldWidget.themeMode);
 }
 ```

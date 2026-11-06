@@ -1,6 +1,6 @@
 ---
 name: repositories
-description: "Stateless repositories: interface plus Impl, no StreamController fields, Stream-returning methods that always close, and safe Drift schema changes."
+description: "Stateless repositories: interface plus Impl, no StreamController fields, Stream-returning methods that always close, decoding response bodies as UTF-8, and safe Drift schema changes."
 ---
 
 # Repositories
@@ -20,8 +20,9 @@ description: "Stateless repositories: interface plus Impl, no StreamController f
   in a repository".
 - Create-vs-update is decided in the repository, not in the controller or widget.
 - Catch an error only to handle it or to pass it on with `rethrow`. A `throw` inside a `catch` is
-  only for turning a transport error into the app's own exception at the boundary (a 401 into
-  `UnauthorizedException`), with the original stack trace. See "Errors".
+  only for turning the server's code into the app's own exception at the boundary (an
+  `APIClientException$Client` with `{"code": "email_taken"}` into `RejectedException`), with the
+  original stack trace. See "Errors".
 - A failure the user can act on is thrown at the boundary as a subtype of `ExpectedException`;
   one that code above the data layer handles in its own way gets its own type, in a sealed
   family. A backend code the provider does not know is rethrown. See "A type for each failure the
@@ -32,6 +33,9 @@ description: "Stateless repositories: interface plus Impl, no StreamController f
   "Cancelling a multi-step operation".
 - Local data goes to SQLite (drift) or, for a few small settings, `shared_preferences`; never to
   `hive`, `isar` or `get_storage`. See "Local storage".
+- Text and JSON from the network are decoded from the bytes as UTF-8: `ApiClient` does it for JSON;
+  code that reads `package:http` directly uses `utf8.decode(response.bodyBytes)`, not
+  `Response.body`. See "Decoding response bodies".
 - Every method of a repository (and of its data providers) is asynchronous, `Future` or `Stream`,
   even when the implementation is synchronous today; the next implementation then changes nothing
   above it. See "Data providers" in `docs/rules/architecture.md`.
@@ -43,22 +47,27 @@ description: "Stateless repositories: interface plus Impl, no StreamController f
   `catch` that does its part (closing a resource, logging) and then `rethrow`s.
 - **`rethrow`, not `throw error`.** `rethrow` keeps the original stack trace; `throw e` inside a
   `catch` starts a new one at that line, and the place the error came from is lost.
-- **Translate at the boundary, and only there.** The data layer turns a transport-specific error
-  into the app's own exception, so nothing above it depends on the client: a 401 from Dio becomes
-  `UnauthorizedException`, a missing row becomes `NotFoundException`. A failure the user can read
-  and act on (a wrong password, a used coupon) is thrown as a subtype of `ExpectedException`
+- **Translate at the boundary, and only there.** The project's `ApiClient` already turns every
+  transport failure into an `APIClientException` (see "HTTP clients" in
+  `docs/rules/dependencies.md`); those pass on as they are, and nothing re-wraps them into generic
+  app exceptions. The data provider is the one place that reads the server's codes: on an
+  `APIClientException$Client` (a 4xx), or an `APIClientException$Authorization` where the code is
+  an answer (a 401 with `invalid_credentials` on sign-in, a request sent without a token), it
+  reads `error.data` with a map pattern and throws the app's exception. A failure the user can
+  read and act on (a wrong password, a used coupon) is thrown as a subtype of `ExpectedException`
   (`app_exception.dart` in `docs/rules/controllers.md`): the controller shows it and does not
-  report it. Everything else keeps its own type and is reported. Keep the original stack trace
-  with `Error.throwWithStackTrace`:
+  report it. An unknown code, or no body, is rethrown: it keeps its own type and is reported. A
+  local query that found no row throws the feature's `NotFoundException`. Keep the original stack
+  trace with `Error.throwWithStackTrace`:
 
 ```dart
 try {
-  return await _client.get('/profile');
-} on DioException catch (error, stackTrace) {
-  if (error.response?.statusCode == 401) {
-    Error.throwWithStackTrace(const UnauthorizedException(), stackTrace);
+  await _client.post('/users', body: <String, Object?>{'email': email});
+} on APIClientException$Client catch (error, stackTrace) {
+  if (error.data case {'code': 'email_taken'}) {
+    Error.throwWithStackTrace(const RejectedException(code: 'email_taken'), stackTrace);
   }
-  rethrow;
+  rethrow; // another code, another 4xx, no body: reported as it is
 }
 ```
 
@@ -76,22 +85,25 @@ try {
   `.ignore()` on a future all hide the failure from the controller, the user and the crash report.
   Return a default only when it is the answer (an optional file that is missing), and say so in a
   comment.
-- **`unawaited` is not `.ignore()`.** `unawaited(f)` only tells the `unawaited_futures` lint that
-  not waiting is deliberate: when `f` fails, its error is uncaught and goes to the zone's handler
-  (`PlatformDispatcher.instance.onError` in the app), where it is still reported. `f.ignore()`
-  marks the error as handled and drops it. Use `.ignore()` only on a future that cannot fail with
-  anything worth knowing: a controller method, whose `handle` reports its own errors, or a body
-  that catches everything itself. A fire-and-forget write whose failure matters (a cache write) is
-  awaited, or gets a `catchError` that logs it. Checked: inside `runZonedGuarded`, a failing
-  `unawaited` future reaches the handler and an `.ignore()`d one does not.
+- **`unawaited` is not `.ignore()`.** `unawaited(f)` only marks not waiting as deliberate, for
+  the reader and for the `unawaited_futures` lint in a project that enables it (the project
+  template leaves it off, so nothing reports a future that is neither awaited nor wrapped). It
+  changes nothing at run time: when `f` fails, its error is uncaught and goes to the zone's
+  handler (`PlatformDispatcher.instance.onError` in the app), where it is still reported.
+  `f.ignore()` marks the error as handled and drops it. Use `.ignore()` only on a future that
+  cannot fail with anything worth knowing: a controller method, whose `handle` reports its own
+  errors, or a body that catches everything itself. A fire-and-forget write whose failure matters
+  (a cache write) is awaited, or gets a `catchError` that logs it. Checked: inside
+  `runZonedGuarded`, a failing `unawaited` future reaches the handler and an `.ignore()`d one does
+  not.
 - **Context beside the error, never secrets.** What helps to find the cause (the path, the status
   code, the backend's error code) goes into the exception's fields and `toString()`, or into the
   report next to the error and its stack trace. Do not rebuild the trace to carry it
   (`StackTrace.fromString('$trace\nHeaders: ...')`). Headers, tokens, passwords and request bodies
   with personal data never go into an exception, its message or a trace: exceptions end up in logs
   and crash reports (see "Rules" in `docs/rules/security.md`).
-- **Catch what you mean.** `on DioException`, `on FormatException`, not a bare `catch` around a
-  whole method; the controller's `handle` is the one place that catches everything.
+- **Catch what you mean.** `on APIClientException$Client`, `on FormatException`, not a bare
+  `catch` around a whole method; the controller's `handle` is the one place that catches everything.
 - **No `try` / `finally` without an `on Object catch`.** Write the catch, even when it only logs
   and `rethrow`s: `try { ... } on Object catch (error, stackTrace) { ...; rethrow; } finally { ... }`.
   A bare `try` / `finally` hides what happens to the error, and the `finally` decides it silently:
@@ -106,21 +118,24 @@ the coupon field, sends the user to sign in), the data provider that sees the fa
 named after it: `InsufficientFundsException`, `CouponAlreadyUsedException`, `NotFoundException`
 for a query that found no row. Nothing above the provider then compares strings or status codes.
 
-- A failure that only needs a message stays generic: a `RejectedException` (an
-  `ExpectedException`) with the backend's code, which `errorText` turns into a sentence (see
-  "Error messages" in `docs/rules/localization.md`). A failure nobody can act on (a 500, a failed
-  parse) passes on unchanged and untyped, and a lost connection as the client's `NetworkException`:
-  neither is an `ExpectedException`, so both are reported.
+- A failure that only needs a message stays generic: for a code the provider knows, a
+  `RejectedException` (an `ExpectedException`) with the backend's code and message, which
+  `errorText` turns into a sentence (see "Error messages" in `docs/rules/localization.md`). A
+  failure nobody can act on (a 500, a failed parse, an unknown code) passes on unchanged and
+  untyped, and a lost connection as the client's `APIClientException$Network`: none is an
+  `ExpectedException`, so all are reported.
 - A feature's types form a `sealed class ... extends ExpectedException` with `final class`
   subtypes and `const` constructors: a `switch` over them is exhaustive, and a new type is a
   compile error wherever it is not handled. They are `Exception`s, not `Error`s: an `Error` means
   a bug in the code. (`ExpectedException` is a `base` class: a subtype `extends` it and is itself
   `base`, `final` or `sealed`.)
 - They carry what the app needs (the coupon that was used), never a transport type
-  (`DioException`, `Response`) and nothing secret.
+  (`APIClientException`, `APIClientResponse`) and nothing secret.
 - The provider maps the backend's code with `Error.throwWithStackTrace`, so the report still points
   at the request, and `rethrow`s every code it does not know: an unknown code is never swallowed
-  and never guessed. See `payments_data_provider.dart` in Examples, and "Testing the data layer"
+  and never guessed. A map pattern matches only when every key it names is there: read an
+  optional `message` in a pattern of its own, or `{'code': ..., 'message': ...}` misses a body
+  without a message. See `payments_data_provider.dart` in Examples, and "Testing the data layer"
   in `docs/rules/testing.md` for its tests.
 
 ## Releasing resources
@@ -132,9 +147,14 @@ must release all of them even when one fails, and must not hang on one that neve
 - An asynchronous step gets a timeout (`.timeout(...)`): a socket that never closes must not keep
   the app from shutting down.
 - A failure goes to a callback or the log, never into silence.
-- Steps that do not depend on each other may run together (`Future.wait`); those that must run in
-  order run one after another, or through one `Mutex` (`control`'s `Mutex().synchronize`) when
-  several disposers share them.
+- Steps that do not depend on each other may run together (`Future.wait`, safe here because each
+  step catches its own error; see "Waiting for several futures" in `docs/rules/dart.md`); those
+  that must run in order run one after another, or through one `Mutex` (`control`'s
+  `Mutex().synchronize`) when several disposers share them.
+- An object that owns native memory (a `ui.Image`, a `Picture`, the image or handle of an FFI
+  package) is disposed right after use, in the `finally` of the `try` that uses it. Do not rely on
+  a finalizer the package attaches: the `Finalizer` doc makes "no promises" that its callback is
+  ever called, and on the web a package may have none.
 
 ```dart
 // file: dispose_all.dart
@@ -577,6 +597,26 @@ controller that owns the state, or in the client's middleware when every caller 
 - Listening twice to a single-subscription stream throws. Each call of a method like `events()`
   returns a new stream, so each listener calls the method.
 
+## Decoding response bodies
+
+The project's `ApiClient` decodes a JSON body from the bytes as UTF-8 itself (see "HTTP clients" in
+`docs/rules/dependencies.md`). Code that reads `package:http` directly (a download, a non-JSON
+endpoint) decodes text from the bytes itself, as UTF-8, unless the API says otherwise:
+
+- `package:http`'s `Response.body` takes the charset from `Content-Type`. Without one it uses
+  UTF-8 only for `application/json`; for `text/plain`, `text/html` or a missing header it falls
+  back to latin1, and `Привет` comes out as `ÐÑÐ¸Ð²ÐµÑ` (checked with http 1.6.0;
+  `charset=utf-8` in the header decodes correctly). Use `utf8.decode(response.bodyBytes)`.
+- JSON goes from bytes to objects in one pass: `utf8.decoder.fuse(json.decoder).convert(bytes)`.
+  On the VM that is a dedicated decoder (`_JsonUtf8Decoder`, checked) that builds no intermediate
+  `String`; `decode` in `patterns.dart` (`docs/rules/dart.md`) uses it.
+- Dio's default transformer (dio 5.11.1) decodes a JSON response the same way, strictly, but other
+  text with `allowMalformed: true`: broken bytes become U+FFFD without an error. Where the text
+  must be valid, request `ResponseType.bytes` and call `utf8.decode`, which throws a
+  `FormatException`.
+
+See "Strings and text length" in `docs/rules/dart.md` for counting and cutting the text.
+
 ## Local storage
 
 Use SQLite, through `drift`, for anything beyond a few settings; `shared_preferences` for a handful
@@ -773,14 +813,8 @@ final class ThemeDataProviderLocal implements IThemeDataProvider {
 
 ```dart
 // file: payments_data_provider.dart
+import 'api_client.dart';
 import 'app_exception.dart';
-
-/// The part of the app's HTTP client a provider uses: decoded JSON in and out, and the app's own
-/// exceptions ([RejectedException] for an error body, a network failure) instead of the
-/// transport's.
-abstract interface class IApiClient {
-  Future<Map<String, Object?>> post(String path, {Map<String, Object?>? body});
-}
 
 /// The failures of a payment that the app handles in their own way. Sealed: a `switch` over them
 /// is checked by the compiler. Expected: the controller shows them and does not report them.
@@ -812,39 +846,50 @@ final class Receipt {
 abstract interface class IPaymentsDataProvider {
   /// Pays for [orderId].
   ///
-  /// Throws a [PaymentException] for a failure the app handles, and passes every other one on.
+  /// Throws a [PaymentException] for a failure the app handles, a [RejectedException] for one the
+  /// user only reads, and passes every other one on.
   Future<Receipt> pay({required String orderId, String? coupon});
 }
 
-/// [IPaymentsDataProvider] over the app's HTTP client.
+/// [IPaymentsDataProvider] over the app's [ApiClient].
 final class PaymentsDataProviderRemote implements IPaymentsDataProvider {
   const PaymentsDataProviderRemote({required this._client});
 
-  final IApiClient _client;
+  final ApiClient _client;
 
   @override
   Future<Receipt> pay({required String orderId, String? coupon}) async {
-    final Map<String, Object?> response;
+    final APIClientResponse response;
     try {
       response = await _client.post(
         '/payments',
         body: <String, Object?>{'order_id': orderId, 'coupon': ?coupon},
       );
-    } on RejectedException catch (error, stackTrace) {
-      switch (error.code) {
-        case 'insufficient_funds':
-          Error.throwWithStackTrace(const InsufficientFundsException(), stackTrace);
-        case 'coupon_used' when coupon != null:
-          Error.throwWithStackTrace(CouponAlreadyUsedException(coupon: coupon), stackTrace);
+    } on APIClientException$Client catch (error, stackTrace) {
+      // A 4xx with the server's error body: `{"code": "insufficient_funds", "message": "..."}`.
+      if (error.data case {'code': final String code}) {
+        // A map pattern matches only when the key is there: the optional message is read apart.
+        final message = switch (error.data) {
+          {'message': final String message} => message,
+          _ => null,
+        };
+        switch (code) {
+          case 'insufficient_funds':
+            Error.throwWithStackTrace(const InsufficientFundsException(), stackTrace);
+          case 'coupon_used' when coupon != null:
+            Error.throwWithStackTrace(CouponAlreadyUsedException(coupon: coupon), stackTrace);
+          case 'order_closed' || 'card_declined':
+            Error.throwWithStackTrace(RejectedException(code: code, message: message), stackTrace);
+        }
       }
-      rethrow; // Any other code stays a RejectedException: `errorText` shows it.
+      rethrow; // An unknown code, another 4xx, no body: reported as it is.
     }
-    return switch (response) {
+    return switch (response.body) {
       {'receipt': {'id': final String id, 'total': final int total}} => Receipt(
         id: id,
         total: total,
       ),
-      _ => throw FormatException('Not a payment receipt', response),
+      final body => throw FormatException('Not a payment receipt', body),
     };
   }
 }

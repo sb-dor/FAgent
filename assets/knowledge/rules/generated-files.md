@@ -13,6 +13,12 @@ description: "Never edit generated files; run build_runner after touching annota
 - A generator runs only where `build.yaml` lets it. A file that uses it somewhere else gets no
   generated part, so its `part` directive fails to resolve: add the folder to `build.yaml`. See
   "build.yaml".
+- In a pub workspace, run it once at the root for every member:
+  `dart run build_runner build --workspace -d` (`-d` is `--delete-conflicting-outputs`;
+  build_runner 2.14 or later), not a loop that runs it in each package. Each member's own
+  `build.yaml` still decides where its generators run (checked: a member's `generate_for` left a
+  `@freezed` file outside it without output). See "Commands at the root" in
+  `docs/rules/tooling.md`.
 
 ## build.yaml
 
