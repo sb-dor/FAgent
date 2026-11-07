@@ -34,6 +34,12 @@ your own subscription or API key, and gives them what a Flutter project needs:
 > **Status:** in active development, macOS first. Everything below works today; signed builds and
 > CI come with the first release (see [Roadmap](#roadmap)).
 
+## Thanks
+
+To the [Flutter 🎯 Dart](https://t.me/ru_dart) community, whose discussions became the rules, and
+to [Michael Lazebny](https://lazebny.io) and [PlugFox](https://plugfox.dev) for their articles and
+templates.
+
 ## Features
 
 ### Chat with your agent
@@ -194,12 +200,6 @@ flutter test
 FLUTTER_RUN_TEST=1 flutter test --tags flutter test/integration   # real flutter, network
 FLUTTER_SCREENSHOTS=1 flutter test test/screenshots              # regenerates docs/images
 ```
-
-## Thanks
-
-To the [Flutter 🎯 Dart](https://t.me/ru_dart) community, whose discussions became the rules, and
-to [Michael Lazebny](https://lazebny.io) and [PlugFox](https://plugfox.dev) for their articles and
-templates.
 
 ## License
 
