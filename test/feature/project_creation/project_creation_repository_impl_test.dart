@@ -5,25 +5,17 @@ import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
-import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_rules/models/project_rule.dart';
-import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
-import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/scripted_daemon_process.dart';
 
 const String _flutter = '/sdk/bin/flutter';
-const int _projectId = 7;
 
 /// A `pubspec.yaml` as `flutter create` writes it, cut down.
 const String _createdPubspec = '''
@@ -42,77 +34,29 @@ flutter:
   uses-material-design: true
 ''';
 
-final class _StubSdk implements IFlutterSdkRepository {
-  String? path = _flutter;
-
-  @override
-  Future<FlutterSdk> sdkFor(String? projectPath) async => FlutterSdk(path: path);
-
-  @override
-  Future<String?> pathFor(String? projectPath) async => path;
-
-  @override
-  Future<List<DoctorCheck>> doctor(String flutter) => throw UnimplementedError();
-}
-
-final class _StubOpening implements IProjectOpeningRepository {
-  final List<String> opened = <String>[];
-  Exception? error;
-
-  @override
-  Future<Project> open(String path) async {
-    opened.add(path);
-    if (error case final error?) throw error;
-    return Project(id: _projectId, path: path, name: p.basename(path), isFlutter: true);
-  }
-}
-
-final class _StubTrust implements IProjectTrustRepository {
-  final List<int> trusted = <int>[];
-
-  @override
-  Future<List<String>> agentSettingsFiles(String projectPath) async => const <String>[];
-
-  @override
-  Future<void> trust(int projectId) async => trusted.add(projectId);
-}
-
-final class _StubRules implements IProjectRulesRepository {
-  List<ProjectRule> rules = const <ProjectRule>[
-    ProjectRule(id: 'rule:builtin:a', name: 'a', description: 'A', enabled: true),
-    ProjectRule(id: 'rule:builtin:b', name: 'b', description: 'B', enabled: false),
-  ];
-  final List<(String, List<String>)> written = <(String, List<String>)>[];
-  final List<int> offered = <int>[];
-
-  @override
-  Future<bool> hasRules(String projectRoot) async => false;
-
-  @override
-  Future<bool> canHaveRules(String projectRoot) async => true;
-
-  @override
-  Future<List<ProjectRule>> builtinRules() async => rules;
-
-  @override
-  Future<void> write(String projectRoot, List<ProjectRule> rules) async {
-    written.add((projectRoot, <String>[for (final rule in rules) rule.name]));
-    Directory(p.join(projectRoot, 'docs', 'rules')).createSync(recursive: true);
-  }
-
-  @override
-  Future<void> markOffered(int projectId) async => offered.add(projectId);
-}
-
 void main() {
   late Directory root;
   late Directory parent;
   late String bin;
   late AppDatabase database;
-  late _StubSdk sdk;
-  late _StubOpening opening;
-  late _StubTrust trust;
-  late _StubRules rules;
+
+  /// What the `flutter` function returns.
+  late String? flutterPath;
+
+  /// The rule names `writeRules` writes; it creates `docs/rules` when there is any.
+  late List<String> ruleNames;
+
+  /// Every project path `writeRules` was called with.
+  late List<String> rulesWritten;
+
+  Future<List<String>> writeRules(String projectPath) async {
+    rulesWritten.add(projectPath);
+    if (ruleNames.isNotEmpty) {
+      Directory(p.join(projectPath, 'docs', 'rules')).createSync(recursive: true);
+    }
+    return ruleNames;
+  }
+
   late List<ScriptedDaemonProcess> started;
   late ShellEnvironment environment;
 
@@ -139,11 +83,9 @@ void main() {
     final inner = scriptedStarter(ScriptedDaemonProcess.new, started: started);
     return ProjectCreationRepositoryImpl(
       database: database,
-      flutterSdk: sdk,
+      flutter: () async => flutterPath,
       environment: environment,
-      projectOpening: opening,
-      projectTrust: trust,
-      projectRules: rules,
+      writeRules: writeRules,
       loadAsset: (key) => File(key).readAsString(),
       now: () => DateTime(2026, 11, 6),
       startProcess: (executable, arguments, {workingDirectory, environment}) async {
@@ -168,10 +110,9 @@ void main() {
     File(p.join(bin, 'git')).writeAsStringSync('');
     environment = ShellEnvironment(<String, String>{'PATH': bin, 'HOME': root.path});
     database = AppDatabase(NativeDatabase.memory());
-    sdk = _StubSdk();
-    opening = _StubOpening();
-    trust = _StubTrust();
-    rules = _StubRules();
+    flutterPath = _flutter;
+    ruleNames = <String>['a'];
+    rulesWritten = <String>[];
     started = <ScriptedDaemonProcess>[];
     script = finish;
   });
@@ -394,9 +335,6 @@ void main() {
       expect(analyze.took, isNull);
       expect(step(runs.last, CreationStepKind.firstCommit).status, CreationStepStatus.pending);
       expect(started.map((process) => process.arguments.first), isNot(contains('commit')));
-      // `flutter create` worked, so the project is added anyway.
-      expect(opening.opened, <String>[path()]);
-      expect(runs.last.projectId, _projectId);
     });
 
     test('stdout and stderr go into the output in arrival order', () async {
@@ -422,11 +360,9 @@ void main() {
     test('a command that cannot start fails its step with the message', () async {
       final repository = ProjectCreationRepositoryImpl(
         database: database,
-        flutterSdk: sdk,
+        flutter: () async => flutterPath,
         environment: environment,
-        projectOpening: opening,
-        projectTrust: trust,
-        projectRules: rules,
+        writeRules: writeRules,
         loadAsset: (key) => File(key).readAsString(),
         startProcess: (executable, arguments, {workingDirectory, environment}) =>
             throw const ProcessException('flutter', <String>[], 'No such file or directory'),
@@ -436,7 +372,6 @@ void main() {
       final create = step(runs.last, CreationStepKind.flutterCreate);
       expect(create.status, CreationStepStatus.failed);
       expect(create.output.last, contains('No such file or directory'));
-      expect(opening.opened, isEmpty);
     });
 
     test('target that appeared fails flutter create', () async {
@@ -451,7 +386,6 @@ void main() {
         runs.last.steps.skip(1).map((step) => step.status),
         everyElement(CreationStepStatus.pending),
       );
-      expect(opening.opened, isEmpty);
     });
 
     test('parent that disappeared fails flutter create', () async {
@@ -466,7 +400,7 @@ void main() {
     });
 
     test('Flutter SDK not found', () async {
-      sdk.path = null;
+      flutterPath = null;
       final runs = await build().create(request()).toList();
 
       expect(started, isEmpty);
@@ -484,7 +418,6 @@ void main() {
       expect(gitInit.output.last, 'git not found');
       expect(step(runs.last, CreationStepKind.skeleton).status, CreationStepStatus.pending);
       expect(started.map((process) => process.arguments.first), <String>['create']);
-      expect(opening.opened, <String>[path()]);
     });
 
     test('stop kills the running command', () async {
@@ -508,8 +441,6 @@ void main() {
       expect(step(runs.last, CreationStepKind.analyze).status, CreationStepStatus.pending);
       expect(step(runs.last, CreationStepKind.firstCommit).status, CreationStepStatus.pending);
       expect(started, hasLength(3));
-      expect(opening.opened, <String>[path()]);
-      expect(runs.last.projectId, _projectId);
     });
 
     test('stop never throws', () async {
@@ -534,7 +465,7 @@ void main() {
       await repository.dispose();
     });
 
-    test('cancel kills and adds nothing', () async {
+    test('cancel kills the command', () async {
       script = (process) {
         if (process.arguments.first != 'analyze') finish(process);
       };
@@ -546,8 +477,6 @@ void main() {
       expect(started.last.stopped, isTrue);
       await Future<void>.delayed(const Duration(milliseconds: 20));
       expect(started.last.arguments, <String>['analyze']);
-      expect(opening.opened, isEmpty);
-      expect(trust.trusted, isEmpty);
     });
 
     test('dispose kills the running command', () async {
@@ -566,7 +495,6 @@ void main() {
       expect(started.last.stopped, isTrue);
       expect(started.last.arguments, <String>['analyze']);
       expect(runs, hasLength(before));
-      expect(opening.opened, isEmpty);
     });
 
     test('output is bounded', () async {
@@ -590,7 +518,7 @@ void main() {
       expect(output.last, 'line 1000');
     });
 
-    test('the rules step writes the enabled rules before the first commit', () async {
+    test('the rules step writes the rules before the first commit and lists them', () async {
       bool? rulesAtAdd;
       script = (process) {
         if (process.executable == git() && process.arguments.first == 'add') {
@@ -601,9 +529,9 @@ void main() {
 
       final runs = await build().create(request()).toList();
 
-      expect(rules.written.single.$1, path());
-      expect(rules.written.single.$2, <String>['a']);
+      expect(rulesWritten, <String>[path()]);
       expect(rulesAtAdd, isTrue);
+      expect(step(runs.last, CreationStepKind.rules).output, <String>['✎ docs/rules/a.md']);
       final kinds = runs.last.steps.map((step) => step.kind).toList();
       expect(
         kinds.indexOf(CreationStepKind.rules),
@@ -611,34 +539,16 @@ void main() {
       );
     });
 
-    test('no enabled rule writes nothing', () async {
-      rules.rules = const <ProjectRule>[
-        ProjectRule(id: 'rule:builtin:b', name: 'b', description: 'B', enabled: false),
-      ];
+    test('no rule written lists nothing', () async {
+      ruleNames = const <String>[];
 
       final runs = await build().create(request()).toList();
 
-      expect(rules.written, isEmpty);
+      expect(step(runs.last, CreationStepKind.rules).output, isEmpty);
       expect(step(runs.last, CreationStepKind.rules).status, CreationStepStatus.done);
     });
 
-    test('a created project is marked as offered', () async {
-      await build().create(request()).toList();
-
-      expect(rules.offered, <int>[_projectId]);
-    });
-
-    test('success adds and trusts the project', () async {
-      final runs = await build().create(request()).toList();
-
-      expect(opening.opened, <String>[path()]);
-      expect(trust.trusted, <int>[_projectId]);
-      expect(runs.last.projectId, _projectId);
-      expect(runs.reversed.skip(1).map((run) => run.projectId), everyElement(isNull));
-      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
-    });
-
-    test('flutter create failure adds nothing', () async {
+    test('flutter create failure runs nothing else', () async {
       script = (process) {
         if (!isCreate(process)) return finish(process);
         Timer.run(() {
@@ -650,20 +560,7 @@ void main() {
       final runs = await build().create(request()).toList();
 
       expect(step(runs.last, CreationStepKind.flutterCreate).status, CreationStepStatus.failed);
-      expect(runs.map((run) => run.projectId), everyElement(isNull));
-      expect(opening.opened, isEmpty);
-      expect(trust.trusted, isEmpty);
       expect(started, hasLength(1));
-    });
-
-    test('a failure to add the project is a stream error', () async {
-      opening.error = const FileSystemException('Folder does not exist');
-
-      await expectLater(
-        build().create(request(template: NewProjectTemplate.plain, gitInit: false)),
-        emitsThrough(emitsError(isA<FileSystemException>())),
-      );
-      expect(trust.trusted, isEmpty);
     });
   });
 

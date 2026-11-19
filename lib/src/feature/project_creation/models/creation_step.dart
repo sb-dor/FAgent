@@ -56,16 +56,11 @@ abstract class CreationStep with _$CreationStep {
   }) = _CreationStep;
 }
 
-/// A snapshot of a creation: all its steps as of now and the project, once it is registered.
+/// A snapshot of a creation: all its steps as of now.
 @freezed
 abstract class CreationRun with _$CreationRun {
   /// Creates a snapshot.
-  const factory CreationRun({
-    required List<CreationStep> steps,
-
-    /// The id of the project in the app's database; `null` until the project is registered.
-    int? projectId,
-  }) = _CreationRun;
+  const factory CreationRun({required List<CreationStep> steps}) = _CreationRun;
 }
 
 /// A creation whose steps ended with the step [kind] failed.

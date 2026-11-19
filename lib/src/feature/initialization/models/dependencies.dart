@@ -23,7 +23,9 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
@@ -119,6 +121,12 @@ class Dependencies {
 
   /// Creates new Flutter projects.
   late final IProjectCreationRepository projectCreationRepository;
+
+  /// Adds a folder to the projects; the creation controller adds a new project with it.
+  late final IProjectOpeningRepository projectOpeningRepository;
+
+  /// Whether agents may run a project's settings; the creation controller trusts a new project.
+  late final IProjectTrustRepository projectTrustRepository;
 
   /// The bearer tokens that tie agents' requests to the app's MCP server to their chats.
   late final AppMcpTokens appMcpTokens;

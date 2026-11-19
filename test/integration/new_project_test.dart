@@ -10,10 +10,6 @@ import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repo
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
-import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_rules/models/project_rule.dart';
-import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -43,11 +39,10 @@ void main() {
 
       final repository = ProjectCreationRepositoryImpl(
         database: database,
-        flutterSdk: sdk,
+        flutter: () async => flutter,
         environment: environment,
-        projectOpening: ProjectOpeningRepositoryImpl(database: database),
-        projectTrust: ProjectTrustRepositoryImpl(database: database),
-        projectRules: _NoRules(),
+        // No built-in rules: the skeleton is what this test checks.
+        writeRules: (_) async => const <String>[],
         loadAsset: (key) => io.File(key).readAsString(),
       );
       addTearDown(repository.dispose);
@@ -79,7 +74,6 @@ void main() {
         everyElement(CreationStepStatus.done),
         reason: report(),
       );
-      expect(last.projectId, isNotNull);
       // ignore: avoid_print
       print(report());
 
@@ -106,20 +100,3 @@ void main() {
   );
 }
 
-/// No built-in rules: the skeleton is what this test checks.
-final class _NoRules implements IProjectRulesRepository {
-  @override
-  Future<bool> hasRules(String projectRoot) async => false;
-
-  @override
-  Future<bool> canHaveRules(String projectRoot) async => true;
-
-  @override
-  Future<List<ProjectRule>> builtinRules() async => const <ProjectRule>[];
-
-  @override
-  Future<void> write(String projectRoot, List<ProjectRule> rules) async {}
-
-  @override
-  Future<void> markOffered(int projectId) async {}
-}

@@ -21,21 +21,19 @@ abstract interface class IProjectCreationRepository {
 
   /// Creates the project of [request]. Emits the snapshot of the run whenever a step changes
   /// (output lines included) and closes after the last step; a step that fails ends the run, the
-  /// later ones stay pending. Once the steps are over, if `flutter create` is done, the project is
-  /// added and trusted and a last snapshot carries its `projectId`; a failure to add it is an error
-  /// of the stream.
+  /// later ones stay pending. It does not add the project to the app: the controller does.
   ///
   /// Cancelling the subscription kills the running command and closes the stream: no snapshot is
-  /// emitted after that and the project is not added.
+  /// emitted after that.
   Stream<CreationRun> create(NewProjectRequest request);
 
   /// Kills the command that is running now. That step fails with the last output line `Stopped`,
-  /// no later step runs, and the stream of [create] ends as a failure (the project is still added
-  /// if `flutter create` is done). Never throws.
+  /// no later step runs, and the stream of [create] ends normally with that step failed. Never
+  /// throws.
   Future<void> stop();
 
   /// Stops the command that is running and closes the stream of a run in progress with a normal
-  /// done: no step is marked failed and nothing is added. Listeners must not read that as success;
+  /// done: no step is marked failed. Listeners must not read that as success;
   /// the controller treats a run without every step done as interrupted. Releases the repository.
   /// Never throws.
   Future<void> dispose();

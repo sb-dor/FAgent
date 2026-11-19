@@ -13,13 +13,14 @@ import '../../support/memory_skills_repository.dart';
 void main() {
   late Directory project;
   late _RecordingProjects projects;
+  late MemorySkillsRepository skills;
   late ProjectRulesRepositoryImpl repository;
 
   setUp(() async {
     project = Directory.systemTemp.createTempSync('project_rules');
     addTearDown(() => project.deleteSync(recursive: true));
     projects = _RecordingProjects();
-    final skills = MemorySkillsRepository(
+    skills = MemorySkillsRepository(
       items: [
         memoryRule('architecture', description: 'Layout and layers.'),
         memoryRule('widgets', description: 'Widget conventions.'),
@@ -68,6 +69,27 @@ void main() {
       expect(read('CLAUDE.md'), '# Ours\n\n@AGENTS.md\n');
     },
   );
+
+  test(
+    'writeBuiltinRules writes the enabled built-in rules only and returns their names',
+    () async {
+      final written = await repository.writeBuiltinRules(project.path);
+
+      expect(written, <String>['architecture']);
+      expect(read('docs/rules/architecture.md'), '# Arch\n');
+      expect(File(p.join(project.path, 'docs/rules/widgets.md')).existsSync(), isFalse);
+      expect(File(p.join(project.path, 'docs/rules/style.md')).existsSync(), isFalse);
+      expect(read('AGENTS.md'), contains('- `docs/rules/architecture.md` — Layout and layers.'));
+    },
+  );
+
+  test('writeBuiltinRules without an enabled rule writes nothing', () async {
+    await skills.setEnabled('rule:builtin:architecture', enabled: false);
+
+    expect(await repository.writeBuiltinRules(project.path), isEmpty);
+    expect(Directory(p.join(project.path, 'docs')).existsSync(), isFalse);
+    expect(File(p.join(project.path, 'AGENTS.md')).existsSync(), isFalse);
+  });
 
   test('hasRules is true once docs/rules exists', () async {
     expect(await repository.hasRules(project.path), isFalse);

@@ -169,7 +169,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     projectOpeningController = ProjectOpeningController(
       repository: ProjectOpeningRepositoryImpl(database: dependencies.database),
     )..addListener(_onProjectOpened);
-    projectCreation = ProjectCreationController(repository: dependencies.projectCreationRepository);
+    projectCreation = ProjectCreationController(
+      repository: dependencies.projectCreationRepository,
+      projectOpening: dependencies.projectOpeningRepository,
+      projectTrust: dependencies.projectTrustRepository,
+      projectRules: dependencies.projectRulesRepository,
+    );
     sessionsController = SessionsController(
       repository: SessionsRepositoryImpl(
         database: dependencies.database,

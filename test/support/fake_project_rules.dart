@@ -57,5 +57,15 @@ final class FakeProjectRules implements IProjectRulesRepository {
   }
 
   @override
+  Future<List<String>> writeBuiltinRules(String projectPath) async {
+    final enabled = <ProjectRule>[
+      for (final rule in rules)
+        if (rule.enabled) rule,
+    ];
+    await write(projectPath, enabled);
+    return <String>[for (final rule in enabled) rule.name];
+  }
+
+  @override
   Future<void> markOffered(int projectId) async => offered.add(projectId);
 }

@@ -50,7 +50,8 @@ abstract interface class IAppCloseRepository {
 
 /// window_manager-backed [IAppCloseRepository].
 final class AppCloseRepositoryImpl implements IAppCloseRepository {
-  /// Creates the repository.
+  /// Creates the repository. It takes the other repositories only for quitting (the ask-before-quit
+  /// setting, the busy chats, then releasing each one): shutdown plumbing, not feature logic.
   AppCloseRepositoryImpl({
     required this._hub,
     required this._database,

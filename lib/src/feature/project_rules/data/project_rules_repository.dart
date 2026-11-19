@@ -26,13 +26,20 @@ abstract interface class IProjectRulesRepository {
   /// Throws [FileSystemException] when the folder is gone or a file cannot be written.
   Future<void> write(String projectRoot, List<ProjectRule> rules);
 
+  /// Writes the enabled [builtinRules] into the project in [projectPath] as [write] does, and
+  /// returns their names; with none enabled it writes nothing and returns an empty list.
+  ///
+  /// Throws [FileSystemException] as [write] does.
+  Future<List<String>> writeBuiltinRules(String projectPath);
+
   /// Remembers that the rules were offered to project [projectId].
   Future<void> markOffered(int projectId);
 }
 
 /// [IProjectRulesRepository] on the skills library (the rules' texts) and the projects table.
 final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
-  /// Creates the repository.
+  /// Creates the repository. It takes the skills and projects repositories because the project
+  /// creation repository calls [writeBuiltinRules] as a plain function, with no controller between.
   ProjectRulesRepositoryImpl({required this._skills, required this._projects});
 
   final ISkillsRepository _skills;
@@ -93,6 +100,16 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
       if (staging.existsSync()) await staging.delete(recursive: true);
       rethrow;
     }
+  }
+
+  @override
+  Future<List<String>> writeBuiltinRules(String projectPath) async {
+    final rules = [
+      for (final rule in await builtinRules())
+        if (rule.enabled) rule,
+    ];
+    if (rules.isNotEmpty) await write(projectPath, rules);
+    return <String>[for (final rule in rules) rule.name];
   }
 
   /// Rewrites the file at [path] (`null` text when it does not exist) with [change].

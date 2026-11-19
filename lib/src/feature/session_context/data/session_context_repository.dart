@@ -89,6 +89,9 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
   ///
   /// [flutterExecutable] finds the `flutter` of a project root; by default
   /// [flutterExecutableFor] on the `PATH` of [environment].
+  ///
+  /// It takes the skills, chat skills and MCP servers repositories because the agent hub, not a
+  /// controller, asks it for a session's context, so there is no controller to combine them.
   SessionContextRepositoryImpl({
     required this._database,
     required this._appServer,

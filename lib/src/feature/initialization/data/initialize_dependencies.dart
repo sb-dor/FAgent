@@ -321,17 +321,19 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
       ),
   'Create permission rules repository': (dependencies) =>
       dependencies.permissionRulesRepository = PermissionRulesRepositoryImpl(),
-  // After the Flutter SDK repository and the shell environment: it runs `flutter` and `git`.
+  // After the shell environment and the project rules repository: it runs `flutter` and `git` and
+  // writes the rules.
   'Create project creation repository': (dependencies) =>
       dependencies.projectCreationRepository = ProjectCreationRepositoryImpl(
         database: dependencies.database,
-        flutterSdk: dependencies.flutterSdkRepository,
+        flutter: () async => flutterExecutableFor(null, which: dependencies.shellEnvironment.which),
         environment: dependencies.shellEnvironment,
-        projectOpening: ProjectOpeningRepositoryImpl(database: dependencies.database),
-        projectTrust: ProjectTrustRepositoryImpl(database: dependencies.database),
-        projectRules: dependencies.projectRulesRepository,
+        writeRules: dependencies.projectRulesRepository.writeBuiltinRules,
         loadAsset: rootBundle.loadString,
       ),
+  'Create project opening and trust repositories': (dependencies) => dependencies
+    ..projectOpeningRepository = ProjectOpeningRepositoryImpl(database: dependencies.database)
+    ..projectTrustRepository = ProjectTrustRepositoryImpl(database: dependencies.database),
 };
 
 /// What the steps above open, keyed by the exact step name. Steps that open nothing have none.

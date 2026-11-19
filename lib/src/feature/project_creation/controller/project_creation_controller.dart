@@ -4,6 +4,9 @@ import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
+import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'project_creation_controller.freezed.dart';
@@ -40,16 +43,25 @@ sealed class ProjectCreationState with _$ProjectCreationState {
 
 /// Creates a new Flutter project, one at a time.
 ///
+/// Once the creation's steps are over and `flutter create` is done (even if a later step failed or
+/// was stopped), it adds the project to the app, trusts it and marks its rules as offered.
+///
 /// It lives as long as the window, so closing the dialog does not stop a creation. A start during
 /// another creation, or before [reset] of a finished one, is dropped.
 final class ProjectCreationController extends StateController<ProjectCreationState>
     with DroppableControllerHandler {
   ProjectCreationController({
     required this._repository,
+    required this._projectOpening,
+    required this._projectTrust,
+    required this._projectRules,
     super.initialState = const ProjectCreationState.idle(),
   });
 
   final IProjectCreationRepository _repository;
+  final IProjectOpeningRepository _projectOpening;
+  final IProjectTrustRepository _projectTrust;
+  final IProjectRulesRepository _projectRules;
 
   StreamSubscription<CreationRun>? _subscription;
   Completer<void>? _finished;
@@ -76,7 +88,6 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
         .listen(
           (snapshot) {
             steps = snapshot.steps;
-            projectId = snapshot.projectId ?? projectId;
             if (!isDisposed) {
               final current = state;
               setState(
@@ -110,6 +121,26 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
             : (steps.every((step) => step.status == CreationStepStatus.done)
                   ? null
                   : const CreationInterrupted()));
+    // The project is there once `flutter create` is done, even if a later step failed or was
+    // stopped. An interrupted run (the repository disposed) adds nothing.
+    if (error is! CreationInterrupted &&
+        failure == null &&
+        steps.first.status == CreationStepStatus.done) {
+      try {
+        final project = await _projectOpening.open(request.path);
+        if (isDisposed) return;
+        await _projectTrust.trust(project.id);
+        // It has the rules (or the user turned them all off): the app does not offer them again.
+        await _projectRules.markOffered(project.id);
+        projectId = project.id;
+      } on Object catch (addError) {
+        if (!isDisposed) {
+          setState(ProjectCreationState.failed(request: request, steps: steps, error: addError));
+        }
+        rethrow;
+      }
+      if (isDisposed) return;
+    }
     setState(
       error == null
           ? ProjectCreationState.completed(request: request, steps: steps, projectId: projectId)

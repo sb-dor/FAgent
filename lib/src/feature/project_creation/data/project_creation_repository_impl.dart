@@ -6,14 +6,10 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
-import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
@@ -30,28 +26,27 @@ const String _stoppedLine = 'Stopped';
 /// Runs `flutter create`, `git` and `flutter pub` for a new project and writes the architecture
 /// skeleton itself, one command at a time, each in its own process group.
 final class ProjectCreationRepositoryImpl implements IProjectCreationRepository {
-  /// Creates the repository. [loadAsset] reads a file of the app's assets (`rootBundle.loadString`
-  /// in the app); [startProcess] starts the commands; [home] defaults to `$HOME`; [now] gives the
-  /// date of the first `CHANGELOG.md` entry.
+  /// Creates the repository. [flutter] gives the `flutter` executable of the SDK the form shows
+  /// (`null` when there is none); [writeRules] writes the enabled built-in rules into a project
+  /// folder and returns their names; [loadAsset] reads a file of the app's assets
+  /// (`rootBundle.loadString` in the app); [startProcess] starts the commands; [home] defaults to
+  /// `$HOME`; [now] gives the date of the first `CHANGELOG.md` entry.
   ProjectCreationRepositoryImpl({
     required this._database,
-    required this._flutterSdk,
+    required Future<String?> Function() flutter,
     required this._environment,
-    required this._projectOpening,
-    required this._projectTrust,
-    required this._projectRules,
+    required this._writeRules,
     required this._loadAsset,
     this._startProcess = startGroupedDaemonProcess,
     this._now = DateTime.now,
     String? home,
-  }) : _home = home ?? Platform.environment['HOME'] ?? p.separator;
+  }) : _flutterPath = flutter,
+       _home = home ?? Platform.environment['HOME'] ?? p.separator;
 
   final AppDatabase _database;
-  final IFlutterSdkRepository _flutterSdk;
+  final Future<String?> Function() _flutterPath;
   final ShellEnvironment _environment;
-  final IProjectOpeningRepository _projectOpening;
-  final IProjectTrustRepository _projectTrust;
-  final IProjectRulesRepository _projectRules;
+  final Future<List<String>> Function(String projectPath) _writeRules;
   final Future<String> Function(String key) _loadAsset;
   final DaemonProcessStarter _startProcess;
   final DateTime Function() _now;
@@ -138,8 +133,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     }
   }
 
-  /// Runs the steps of [run] in order, until one fails, then adds the project if `flutter create`
-  /// is done.
+  /// Runs the steps of [run] in order, until one fails.
   Future<void> _execute(_Run run) async {
     run.emit();
     for (var index = 0; index < run.steps.length; index++) {
@@ -174,13 +168,6 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         break;
       }
     }
-    if (run.cancelled || run.steps.first.status != CreationStepStatus.done) return;
-    final project = await _projectOpening.open(run.request.path);
-    if (run.cancelled) return;
-    await _projectTrust.trust(project.id);
-    // It has the rules (or the user turned them all off): the app does not offer them again.
-    await _projectRules.markOffered(project.id);
-    run.emit(projectId: project.id);
   }
 
   Future<void> _runStep(_Run run, int index) async {
@@ -238,13 +225,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           'analyze',
         ], workingDirectory: path);
       case CreationStepKind.rules:
-        final rules = [
-          for (final rule in await _projectRules.builtinRules())
-            if (rule.enabled) rule,
-        ];
-        if (rules.isNotEmpty) await _projectRules.write(path, rules);
-        for (final rule in rules) {
-          run.addLine(index, '✎ docs/rules/${rule.name}.md');
+        for (final name in await _writeRules(path)) {
+          run.addLine(index, '✎ docs/rules/$name.md');
         }
       case CreationStepKind.firstCommit:
         final git = _git();
@@ -258,8 +240,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   }
 
   /// The `flutter` of the SDK the form shows, looked up once per creation.
-  Future<String> _flutter(_Run run) async => run.flutter ??=
-      (await _flutterSdk.pathFor(null)) ?? (throw const _StepFailure('Flutter SDK not found'));
+  Future<String> _flutter(_Run run) async =>
+      run.flutter ??= (await _flutterPath()) ?? (throw const _StepFailure('Flutter SDK not found'));
 
   /// The `dart` next to [flutter] in the SDK's `bin` folder.
   String _dart(String flutter) =>
@@ -383,9 +365,9 @@ final class _Run {
     if (stopped) throw const _StepFailure(_stoppedLine);
   }
 
-  void emit({int? projectId}) {
+  void emit() {
     if (cancelled || controller.isClosed) return;
-    controller.add(CreationRun(steps: steps, projectId: projectId));
+    controller.add(CreationRun(steps: steps));
   }
 
   void update(int index, CreationStep Function(CreationStep step) change) {

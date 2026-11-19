@@ -32,9 +32,8 @@ List<String> _stepOutput(CreationStepKind kind, String name) => switch (kind) {
 ///
 /// [existing] are the full paths [checkTarget] reports as taken. [create] plays a made-up run
 /// (first all pending, then each step of [creationStepsFor] with its output and duration) and
-/// records the request in [requests]. Every snapshot after the first carries
-/// [completedProjectId]; with [failAt] set, that step fails and the run ends there. [stop] only
-/// counts in [stopCalls].
+/// records the request in [requests]. With [failAt] set, that step fails and the run ends there.
+/// [stop] only counts in [stopCalls].
 final class MemoryProjectCreationRepository implements IProjectCreationRepository {
   /// Creates the repository.
   MemoryProjectCreationRepository({
@@ -50,9 +49,6 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
   final Duration step;
 
   final Set<String> _existing;
-
-  /// The project id every snapshot of [create] carries after the first.
-  int? completedProjectId = 1;
 
   /// The step that fails; the run ends with it. `null` for a run that succeeds.
   CreationStepKind? failAt;
@@ -90,7 +86,7 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
         final snapshots = <CreationRun>[];
         void change(int index, CreationStep Function(CreationStep) apply) {
           steps = List<CreationStep>.of(steps)..[index] = apply(steps[index]);
-          snapshots.add(CreationRun(steps: steps, projectId: completedProjectId));
+          snapshots.add(CreationRun(steps: steps));
         }
 
         for (var i = 0; i < kinds.length; i++) {

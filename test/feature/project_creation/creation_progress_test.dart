@@ -386,9 +386,7 @@ void main() {
 
   testWidgets('failed without project offers only close', (tester) async {
     await pumpWindow(tester);
-    memory
-      ..failAt = CreationStepKind.flutterCreate
-      ..completedProjectId = null;
+    memory.failAt = CreationStepKind.flutterCreate;
     await startCreation(tester);
     await _elapse(tester, const Duration(seconds: 3));
 

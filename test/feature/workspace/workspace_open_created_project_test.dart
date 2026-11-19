@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widge
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_project_creation_repository.dart';
+import '../../support/memory_project_opening_repository.dart';
 import '../../support/test_app.dart';
 
 const _step = Duration(milliseconds: 10);
@@ -18,6 +19,7 @@ void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
   late Dependencies dependencies;
   late MemoryProjectCreationRepository memory;
+  late MemoryProjectOpeningRepository opening;
   late int otherProjectId;
   late int createdProjectId;
 
@@ -35,20 +37,25 @@ void main() {
   Future<void> pumpShell(WidgetTester tester) async {
     useDesktopView(tester);
     memory = MemoryProjectCreationRepository(step: _step);
-    dependencies = testDependencies(projectCreationRepository: memory);
+    opening = MemoryProjectOpeningRepository();
+    dependencies = testDependencies(
+      projectCreationRepository: memory,
+      projectOpeningRepository: opening,
+    );
     await tester.runAsync(() async {
       final database = dependencies.database;
       otherProjectId = await database
           .into(database.projectsTable)
           .insert(ProjectsTableCompanion.insert(path: '/other', name: 'other'));
-      // The creation adds its project itself; the test stands in for that.
+      // The controller adds the created project through the opening repository; the test stands in
+      // for the row it writes.
       createdProjectId = await database
           .into(database.projectsTable)
           .insert(
             ProjectsTableCompanion.insert(path: '/work/avera_booking', name: 'avera_booking'),
           );
     });
-    memory.completedProjectId = createdProjectId;
+    opening.projectId = createdProjectId;
     await tester.pumpWidget(
       testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
     );

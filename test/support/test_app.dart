@@ -30,7 +30,9 @@ import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
@@ -45,6 +47,8 @@ import 'memory_dart_analysis_repository.dart';
 import 'memory_devices_repository.dart';
 import 'memory_permission_rules_repository.dart';
 import 'memory_project_creation_repository.dart';
+import 'memory_project_opening_repository.dart';
+import 'memory_project_trust_repository.dart';
 import 'memory_run_config_repository.dart';
 import 'memory_skills_repository.dart';
 import 'scripted_app_run_repository.dart';
@@ -68,7 +72,9 @@ import 'scripted_widget_picker_repository.dart';
 /// [permissionRulesRepository]. The Flutter SDK repository is the fake one with a `flutter` on
 /// `PATH` and no delay unless the test passes its own [flutterSdkRepository]. The project creation
 /// repository is a [MemoryProjectCreationRepository] unless the test passes its own
-/// [projectCreationRepository]. The app's MCP server is a real one that is never started unless the
+/// [projectCreationRepository]; a created project is added through a
+/// [MemoryProjectOpeningRepository] (id 1) and trusted through a [MemoryProjectTrustRepository]
+/// unless the test passes its own [projectOpeningRepository] or [projectTrustRepository]. The app's MCP server is a real one that is never started unless the
 /// test passes its own [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
 /// that fails every server unless the test passes its own [mcpProbe]. Nothing is ever dropped on
 /// the window unless the test passes its own [dropZone] (`DropZone.fromStream` of a controller).
@@ -90,6 +96,8 @@ Dependencies testDependencies({
   IPermissionRulesRepository? permissionRulesRepository,
   IFlutterSdkRepository? flutterSdkRepository,
   IProjectCreationRepository? projectCreationRepository,
+  IProjectOpeningRepository? projectOpeningRepository,
+  IProjectTrustRepository? projectTrustRepository,
   IAppMcpServer? appMcpServer,
   IMcpProbe? mcpProbe,
   DropZone? dropZone,
@@ -148,6 +156,8 @@ Dependencies testDependencies({
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()
     ..projectCreationRepository = projectCreationRepository ?? MemoryProjectCreationRepository()
+    ..projectOpeningRepository = projectOpeningRepository ?? MemoryProjectOpeningRepository()
+    ..projectTrustRepository = projectTrustRepository ?? MemoryProjectTrustRepository()
     ..appMcpTokens = appMcpTokens
     ..appMcpServer = appServer
     ..flutterSdkRepository = sdkRepository
