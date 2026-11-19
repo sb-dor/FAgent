@@ -66,6 +66,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     this._unsavedFiles,
     this._stopAgentList,
     this._stopCodeViews,
+    this._stopMcpServers,
   });
 
   final AgentHub _hub;
@@ -88,6 +89,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
 
   /// Closes the Code views, which stops their Dart analysis servers.
   final Future<void> Function()? _stopCodeViews;
+
+  /// Closes the change stream of the MCP servers repository; called before the probes stop.
+  final Future<void> Function()? _stopMcpServers;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -153,6 +157,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     await _hub.dispose();
     // After the agents, so none of them is cut off mid-call; before the database its tools read.
     await _stopQuietly('app MCP server', _appMcpServer.close);
+    if (_stopMcpServers case final stop?) await _stopQuietly('MCP servers', stop);
     // The status probes of Settings run user servers (`npx` and the like) in their own process
     // groups, which would outlive the app.
     await _stopQuietly('MCP probes', _mcpProbe.dispose);

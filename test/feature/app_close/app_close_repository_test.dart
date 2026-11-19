@@ -287,6 +287,28 @@ void main() {
       await expectLater(database.select(database.projectsTable).get(), throwsA(anything));
     });
 
+    test('stops the MCP servers repository before the probes', () async {
+      repository = AppCloseRepositoryImpl(
+        hub: hub,
+        database: database,
+        settings: AppSettingsRepositoryImpl(database: database),
+        appRun: run,
+        devices: devices,
+        widgetPicker: picker,
+        appMcpServer: _RecordingAppMcpServer(events, database),
+        mcpProbe: _RecordingProbe(events, database),
+        agentProbe: _RecordingAgentProbe(events, database),
+        projectCreation: _RecordingCreation(creationEvents),
+        stopMcpServers: () async => events.add('mcp-servers:stop'),
+        queuedChats: queued,
+      );
+
+      await repository.shutdown();
+
+      expect(events.indexOf('mcp-servers:stop'), isNonNegative);
+      expect(events.indexOf('mcp-servers:stop'), lessThan(events.indexOf('probe:dispose')));
+    });
+
     test('stops following the agent list before the agents stop', () async {
       hub.notices.listen(null, onDone: () => events.add('hub:disposed'));
       repository = AppCloseRepositoryImpl(

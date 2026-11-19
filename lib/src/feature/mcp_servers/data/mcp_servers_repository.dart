@@ -23,6 +23,9 @@ abstract interface class IMcpServersRepository {
   /// Dart MCP and the user's servers show `unknown` until [check] has probed them.
   Stream<List<McpServer>> watchServers();
 
+  /// Ends every [watchServers] stream. Call it once, when the app closes.
+  Future<void> dispose();
+
   /// Connects to Dart MCP and the user's servers that are switched on everywhere, or only to [id]
   /// when it is one of them, and keeps what it found in memory for [watchServers].
   ///
@@ -98,6 +101,15 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
   bool _sdkLookedUp = false;
   String? _dartSdkRoot;
 
+  void _notifyChanged() {
+    if (!_changed.isClosed) _changed.add(null);
+  }
+
+  @override
+  Future<void> dispose() async {
+    if (!_changed.isClosed) await _changed.close();
+  }
+
   @override
   Stream<List<McpServer>> watchServers() {
     final controller = StreamController<List<McpServer>>();
@@ -107,6 +119,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
     List<McpServerRow>? rows;
     List<McpServerStateRow>? states;
     List<McpServer>? emitted;
+    var closedByDispose = false;
 
     void emit() {
       final currentRows = rows;
@@ -137,13 +150,20 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
           states = value;
           emit();
         }, onError: fail);
-        changesSubscription = _changed.stream.listen((_) => emit());
+        changesSubscription = _changed.stream.listen(
+          (_) => emit(),
+          onDone: () {
+            // Closing the controller cancels it; the cancel must not wait for this close.
+            closedByDispose = true;
+            if (!controller.isClosed) controller.close().ignore();
+          },
+        );
       }
       ..onCancel = () async {
         await rowsSubscription?.cancel();
         await statesSubscription?.cancel();
         await changesSubscription?.cancel();
-        await controller.close();
+        if (!closedByDispose) await controller.close();
       };
     return controller.stream;
   }
@@ -236,7 +256,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
       _sdkLookedUp = true;
       _dartSdkRoot = root;
       if (root == null) _results.remove(_dartKey);
-      _changed.add(null);
+      _notifyChanged();
     }
     if (root == null) return;
     final (:command, :args) = dartMcpCommand(root);
@@ -260,7 +280,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
     } finally {
       _probing.remove(server.id);
     }
-    _changed.add(null);
+    _notifyChanged();
   })();
 
   McpServer _fromRow(McpServerRow row, Set<int> disabledIn) {

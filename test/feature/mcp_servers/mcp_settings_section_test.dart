@@ -63,6 +63,9 @@ final class _StubServers implements IMcpServersRepository {
   final List<String> importedPaths = <String>[];
 
   @override
+  Future<void> dispose() async {}
+
+  @override
   Stream<List<McpServer>> watchServers() =>
       servers != null ? Stream<List<McpServer>>.value(servers!) : _inner.watchServers();
 

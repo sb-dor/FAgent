@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -414,5 +415,17 @@ void main() {
     await repository.add(stdio('b'));
     await pumpEventQueue();
     expect(seen.length, count);
+  });
+
+  test('dispose closes the watchers and does not break a probe that finishes later', () async {
+    final done = Completer<void>();
+    final subscription = repository.watchServers().listen((_) {}, onDone: done.complete);
+    await pumpEventQueue();
+
+    await repository.dispose();
+
+    await done.future.timeout(const Duration(seconds: 2));
+    await subscription.cancel();
+    await repository.dispose();
   });
 }

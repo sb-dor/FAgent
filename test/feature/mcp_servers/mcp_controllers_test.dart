@@ -17,6 +17,9 @@ final class _Repository implements IMcpServersRepository {
   Future<void> close() => servers.close();
 
   @override
+  Future<void> dispose() async {}
+
+  @override
   Stream<List<McpServer>> watchServers() => servers.stream;
 
   @override

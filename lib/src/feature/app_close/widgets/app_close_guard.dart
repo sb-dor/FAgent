@@ -50,6 +50,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             unsavedFiles: dependencies.codeViews,
             stopCodeViews: dependencies.codeViews.close,
             stopAgentList: dependencies.stopFollowingCustomAgents,
+            stopMcpServers: dependencies.mcpServersRepository.dispose,
           ),
     )..watch();
   }

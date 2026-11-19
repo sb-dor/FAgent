@@ -346,5 +346,8 @@ final Map<String, InitializationCloser> _initializationClosers = <String, Initia
   'Create agents repository': (dependencies) => dependencies.agentProbe.dispose(),
   'Create code views': (dependencies) => dependencies.codeViews.close(),
   'App MCP server': (dependencies) => dependencies.appMcpServer.close(),
-  'Create MCP servers repository': (dependencies) => dependencies.mcpProbe.dispose(),
+  'Create MCP servers repository': (dependencies) async {
+    await dependencies.mcpServersRepository.dispose();
+    await dependencies.mcpProbe.dispose();
+  },
 };
