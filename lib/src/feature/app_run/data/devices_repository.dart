@@ -241,17 +241,18 @@ final class _DaemonSession {
   }
 
   Future<void> _loadAll() async {
-    final connection = _connection!;
+    final connection = _connection;
+    if (connection == null) return;
     await connection.request('device.enable');
-    final results = await Future.wait<Object?>(<Future<Object?>>[
+    final (devices, emulators) = await (
       connection.request('device.getDevices'),
       _loadEmulators(connection),
-    ]);
+    ).wait;
     _running.clear();
-    for (final device in _parseDevices(results[0])) {
+    for (final device in _parseDevices(devices)) {
       _running[device.id] = device;
     }
-    _emulators = results[1]! as List<_Emulator>;
+    _emulators = emulators;
     _publish();
   }
 
@@ -261,7 +262,9 @@ final class _DaemonSession {
       if (device != null) _running[device.id] = device;
     }
     if (removedId is String) _running.remove(removedId);
-    _emulators = await _loadEmulators(_connection!);
+    final connection = _connection;
+    if (connection == null) return;
+    _emulators = await _loadEmulators(connection);
     if (!_stopped) _publish();
   }
 
@@ -339,14 +342,17 @@ final class _DaemonSession {
     if (result is! List<Object?>) return const <_Emulator>[];
     return <_Emulator>[
       for (final entry in result)
-        if (entry is Map<String, Object?> &&
-            entry['id'] is String &&
-            _platform(entry['platformType']) != null)
-          (
-            id: entry['id']! as String,
-            name: entry['name'] is String ? entry['name']! as String : entry['id']! as String,
-            platform: _platform(entry['platformType'])!,
-          ),
+        if (entry is Map<String, Object?>)
+          if (entry['id'] case final String id)
+            if (_platform(entry['platformType']) case final DevicePlatform platform)
+              (
+                id: id,
+                name: switch (entry['name']) {
+                  final String name => name,
+                  _ => id,
+                },
+                platform: platform,
+              ),
     ];
   }
 }

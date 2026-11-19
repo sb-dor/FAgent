@@ -248,12 +248,13 @@ abstract final class ChatTranscript {
       command: _string(rawInput?['command']),
       options: <PermissionOptionView>[
         for (final option in (_list(params['options']) ?? const <Object?>[]).map(_map))
-          if (option != null && _string(option['optionId']) != null)
-            PermissionOptionView(
-              optionId: _string(option['optionId'])!,
-              name: _string(option['name']) ?? _string(option['optionId'])!,
-              kind: _string(option['kind']) ?? 'allow_once',
-            ),
+          if (option != null)
+            if (_string(option['optionId']) case final String optionId)
+              PermissionOptionView(
+                optionId: optionId,
+                name: _string(option['name']) ?? optionId,
+                kind: _string(option['kind']) ?? 'allow_once',
+              ),
       ],
     );
   }
@@ -262,12 +263,13 @@ abstract final class ChatTranscript {
     for (final block in (_list(value) ?? const <Object?>[]).map(_map))
       if (block != null)
         ...switch (block['type']) {
-          'diff' when _string(block['path']) != null => <ToolContent>[
-            ToolDiffContent(
-              path: _string(block['path'])!,
-              oldText: _string(block['oldText']),
-              newText: _string(block['newText']) ?? '',
-            ),
+          'diff' => <ToolContent>[
+            if (_string(block['path']) case final String path)
+              ToolDiffContent(
+                path: path,
+                oldText: _string(block['oldText']),
+                newText: _string(block['newText']) ?? '',
+              ),
           ],
           'content' => <ToolContent>[
             if (_map(block['content']) case {'type': 'text', 'text': final String text})

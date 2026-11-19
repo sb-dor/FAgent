@@ -319,7 +319,8 @@ final class AgentHub {
       // ([retryPrompt] takes the text from the first block). A repeated prompt
       // has them already.
       final rules = live.firstMessageRules;
-      final blocks = live.lastPrompt!;
+      final blocks = live.lastPrompt;
+      if (blocks == null) throw const AgentStoppedException();
       if (rules != null && !blocks.any(isRulesResource)) {
         blocks.insert(text.isEmpty ? 0 : 1, rulesResource(rules));
       }
@@ -381,7 +382,8 @@ final class AgentHub {
         );
         return;
       }
-      final blocks = live.lastPrompt!;
+      final blocks = live.lastPrompt;
+      if (blocks == null) return;
       final request = PromptRequest.fromJson(<String, Object?>{
         'sessionId': live.acpSessionId,
         'prompt': <Map<String, Object?>>[for (final block in blocks) promptBlockForAgent(block)],
@@ -638,10 +640,10 @@ final class AgentHub {
   Future<void> _ensureReady(LiveSession live) async {
     if (live.status.value == SessionStatus.idle) return;
     final connection = await _start(live);
-    if (live.acpSessionId == null) {
-      await _create(live, connection);
+    if (live.acpSessionId case final acpId?) {
+      await _load(live, connection, acpId);
     } else {
-      await _load(live, connection);
+      await _create(live, connection);
     }
   }
 
@@ -867,14 +869,13 @@ final class AgentHub {
     },
   };
 
-  Future<void> _load(LiveSession live, AgentConnection connection) async {
+  Future<void> _load(LiveSession live, AgentConnection connection, String acpId) async {
     final slot = _registry[live.agentId];
     if (slot == null) {
       await _markRemoved(live);
       throw const AgentRemovedException();
     }
     _move(live, SessionStatus.loading);
-    final acpId = live.acpSessionId!;
     slot.byAcpId[acpId] = live;
     live.replaying = true;
     try {
@@ -945,10 +946,10 @@ final class AgentHub {
     if (!message.isNotification || acpId == null) return;
     final live = slot.byAcpId[acpId];
     if (live == null || _isTerminal(live)) return;
+    final method = message.method;
+    if (method == null) return;
     final update = _object(message.params?['update']);
-    final kind = message.method == 'session/update'
-        ? '${update?['sessionUpdate']}'
-        : message.method!;
+    final kind = method == 'session/update' ? '${update?['sessionUpdate']}' : method;
     // State updates apply even while load replays history.
     switch (kind) {
       case 'available_commands_update':
@@ -1007,9 +1008,10 @@ final class AgentHub {
       _notice(live, 'A permission request could not be saved and was declined: $error');
       // Controlled error: stop the turn instead of letting it go on unseen.
       final acpId = live.acpSessionId;
-      if (acpId != null && slot.connection?.isAlive == true) {
+      final connection = slot.connection;
+      if (acpId != null && connection != null && connection.isAlive) {
         unawaited(
-          slot.connection!.agent
+          connection.agent
               .cancelSession(CancelNotification(sessionId: SessionId(acpId)))
               .catchError((Object _) {}),
         );

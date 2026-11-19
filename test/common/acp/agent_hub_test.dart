@@ -744,6 +744,30 @@ void main() {
       expect(live.store.events.where((e) => e.kind == SessionEventKind.prompt), isEmpty);
     });
 
+    test(
+      'an agent that stops while the turn is prepared ends it without a null check error',
+      () async {
+        final gate = Completer<void>();
+        final hub = newHub(observers: <TurnObserver>[_GateObserver(gate.future)]);
+        final chat = await newChat();
+        final live = await hub.session(chat);
+
+        final turn = hub.prompt(chat, 'echo never');
+        await _until(live.status, (s) => s == SessionStatus.running);
+        await hub.dispose();
+        gate.complete();
+        Object? failure;
+        try {
+          await turn;
+        } on Object catch (error) {
+          failure = error;
+        }
+
+        expect(failure, isNot(isA<TypeError>()));
+        expect(live.store.events.where((e) => e.kind == SessionEventKind.prompt), isEmpty);
+      },
+    );
+
     test('a crashed agent leaves no processes behind', () async {
       final hub = newHub();
       final chat = await newChat();
