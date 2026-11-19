@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,6 +25,10 @@ void main() {
 
   test('a process that cannot start names the command', () {
     expect(errorText(lcl, const ProcessException('npx', <String>[])), contains('npx'));
+  });
+
+  test('a failed flutter doctor shows what it printed', () {
+    expect(errorText(lcl, const FlutterDoctorFailedException(1, 'no git')), contains('no git'));
   });
 
   test('a timeout has its own sentence', () {
@@ -50,6 +55,7 @@ void main() {
       const FileSystemException('Cannot open', '/p/a.txt', OSError('Permission denied', 13)),
       const ProcessException('npx', <String>[]),
       TimeoutException('x'),
+      const FlutterDoctorFailedException(1, 'x'),
       const FlutterNotFoundException(),
       const ChatBusyException(1),
       const ProjectBusyException(1),

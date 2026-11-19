@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
+import 'package:flutter_code_agent/src/common/process/run_process.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/doctor_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
@@ -21,12 +22,13 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   /// Creates the repository. [which] finds an executable on `PATH` by name; [environment] is the
   /// environment `flutter` runs in (the login shell's, since a GUI app does not inherit it);
   /// [runProcess] starts it; [versionTimeout] is how long [sdkFor] waits for the version, since a
-  /// cold or locked `flutter` can take long (or hang); [doctorTimeout] is how long [doctor] waits
-  /// for the report.
+  /// cold or locked `flutter` can take long (or hang); [runDoctor] runs `flutter doctor` and kills it
+  /// when [doctorTimeout] passes.
   FlutterSdkRepositoryImpl({
     required this._which,
     this._environment,
     this._runProcess = io.Process.run,
+    this._runDoctor = runProcessKillingOnTimeout,
     this.versionTimeout = const Duration(seconds: 10),
     this.doctorTimeout = const Duration(minutes: 2),
   });
@@ -34,11 +36,12 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   final String? Function(String name) _which;
   final Map<String, String>? _environment;
   final ProcessRunner _runProcess;
+  final TimedProcessRunner _runDoctor;
 
   /// How long [sdkFor] waits for `flutter --version`; the process itself is not killed.
   final Duration versionTimeout;
 
-  /// How long [doctor] waits for `flutter doctor`; the process itself is not killed.
+  /// How long [doctor] waits for `flutter doctor`; a process that runs longer is killed.
   final Duration doctorTimeout;
 
   @override
@@ -57,14 +60,26 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   Future<String?> pathFor(String? projectPath) async =>
       flutterExecutableFor(projectPath, which: _which);
 
-  /// `flutter doctor` exits with 1 when it finds a problem, so the exit code is not looked at: the
-  /// report is. A process that cannot start, or a timeout, throws.
+  /// `flutter doctor` exits with 1 when it finds a problem, so a report with checks is returned
+  /// whatever the exit code. A failure that printed no check (a broken SDK) throws a
+  /// [FlutterDoctorFailedException]; a process that cannot start or a timeout throws too.
   @override
   Future<List<DoctorCheck>> doctor(String flutter) async {
-    final result = await _runProcess(flutter, const <String>[
-      'doctor',
-    ], environment: _environment).timeout(doctorTimeout);
-    return parseDoctorOutput('${result.stdout}');
+    final result = await _runDoctor(
+      flutter,
+      const <String>['doctor'],
+      environment: _environment,
+      timeout: doctorTimeout,
+    );
+    final checks = parseDoctorOutput('${result.stdout}');
+    if (checks.isEmpty && result.exitCode != 0) {
+      final stderr = '${result.stderr}'.trim();
+      throw FlutterDoctorFailedException(
+        result.exitCode,
+        stderr.isNotEmpty ? stderr : '${result.stdout}'.trim(),
+      );
+    }
+    return checks;
   }
 
   /// The version and channel `flutter --version --machine` reports; `null` (and one log line)

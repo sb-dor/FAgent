@@ -24,6 +24,22 @@ abstract class FlutterSdk with _$FlutterSdk {
   }) = _FlutterSdk;
 }
 
+/// `flutter doctor` failed without a report: it exited with [exitCode] and printed [output]
+/// (stderr, else stdout) instead of checks.
+class FlutterDoctorFailedException implements Exception {
+  /// Creates the exception.
+  const FlutterDoctorFailedException(this.exitCode, this.output);
+
+  /// The exit code of `flutter doctor`.
+  final int exitCode;
+
+  /// What `flutter doctor` printed.
+  final String output;
+
+  @override
+  String toString() => 'FlutterDoctorFailedException($exitCode): $output';
+}
+
 /// The verdict of one `flutter doctor` check.
 enum DoctorStatus {
   /// Nothing to do.

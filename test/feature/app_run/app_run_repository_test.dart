@@ -580,7 +580,7 @@ void main() {
       expect(
         failure.error,
         const RunError(
-          kind: RunErrorKind.other,
+          kind: RunErrorKind.hotReloadFailed,
           title: 'Hot reload failed',
           message: 'Reload rejected',
         ),
@@ -623,7 +623,11 @@ void main() {
       expect(seen.last, isA<RunRunning>());
       expect(
         log.last.error,
-        const RunError(kind: RunErrorKind.other, title: 'Hot reload failed', message: 'timed out'),
+        const RunError(
+          kind: RunErrorKind.hotReloadFailed,
+          title: 'Hot reload failed',
+          message: 'timed out',
+        ),
       );
       expect(log.last.text, 'Hot reload failed: timed out');
     });

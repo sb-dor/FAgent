@@ -365,6 +365,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     final run = _runs[projectId];
     final launch = run?.launch;
     if (run == null || launch == null || run.state is! RunRunning) return Duration.zero;
+    final kind = full ? RunErrorKind.hotRestartFailed : RunErrorKind.hotReloadFailed;
     final title = full ? 'Hot restart failed' : 'Hot reload failed';
     final stopwatch = Stopwatch()..start();
     String message;
@@ -385,7 +386,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       l.w('AppRunRepository | ${full ? 'hot restart' : 'hot reload'} of $projectId failed: $error');
       message = '$error';
     }
-    _logFailure(run, launch, RunErrorKind.other, title, message);
+    _logFailure(run, launch, kind, title, message);
     return Duration.zero;
   }
 
@@ -429,10 +430,10 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       final bytes = await launch.screenshot();
       return await saveScreenshotPng(root, bytes, name: 'screenshot-${_stamp(_now())}');
     } on DaemonRequestException catch (error) {
-      _logFailure(run, launch, RunErrorKind.other, title, '${error.error}');
+      _logFailure(run, launch, RunErrorKind.screenshotFailed, title, '${error.error}');
     } on Object catch (error, stackTrace) {
       l.w('AppRunRepository | screenshot of $projectId failed: $error', stackTrace);
-      _logFailure(run, launch, RunErrorKind.other, title, '$error');
+      _logFailure(run, launch, RunErrorKind.screenshotFailed, title, '$error');
     }
     return null;
   }

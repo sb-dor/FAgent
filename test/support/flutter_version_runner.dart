@@ -15,12 +15,18 @@ Doctor summary (to see all details, run flutter doctor -v):
 ''';
 
 /// A `ProcessRunner` for `FlutterSdkRepositoryImpl` that answers `flutter --version --machine`
-/// with Flutter 3.27.1 on stable and `flutter doctor` with [flutterDoctorReport]; it starts no
-/// process.
+/// with Flutter 3.27.1 on stable; it starts no process.
 Future<io.ProcessResult> flutterVersionRunner(
   String executable,
   List<String> arguments, {
   Map<String, String>? environment,
-}) async => arguments.contains('doctor')
-    ? io.ProcessResult(1, 1, flutterDoctorReport, '')
-    : io.ProcessResult(1, 0, '{"frameworkVersion":"3.27.1","channel":"stable"}', '');
+}) async => io.ProcessResult(1, 0, '{"frameworkVersion":"3.27.1","channel":"stable"}', '');
+
+/// A `TimedProcessRunner` for `FlutterSdkRepositoryImpl.runDoctor` that answers `flutter doctor`
+/// with [flutterDoctorReport]; it starts no process.
+Future<io.ProcessResult> flutterDoctorRunner(
+  String executable,
+  List<String> arguments, {
+  Map<String, String>? environment,
+  Duration? timeout,
+}) async => io.ProcessResult(1, 1, flutterDoctorReport, '');

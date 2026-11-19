@@ -28,6 +28,15 @@ enum RunErrorKind {
   /// DevTools could not be opened.
   devToolsFailed,
 
+  /// A hot reload did not go through.
+  hotReloadFailed,
+
+  /// A hot restart did not go through.
+  hotRestartFailed,
+
+  /// A screenshot of the app could not be taken.
+  screenshotFailed,
+
   /// Anything else; its title comes from the app or the framework and is shown as it is.
   other,
 }

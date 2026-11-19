@@ -52,7 +52,11 @@ String _composerText(WidgetTester tester) =>
     tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text;
 
 FlutterSdkRepositoryImpl _fake({String? path = '/opt/flutter/bin/flutter'}) =>
-    FlutterSdkRepositoryImpl(which: (_) => path, runProcess: flutterVersionRunner);
+    FlutterSdkRepositoryImpl(
+      which: (_) => path,
+      runProcess: flutterVersionRunner,
+      runDoctor: flutterDoctorRunner,
+    );
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;

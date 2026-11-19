@@ -14,5 +14,8 @@ String runErrorTitle(GeneratedLocalization lcl, RunError error) => switch (error
   RunErrorKind.layoutOverflow => lcl.runErrorLayoutOverflow,
   RunErrorKind.exception => lcl.runErrorException,
   RunErrorKind.devToolsFailed => lcl.runErrorDevToolsFailed,
+  RunErrorKind.hotReloadFailed => lcl.runErrorHotReloadFailed,
+  RunErrorKind.hotRestartFailed => lcl.runErrorHotRestartFailed,
+  RunErrorKind.screenshotFailed => lcl.runErrorScreenshotFailed,
   RunErrorKind.other => error.title,
 };

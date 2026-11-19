@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 
@@ -20,6 +21,7 @@ String errorText(GeneratedLocalization lcl, Object? error, {bool debug = kDebugM
       ProcessException(:final executable) => lcl.errorProcess(executable),
       TimeoutException() => lcl.errorTimeout,
       FlutterNotFoundException() => lcl.errorFlutterNotFound,
+      FlutterDoctorFailedException(:final output) => lcl.errorFlutterDoctorFailed(output),
       ChatBusyException() => lcl.errorChatBusy,
       ProjectBusyException() => lcl.errorProjectBusy,
       _ => debug ? '$error' : lcl.errorUnknown,
