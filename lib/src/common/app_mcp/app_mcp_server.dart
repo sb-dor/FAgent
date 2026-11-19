@@ -12,7 +12,7 @@ const String appMcpServerName = 'flutter_code_agent';
 
 /// The server's `instructions` for the agent. Claude Code keeps only the first 2048 characters.
 const String appMcpInstructions =
-    'flutter_code_agent is the MCP server of Flutter Code Agent, the desktop app this chat runs '
+    'flutter_code_agent is the MCP server of FAgent, the desktop app this chat runs '
     'in. Its tools work on the project of this chat and on the app run shown in the Run tab.\n'
     '\n'
     'Skills: when a task may match a skill, call list_skills, then call load_skill with its name '

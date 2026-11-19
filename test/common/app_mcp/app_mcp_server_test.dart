@@ -316,5 +316,10 @@ void main() {
         expect(appMcpInstructions, contains(name));
       }
     });
+
+    test('names the app FAgent, not its old name', () {
+      expect(appMcpInstructions, contains('FAgent'));
+      expect(appMcpInstructions, isNot(contains('Flutter Code Agent')));
+    });
   });
 }
