@@ -280,7 +280,7 @@ final class _GroupedStdioTransport implements Transport {
   @override
   Future<void> start() async {
     _subscription = _process.stdout
-        .transform(utf8.decoder)
+        .transform(const Utf8Decoder(allowMalformed: true))
         .transform(const LineSplitter())
         .listen(
           (line) {
@@ -293,13 +293,18 @@ final class _GroupedStdioTransport implements Transport {
               // A line that is not a JSON-RPC message (a log line on stdout) is not an answer.
             }
           },
-          onDone: () {
-            if (!_closed) {
-              _closed = true;
-              onclose?.call();
-            }
+          onError: (Object error, StackTrace stackTrace) {
+            l.w('MCP | stdout of the server failed: $error', stackTrace);
+            _finish();
           },
+          onDone: _finish,
         );
+  }
+
+  void _finish() {
+    if (_closed) return;
+    _closed = true;
+    onclose?.call();
   }
 
   @override

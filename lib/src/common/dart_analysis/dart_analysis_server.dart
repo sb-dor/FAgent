@@ -99,8 +99,10 @@ final class DartAnalysisServer {
   static Object? _answerServer(String method, Object? params) => switch (method) {
     // One (empty: the defaults) settings object per asked item.
     'workspace/configuration' => <Object?>[
-      for (final _
-          in (params is Map ? params['items'] as List<Object?>? : null) ?? const <Object?>[])
+      for (final _ in switch (params) {
+        {'items': final List<Object?> items} => items,
+        _ => const <Object?>[],
+      })
         <String, Object?>{},
     ],
     _ => null,
@@ -161,18 +163,16 @@ final class DartAnalysisServer {
       final List<Object?> list => list,
       _ => const <Object?>[],
     };
-    return <DartCompletion>[
-      for (final item in items)
-        if (item is Map<String, Object?>) DartCompletion.fromJson(item),
-    ];
+    return <DartCompletion>[for (final item in items) ?DartCompletion.fromJson(item)];
   }
 
   /// [completion] with the parts the server sends only on demand (an `import` to add).
   Future<DartCompletion> resolve(DartCompletion completion) async {
     final result = await _connection.request('completionItem/resolve', completion.toJson());
-    return result is Map<String, Object?>
-        ? completion.withResolved(DartCompletion.fromJson(result))
-        : completion;
+    return switch (DartCompletion.fromJson(result)) {
+      final resolved? => completion.withResolved(resolved),
+      null => completion,
+    };
   }
 
   Map<String, Object?> _at(String path, LspPosition position) => <String, Object?>{
@@ -209,10 +209,9 @@ final class DartAnalysisServer {
       'options': <String, Object?>{'tabSize': 2, 'insertSpaces': true},
     }, timeout: timeout);
     if (result is! List) return null;
-    return <LspTextEdit>[
-      for (final edit in result)
-        if (edit is Map) LspTextEdit.fromJson(edit),
-    ];
+    final edits = <LspTextEdit>[for (final edit in result) ?LspTextEdit.fromJson(edit)];
+    // Part of a formatting applied would corrupt the file: a malformed edit means "cannot format".
+    return edits.length == result.length ? edits : null;
   }
 
   void _onNotification(LspNotification notification) {
@@ -223,8 +222,8 @@ final class DartAnalysisServer {
         if (uri == null || !uri.isScheme('file')) return;
         _diagnostics.add(
           DartFileDiagnostics(uri.toFilePath(), <DartDiagnostic>[
-            for (final entry in (params['diagnostics'] as List<Object?>?) ?? const <Object?>[])
-              if (entry is Map<String, Object?>) DartDiagnostic.fromJson(entry),
+            if (params['diagnostics'] case final List<Object?> entries)
+              for (final entry in entries) ?DartDiagnostic.fromJson(entry),
           ]),
         );
       case r'$/analyzerStatus' when params is Map:

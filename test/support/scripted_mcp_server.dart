@@ -4,6 +4,7 @@
 //   tools <n> [file] answer `initialize` and `tools/list` (n tools named tool1, tool2, …). With
 //                    <file> it also writes its pid there and starts a `sleep` child in its process
 //                    group (pid in <file>.child), so a test can tell whether the group was killed.
+//   junk <n>         like `tools <n>`, but first writes the invalid UTF-8 line [0xff, 0x0a] to stdout
 //   silent <file>    never answer. Writes its pid to <file> and the pid of a `sleep` child it
 //                    started in the same process group to <file>.child.
 //   stderr <text>    write <text> to stderr and exit with code 2
@@ -27,6 +28,10 @@ Future<void> main(List<String> arguments) async {
       );
       exit(2);
     default:
+      if (mode == 'junk') {
+        stdout.add(const <int>[0xff, 0x0a]);
+        await stdout.flush();
+      }
       final count = arguments.length > 1 ? int.parse(arguments[1]) : 0;
       if (arguments.length > 2) await _writePids(arguments[2]);
       await stdin.transform(utf8.decoder).transform(const LineSplitter()).forEach((line) {

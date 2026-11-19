@@ -47,6 +47,23 @@ void main() {
     );
   });
 
+  test('an error whose message and code are not text and int still gives an exception', () async {
+    process.onMessage = (process, message) => process.send(<String, Object?>{
+      'jsonrpc': '2.0',
+      'id': message['id'],
+      'error': <String, Object?>{'code': 'bad', 'message': 42},
+    });
+
+    await expectLater(
+      connection.request('nope', null),
+      throwsA(
+        isA<LspRequestException>()
+            .having((e) => e.code, 'code', 0)
+            .having((e) => e.message, 'message', '42'),
+      ),
+    );
+  });
+
   test('a request without an answer times out', () async {
     await expectLater(
       connection.request('slow', null, timeout: const Duration(milliseconds: 20)),

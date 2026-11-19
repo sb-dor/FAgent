@@ -12,25 +12,39 @@ sealed class ConfigOption {
   ];
 
   static ConfigOption _parse(String id, Map<String, Object?> option) {
-    final name = option['name'] is String ? option['name']! as String : id;
-    final description = option['description'] is String ? option['description']! as String : null;
+    final name = switch (option['name']) {
+      final String name => name,
+      _ => id,
+    };
+    final description = switch (option['description']) {
+      final String description => description,
+      _ => null,
+    };
     return switch (option['type']) {
       'select' => SelectConfigOption(
         id: id,
         name: name,
         description: description,
-        category: option['category'] is String ? option['category']! as String : null,
+        category: switch (option['category']) {
+          final String category => category,
+          _ => null,
+        },
         currentValue: '${option['currentValue'] ?? ''}',
         choices: <ConfigChoice>[
-          for (final choice in (option['options'] as List<Object?>?) ?? const <Object?>[])
-            if (choice case {'value': final String value})
-              ConfigChoice(
-                value: value,
-                name: (choice as Map)['name'] is String ? choice['name']! as String : value,
-                description: choice['description'] is String
-                    ? choice['description']! as String
-                    : null,
-              ),
+          if (option['options'] case final List<Object?> options)
+            for (final choice in options)
+              if (choice case {'value': final String value})
+                ConfigChoice(
+                  value: value,
+                  name: switch (choice['name']) {
+                    final String name => name,
+                    _ => value,
+                  },
+                  description: switch (choice['description']) {
+                    final String description => description,
+                    _ => null,
+                  },
+                ),
         ],
       ),
       'boolean' => BooleanConfigOption(

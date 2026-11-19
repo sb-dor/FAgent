@@ -77,38 +77,41 @@ final class DartCompletion {
     this.data,
   }) : filterText = filterText ?? label;
 
-  /// Parses an LSP `CompletionItem`.
-  factory DartCompletion.fromJson(Map<String, Object?> json) {
-    final label = '${json['label'] ?? ''}';
+  /// Parses an LSP `CompletionItem`; `null` when it has no string `label`.
+  static DartCompletion? fromJson(Object? json) {
+    if (json is! Map || json['label'] is! String) return null;
+    final label = json['label'].toString();
     final textEdit = json['textEdit'];
     // An InsertReplaceEdit (`insert`/`replace`) is not asked for; take `insert` should one come.
     final edit = switch (textEdit) {
-      {'range': final Object range} => LspTextEdit.fromJson(<String, Object?>{
-        'range': range,
+      {'range': _} => LspTextEdit.fromJson(textEdit),
+      {'insert': final Object insert} => LspTextEdit.fromJson(<String, Object?>{
+        'range': insert,
         'newText': textEdit['newText'],
       }),
-      {'insert': final Object insert} => LspTextEdit(
-        range: LspRange.fromJson(insert),
-        newText: '${textEdit['newText'] ?? ''}',
-      ),
       _ => null,
     };
     return DartCompletion(
       label: label,
-      kind: DartCompletionKind.ofLsp((json['kind'] as num?)?.toInt()),
-      detail: json['detail'] as String?,
-      filterText: json['filterText'] as String?,
-      sortText: json['sortText'] as String?,
-      insertText: edit?.newText ?? json['insertText'] as String? ?? label,
+      kind: DartCompletionKind.ofLsp(switch (json['kind']) {
+        final num kind => kind.toInt(),
+        _ => null,
+      }),
+      detail: _text(json['detail']),
+      filterText: _text(json['filterText']),
+      sortText: _text(json['sortText']),
+      insertText: edit?.newText ?? _text(json['insertText']) ?? label,
       isSnippet: json['insertTextFormat'] == 2,
       edit: edit,
       additionalEdits: <LspTextEdit>[
-        for (final entry in (json['additionalTextEdits'] as List<Object?>?) ?? const <Object?>[])
-          LspTextEdit.fromJson(entry),
+        if (json['additionalTextEdits'] case final List<Object?> edits)
+          for (final entry in edits) ?LspTextEdit.fromJson(entry),
       ],
       data: json['data'],
     );
   }
+
+  static String? _text(Object? value) => value is String ? value : null;
 
   /// What the list shows.
   final String label;

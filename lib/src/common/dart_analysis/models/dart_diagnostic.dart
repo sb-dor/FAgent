@@ -39,13 +39,21 @@ final class DartDiagnostic {
     this.code,
   });
 
-  /// Parses an LSP `Diagnostic`.
-  factory DartDiagnostic.fromJson(Map<String, Object?> json) => DartDiagnostic(
-    range: LspRange.fromJson(json['range']),
-    severity: DartSeverity.ofLsp((json['severity'] as num?)?.toInt()),
-    message: '${json['message'] ?? ''}',
-    code: json['code']?.toString(),
-  );
+  /// Parses an LSP `Diagnostic`; `null` when its range is malformed.
+  static DartDiagnostic? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final range = LspRange.fromJson(json['range']);
+    if (range == null) return null;
+    return DartDiagnostic(
+      range: range,
+      severity: DartSeverity.ofLsp(switch (json['severity']) {
+        final num severity => severity.toInt(),
+        _ => null,
+      }),
+      message: '${json['message'] ?? ''}',
+      code: json['code']?.toString(),
+    );
+  }
 
   /// Where.
   final LspRange range;

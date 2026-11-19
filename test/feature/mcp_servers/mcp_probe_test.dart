@@ -72,6 +72,18 @@ void main() {
       expect(result, const McpProbeConnected(3));
     });
 
+    test('a byte that is not UTF-8 on stdout is not an answer and crashes nothing', () async {
+      final uncaught = <Object>[];
+      late McpProbeResult result;
+      await runZonedGuarded(
+        () async => result = await probe.probe(stdio(['junk', '2'])),
+        (error, stack) => uncaught.add(error),
+      );
+
+      expect(result, const McpProbeConnected(2));
+      expect(uncaught, isEmpty);
+    });
+
     test('a server without tools is connected with 0', () async {
       expect(await probe.probe(stdio(['tools', '0'])), const McpProbeConnected(0));
     });

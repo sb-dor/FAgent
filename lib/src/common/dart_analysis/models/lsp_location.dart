@@ -10,14 +10,15 @@ final class LspLocation {
   const LspLocation({required this.path, required this.range});
 
   /// Parses a `Location` (`uri`, `range`) or a `LocationLink` (`targetUri`,
-  /// `targetSelectionRange`); `null` for anything that is not a `file:` URI.
+  /// `targetSelectionRange`); `null` for anything that is not a `file:` URI or has a malformed range.
   static LspLocation? fromJson(Object? json) {
     if (json is! Map) return null;
     final link = json.containsKey('targetUri');
     final uri = Uri.tryParse('${link ? json['targetUri'] : json['uri']}');
     if (uri == null || !uri.isScheme('file')) return null;
     final range = link ? json['targetSelectionRange'] ?? json['targetRange'] : json['range'];
-    return LspLocation(path: uri.toFilePath(), range: LspRange.fromJson(range));
+    final parsed = LspRange.fromJson(range);
+    return parsed == null ? null : LspLocation(path: uri.toFilePath(), range: parsed);
   }
 
   /// Parses a `Location`, a list of `Location`s or `LocationLink`s, or `null`.

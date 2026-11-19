@@ -178,11 +178,10 @@ final class LspConnection {
       final (requested, completer) = pending;
       if (decoded['error'] case final Map<String, Object?> error) {
         completer.completeError(
-          LspRequestException(
-            requested,
-            (error['code'] as num?)?.toInt() ?? 0,
-            '${error['message'] ?? ''}',
-          ),
+          LspRequestException(requested, switch (error['code']) {
+            final num code => code.toInt(),
+            _ => 0,
+          }, '${error['message'] ?? ''}'),
         );
       } else {
         completer.complete(decoded['result']);

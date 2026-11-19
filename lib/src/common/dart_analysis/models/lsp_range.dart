@@ -9,14 +9,14 @@ final class LspPosition {
   /// {@macro lsp_position}
   const LspPosition({required this.line, required this.character});
 
-  /// Parses `{line, character}`.
-  factory LspPosition.fromJson(Object? json) {
-    final map = json is Map ? json : const <String, Object?>{};
-    return LspPosition(
-      line: (map['line'] as num?)?.toInt() ?? 0,
-      character: (map['character'] as num?)?.toInt() ?? 0,
-    );
-  }
+  /// Parses `{line, character}`; `null` when either is missing or not a number.
+  static LspPosition? fromJson(Object? json) => switch (json) {
+    {'line': final num line, 'character': final num character} => LspPosition(
+      line: line.toInt(),
+      character: character.toInt(),
+    ),
+    _ => null,
+  };
 
   /// 0-based line.
   final int line;
@@ -46,13 +46,12 @@ final class LspRange {
   /// {@macro lsp_range}
   const LspRange({required this.start, required this.end});
 
-  /// Parses `{start, end}`.
-  factory LspRange.fromJson(Object? json) {
-    final map = json is Map ? json : const <String, Object?>{};
-    return LspRange(
-      start: LspPosition.fromJson(map['start']),
-      end: LspPosition.fromJson(map['end']),
-    );
+  /// Parses `{start, end}`; `null` when either position is malformed.
+  static LspRange? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final start = LspPosition.fromJson(json['start']);
+    final end = LspPosition.fromJson(json['end']);
+    return start == null || end == null ? null : LspRange(start: start, end: end);
   }
 
   /// First position.
@@ -79,10 +78,14 @@ final class LspTextEdit {
   /// {@macro lsp_text_edit}
   const LspTextEdit({required this.range, required this.newText});
 
-  /// Parses `{range, newText}`.
-  factory LspTextEdit.fromJson(Object? json) {
-    final map = json is Map ? json : const <String, Object?>{};
-    return LspTextEdit(range: LspRange.fromJson(map['range']), newText: '${map['newText'] ?? ''}');
+  /// Parses `{range, newText}`; `null` when the range is malformed or `newText` is not a string.
+  static LspTextEdit? fromJson(Object? json) {
+    if (json case {'newText': final String newText, 'range': final Object? rangeJson}) {
+      if (LspRange.fromJson(rangeJson) case final range?) {
+        return LspTextEdit(range: range, newText: newText);
+      }
+    }
+    return null;
   }
 
   /// What is replaced.
