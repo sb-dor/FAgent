@@ -29,6 +29,7 @@ environment:
 # versions available, run `flutter pub outdated`.
 dependencies:
   async: ^2.13.1
+  characters: ^1.4.1
   collection: ^1.19.1
   control:
     git:

@@ -4,8 +4,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
 
-import 'package:flutter/widgets.dart' show StringCharacters;
-
+import 'package:characters/characters.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';

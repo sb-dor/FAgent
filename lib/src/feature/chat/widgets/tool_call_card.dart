@@ -97,6 +97,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
     final lines = _diffLines.resolve(diffs);
     final texts = call.content.whereType<ToolTextContent>().toList();
     final output = call.rawOutput;
+    final chars = (output ?? '').characters;
     final hasBody = diffs.isNotEmpty || texts.isNotEmpty || (output != null && output.isNotEmpty);
     final path = call.locations.isEmpty ? null : call.locations.first;
     final label = toolRowLabel(title: call.title, path: path, projectRoot: widget.projectRoot);
@@ -143,9 +144,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   Text(Localization.of(context).toolOutput, style: theme.textTheme.labelSmall),
                   const SizedBox(height: 4),
                   SelectableText(
-                    output.characters.length > _maxOutputChars
-                        ? '${output.characters.take(_maxOutputChars)}…'
-                        : output,
+                    chars.length > _maxOutputChars ? '${chars.take(_maxOutputChars)}…' : output,
                     style: AppText.mono(context),
                   ),
                 ],
