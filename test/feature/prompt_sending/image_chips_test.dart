@@ -16,7 +16,9 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.d
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_drop_target.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_blocks.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -260,7 +262,7 @@ void main() {
     // Kept once, as the image: its block is built when the message goes.
     expect(queued.resources, isEmpty);
     expect(queued.images.single.bytes, _png);
-    expectImageBlock(queued.blocks.last, _png);
+    expectImageBlock(promptBlocks(queued.attachments).last, _png);
     expect(queued.attachmentCount, 1);
     expect(chat.images.value, isEmpty);
     expect(chat.textController.text, isEmpty);
@@ -329,7 +331,7 @@ void main() {
 
     expect((thumbnail.width, thumbnail.height), (256, 128));
     expect(image.thumbnail.length, lessThan(image.bytes.length));
-    final block = image.toBlock();
+    final block = promptBlocks(<PromptAttachment>[image.toAttachment()]).single;
     expect((block['_meta']! as Map<String, Object?>)['flutter_code_agent'], <String, Object?>{
       'thumbnail': base64Encode(image.thumbnail),
       'thumbnailMimeType': 'image/png',

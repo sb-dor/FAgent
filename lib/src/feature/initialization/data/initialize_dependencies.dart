@@ -25,6 +25,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
@@ -193,6 +194,7 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
     create: (sessionId) => ChatQueueController(
       sessionId: sessionId,
       repository: PromptSendingRepositoryImpl(hub: dependencies.agentHub),
+      chat: ChatRepositoryImpl(hub: dependencies.agentHub),
     ),
   ),
   // The built-in and the custom agents; the hub follows the custom ones in the next step.

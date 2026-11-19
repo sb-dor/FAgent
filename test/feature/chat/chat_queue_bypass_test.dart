@@ -12,8 +12,10 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_agent_binary.dart';
@@ -94,13 +96,15 @@ void main() {
     final queue = ChatQueueController(
       sessionId: chat,
       repository: PromptSendingRepositoryImpl(hub: hub),
-    )..follow(live.status);
+      chat: ChatRepositoryImpl(hub: hub),
+    )..follow();
     addTearDown(queue.dispose);
+    await pumpEventQueue();
 
     // M1 goes; M2 is queued (⌘↵) while M1's agent session is being set up.
     final first = hub.prompt(chat, 'echo first');
     await _until(live.status, (status) => status.isBusy);
-    queue.add(const QueuedPrompt(text: 'echo second', resources: <Map<String, Object?>>[]));
+    queue.add(const QueuedPrompt(text: 'echo second', resources: <PromptAttachment>[]));
     await expectLater(first, throwsA(isA<BypassNotAllowedException>()));
     // The setup reached `idle` without a turn: the queue tries M2 on the next event.
     await Future<void>.delayed(const Duration(milliseconds: 300));

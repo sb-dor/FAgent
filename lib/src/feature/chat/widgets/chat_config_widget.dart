@@ -34,6 +34,7 @@ import 'package:flutter_code_agent/src/feature/prompt_sending/controller/prompt_
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/skill_prompt.dart';
 import 'package:flutter_code_agent/src/feature/session_config/controller/session_config_controller.dart';
@@ -196,12 +197,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     _queues = dependencies.chatQueues;
     queueController = _queues.acquire(sessionId);
     unsavedGate = UnsavedFilesGate(files: dependencies.codeViews, projectId: widget.project.id);
-    // Assigned before it opens: [_followStatus] reads it on the first change.
     chatController = ChatController(repository: ChatRepositoryImpl(hub: hub));
     chatController
       ..addListener(_schedulePublish)
-      ..addListener(_followStatus)
       ..open(sessionId);
+    queueController.follow();
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionAgentController = SessionAgentController(
       repository: SessionsRepositoryImpl(
@@ -240,7 +240,6 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   void dispose() {
     chatController
       ..removeListener(_schedulePublish)
-      ..removeListener(_followStatus)
       ..dispose();
     // The queue keeps sending into this chat while it holds messages.
     _queues.release(sessionId);
@@ -281,6 +280,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     switch (sessionAgentController.state) {
       case SessionAgent$CompletedState(:final sessionId) when sessionId == this.sessionId:
         chatController.open(sessionId, keepView: true);
+        queueController.follow();
       case SessionAgent$ErrorState(:final error):
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
           SnackBar(
@@ -292,11 +292,6 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         );
       case _:
     }
-  }
-
-  /// Lets the queue follow the chat's live status (again, after the runtime state was replaced).
-  void _followStatus() {
-    if (chatController.status case final status?) queueController.follow(status);
   }
 
   /// Makes [agentId] run this chat; only possible before the first message.
@@ -351,56 +346,55 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
   /// Refreshes the file list (the agent may have added files).
   void refreshFiles() => fileMentionController.load(widget.project.path);
 
-  /// The `resource_link`s for the files [text] mentions: project files, and the screenshots the
-  /// run offers (they live in `.dart_tool`, outside the file list). Only files that are still
-  /// inside the project count.
-  Future<List<Map<String, Object?>>> resourcesFor(String text) async {
+  /// The links to the files [text] mentions: project files, and the screenshots the run offers
+  /// (they live in `.dart_tool`, outside the file list). Only files that are still inside the
+  /// project count.
+  Future<List<PromptAttachment>> resourcesFor(String text) async {
     final known = <String>{...fileMentionController.files, ...?runContext.value?.attachable};
     final mentioned = await fileMentionController.insideProject(
       widget.project.path,
       mentionedFiles(text, known),
     );
-    return resourceLinks(widget.project.path, mentioned);
+    return projectFileLinks(widget.project.path, mentioned);
   }
 
   /// The skills this chat works with: the ones on for its project, minus the ones the chat turned
   /// off.
   ChatSkills get skillsOfChat => chatSkills.value.forChat(chatSkillsController.states);
 
-  /// What goes to the agent for the composer [text]: the text and the content blocks beside it.
+  /// What goes to the agent for the composer [text]: the text and the attachments beside it.
   ///
   /// A leading `/<name>` of a built-in or user skill that is on for the chat sends the rest of the
-  /// text (or `Use the <name> skill.`) with `SKILL.md` embedded as a resource: the agent does not
-  /// find those skills on disk. The project's own skills (`.claude/skills`) and every other text
-  /// go as typed, as does a command whose `SKILL.md` cannot be read. Mentioned files follow as
-  /// `resource_link`s ([resourcesFor]), then, [withImages], the composer's [files] as links and its
-  /// [images] as `image` blocks.
-  Future<({String text, List<Map<String, Object?>> resources})> promptFor(
+  /// text (or `Use the <name> skill.`) with `SKILL.md` embedded: the agent does not find those
+  /// skills on disk. The project's own skills (`.claude/skills`) and every other text go as typed,
+  /// as does a command whose `SKILL.md` cannot be read. Links to the mentioned files follow
+  /// ([resourcesFor]), then, [withImages], the composer's [files] as links and its [images].
+  Future<({String text, List<PromptAttachment> attachments})> promptFor(
     String text, {
     bool withImages = true,
   }) async {
     // Taken now: the caller clears the images it sent.
-    final attached = <Map<String, Object?>>[
-      if (withImages) ...<Map<String, Object?>>[
-        for (final file in files.value) file.toBlock(),
-        for (final image in images.value) image.toBlock(),
+    final attached = <PromptAttachment>[
+      if (withImages) ...<PromptAttachment>[
+        for (final file in files.value) file.toAttachment(),
+        for (final image in images.value) image.toAttachment(),
       ],
     ];
-    final blocks = <Map<String, Object?>>[...await resourcesFor(text), ...attached];
+    final attachments = <PromptAttachment>[...await resourcesFor(text), ...attached];
     final command = leadingCommand(text);
     final skill = command == null ? null : skillsOfChat.runnable(command.name);
     if (command == null || skill == null || skill.source == SkillSource.project) {
-      return (text: text, resources: blocks);
+      return (text: text, attachments: attachments);
     }
     final String markdown;
     try {
       markdown = await skillTextController.read(skill.id, projectRoot: projectRoot);
     } on Object {
-      return (text: text, resources: blocks);
+      return (text: text, attachments: attachments);
     }
     return (
       text: skillPromptText(skill.name, command.rest),
-      resources: <Map<String, Object?>>[skillResource(skill.name, markdown), ...blocks],
+      attachments: <PromptAttachment>[PromptSkill(skill.name, markdown), ...attachments],
     );
   }
 
@@ -460,7 +454,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     textController.clear();
     _clearImages(attached);
     _clearFiles(cards);
-    promptController.send(sessionId, prompt.text, resources: prompt.resources);
+    promptController.send(sessionId, prompt.text, attachments: prompt.attachments);
   }
 
   /// Queues the composer text ([promptFor], as it is now) to go after the running turn; the
@@ -491,7 +485,7 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       queueController.add(
         QueuedPrompt(
           text: prompt.text,
-          resources: prompt.resources,
+          resources: prompt.attachments,
           draft: prompt.text == draft ? null : draft,
           images: attached,
           files: cards,

@@ -3,33 +3,31 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_queue_view.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_image.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/test_app.dart';
 
-const _link = <String, Object?>{'type': 'resource_link', 'uri': 'file:///p/a.dart', 'name': 'a'};
+const _link = PromptFileLink('/p/a.dart');
 final _image = ComposerImage(
   name: 'shot.png',
   mimeType: 'image/png',
   bytes: Uint8List.fromList(<int>[0]),
   thumbnail: Uint8List.fromList(<int>[0]),
 );
-const _skill = <String, Object?>{
-  'type': 'resource',
-  'resource': <String, Object?>{'uri': 'skill://x/SKILL.md', 'text': '# x'},
-};
+const _skill = PromptSkill('x', '# x');
 
 void main() {
   final items = <QueuedPrompt>[
     QueuedPrompt(
       text: 'Fix the tests\nthen run them again',
-      resources: const <Map<String, Object?>>[_link],
+      resources: const <PromptAttachment>[_link],
       images: <ComposerImage>[_image],
     ),
     const QueuedPrompt(
       text: 'Use the x skill.',
       draft: '/x',
-      resources: <Map<String, Object?>>[_skill],
+      resources: <PromptAttachment>[_skill],
     ),
   ];
 
@@ -55,7 +53,7 @@ void main() {
     await tester.pumpWidget(
       view(
         queued: <QueuedPrompt>[
-          QueuedPrompt(text: '', resources: const <Map<String, Object?>>[], images: [_image]),
+          QueuedPrompt(text: '', resources: const <PromptAttachment>[], images: [_image]),
         ],
       ),
     );

@@ -28,15 +28,4 @@ void main() {
     expect(skillPromptText('feature-architecture', ''), 'Use the feature-architecture skill.');
     expect(skillPromptText('feature-architecture', 'add a todo'), 'add a todo');
   });
-
-  test('the skill resource embeds SKILL.md as markdown', () {
-    expect(skillResource('feature-architecture', '# Feature\n'), <String, Object?>{
-      'type': 'resource',
-      'resource': <String, Object?>{
-        'uri': 'skill://feature-architecture/SKILL.md',
-        'mimeType': 'text/markdown',
-        'text': '# Feature\n',
-      },
-    });
-  });
 }

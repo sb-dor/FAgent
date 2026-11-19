@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/chat/widgets/chat_drop_target.dar
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -41,6 +42,13 @@ void main() {
 
   String heic() => p.join(outside.path, 'shot.heic');
   String folder() => p.join(outside.path, 'Downloads');
+
+  /// The block of a card's file at [path], as the agent gets it.
+  Map<String, Object?> link(String path) => <String, Object?>{
+    'type': 'resource_link',
+    'uri': Uri.file(path).toString(),
+    'name': p.basename(path),
+  };
 
   Future<void> settle(WidgetTester tester) async {
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
@@ -143,7 +151,7 @@ void main() {
 
     final sent = live.lastPrompt!;
     expect(sent.first, <String, Object?>{'type': 'text', 'text': 'what is in it?'});
-    expect(sent.last, ComposerFile(path: heic()).toBlock());
+    expect(sent.last, link(heic()));
     expect(chat.files.value, isEmpty);
     await tester.pump(const Duration(seconds: 20));
   });
@@ -155,7 +163,7 @@ void main() {
     await tester.tap(find.byTooltip('Send'));
     await settle(tester);
 
-    expect(live.lastPrompt, <Map<String, Object?>>[ComposerFile(path: heic()).toBlock()]);
+    expect(live.lastPrompt, <Map<String, Object?>>[link(heic())]);
     await tester.pump(const Duration(seconds: 20));
   });
 
@@ -171,7 +179,7 @@ void main() {
 
     final queued = chat.queueController.state.items.single;
     expect(queued.files, <ComposerFile>[ComposerFile(path: heic())]);
-    expect(queued.blocks.last, ComposerFile(path: heic()).toBlock());
+    expect(queued.attachments.last, PromptFileLink(heic()));
     expect(queued.attachmentCount, 1);
     expect(chat.files.value, isEmpty);
 

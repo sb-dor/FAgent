@@ -7,10 +7,13 @@ import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/status_chat_repository.dart';
+
 /// One prompt the queue handed to the agent.
-typedef _Sent = ({int sessionId, String text, List<Map<String, Object?>> resources});
+typedef _Sent = ({int sessionId, String text, List<PromptAttachment> attachments});
 
 /// Records the prompts; each send completes when the test says (the turn ends), or throws
 /// [failWith] once.
@@ -25,9 +28,9 @@ final class _RecordingSending implements IPromptSendingRepository {
   Future<void> send(
     int sessionId,
     String text, {
-    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
+    List<PromptAttachment> attachments = const <PromptAttachment>[],
   }) async {
-    sent.add((sessionId: sessionId, text: text, resources: resources));
+    sent.add((sessionId: sessionId, text: text, attachments: attachments));
     if (hold case final hold?) await hold.future;
     if (failWith case final error?) {
       failWith = null;
@@ -46,13 +49,9 @@ final class _RecordingSending implements IPromptSendingRepository {
   Future<void> forceStop(String agentId) async {}
 }
 
-const _link = <String, Object?>{
-  'type': 'resource_link',
-  'uri': 'file:///p/lib/main.dart',
-  'name': 'main.dart',
-};
+const _link = PromptFileLink('/p/lib/main.dart');
 
-QueuedPrompt _prompt(String text, {List<Map<String, Object?>> resources = const []}) =>
+QueuedPrompt _prompt(String text, {List<PromptAttachment> resources = const []}) =>
     QueuedPrompt(text: text, resources: resources);
 
 void main() {
@@ -63,7 +62,11 @@ void main() {
   setUp(() {
     sending = _RecordingSending();
     status = ValueNotifier<SessionStatus>(SessionStatus.running);
-    queue = ChatQueueController(sessionId: 1, repository: sending)..follow(status);
+    queue = ChatQueueController(
+      sessionId: 1,
+      repository: sending,
+      chat: StatusChatRepository((_) => status),
+    )..follow();
   });
 
   tearDown(() {
@@ -84,14 +87,14 @@ void main() {
 
   test('a turn ending idle sends the first queued, then the next after its turn', () async {
     queue
-      ..add(_prompt('first', resources: const <Map<String, Object?>>[_link]))
+      ..add(_prompt('first', resources: const <PromptAttachment>[_link]))
       ..add(_prompt('second'));
 
     status.value = SessionStatus.idle;
     await settle();
 
     expect(sending.sent.map((s) => s.text), <String>['first']);
-    expect(sending.sent.single.resources, const <Map<String, Object?>>[_link]);
+    expect(sending.sent.single.attachments, const <PromptAttachment>[_link]);
     expect(queue.state.items.map((p) => p.text), <String>['second']);
 
     await turn();
@@ -297,11 +300,11 @@ void main() {
   test('edit returns the item and removes it', () async {
     queue
       ..add(_prompt('first'))
-      ..add(_prompt('second', resources: const <Map<String, Object?>>[_link]));
+      ..add(_prompt('second', resources: const <PromptAttachment>[_link]));
 
     final edited = queue.edit(1);
 
-    expect(edited, _prompt('second', resources: const <Map<String, Object?>>[_link]));
+    expect(edited, _prompt('second', resources: const <PromptAttachment>[_link]));
     expect(queue.state.items.map((p) => p.text), <String>['first']);
     expect(queue.edit(5), isNull);
   });
@@ -378,7 +381,11 @@ void main() {
 
   test('a queue of chat A is never sent into chat B', () async {
     final statusB = ValueNotifier<SessionStatus>(SessionStatus.idle);
-    final queueB = ChatQueueController(sessionId: 2, repository: sending)..follow(statusB);
+    final queueB = ChatQueueController(
+      sessionId: 2,
+      repository: sending,
+      chat: StatusChatRepository((_) => statusB),
+    )..follow();
     addTearDown(() {
       queueB.dispose();
       statusB.dispose();
@@ -407,7 +414,11 @@ void main() {
     setUp(() {
       statuses = <int, ValueNotifier<SessionStatus>>{};
       registry = ChatQueueRegistry(
-        create: (sessionId) => ChatQueueController(sessionId: sessionId, repository: sending),
+        create: (sessionId) => ChatQueueController(
+          sessionId: sessionId,
+          repository: sending,
+          chat: StatusChatRepository((sessionId) => statuses[sessionId]!),
+        ),
       );
     });
 
@@ -419,8 +430,8 @@ void main() {
     });
 
     ChatQueueController open(int sessionId) {
-      final notifier = statuses[sessionId] ??= ValueNotifier<SessionStatus>(SessionStatus.running);
-      return registry.acquire(sessionId)..follow(notifier);
+      statuses[sessionId] ??= ValueNotifier<SessionStatus>(SessionStatus.running);
+      return registry.acquire(sessionId)..follow();
     }
 
     test('the same chat gets the same queue', () {

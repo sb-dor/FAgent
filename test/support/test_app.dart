@@ -20,6 +20,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
+import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
@@ -140,6 +141,7 @@ Dependencies testDependencies({
       create: (sessionId) => ChatQueueController(
         sessionId: sessionId,
         repository: PromptSendingRepositoryImpl(hub: hub),
+        chat: ChatRepositoryImpl(hub: hub),
       ),
     )
     ..stopFollowingCustomAgents = () async {}

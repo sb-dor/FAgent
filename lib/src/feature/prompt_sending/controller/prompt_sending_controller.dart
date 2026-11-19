@@ -1,5 +1,6 @@
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'prompt_sending_controller.freezed.dart';
@@ -30,10 +31,10 @@ final class PromptSendingController extends StateController<PromptSendingState>
   void send(
     int sessionId,
     String text, {
-    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
+    List<PromptAttachment> attachments = const <PromptAttachment>[],
   }) => handle(() async {
     setState(const PromptSendingState.inProgress());
-    await _repository.send(sessionId, text, resources: resources);
+    await _repository.send(sessionId, text, attachments: attachments);
     setState(const PromptSendingState.completed());
   }, error: (error, stackTrace) async => setState(PromptSendingState.error(error: error)));
 

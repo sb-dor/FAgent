@@ -1,4 +1,5 @@
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/composer_file.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -42,19 +43,18 @@ void main() {
     });
   });
 
-  group('block', () {
-    test('a file is a resource_link to its file URI', () {
-      expect(const ComposerFile(path: '/Users/avaz/Desktop/a b.heic').toBlock(), <String, Object?>{
-        'type': 'resource_link',
-        'uri': 'file:///Users/avaz/Desktop/a%20b.heic',
-        'name': 'a b.heic',
-      });
+  group('attachment', () {
+    test('a file is a link to its path', () {
+      expect(
+        const ComposerFile(path: '/Users/avaz/Desktop/a b.heic').toAttachment(),
+        const PromptFileLink('/Users/avaz/Desktop/a b.heic'),
+      );
     });
 
-    test('a folder links with a trailing /', () {
+    test('a folder is a link to a folder', () {
       expect(
-        const ComposerFile(path: '/Users/avaz/Downloads', folder: true).toBlock()['uri'],
-        'file:///Users/avaz/Downloads/',
+        const ComposerFile(path: '/Users/avaz/Downloads', folder: true).toAttachment(),
+        const PromptFileLink('/Users/avaz/Downloads', folder: true),
       );
     });
 

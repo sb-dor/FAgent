@@ -1,6 +1,6 @@
 import 'package:control/control.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_code_agent/src/common/acp/live_session.dart';
+import 'package:flutter_code_agent/src/common/acp/session_problem.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';

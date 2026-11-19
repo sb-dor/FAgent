@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_blocks.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
@@ -99,7 +100,10 @@ void main() {
     String text,
   ) async {
     late ({String text, List<Map<String, Object?>> resources}) found;
-    await tester.runAsync(() async => found = await chat.promptFor(text));
+    await tester.runAsync(() async {
+      final prompt = await chat.promptFor(text);
+      found = (text: prompt.text, resources: promptBlocks(prompt.attachments));
+    });
     return found;
   }
 

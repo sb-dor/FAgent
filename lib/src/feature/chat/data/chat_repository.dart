@@ -1,13 +1,19 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
+import 'package:flutter_code_agent/src/common/acp/session_event.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_runtime.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 
 /// A chat's runtime state and its recovery actions.
 abstract interface class IChatRepository {
-  /// Opens chat [sessionId] (its journal and live state).
-  Future<LiveSession> open(int sessionId);
-
-  /// Permission request ids still open in this run, for the feed.
-  Set<String> openPermissionIds(int sessionId);
+  /// Chat [sessionId] (its journal and live state): a first value once it is open, then a new
+  /// one on every journal append and every change of its live state. A chat that cannot be
+  /// opened is an error of the stream.
+  Stream<ChatRuntime> watch(int sessionId);
 
   /// Repeats the failed setup or restarts the agent after an error.
   Future<void> retry(int sessionId);
@@ -24,10 +30,93 @@ final class ChatRepositoryImpl implements IChatRepository {
   final AgentHub _hub;
 
   @override
-  Future<LiveSession> open(int sessionId) => _hub.session(sessionId);
+  Stream<ChatRuntime> watch(int sessionId) {
+    // Synchronous: a listener sees every status the chat goes through, as with the notifiers.
+    final controller = StreamController<ChatRuntime>(sync: true);
+    LiveSession? session;
+    StreamSubscription<SessionEvent>? added;
+    var cancelled = false;
+    // The agent's options and commands are mapped once per change, not once per value.
+    List<Map<String, Object?>>? rawOptions;
+    var options = const <ConfigOption>[];
+    List<Map<String, Object?>>? rawCommands;
+    var commands = const <SlashCommand>[];
 
-  @override
-  Set<String> openPermissionIds(int sessionId) => _hub.permissions.pendingFor(sessionId).toSet();
+    void emit() {
+      final live = session;
+      if (live == null || controller.isClosed) return;
+      if (!identical(live.configOptions.value, rawOptions)) {
+        rawOptions = live.configOptions.value;
+        options = ConfigOption.parseAll(rawOptions!);
+      }
+      if (!identical(live.availableCommands.value, rawCommands)) {
+        rawCommands = live.availableCommands.value;
+        commands = agentCommands(rawCommands!);
+      }
+      controller.add(
+        ChatRuntime(
+          sessionId: live.id,
+          agentId: live.agentId,
+          events: live.store.events,
+          openPermissionIds: _hub.permissions.pendingFor(live.id).toSet(),
+          status: live.status.value,
+          problem: live.problem.value,
+          canForceStop: live.canForceStop.value,
+          canRetryPrompt: live.canRetryPrompt.value,
+          configOptions: options,
+          bypassBlocked: live.bypassBlocked,
+          preparingTurn: live.preparingTurn.value,
+          commands: commands,
+        ),
+      );
+    }
+
+    controller
+      ..onListen = () async {
+        final LiveSession live;
+        try {
+          live = await _hub.session(sessionId);
+        } on Object catch (error, stackTrace) {
+          if (!cancelled) {
+            controller.addError(error, stackTrace);
+            await controller.close();
+          }
+          return;
+        }
+        if (cancelled) return;
+        session = live;
+        added = live.store.added.listen((_) => emit());
+        for (final notifier in _notifiers(live)) {
+          notifier.addListener(emit);
+        }
+        emit();
+      }
+      ..onCancel = () async {
+        cancelled = true;
+        final live = session;
+        session = null;
+        // Allowed after the hub disposed the notifiers (the app closes).
+        if (live != null) {
+          for (final notifier in _notifiers(live)) {
+            notifier.removeListener(emit);
+          }
+        }
+        await added?.cancel();
+        if (!controller.isClosed) await controller.close();
+      };
+    return controller.stream;
+  }
+
+  static List<Listenable> _notifiers(LiveSession session) => <Listenable>[
+    session.status,
+    session.problem,
+    session.canForceStop,
+    session.canRetryPrompt,
+    session.configOptions,
+    session.bypassAcknowledged,
+    session.preparingTurn,
+    session.availableCommands,
+  ];
 
   @override
   Future<void> retry(int sessionId) => _hub.retry(sessionId);

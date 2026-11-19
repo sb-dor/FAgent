@@ -1,13 +1,15 @@
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_blocks.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 
 /// Sends prompts and stops turns.
 abstract interface class IPromptSendingRepository {
-  /// Sends [text] with ACP content blocks [resources] (e.g. `resource_link`)
-  /// to chat [sessionId]; completes when the turn ends.
+  /// Sends [text] with [attachments] (files, images, a skill) to chat [sessionId]; completes
+  /// when the turn ends.
   Future<void> send(
     int sessionId,
     String text, {
-    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
+    List<PromptAttachment> attachments = const <PromptAttachment>[],
   });
 
   /// Repeats the last prompt (after a login).
@@ -31,8 +33,8 @@ final class PromptSendingRepositoryImpl implements IPromptSendingRepository {
   Future<void> send(
     int sessionId,
     String text, {
-    List<Map<String, Object?>> resources = const <Map<String, Object?>>[],
-  }) => _hub.prompt(sessionId, text, resources: resources);
+    List<PromptAttachment> attachments = const <PromptAttachment>[],
+  }) => _hub.prompt(sessionId, text, resources: promptBlocks(attachments));
 
   @override
   Future<void> repeat(int sessionId) => _hub.retryPrompt(sessionId);

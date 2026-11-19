@@ -1,15 +1,10 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_code_agent/src/common/acp/live_session.dart';
-import 'package:flutter_code_agent/src/common/acp/session_event.dart';
-import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/chat_runtime.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_transcript.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
-import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
-import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'chat_controller.freezed.dart';
@@ -25,11 +20,11 @@ sealed class ChatState with _$ChatState {
   const factory ChatState.completed(ChatView view) = Chat$CompletedState;
 }
 
-/// Shows one chat: folds its journal and follows its live status.
+/// Shows one chat: folds its journal and follows its live state.
 ///
 /// While the agent streams, the feed is folded at most every
 /// [refoldInterval] instead of once per chunk.
-final class ChatController extends StateController<ChatState> with SequentialControllerHandler {
+final class ChatController extends StateController<ChatState> {
   ChatController({
     required this._repository,
     this.refoldInterval = const Duration(milliseconds: 50),
@@ -41,29 +36,41 @@ final class ChatController extends StateController<ChatState> with SequentialCon
   /// Longest delay between a journal event and the feed showing it.
   final Duration refoldInterval;
 
-  LiveSession? _session;
-  StreamSubscription<SessionEvent>? _events;
+  StreamSubscription<ChatRuntime>? _runtimes;
 
-  /// The live status of the open chat; `null` until it is open.
-  ValueListenable<SessionStatus>? get status => _session?.status;
+  /// The chat's latest runtime state; `null` until it is open.
+  ChatRuntime? _runtime;
   Timer? _refold;
-
-  // The agent's commands are mapped once per change, not once per refold.
-  List<Map<String, Object?>>? _rawCommands;
-  List<SlashCommand> _commands = const <SlashCommand>[];
 
   /// Shows chat [sessionId]. With [keepView] the screen stays as it is until the chat is
   /// loaded again (its runtime state was replaced, for example after a change of its agent).
-  void open(int sessionId, {bool keepView = false}) => handle(() async {
+  ///
+  /// Only subscribes, so it is not a handled operation: the chat's stream runs in the caller's
+  /// zone, not in one of a handler that has already finished.
+  void open(int sessionId, {bool keepView = false}) {
+    if (isDisposed) return;
     _detach();
     if (!keepView) setState(const ChatState.inProgress());
-    final session = _session = await _repository.open(sessionId);
-    _events = session.store.added.listen((_) => _scheduleRefold());
-    for (final notifier in _notifiers(session)) {
-      notifier.addListener(_scheduleRefold);
+    _runtimes = _repository
+        .watch(sessionId)
+        .listen(
+          _onRuntime,
+          onError: (Object error, StackTrace stackTrace) {
+            if (!isDisposed) setState(ChatState.error(error: error));
+          },
+        );
+  }
+
+  void _onRuntime(ChatRuntime runtime) {
+    final first = _runtime == null;
+    _runtime = runtime;
+    // The chat was just opened: it shows at once.
+    if (first) {
+      _emit();
+    } else {
+      _scheduleRefold();
     }
-    _emit();
-  }, error: (error, stackTrace) async => setState(ChatState.error(error: error)));
+  }
 
   void _scheduleRefold() => _refold ??= Timer(refoldInterval, () {
     _refold = null;
@@ -71,66 +78,33 @@ final class ChatController extends StateController<ChatState> with SequentialCon
   });
 
   void _emit() {
-    final session = _session;
-    if (session == null || isDisposed) return;
-    final configOptions = ConfigOption.parseAll(session.configOptions.value);
+    final runtime = _runtime;
+    if (runtime == null || isDisposed) return;
     setState(
       ChatState.completed(
         ChatView(
-          sessionId: session.id,
-          agentId: session.agentId,
-          items: ChatTranscript.fold(
-            session.store.events,
-            openPermissionIds: _repository.openPermissionIds(session.id),
-          ),
-          status: session.status.value,
-          problem: session.problem.value,
-          canForceStop: session.canForceStop.value,
-          canRetryPrompt: session.canRetryPrompt.value,
-          configOptions: configOptions,
-          bypassBlocked: session.bypassBlocked,
-          preparingTurn: session.preparingTurn.value,
-          commands: _commandsOf(session),
+          sessionId: runtime.sessionId,
+          agentId: runtime.agentId,
+          items: ChatTranscript.fold(runtime.events, openPermissionIds: runtime.openPermissionIds),
+          status: runtime.status,
+          problem: runtime.problem,
+          canForceStop: runtime.canForceStop,
+          canRetryPrompt: runtime.canRetryPrompt,
+          configOptions: runtime.configOptions,
+          bypassBlocked: runtime.bypassBlocked,
+          preparingTurn: runtime.preparingTurn,
+          commands: runtime.commands,
         ),
       ),
     );
   }
 
-  List<SlashCommand> _commandsOf(LiveSession session) {
-    final raw = session.availableCommands.value;
-    if (!identical(raw, _rawCommands)) {
-      _rawCommands = raw;
-      _commands = agentCommands(raw);
-    }
-    return _commands;
-  }
-
-  static List<Listenable> _notifiers(LiveSession session) => <Listenable>[
-    session.status,
-    session.problem,
-    session.canForceStop,
-    session.canRetryPrompt,
-    session.configOptions,
-    session.bypassAcknowledged,
-    session.preparingTurn,
-    session.availableCommands,
-  ];
-
   void _detach() {
     _refold?.cancel();
     _refold = null;
-    _events?.cancel().ignore();
-    _events = null;
-    final session = _session;
-    // The hub disposes the notifiers when the app closes.
-    if (session != null && session.status.hasListeners) {
-      for (final notifier in _notifiers(session)) {
-        notifier.removeListener(_scheduleRefold);
-      }
-    }
-    _session = null;
-    _rawCommands = null;
-    _commands = const <SlashCommand>[];
+    _runtimes?.cancel().ignore();
+    _runtimes = null;
+    _runtime = null;
   }
 
   @override

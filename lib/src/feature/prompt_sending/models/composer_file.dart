@@ -1,3 +1,4 @@
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
@@ -36,12 +37,8 @@ final class ComposerFile {
     return extension.length > 1 ? extension.substring(1).toUpperCase() : null;
   }
 
-  /// The ACP block that goes to the agent.
-  Map<String, Object?> toBlock() => <String, Object?>{
-    'type': 'resource_link',
-    'uri': (folder ? Uri.directory(path) : Uri.file(path)).toString(),
-    'name': p.basename(path),
-  };
+  /// What goes to the agent: a link to the file or folder.
+  PromptAttachment toAttachment() => PromptFileLink(path, folder: folder);
 
   @override
   bool operator ==(Object other) =>

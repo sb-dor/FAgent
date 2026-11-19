@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
+import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:l/l.dart';
 
 part 'chat_queue_controller.freezed.dart';
 
@@ -45,6 +46,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   ChatQueueController({
     required this.sessionId,
     required this._repository,
+    required this._chat,
     super.initialState = const ChatQueueState(),
   });
 
@@ -52,8 +54,14 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   final int sessionId;
 
   final IPromptSendingRepository _repository;
-  ValueListenable<SessionStatus>? _status;
+  final IChatRepository _chat;
+  StreamSubscription<SessionStatus>? _statuses;
+
+  /// The chat's live status; `null` until it is followed.
   SessionStatus? _last;
+
+  /// The next status is the first one of the chat's runtime state that is followed now.
+  bool _firstStatus = false;
 
   /// The user pressed Stop during the current turn.
   bool _stopped = false;
@@ -64,13 +72,22 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   /// Sends whose turn has not ended yet.
   int _inFlight = 0;
 
-  /// Follows [status], the live status of the chat. Following another one (the chat's runtime
-  /// state was replaced) stops following the old; the same one changes nothing.
-  void follow(ValueListenable<SessionStatus> status) {
-    if (isDisposed || identical(status, _status)) return;
-    _status?.removeListener(_onStatus);
-    _status = status..addListener(_onStatus);
-    _last = status.value;
+  /// Follows the live status of the chat. Following it again (the chat's runtime state was
+  /// replaced) stops following the old one.
+  void follow() {
+    if (isDisposed) return;
+    _statuses?.cancel().ignore();
+    _firstStatus = true;
+    _statuses = _chat
+        .watch(sessionId)
+        .map((runtime) => runtime.status)
+        .distinct()
+        .listen(
+          _onStatus,
+          // The chat screen shows a chat that cannot be opened.
+          onError: (Object error, StackTrace stackTrace) =>
+              l.w('Chat queue | chat $sessionId cannot be followed: $error', stackTrace),
+        );
   }
 
   /// Adds [prompt] at the end. When the turn it waited for is already over, it goes now (or the
@@ -78,7 +95,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   void add(QueuedPrompt prompt) {
     if (isDisposed) return;
     setState(state.copyWith(items: <QueuedPrompt>[...state.items, prompt]));
-    final status = _status?.value;
+    final status = _last;
     if (status == null || status.isBusy || state.paused) return;
     if (status == SessionStatus.idle && _lastEndedNormally) {
       _sendFirst();
@@ -112,7 +129,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   /// The user stopped the running turn: its end pauses the queue. Called before the status
   /// moves.
   void pauseAfterStop() {
-    if (_status?.value.isBusy ?? false) _stopped = true;
+    if (_last?.isBusy ?? false) _stopped = true;
   }
 
   /// Resumes the queue: the first message goes now when the chat can take it, else after the
@@ -124,18 +141,22 @@ final class ChatQueueController extends StateController<ChatQueueState> {
       return;
     }
     setState(state.copyWith(paused: false));
-    switch (_status?.value) {
+    switch (_last) {
       case SessionStatus.idle || SessionStatus.cold || SessionStatus.error:
         _sendFirst();
       case _:
     }
   }
 
-  void _onStatus() {
-    final status = _status;
-    if (status == null || isDisposed) return;
+  void _onStatus(SessionStatus current) {
+    if (isDisposed) return;
     final previous = _last;
-    final current = _last = status.value;
+    _last = current;
+    // As it is now, not a change.
+    if (_firstStatus) {
+      _firstStatus = false;
+      return;
+    }
     if (current == SessionStatus.cancelling) _stopped = true;
     if (previous == null || !previous.isBusy || current.isBusy) return;
     // A setup that reached `idle` is not a turn: the turn it prepared usually runs next, within
@@ -157,7 +178,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   }
 
   void _sendIfStillIdle() {
-    if (isDisposed || state.paused || _status?.value != SessionStatus.idle) return;
+    if (isDisposed || state.paused || _last != SessionStatus.idle) return;
     _sendFirst();
   }
 
@@ -168,7 +189,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     _inFlight++;
     setState(state.copyWith(items: state.items.sublist(1), sending: true));
     handle(
-      () => _repository.send(sessionId, prompt.text, resources: prompt.blocks),
+      () => _repository.send(sessionId, prompt.text, attachments: prompt.attachments),
       done: () async {
         if (--_inFlight == 0) setState(state.copyWith(sending: false));
       },
@@ -189,8 +210,8 @@ final class ChatQueueController extends StateController<ChatQueueState> {
 
   @override
   void dispose() {
-    _status?.removeListener(_onStatus);
-    _status = null;
+    _statuses?.cancel().ignore();
+    _statuses = null;
     super.dispose();
   }
 }

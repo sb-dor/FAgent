@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_blocks.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/models/run_mentions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -47,7 +48,7 @@ void main() {
     String text,
   ) async {
     late List<Map<String, Object?>> found;
-    await tester.runAsync(() async => found = await chat.resourcesFor(text));
+    await tester.runAsync(() async => found = promptBlocks(await chat.resourcesFor(text)));
     return found;
   }
 

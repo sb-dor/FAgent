@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter_code_agent/src/common/acp/prompt_images.dart';
+import 'package:flutter_code_agent/src/feature/prompt_sending/models/prompt_attachment.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
 
@@ -70,19 +70,9 @@ final class ComposerImage {
   /// kept in the chat's journal instead of the image.
   final Uint8List thumbnail;
 
-  /// The ACP content block that sends the image; the thumbnail rides in the app's `_meta`, which
-  /// the hub journals in place of the image and never sends to the agent.
-  Map<String, Object?> toBlock() => <String, Object?>{
-    'type': 'image',
-    'mimeType': mimeType,
-    'data': base64Encode(bytes),
-    '_meta': <String, Object?>{
-      kAppMetaKey: <String, Object?>{
-        'thumbnail': base64Encode(thumbnail),
-        'thumbnailMimeType': 'image/png',
-      },
-    },
-  };
+  /// What goes to the agent: the image, with the thumbnail the journal keeps instead of it.
+  PromptAttachment toAttachment() =>
+      PromptImage(mimeType, base64Encode(bytes), thumbnailBase64: base64Encode(thumbnail));
 
   static Future<Uint8List> _thumbnail(Uint8List bytes) async {
     final buffer = await ui.ImmutableBuffer.fromUint8List(bytes);
