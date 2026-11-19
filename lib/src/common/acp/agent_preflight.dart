@@ -4,12 +4,15 @@ import 'dart:io' as io;
 
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 
 /// {@template agent_preflight_exception}
 /// The agent cannot start on this machine; [message] says why and [hint] how
 /// to fix it.
+///
+/// It is the machine's setup, not a bug: Node.js or the agent is missing.
 /// {@endtemplate}
-final class AgentPreflightException implements Exception {
+final class AgentPreflightException extends ExpectedException {
   /// {@macro agent_preflight_exception}
   const AgentPreflightException(this.message, {this.hint});
 

@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dart_acp_sdk/dart_acp_sdk.dart' show JsonRpcRequestException;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
@@ -28,12 +31,20 @@ String errorText(GeneratedLocalization lcl, Object? error, {bool debug = kDebugM
           when path.isNotEmpty =>
         lcl.errorFile(path, osError?.message ?? message),
       FileSystemException(:final message, :final osError) => osError?.message ?? message,
+      ProcessException(:final executable, :final errorCode, :final message)
+          when errorCode != 0 && message.isNotEmpty =>
+        lcl.errorProcessFailed(executable, message),
       ProcessException(:final executable) => lcl.errorProcess(executable),
       TimeoutException() => lcl.errorTimeout,
       FlutterNotFoundException() => lcl.errorFlutterNotFound,
       FlutterDoctorFailedException(:final output) => lcl.errorFlutterDoctorFailed(output),
       ChatBusyException() => lcl.errorChatBusy,
       AgentStoppedException() => lcl.errorAgentStopped,
+      AgentPreflightException(:final message, hint: final String hint) =>
+        lcl.errorAgentPreflightHint(message, hint),
+      AgentPreflightException(:final message) => lcl.errorAgentPreflight(message),
+      AgentStartException(:final message) => lcl.errorAgentStart(message),
+      JsonRpcRequestException(:final message) => lcl.errorAgentRequest(message),
       ProjectBusyException() => lcl.errorProjectBusy,
       OpenPathRefusedException(:final path) => lcl.errorOpenPathRefused(path),
       InvalidMcpServerException() => lcl.errorInvalidMcpServer,

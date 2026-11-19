@@ -2,11 +2,15 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:dart_acp_sdk/dart_acp_sdk.dart' show JsonRpcRequestException;
+import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
@@ -34,6 +38,51 @@ void main() {
 
   test('a process that cannot start names the command', () {
     expect(errorText(lcl, const ProcessException('npx', <String>[])), contains('npx'));
+  });
+
+  test('a process that started and failed shows what it printed', () {
+    final text = errorText(
+      lcl,
+      const ProcessException('claude', <String>['auth', 'logout'], 'not signed in', 1),
+      debug: false,
+    );
+    expect(text, contains('not signed in'));
+    expect(text, isNot(lcl.errorProcess('claude')));
+  });
+
+  group('agent errors', () {
+    test('a preflight failure shows its message and its hint', () {
+      final text = errorText(
+        lcl,
+        const AgentPreflightException('Node.js 20+ is required.', hint: 'Install Node.js 20'),
+        debug: false,
+      );
+      expect(text, contains('Node.js 20+ is required.'));
+      expect(text, contains('Install Node.js 20'));
+      expect(text, isNot(contains('AgentPreflightException')));
+    });
+
+    test('a preflight failure without a hint shows its message', () {
+      final text = errorText(lcl, const AgentPreflightException('no claude'), debug: false);
+      expect(text, contains('no claude'));
+      expect(text, isNot(contains('AgentPreflightException')));
+    });
+
+    test('a preflight failure is expected, not a crash', () {
+      expect(const AgentPreflightException('x'), isA<ExpectedException>());
+    });
+
+    test('a start failure shows its message', () {
+      final text = errorText(lcl, const AgentStartException('Claude failed'), debug: false);
+      expect(text, contains('Claude failed'));
+      expect(text, isNot(contains('AgentStartException')));
+    });
+
+    test('a failed agent request shows its message', () {
+      final text = errorText(lcl, JsonRpcRequestException.authenticationRequired(), debug: false);
+      expect(text, contains('Authentication required'));
+      expect(text, isNot(contains('JsonRpcRequestException')));
+    });
   });
 
   test('a failed flutter doctor shows what it printed', () {
@@ -73,6 +122,11 @@ void main() {
       const FileChangedOnDiskException('/p/a.txt', null),
       const BypassNotAllowedException(),
       const PermissionRulesUnreadableException('/p/.claude/settings.local.json'),
+      const AgentPreflightException('no node', hint: 'install node'),
+      const AgentPreflightException('no node'),
+      const AgentStartException('failed'),
+      JsonRpcRequestException.internalError(),
+      const ProcessException('claude', <String>[], 'not signed in', 1),
     ];
     for (final error in errors) {
       test('${error.runtimeType}', () {
