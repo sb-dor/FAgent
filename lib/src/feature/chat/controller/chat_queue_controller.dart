@@ -60,7 +60,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   /// The chat's live status; `null` until it is followed.
   SessionStatus? _last;
 
-  /// The next status is the first one of the chat's runtime state that is followed now.
+  /// The next status is the first one of the subscription [follow] made.
   bool _firstStatus = false;
 
   /// The user pressed Stop during the current turn.
@@ -73,7 +73,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
   int _inFlight = 0;
 
   /// Follows the live status of the chat. Following it again (the chat's runtime state was
-  /// replaced) stops following the old one.
+  /// replaced) stops following the old one; a status that moved in between counts as a change.
   void follow() {
     if (isDisposed) return;
     _statuses?.cancel().ignore();
@@ -150,10 +150,11 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     if (isDisposed) return;
     final previous = _last;
     _last = current;
-    // As it is now, not a change.
+    // The first status of the first follow is how the chat is now, not a change. After a
+    // re-follow it is a change from the last status seen: a turn may have ended in between.
     if (_firstStatus) {
       _firstStatus = false;
-      return;
+      if (previous == null) return;
     }
     if (current == SessionStatus.cancelling) _stopped = true;
     if (previous == null || !previous.isBusy || current.isBusy) return;

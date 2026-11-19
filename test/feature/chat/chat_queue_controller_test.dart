@@ -379,6 +379,52 @@ void main() {
     expect(queue.state.paused, isTrue);
   });
 
+  test('a turn that ends right at a re-follow still sends the queued message', () async {
+    // The chat's status the repository gives; the test swaps it between two follows, so the
+    // status moves while no subscription listens (a re-follow of the same chat races the end of
+    // its turn, or its runtime state was replaced).
+    var current = ValueNotifier<SessionStatus>(SessionStatus.running);
+    final first = current;
+    final refollowed = ChatQueueController(
+      sessionId: 3,
+      repository: sending,
+      chat: StatusChatRepository((_) => current),
+    )..follow();
+    addTearDown(() {
+      refollowed.dispose();
+      first.dispose();
+      current.dispose();
+    });
+    refollowed.add(_prompt('queued'));
+    await settle();
+    expect(sending.sent, isEmpty);
+
+    // The turn ended exactly as the chat is followed again: its first status is already idle.
+    current = ValueNotifier<SessionStatus>(SessionStatus.idle);
+    refollowed.follow();
+    await settle();
+
+    expect(sending.sent.map((s) => s.text), <String>['queued']);
+    expect(refollowed.state.items, isEmpty);
+  });
+
+  test('the first status of the first follow is not a change', () async {
+    final idle = ValueNotifier<SessionStatus>(SessionStatus.idle);
+    final fresh = ChatQueueController(
+      sessionId: 4,
+      repository: sending,
+      chat: StatusChatRepository((_) => idle),
+    )..follow();
+    addTearDown(() {
+      fresh.dispose();
+      idle.dispose();
+    });
+    await settle();
+
+    expect(sending.sent, isEmpty);
+    expect(fresh.state.paused, isFalse);
+  });
+
   test('a queue of chat A is never sent into chat B', () async {
     final statusB = ValueNotifier<SessionStatus>(SessionStatus.idle);
     final queueB = ChatQueueController(
