@@ -24,7 +24,6 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/app_mcp_tools/data/skill_tools.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_context/data/session_context_repository.dart';
 import 'package:flutter_code_agent/src/feature/skills/data/builtin_knowledge.dart';
@@ -33,7 +32,6 @@ import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dar
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
-import '../support/flutter_version_runner.dart';
 import '../support/scripted_mcp_probe.dart';
 
 /// The files of `assets/knowledge/` read from disk, keyed like the asset bundle does.
@@ -130,7 +128,7 @@ void main() {
         database: database,
         appServer: server,
         probe: ScriptedMcpProbe(),
-        flutterSdk: FlutterSdkRepositoryImpl(which: (_) => null, runProcess: flutterVersionRunner),
+        flutter: () async => null,
       ),
       environment: environment,
     );

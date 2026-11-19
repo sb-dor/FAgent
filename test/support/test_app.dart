@@ -160,7 +160,7 @@ Dependencies testDependencies({
           database: database,
           appServer: appServer,
           probe: probe,
-          flutterSdk: sdkRepository,
+          flutter: () => sdkRepository.pathFor(null),
         )
     ..skillsRepository =
         skillsRepository ??

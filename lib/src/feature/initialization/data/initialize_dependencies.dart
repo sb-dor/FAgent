@@ -305,7 +305,7 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
         database: dependencies.database,
         appServer: dependencies.appMcpServer,
         probe: probe,
-        flutterSdk: dependencies.flutterSdkRepository,
+        flutter: () async => flutterExecutableFor(null, which: dependencies.shellEnvironment.which),
       );
   },
   'Create session context repository': (dependencies) =>

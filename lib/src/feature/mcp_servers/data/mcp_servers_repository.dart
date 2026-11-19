@@ -7,7 +7,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/dart_mcp_command.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_json.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
@@ -74,19 +73,19 @@ const Set<String> _reservedNames = {'flutter_code_agent', 'dart'};
 
 /// [IMcpServersRepository] over the `mcp_servers` and `mcp_server_states` tables.
 final class McpServersRepositoryImpl implements IMcpServersRepository {
-  /// Creates the repository. [flutterSdk] tells which Flutter SDK Dart MCP runs on (the one the
+  /// Creates the repository. [flutter] finds the Flutter executable Dart MCP runs on (the SDK the
   /// Flutter section of Settings shows); [probe] connects to the servers.
   McpServersRepositoryImpl({
     required this._database,
     required this._appServer,
     required this._probe,
-    required this._flutterSdk,
+    required this._flutter,
   });
 
   final AppDatabase _database;
   final IAppMcpServer _appServer;
   final IMcpProbe _probe;
-  final IFlutterSdkRepository _flutterSdk;
+  final Future<String?> Function() _flutter;
 
   /// What the probes found, by server id; lost when the app closes.
   final Map<String, McpProbeResult> _results = <String, McpProbeResult>{};
@@ -250,7 +249,7 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
 
   /// Looks up the SDK of Settings, then probes Dart MCP on it.
   Future<void> _checkDart() async {
-    final flutter = await _flutterSdk.pathFor(null);
+    final flutter = await _flutter();
     final root = flutter == null ? null : flutterSdkRootOf(flutter);
     if (!_sdkLookedUp || root != _dartSdkRoot) {
       _sdkLookedUp = true;
