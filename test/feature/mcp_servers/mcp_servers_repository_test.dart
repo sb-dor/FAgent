@@ -88,6 +88,7 @@ void main() {
     final broken = list.firstWhere((s) => s.name == 'broken');
     expect(broken.command, isNull);
     expect(broken.url, isNull);
+    expect(broken.args, isEmpty);
   });
 
   group('the app server entry', () {

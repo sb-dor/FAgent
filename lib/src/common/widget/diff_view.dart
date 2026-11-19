@@ -32,16 +32,16 @@ class DiffView extends StatelessWidget {
   /// Lines rendered before the rest is summarized.
   final int maxLines;
 
-  /// The diff when the caller has already computed it (`LineDiff.compute`
-  /// of [oldText] and [newText]); computed here otherwise.
+  /// The diff of [oldText] and [newText], computed by the caller; `null`
+  /// while it is still being computed (a placeholder is shown).
   final List<DiffLine>? lines;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = context.colors;
-    final lines = this.lines ?? LineDiff.compute(oldText, newText);
-    final stats = LineDiff.stats(lines);
+    final lines = this.lines;
+    final stats = lines == null ? null : LineDiff.stats(lines);
     final mono = theme.textTheme.bodySmall?.copyWith(fontFamily: 'Menlo', height: 1.35);
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -62,7 +62,9 @@ class DiffView extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (oldText == null)
+                if (stats == null)
+                  const SizedBox.shrink()
+                else if (oldText == null)
                   Text(Localization.of(context).newFile, style: theme.textTheme.labelSmall)
                 else ...<Widget>[
                   Text(
@@ -79,33 +81,42 @@ class DiffView extends StatelessWidget {
             ),
           ),
           Divider(height: 1, color: colors.border),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SelectionArea(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  for (final line in lines.take(maxLines))
-                    ColoredBox(
-                      color: switch (line.kind) {
-                        DiffLineKind.added => colors.okSoft,
-                        DiffLineKind.removed => colors.dangerSoft,
-                        DiffLineKind.same => Colors.transparent,
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        child: Text('$line', style: mono, softWrap: false),
+          if (lines == null)
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Text(
+                Localization.of(context).diffComputing,
+                style: mono?.copyWith(color: colors.muted),
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SelectionArea(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    for (final line in lines.take(maxLines))
+                      ColoredBox(
+                        color: switch (line.kind) {
+                          DiffLineKind.added => colors.okSoft,
+                          DiffLineKind.removed => colors.dangerSoft,
+                          DiffLineKind.same => Colors.transparent,
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: Text('$line', style: mono, softWrap: false),
+                        ),
                       ),
-                    ),
-                  if (lines.length > maxLines)
-                    Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Text('… ${lines.length - maxLines}', style: mono),
-                    ),
-                ],
+                    if (lines.length > maxLines)
+                      Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Text('… ${lines.length - maxLines}', style: mono),
+                      ),
+                  ],
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

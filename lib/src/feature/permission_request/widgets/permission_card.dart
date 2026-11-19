@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/localization/generated/generated_l
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/src/feature/chat/models/diff_lines_cache.dart';
 
 /// {@template permission_card}
 /// The agent asks before acting: what it wants to do (command or diff) and the
@@ -114,12 +115,7 @@ class PermissionCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (pending)
-              for (final diff in item.diffs)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: DiffView(path: diff.path, oldText: diff.oldText, newText: diff.newText),
-                ),
+            if (pending) _PermissionDiffs(diffs: item.diffs),
             const SizedBox(height: 12),
             if (pending)
               Wrap(
@@ -184,4 +180,49 @@ class _WithHint extends StatelessWidget {
       ),
     ],
   );
+}
+
+/// The diffs of a pending request; owns the cache that computes them off the UI isolate.
+class _PermissionDiffs extends StatefulWidget {
+  const _PermissionDiffs({required this.diffs});
+
+  final List<ToolDiffContent> diffs;
+
+  @override
+  State<_PermissionDiffs> createState() => _PermissionDiffsState();
+}
+
+class _PermissionDiffsState extends State<_PermissionDiffs> {
+  late final DiffLinesCache _diffLines = DiffLinesCache(
+    onReady: () {
+      if (mounted) setState(() {});
+    },
+  );
+
+  @override
+  void dispose() {
+    _diffLines.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final diffs = widget.diffs;
+    final lines = _diffLines.resolve(diffs);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        for (var i = 0; i < diffs.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: DiffView(
+              path: diffs[i].path,
+              oldText: diffs[i].oldText,
+              newText: diffs[i].newText,
+              lines: lines[i],
+            ),
+          ),
+      ],
+    );
+  }
 }

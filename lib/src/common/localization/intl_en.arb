@@ -78,6 +78,7 @@
   "permissionStale": "Expired: the app was closed before an answer",
   "toolOutput": "Output",
   "newFile": "new file",
+  "diffComputing": "Computing diff…",
   "plan": "Plan",
   "turnCancelled": "Stopped",
   "turnRefused": "The agent refused to continue",

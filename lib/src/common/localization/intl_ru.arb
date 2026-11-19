@@ -57,6 +57,7 @@
   "permissionStale": "Истекло: приложение закрыли до ответа",
   "toolOutput": "Вывод",
   "newFile": "новый файл",
+  "diffComputing": "Считаю diff…",
   "plan": "План",
   "turnCancelled": "Остановлено",
   "turnRefused": "Агент отказался продолжать",

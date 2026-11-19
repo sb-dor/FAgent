@@ -1,5 +1,7 @@
 // ignore_for_file: avoid_classes_with_only_static_members
 
+import 'dart:isolate';
+
 import 'package:meta/meta.dart';
 
 /// Kind of a diff line.
@@ -46,6 +48,23 @@ abstract final class LineDiff {
   /// Above this many cells the LCS table is skipped and the change is shown
   /// as all old lines removed, all new lines added.
   static const int maxCells = 4000000;
+
+  /// Up to this many cells the diff is computed on the calling isolate; above
+  /// it [computeAsync] moves it to a background isolate.
+  static const int syncCells = 40000;
+
+  /// Size of the LCS table of [oldText] and [newText].
+  static int cells(String? oldText, String newText) {
+    final before = oldText == null || oldText.isEmpty ? 0 : '\n'.allMatches(oldText).length + 1;
+    final after = newText.isEmpty ? 0 : '\n'.allMatches(newText).length + 1;
+    return before * after;
+  }
+
+  /// [compute], on a background isolate when the table is above [syncCells].
+  static Future<List<DiffLine>> computeAsync(String? oldText, String newText) async {
+    if (cells(oldText, newText) <= syncCells) return compute(oldText, newText);
+    return Isolate.run(() => compute(oldText, newText));
+  }
 
   /// Diff of [oldText] (`null` for a new file) and [newText].
   static List<DiffLine> compute(String? oldText, String newText) {

@@ -48,7 +48,17 @@ class ChangesView extends StatefulWidget {
 }
 
 class _ChangesViewState extends State<ChangesView> {
-  final DiffLinesCache _diffLines = DiffLinesCache();
+  late final DiffLinesCache _diffLines = DiffLinesCache(
+    onReady: () {
+      if (mounted) setState(() {});
+    },
+  );
+
+  @override
+  void dispose() {
+    _diffLines.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +77,7 @@ class _ChangesViewState extends State<ChangesView> {
     // One cache for every diff, so a streamed chunk does not recompute the unchanged ones.
     final all = <ToolDiffContent>[for (final file in files) ...file.diffs];
     final resolved = _diffLines.resolve(all);
-    final lines = <String, List<List<DiffLine>>>{};
+    final lines = <String, List<List<DiffLine>?>>{};
     var offset = 0;
     for (final file in files) {
       lines[file.path] = resolved.sublist(offset, offset += file.diffs.length);
@@ -121,11 +131,12 @@ class _ChangesViewState extends State<ChangesView> {
 }
 
 /// `+N −M` over [diffs]; `null` without any.
-({int added, int removed})? _sum(List<List<DiffLine>> diffs) {
+({int added, int removed})? _sum(List<List<DiffLine>?> diffs) {
   if (diffs.isEmpty) return null;
   var added = 0;
   var removed = 0;
   for (final lines in diffs) {
+    if (lines == null) continue;
     final stats = LineDiff.stats(lines);
     added += stats.added;
     removed += stats.removed;

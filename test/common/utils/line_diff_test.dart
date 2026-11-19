@@ -18,6 +18,16 @@ void main() {
     expect(LineDiff.stats(LineDiff.compute('a\nc\nd', 'a\nb\nc')), (added: 1, removed: 1));
   });
 
+  test('computeAsync of large texts equals compute', () async {
+    String text(int step) =>
+        List<String>.generate(400, (i) => i % step == 0 ? 'x$i' : 'l$i').join('\n');
+    final a = text(7);
+    final b = text(5);
+
+    expect(LineDiff.cells(a, b), greaterThan(LineDiff.syncCells));
+    expect(await LineDiff.computeAsync(a, b), LineDiff.compute(a, b));
+  });
+
   test('huge inputs fall back to remove-all, add-all', () {
     final big = List<String>.generate(2100, (i) => 'line $i').join('\n');
     final lines = LineDiff.compute(big, '$big\nextra');

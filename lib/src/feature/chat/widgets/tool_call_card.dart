@@ -72,7 +72,17 @@ class ToolCallCard extends StatefulWidget {
 class _ToolCallCardState extends State<ToolCallCard> {
   static const int _maxOutputChars = 4000;
 
-  final DiffLinesCache _diffLines = DiffLinesCache();
+  late final DiffLinesCache _diffLines = DiffLinesCache(
+    onReady: () {
+      if (mounted) setState(() {});
+    },
+  );
+
+  @override
+  void dispose() {
+    _diffLines.dispose();
+    super.dispose();
+  }
 
   /// [path] as the Changes tab knows the file: inside the project folder (the agent may report a
   /// path relative to it), normalized.
@@ -158,7 +168,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
 class _DiffCounter extends StatelessWidget {
   const _DiffCounter({required this.lines});
 
-  final List<List<DiffLine>> lines;
+  final List<List<DiffLine>?> lines;
 
   @override
   Widget build(BuildContext context) {
@@ -166,6 +176,7 @@ class _DiffCounter extends StatelessWidget {
     var added = 0;
     var removed = 0;
     for (final diffLines in lines) {
+      if (diffLines == null) continue;
       final stats = LineDiff.stats(diffLines);
       added += stats.added;
       removed += stats.removed;

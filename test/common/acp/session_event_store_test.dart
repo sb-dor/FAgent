@@ -53,6 +53,63 @@ void main() {
     await store.close();
   });
 
+  test('the next seq follows the last row even when it is unreadable', () async {
+    Future<void> insert(int seq, String payload) => database
+        .into(database.sessionEventsTable)
+        .insert(
+          SessionEventsTableCompanion.insert(
+            sessionId: sessionId,
+            seq: seq,
+            origin: 'agent',
+            kind: 'agent_message_chunk',
+            payload: payload,
+          ),
+        );
+    await insert(3, '{}');
+    await insert(4, 'not json');
+
+    final store = await SessionEventStore.open(
+      database,
+      sessionId,
+      flushInterval: const Duration(hours: 1),
+    );
+
+    expect(store.events.map((e) => e.seq), <int>[3]);
+    expect(store.addAgentFrame('agent_message_chunk', <String, Object?>{}).seq, 5);
+    await store.close();
+  });
+
+  test('a long journal is decoded in order, skipping the corrupt row', () async {
+    const count = SessionEventStore.isolateRows + 100;
+    await database.batch(
+      (batch) => batch.insertAll(database.sessionEventsTable, <SessionEventsTableCompanion>[
+        for (var seq = 0; seq < count; seq++)
+          SessionEventsTableCompanion.insert(
+            sessionId: sessionId,
+            seq: seq,
+            origin: 'agent',
+            kind: 'agent_message_chunk',
+            payload: seq == 300 ? 'not json' : '{"n": $seq}',
+          ),
+      ]),
+    );
+
+    final store = await SessionEventStore.open(
+      database,
+      sessionId,
+      flushInterval: const Duration(hours: 1),
+    );
+
+    expect(store.events, hasLength(count - 1));
+    expect(store.events.map((e) => e.seq), <int>[
+      for (var seq = 0; seq < count; seq++)
+        if (seq != 300) seq,
+    ]);
+    expect(store.events[301].payload, <String, Object?>{'n': 302});
+    expect(store.addAgentFrame('agent_message_chunk', <String, Object?>{}).seq, count);
+    await store.close();
+  });
+
   test('agent frames are visible at once and written in a batch', () async {
     final store = await SessionEventStore.open(
       database,

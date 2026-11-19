@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/src/common/utils/line_diff.dart';
 import 'package:flutter_code_agent/src/common/widget/app_card.dart';
 import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
@@ -100,10 +102,28 @@ void main() {
     expect(picked, 'changes');
   });
 
+  testWidgets('DiffView without lines shows the computing placeholder', (tester) async {
+    await tester.pumpWidget(
+      testApp(const DiffView(path: 'lib/a.dart', oldText: 'a', newText: 'b')),
+    );
+
+    expect(
+      find.text(lookupGeneratedLocalization(const Locale('en')).diffComputing),
+      findsOneWidget,
+    );
+    expect(find.text('+b'), findsNothing);
+    expect(find.text('-a'), findsNothing);
+  });
+
   testWidgets('DiffView paints its lines and frame from the dark tokens', (tester) async {
     await tester.pumpWidget(
       testApp(
-        const DiffView(path: 'lib/a.dart', oldText: 'a\nb', newText: 'a\nc'),
+        DiffView(
+          path: 'lib/a.dart',
+          oldText: 'a\nb',
+          newText: 'a\nc',
+          lines: LineDiff.compute('a\nb', 'a\nc'),
+        ),
         theme: AppTheme.dark(),
       ),
     );

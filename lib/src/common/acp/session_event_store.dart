@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
@@ -26,6 +27,9 @@ final class SessionEventStore {
     this.flushInterval,
   );
 
+  /// Journals with more rows than this are decoded on a background isolate.
+  static const int isolateRows = 500;
+
   /// Loads the journal of [sessionId] and returns a store that appends to it.
   static Future<SessionEventStore> open(
     AppDatabase database,
@@ -39,10 +43,9 @@ final class SessionEventStore {
                 (e) => OrderingTerm.asc(e.seq),
               ]))
             .get();
-    final events = <SessionEvent>[
-      for (final row in rows)
-        if (_fromRow(row) case final SessionEvent event) event,
-    ];
+    final events = rows.length > isolateRows
+        ? await Isolate.run(() => _decodeRows(rows))
+        : _decodeRows(rows);
     return SessionEventStore._(
       database,
       sessionId,
@@ -51,6 +54,11 @@ final class SessionEventStore {
       flushInterval,
     );
   }
+
+  static List<SessionEvent> _decodeRows(List<SessionEventRow> rows) => <SessionEvent>[
+    for (final row in rows)
+      if (_fromRow(row) case final SessionEvent event) event,
+  ];
 
   /// The event stored in [row], or `null` (logged) when the row cannot be read.
   static SessionEvent? _fromRow(SessionEventRow row) {
