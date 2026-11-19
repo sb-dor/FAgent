@@ -33,5 +33,11 @@ void main() {
     final lines = LineDiff.compute(big, '$big\nextra');
     expect(lines.where((l) => l.kind == DiffLineKind.same), isEmpty);
     expect(lines.length, 2100 + 2101);
+    expect(lines, LineDiff.allChanged(big, '$big\nextra'));
+  });
+
+  test('allChanged removes every old line and adds every new one', () {
+    expect(LineDiff.allChanged('a\nb', 'a\nc').map((l) => '$l'), <String>['-a', '-b', '+a', '+c']);
+    expect(LineDiff.allChanged(null, 'a').map((l) => '$l'), <String>['+a']);
   });
 }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/utils/line_diff.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
+import 'package:l/l.dart';
 
 /// Line diffs of tool calls, computed once per distinct change.
 ///
@@ -10,7 +11,7 @@ import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 /// new each time while their texts stay equal; the diff (LCS, O(n·m)) must
 /// not run on the UI thread for each streamed chunk. Small diffs are computed
 /// at once; large ones on a background isolate, and [onReady] fires when one
-/// lands.
+/// lands (or failed, and shows every line as changed).
 class DiffLinesCache {
   /// Creates a cache that calls [onReady] when a background diff is done.
   DiffLinesCache({required this.onReady});
@@ -47,8 +48,16 @@ class DiffLinesCache {
     return null;
   }
 
+  /// A diff that fails on the background isolate shows as [LineDiff.allChanged], so the card
+  /// does not wait for it forever.
   Future<void> _computeInBackground((String?, String) key) async {
-    final lines = await LineDiff.computeAsync(key.$1, key.$2);
+    List<DiffLine> lines;
+    try {
+      lines = await LineDiff.computeAsync(key.$1, key.$2);
+    } on Object catch (error, stackTrace) {
+      l.w('DiffLinesCache | the diff failed, showing every line as changed: $error', stackTrace);
+      lines = LineDiff.allChanged(key.$1, key.$2);
+    }
     if (_disposed || !_pending.remove(key)) return;
     _entries[key] = lines;
     onReady();

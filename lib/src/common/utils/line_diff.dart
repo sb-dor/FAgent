@@ -66,16 +66,23 @@ abstract final class LineDiff {
     return Isolate.run(() => compute(oldText, newText));
   }
 
+  /// The change from [oldText] to [newText] without a diff: every old line removed, every new
+  /// line added. [compute] returns it above [maxCells].
+  static List<DiffLine> allChanged(String? oldText, String newText) => _allChanged(
+    oldText == null || oldText.isEmpty ? const <String>[] : oldText.split('\n'),
+    newText.isEmpty ? const <String>[] : newText.split('\n'),
+  );
+
+  static List<DiffLine> _allChanged(List<String> before, List<String> after) => <DiffLine>[
+    for (final line in before) DiffLine(DiffLineKind.removed, line),
+    for (final line in after) DiffLine(DiffLineKind.added, line),
+  ];
+
   /// Diff of [oldText] (`null` for a new file) and [newText].
   static List<DiffLine> compute(String? oldText, String newText) {
     final before = oldText == null || oldText.isEmpty ? const <String>[] : oldText.split('\n');
     final after = newText.isEmpty ? const <String>[] : newText.split('\n');
-    if (before.length * after.length > maxCells) {
-      return <DiffLine>[
-        for (final line in before) DiffLine(DiffLineKind.removed, line),
-        for (final line in after) DiffLine(DiffLineKind.added, line),
-      ];
-    }
+    if (before.length * after.length > maxCells) return _allChanged(before, after);
     // lcs[i][j]: length of the LCS of before[i..] and after[j..].
     final lcs = List<List<int>>.generate(
       before.length + 1,
