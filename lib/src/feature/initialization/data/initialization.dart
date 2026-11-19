@@ -14,13 +14,17 @@ Future<Dependencies> $initializeApp({
   void Function(int progress, String message)? onProgress,
   Future<void> Function(Dependencies dependencies)? onSuccess,
   void Function(Object error, StackTrace stackTrace)? onError,
+  @visibleForTesting Map<String, InitializationStep>? steps,
 }) => _$initializeApp ??= Future<Dependencies>(() async {
-  late final WidgetsBinding binding;
+  // One deferral and one allowance per attempt, so a retry never allows a frame twice.
+  final binding = WidgetsFlutterBinding.ensureInitialized()..deferFirstFrame();
   try {
-    binding = WidgetsFlutterBinding.ensureInitialized()..deferFirstFrame();
     await _catchExceptions();
-    final dependencies = await $initializeDependencies(onProgress: onProgress)
-        .timeout(const Duration(minutes: 1));
+    final dependencies = await $initializeDependencies(
+      onProgress: onProgress,
+      // ignore: invalid_use_of_visible_for_testing_member, the steps of a test
+      steps: steps,
+    ).timeout(const Duration(minutes: 1));
     await onSuccess?.call(dependencies);
     return dependencies;
   } on Object catch (error, stackTrace) {
@@ -45,7 +49,16 @@ Future<void> $disposeApp(Dependencies dependencies) async {
   await dependencies.database.close();
 }
 
+bool _handlersInstalled = false;
+
+/// How many times the error handlers were installed; once per app run.
+@visibleForTesting
+int handlerInstalls = 0;
+
 Future<void> _catchExceptions() async {
+  if (_handlersInstalled) return;
+  _handlersInstalled = true;
+  handlerInstalls++;
   try {
     PlatformDispatcher.instance.onError = (error, stackTrace) {
       ErrorUtil.logError(

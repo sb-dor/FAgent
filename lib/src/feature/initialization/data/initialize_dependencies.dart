@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
@@ -32,6 +33,7 @@ import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repo
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/initialization/models/initialization_exception.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
@@ -49,31 +51,61 @@ import 'package:flutter_code_agent/src/feature/turn_files/data/git_turn_files_ob
 import 'package:l/l.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Initializes the app and returns a [Dependencies] object
+/// Opens one thing at startup.
+typedef InitializationStep = FutureOr<void> Function(Dependencies dependencies);
+
+/// Closes what the step of the same name opened.
+typedef InitializationCloser = FutureOr<void> Function(Dependencies dependencies);
+
+/// The startup steps, for the test that checks the closers against them.
+@visibleForTesting
+Map<String, InitializationStep> get initializationStepsForTest => _initializationSteps;
+
+/// The closers, for the test that checks them against the steps.
+@visibleForTesting
+Map<String, InitializationCloser> get initializationClosersForTest => _initializationClosers;
+
+/// Initializes the app and returns a [Dependencies] object.
+///
+/// When a step fails, the closers of the steps that finished run in reverse order (one that fails
+/// is logged, the rest still run), then an [InitializationException] is thrown.
 Future<Dependencies> $initializeDependencies({
   void Function(int progress, String message)? onProgress,
+  @visibleForTesting Map<String, InitializationStep>? steps,
+  @visibleForTesting Map<String, InitializationCloser>? closers,
 }) async {
+  final stepMap = steps ?? _initializationSteps;
+  final closerMap = closers ?? _initializationClosers;
   final dependencies = Dependencies();
-  final totalSteps = _initializationSteps.length;
+  final totalSteps = stepMap.length;
+  final finished = <String>[];
   var currentStep = 0;
-  for (final step in _initializationSteps.entries) {
+  for (final step in stepMap.entries) {
     try {
       currentStep++;
       final percent = (currentStep * 100 ~/ totalSteps).clamp(0, 100);
       onProgress?.call(percent, step.key);
       l.v6('Initialization | $currentStep/$totalSteps ($percent%) | "${step.key}"');
       await step.value(dependencies);
+      finished.add(step.key);
     } on Object catch (error, stackTrace) {
       l.e('Initialization failed at step "${step.key}": $error', stackTrace);
-      Error.throwWithStackTrace('Initialization failed at step "${step.key}": $error', stackTrace);
+      for (final name in finished.reversed) {
+        final close = closerMap[name];
+        if (close == null) continue;
+        try {
+          await close(dependencies);
+        } on Object catch (closeError, closeStackTrace) {
+          l.w('Initialization | closing "$name" failed: $closeError', closeStackTrace);
+        }
+      }
+      Error.throwWithStackTrace(InitializationException(step.key, error), stackTrace);
     }
   }
   return dependencies;
 }
 
-typedef _InitializationStep = FutureOr<void> Function(Dependencies dependencies);
-
-final Map<String, _InitializationStep> _initializationSteps = <String, _InitializationStep>{
+final Map<String, InitializationStep> _initializationSteps = <String, InitializationStep>{
   'Platform pre-initialization': (_) => $platformInitialization(),
   'Observer state management': (_) => Controller.observer = const ControllerObserver(),
   'Connect to database': (dependencies) =>
@@ -275,4 +307,20 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
         projectRules: dependencies.projectRulesRepository,
         loadAsset: rootBundle.loadString,
       ),
+};
+
+/// What the steps above open, keyed by the exact step name. Steps that open nothing have none.
+final Map<String, InitializationCloser> _initializationClosers = <String, InitializationCloser>{
+  'Connect to database': (dependencies) => dependencies.database.close(),
+  'Create app run repositories': (dependencies) async {
+    await dependencies.widgetPickerRepository.dispose();
+    await dependencies.appRunRepository.dispose();
+    await dependencies.devicesRepository.dispose();
+  },
+  'Create agent hub': (dependencies) => dependencies.agentHub.dispose(),
+  'Follow custom agents': (dependencies) => dependencies.stopFollowingCustomAgents(),
+  'Create agents repository': (dependencies) => dependencies.agentProbe.dispose(),
+  'Create code views': (dependencies) => dependencies.codeViews.close(),
+  'App MCP server': (dependencies) => dependencies.appMcpServer.close(),
+  'Create MCP servers repository': (dependencies) => dependencies.mcpProbe.dispose(),
 };

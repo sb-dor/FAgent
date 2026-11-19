@@ -8,13 +8,15 @@ import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings
 import 'package:flutter_code_agent/src/feature/initialization/data/initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/widget/app.dart';
 
-void main() => appZone(() async {
+void main() => appZone(() async => _start());
+
+void _start() {
   $initializeApp(
     onSuccess: (dependencies) async =>
         runApp(dependencies.inject(child: const AppSettingsConfigWidget(child: App()))),
     onError: (error, stackTrace) {
-      runApp(AppError(error: error));
+      runApp(AppError(error: error, onRetry: _start));
       ErrorUtil.logError(error, stackTrace).ignore();
     },
   ).ignore();
-});
+}

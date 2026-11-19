@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
+import 'package:flutter_code_agent/src/feature/initialization/models/initialization_exception.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 
@@ -14,6 +15,7 @@ import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository
 /// what was missed ([debug]), and a generic sentence otherwise.
 String errorText(GeneratedLocalization lcl, Object? error, {bool debug = kDebugMode}) =>
     switch (error) {
+      InitializationException(:final cause) => errorText(lcl, cause, debug: debug),
       FileSystemException(:final String path, :final message, :final osError)
           when path.isNotEmpty =>
         lcl.errorFile(path, osError?.message ?? message),
