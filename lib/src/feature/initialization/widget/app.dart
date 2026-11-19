@@ -21,8 +21,6 @@ class App extends StatefulWidget {
 }
 
 class _AppState extends State<App> {
-  final Key builderKey = GlobalKey(); // Disable recreate widgets tree
-
   late final _settings = AppSettingsConfigInhWidget.of(context).controller;
 
   @override
@@ -56,9 +54,10 @@ class _AppState extends State<App> {
     themeMode: _settings.settings.themeMode,
 
     home: const AppCloseGuard(child: HubNoticesListener(child: WorkspaceConfigWidget())),
-    builder: (context, child) => MediaQuery(
-      key: builderKey,
-      data: MediaQuery.of(context).copyWith(textScaler: TextScaler.noScaling),
+    // The system text size, kept within the range the layout was checked at.
+    builder: (context, child) => MediaQuery.withClampedTextScaling(
+      minScaleFactor: 1,
+      maxScaleFactor: 1.5,
       child: child ?? const SizedBox.shrink(),
     ),
   );
