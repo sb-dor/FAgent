@@ -79,9 +79,7 @@ final class ChatQueueController extends StateController<ChatQueueState> {
     _statuses?.cancel().ignore();
     _firstStatus = true;
     _statuses = _chat
-        .watch(sessionId)
-        .map((runtime) => runtime.status)
-        .distinct()
+        .watchStatus(sessionId)
         .listen(
           _onStatus,
           // The chat screen shows a chat that cannot be opened.

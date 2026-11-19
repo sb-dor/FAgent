@@ -53,6 +53,26 @@ final class StatusChatRepository implements IChatRepository {
   }
 
   @override
+  Stream<SessionStatus> watchStatus(int sessionId) {
+    final status = statusOf(sessionId);
+    final controller = StreamController<SessionStatus>(sync: true);
+    void emit() {
+      if (!controller.isClosed) controller.add(status.value);
+    }
+
+    controller
+      ..onListen = () {
+        status.addListener(emit);
+        emit();
+      }
+      ..onCancel = () {
+        status.removeListener(emit);
+        return controller.close();
+      };
+    return controller.stream;
+  }
+
+  @override
   Future<void> retry(int sessionId) async {}
 
   @override

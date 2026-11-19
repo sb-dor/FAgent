@@ -24,7 +24,7 @@ sealed class ChatState with _$ChatState {
 ///
 /// While the agent streams, the feed is folded at most every
 /// [refoldInterval] instead of once per chunk.
-final class ChatController extends StateController<ChatState> {
+final class ChatController extends StateController<ChatState> with SequentialControllerHandler {
   ChatController({
     required this._repository,
     this.refoldInterval = const Duration(milliseconds: 50),
@@ -44,33 +44,29 @@ final class ChatController extends StateController<ChatState> {
 
   /// Shows chat [sessionId]. With [keepView] the screen stays as it is until the chat is
   /// loaded again (its runtime state was replaced, for example after a change of its agent).
-  ///
-  /// Only subscribes, so it is not a handled operation: the chat's stream runs in the caller's
-  /// zone, not in one of a handler that has already finished.
-  void open(int sessionId, {bool keepView = false}) {
-    if (isDisposed) return;
+  void open(int sessionId, {bool keepView = false}) => handle(() async {
     _detach();
     if (!keepView) setState(const ChatState.inProgress());
+    final opened = Completer<void>();
     _runtimes = _repository
         .watch(sessionId)
         .listen(
-          _onRuntime,
+          (runtime) {
+            _runtime = runtime;
+            opened.isCompleted ? _scheduleRefold() : opened.complete();
+          },
           onError: (Object error, StackTrace stackTrace) {
-            if (!isDisposed) setState(ChatState.error(error: error));
+            if (!opened.isCompleted) {
+              opened.completeError(error, stackTrace);
+            } else if (!isDisposed) {
+              setState(ChatState.error(error: error));
+            }
           },
         );
-  }
-
-  void _onRuntime(ChatRuntime runtime) {
-    final first = _runtime == null;
-    _runtime = runtime;
-    // The chat was just opened: it shows at once.
-    if (first) {
-      _emit();
-    } else {
-      _scheduleRefold();
-    }
-  }
+    await opened.future;
+    // The chat was just opened: it shows at once, and a fold that fails is the open's error.
+    _emit();
+  }, error: (error, stackTrace) async => setState(ChatState.error(error: error)));
 
   void _scheduleRefold() => _refold ??= Timer(refoldInterval, () {
     _refold = null;

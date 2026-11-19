@@ -32,7 +32,8 @@ final class ChatRuntime {
   /// Agent that runs the chat.
   final String agentId;
 
-  /// The journal's visible events in `seq` order.
+  /// The journal's visible events in `seq` order: a read-only view of the journal, not a copy, so
+  /// it shows later events too; read it when the feed is folded.
   final List<SessionEvent> events;
 
   /// Permission request ids still open in this run.

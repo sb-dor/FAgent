@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:isolate';
 
@@ -110,6 +111,12 @@ final class SessionEventStore {
 
   /// Visible events in `seq` order.
   List<SessionEvent> get events => List<SessionEvent>.unmodifiable(_events);
+
+  /// The visible events in `seq` order, read-only and without a copy: one view that shows every
+  /// later event too.
+  late final UnmodifiableListView<SessionEvent> eventsView = UnmodifiableListView<SessionEvent>(
+    _events,
+  );
 
   /// Every event as it becomes visible. Durable events may arrive after agent
   /// frames with a higher `seq`; consumers order by `seq`.

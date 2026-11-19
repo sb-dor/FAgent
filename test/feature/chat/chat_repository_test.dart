@@ -125,6 +125,54 @@ void main() {
     expect(identical(runtimes.last.commands, runtimes[runtimes.length - 2].commands), isTrue);
   });
 
+  test('the runtimes share one view of the journal instead of copying it', () async {
+    final runtimes = collect(repository.watch(chat));
+    await pumpEventQueue();
+    final live = await hub.session(chat);
+
+    live.status.value = SessionStatus.error;
+    expect(runtimes, hasLength(2));
+    expect(identical(runtimes.first.events, runtimes.last.events), isTrue);
+
+    live.store.addAgentFrame('agent_message_chunk', const <String, Object?>{});
+    expect(identical(runtimes.last.events, runtimes.first.events), isTrue);
+    expect(runtimes.first.events, hasLength(1));
+  });
+
+  test('watchStatus emits the status and its changes, and nothing after cancel', () async {
+    final statuses = <SessionStatus>[];
+    final subscription = repository.watchStatus(chat).listen(statuses.add);
+    await pumpEventQueue();
+    final live = await hub.session(chat);
+    expect(statuses, <SessionStatus>[SessionStatus.cold]);
+
+    live
+      ..canForceStop.value = true
+      ..status.value = SessionStatus.starting;
+    live.store.addAgentFrame('agent_message_chunk', const <String, Object?>{});
+    expect(statuses, <SessionStatus>[SessionStatus.cold, SessionStatus.starting]);
+
+    await subscription.cancel();
+    live.status.value = SessionStatus.idle;
+    await pumpEventQueue();
+    expect(statuses, <SessionStatus>[SessionStatus.cold, SessionStatus.starting]);
+  });
+
+  test('watchStatus of a chat that cannot be opened is an error, then the stream ends', () async {
+    final events = <String>[];
+    final done = Completer<void>();
+    repository
+        .watchStatus(chat + 100)
+        .listen(
+          (_) => events.add('value'),
+          onError: (Object error) => events.add('error'),
+          onDone: done.complete,
+        );
+
+    await done.future;
+    expect(events, <String>['error']);
+  });
+
   test('emits nothing after the listener cancels', () async {
     final runtimes = <ChatRuntime>[];
     final subscription = repository.watch(chat).listen(runtimes.add);
@@ -144,10 +192,12 @@ void main() {
     expect(runtimes, hasLength(count));
   });
 
-  test('a chat that cannot be opened is a stream error', () async {
-    final done = Completer<Object>();
-    repository.watch(chat + 100).listen((_) {}, onError: done.complete);
+  test('a chat that cannot be opened is a stream error, then the stream ends', () async {
+    final error = Completer<Object>();
+    final done = Completer<void>();
+    repository.watch(chat + 100).listen((_) {}, onError: error.complete, onDone: done.complete);
 
-    expect(await done.future, isA<StateError>());
+    expect(await error.future, isA<StateError>());
+    await done.future;
   });
 }

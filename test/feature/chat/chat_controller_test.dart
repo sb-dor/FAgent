@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
@@ -25,6 +26,9 @@ final class _FakeChatRepository implements IChatRepository {
   }
 
   Future<void> close() => runtimes.close();
+
+  @override
+  Stream<SessionStatus> watchStatus(int sessionId) => throw UnimplementedError();
 
   @override
   Future<void> retry(int sessionId) async {}
@@ -144,6 +148,14 @@ void main() {
     expect((controller.state as Chat$ErrorState).error, isA<StateError>());
   });
 
+  test('a first runtime that cannot be folded shows the error', () async {
+    await open();
+    repository.runtimes.add(_runtime(events: _Throwing(<SessionEvent>[_prompt(1, 'x')])));
+    await pumpEventQueue();
+
+    expect(controller.state, isA<Chat$ErrorState>());
+  });
+
   test('opening again with keepView keeps the view until the new runtime arrives', () async {
     await open();
     repository.runtimes.add(_runtime(events: <SessionEvent>[_prompt(1, 'kept')]));
@@ -160,4 +172,23 @@ void main() {
     expect(view().status, SessionStatus.cold);
     expect(view().items, isEmpty);
   });
+}
+
+/// A journal whose reading throws, as a corrupt one could in the fold.
+final class _Throwing extends ListBase<SessionEvent> {
+  _Throwing(this._events);
+
+  final List<SessionEvent> _events;
+
+  @override
+  int get length => _events.length;
+
+  @override
+  set length(int value) => throw UnsupportedError('read-only');
+
+  @override
+  SessionEvent operator [](int index) => throw StateError('corrupt journal');
+
+  @override
+  void operator []=(int index, SessionEvent value) => throw UnsupportedError('read-only');
 }

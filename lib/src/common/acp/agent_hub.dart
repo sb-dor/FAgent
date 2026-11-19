@@ -118,7 +118,10 @@ final class AgentHub {
   /// How long Stop may take before force-stop is offered.
   final Duration cancelTimeout;
 
-  final Map<int, Future<LiveSession>> _sessions = <int, Future<LiveSession>>{};
+  /// One open per chat. It never completes with an error: a failure is its value, rethrown by
+  /// [session] in each caller's own error zone (a future's error does not cross error zones, so a
+  /// shared failing future would reach only the zone that created it).
+  final Map<int, Future<_Opening>> _sessions = <int, Future<_Opening>>{};
   final Map<int, LiveSession> _opened = <int, LiveSession>{};
   final Map<int, Future<void>> _setupLanes = <int, Future<void>>{};
   final StreamController<HubNotice> _notices = StreamController<HubNotice>.broadcast();
@@ -154,10 +157,8 @@ final class AgentHub {
 
   /// Chats opened so far (chats whose journal failed to open are skipped).
   Future<List<LiveSession>> get liveSessions async => <LiveSession>[
-    for (final opening in List<Future<LiveSession>>.of(_sessions.values))
-      if (await opening.then<LiveSession?>((s) => s, onError: (Object _) => null)
-          case final LiveSession live)
-        live,
+    for (final opening in List<Future<_Opening>>.of(_sessions.values))
+      if ((await opening).live case final LiveSession live) live,
   ];
 
   /// The chat's runtime state if it was opened in this run, without opening
@@ -173,11 +174,22 @@ final class AgentHub {
   /// The runtime state of chat [sessionId], opening its journal on first use.
   Future<LiveSession> session(int sessionId) {
     _checkNotDisposed();
-    return _sessions[sessionId] ??= _open(sessionId)
-        .catchError((Object error, StackTrace stackTrace) {
+    return _unwrap(
+      _sessions[sessionId] ??= _open(sessionId).then<_Opening>(
+        (live) => (live: live, failure: null),
+        onError: (Object error, StackTrace stackTrace) {
           _sessions.remove(sessionId);
-          Error.throwWithStackTrace(error, stackTrace);
-        });
+          return (live: null, failure: AsyncError(error, stackTrace));
+        },
+      ),
+    );
+  }
+
+  /// The chat of [opening], or its failure thrown in the caller's zone.
+  static Future<LiveSession> _unwrap(Future<_Opening> opening) async {
+    final (:live, :failure) = await opening;
+    if (failure != null) Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    return live!;
   }
 
   /// Whether the agent of chat [sessionId] can still change: the chat has no agent session, no
@@ -210,15 +222,11 @@ final class AgentHub {
   /// A listener that still follows the dropped state has to open the chat again.
   Future<bool> forget(int sessionId) async {
     if (_disposing) return false;
-    final LiveSession live;
-    try {
-      final opening = _sessions[sessionId];
-      if (opening == null) return true;
-      live = await opening;
-    } on Object {
-      // The chat never opened: nothing is cached.
-      return true;
-    }
+    final opening = _sessions[sessionId];
+    if (opening == null) return true;
+    final live = (await opening).live;
+    // The chat never opened: nothing is cached.
+    if (live == null) return true;
     // Another caller may have dropped or replaced it while the open was awaited.
     if (!identical(_opened[sessionId], live)) return !_opened.containsKey(sessionId);
     if (!_agentChangeable(live)) return false;
@@ -1275,3 +1283,6 @@ final class AgentHub {
     _ => const <Map<String, Object?>>[],
   };
 }
+
+/// A chat's open: its runtime state, or why it failed.
+typedef _Opening = ({LiveSession? live, AsyncError? failure});

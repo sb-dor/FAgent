@@ -236,4 +236,17 @@ void main() {
     expect(await storedSeqs(), <int>[0, 1]);
     await store.close();
   });
+
+  test('eventsView is one read-only view that shows later events without a copy', () async {
+    final store = await SessionEventStore.open(database, sessionId);
+    final view = store.eventsView;
+    expect(view, isEmpty);
+
+    store.addAgentFrame('agent_message_chunk', const <String, Object?>{});
+
+    expect(identical(store.eventsView, view), isTrue);
+    expect(view.map((event) => event.seq), store.events.map((event) => event.seq));
+    expect(() => view.add(view.first), throwsUnsupportedError);
+    await store.close();
+  });
 }
