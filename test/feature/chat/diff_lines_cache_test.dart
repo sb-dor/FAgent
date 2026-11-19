@@ -50,9 +50,7 @@ void main() {
 
   test('dispose before the diff lands means onReady never fires', () async {
     var ready = 0;
-    final cache = DiffLinesCache(onReady: () => ready++);
-
-    cache
+    final cache = DiffLinesCache(onReady: () => ready++)
       ..resolve(<ToolDiffContent>[_diff(_lines('a', 300), _lines('b', 300))])
       ..dispose();
     await Future<void>.delayed(const Duration(seconds: 2));
@@ -62,9 +60,7 @@ void main() {
 
   test('a dropped pending diff does not land', () async {
     var ready = 0;
-    final cache = DiffLinesCache(onReady: () => ready++);
-
-    cache
+    final cache = DiffLinesCache(onReady: () => ready++)
       ..resolve(<ToolDiffContent>[_diff(_lines('a', 300), _lines('b', 300))])
       ..resolve(<ToolDiffContent>[_diff('a', 'b')]);
     await Future<void>.delayed(const Duration(seconds: 2));
