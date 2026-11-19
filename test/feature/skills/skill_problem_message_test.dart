@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization_en.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization_ru.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
@@ -15,5 +18,16 @@ void main() {
     expect(en, hasLength(KnowledgeProblem.values.length));
     expect(ru, hasLength(KnowledgeProblem.values.length));
     expect(en.intersection(ru), isEmpty);
+  });
+
+  test('an error that is not about the skill gets its own sentence, not the general one', () {
+    final english = GeneratedLocalizationEn();
+    const error = FileSystemException('Cannot write', '/p/SKILL.md', OSError('Disk full', 28));
+
+    final text = skillErrorMessage(english, error);
+
+    expect(text, isNot(english.somethingWentWrong));
+    expect(text, errorText(english, error));
+    expect(text, contains('/p/SKILL.md'));
   });
 }

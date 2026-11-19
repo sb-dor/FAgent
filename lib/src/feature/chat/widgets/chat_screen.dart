@@ -2,6 +2,7 @@ import 'package:control/control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/session_problem.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
@@ -226,7 +227,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       Chat$ErrorState(:final error) => Center(
-        child: Text(error?.toString() ?? Localization.of(context).somethingWentWrong),
+        child: Text(errorText(Localization.of(context), error)),
       ),
       _ => const Center(child: CircularProgressIndicator()),
     },

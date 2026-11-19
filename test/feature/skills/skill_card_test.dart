@@ -1142,12 +1142,16 @@ void main() {
       useDesktopView(tester);
       await pumpScreen(tester);
 
-      // A project item has no global switch, so the repository refuses it.
+      // A project item has no global switch, so the repository refuses it. The refusal is a bug,
+      // not a failure the user can act on: a debug build shows it as it is (see errorText).
       _skills(tester).actions.setEnabled('skill:project:c', enabled: false);
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('Something went wrong'), findsOneWidget);
+      expect(
+        find.textContaining('A project item can only be turned on or off per project'),
+        findsOneWidget,
+      );
       await disposeTestApp(tester, dependencies);
     });
 
