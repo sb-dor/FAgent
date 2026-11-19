@@ -18,8 +18,7 @@ import 'package:flutter_code_agent/src/feature/flutter_sdk/widgets/flutter_sdk_c
 /// `flutter doctor` report with a button that hands a finding to an agent, what a new project
 /// starts from, and where DevTools opens.
 ///
-/// The doctor report, the `git` template and in-app DevTools are previews (made up or not built
-/// yet) and say so.
+/// The `git` template and in-app DevTools are previews (not built yet) and say so.
 /// {@endtemplate}
 class FlutterSettingsSection extends StatelessWidget {
   /// {@macro flutter_settings_section}
@@ -210,8 +209,8 @@ class _DoctorGroup extends StatelessWidget {
   Widget _build(BuildContext context, FlutterSdkConfigWidgetState scope) {
     final localization = Localization.of(context);
     final (ready, running, checks) = switch (scope.sdk.state) {
-      FlutterSdk$CompletedState(:final checks, :final doctorRunning) => (
-        true,
+      FlutterSdk$CompletedState(:final sdk, :final checks, :final doctorRunning) => (
+        sdk.path != null,
         doctorRunning,
         checks,
       ),
@@ -224,20 +223,11 @@ class _DoctorGroup extends StatelessWidget {
         children: <Widget>[
           SettingsRow(
             label: localization.flutterDoctorHint,
-            control: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                const PreviewBadge(),
-                const SizedBox(width: 8),
-                CompactButton(
-                  key: const ValueKey<String>('flutter-doctor-run'),
-                  label: running
-                      ? localization.flutterDoctorRunning
-                      : localization.flutterDoctorRun,
-                  icon: Icons.medical_services_outlined,
-                  onPressed: ready && !running ? scope.runDoctor : null,
-                ),
-              ],
+            control: CompactButton(
+              key: const ValueKey<String>('flutter-doctor-run'),
+              label: running ? localization.flutterDoctorRunning : localization.flutterDoctorRun,
+              icon: Icons.medical_services_outlined,
+              onPressed: ready && !running ? scope.runDoctor : null,
             ),
           ),
           if (checks != null)

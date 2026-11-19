@@ -113,7 +113,6 @@ Dependencies testDependencies({
       FlutterSdkRepositoryImpl(
         which: (_) => '/opt/flutter/bin/flutter',
         runProcess: flutterVersionRunner,
-        step: Duration.zero,
       );
   final hub = AgentHub(database: database, environment: environment);
   final codeFiles = codeFilesRepository ?? CodeFilesRepositoryImpl(environment: environment);

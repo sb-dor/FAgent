@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 
 /// What one project's fake run holds: its state, its output and the timers of the running scenario.
@@ -275,6 +276,7 @@ class ScriptedAppRunRepository implements IAppRunRepository {
       LogLevel.error,
       message,
       error: const RunError(
+        kind: RunErrorKind.layoutOverflow,
         title: 'Layout overflow',
         message: message,
         location: 'booking_card.dart:42:12',

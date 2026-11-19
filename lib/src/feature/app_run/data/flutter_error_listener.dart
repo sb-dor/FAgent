@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:l/l.dart' show l;
 import 'package:vm_service/vm_service.dart';
 import 'package:vm_service/vm_service_io.dart';
@@ -179,6 +180,7 @@ RunError runErrorFromFlutterError(Map<String, Object?> data) {
 
   final place = _creationPlace(nodes) ?? _errorCausingWidgetPlace(nodes);
   return RunError(
+    kind: RunErrorKind.other,
     title: title,
     message: messageText.isEmpty ? title : messageText,
     file: place?.file,

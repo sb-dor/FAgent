@@ -129,11 +129,7 @@ void main() {
       database: database,
       appServer: appServer,
       probe: ScriptedMcpProbe(),
-      flutterSdk: FlutterSdkRepositoryImpl(
-        which: (_) => flutter,
-        runProcess: flutterVersionRunner,
-        step: Duration.zero,
-      ),
+      flutterSdk: FlutterSdkRepositoryImpl(which: (_) => flutter, runProcess: flutterVersionRunner),
     );
     skills = MemorySkillsRepository(
       items: [

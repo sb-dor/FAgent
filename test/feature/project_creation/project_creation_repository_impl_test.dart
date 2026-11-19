@@ -52,7 +52,7 @@ final class _StubSdk implements IFlutterSdkRepository {
   Future<String?> pathFor(String? projectPath) async => path;
 
   @override
-  Future<List<DoctorCheck>> doctor() => throw UnimplementedError();
+  Future<List<DoctorCheck>> doctor(String flutter) => throw UnimplementedError();
 }
 
 final class _StubOpening implements IProjectOpeningRepository {

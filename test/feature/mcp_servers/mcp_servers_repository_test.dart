@@ -40,11 +40,7 @@ void main() {
       database: database,
       appServer: appServer,
       probe: probe,
-      flutterSdk: FlutterSdkRepositoryImpl(
-        which: (_) => flutter,
-        runProcess: flutterVersionRunner,
-        step: Duration.zero,
-      ),
+      flutterSdk: FlutterSdkRepositoryImpl(which: (_) => flutter, runProcess: flutterVersionRunner),
     );
   });
   tearDown(() async {

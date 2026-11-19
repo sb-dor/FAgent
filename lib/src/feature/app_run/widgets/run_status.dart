@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/status.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_error_title.dart';
 
 /// {@template run_status}
 /// The status line of the Run tab: the build progress, how long the app has been running with the
@@ -61,7 +62,7 @@ class RunStatus extends StatelessWidget {
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                error.title,
+                runErrorTitle(localization, error),
                 style: style.copyWith(color: colors.danger),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -576,7 +577,14 @@ void main() {
       expect(seen.last, isA<RunRunning>());
       final failure = log.last;
       expect(failure.level, LogLevel.error);
-      expect(failure.error, const RunError(title: 'Hot reload failed', message: 'Reload rejected'));
+      expect(
+        failure.error,
+        const RunError(
+          kind: RunErrorKind.other,
+          title: 'Hot reload failed',
+          message: 'Reload rejected',
+        ),
+      );
     });
 
     test(
@@ -613,7 +621,10 @@ void main() {
 
       expect(took, Duration.zero);
       expect(seen.last, isA<RunRunning>());
-      expect(log.last.error, const RunError(title: 'Hot reload failed', message: 'timed out'));
+      expect(
+        log.last.error,
+        const RunError(kind: RunErrorKind.other, title: 'Hot reload failed', message: 'timed out'),
+      );
       expect(log.last.text, 'Hot reload failed: timed out');
     });
 
@@ -791,7 +802,11 @@ void main() {
       expect(
         seen.last,
         const RunFailed(
-          error: RunError(title: 'Build failed', message: 'Unable to start the app on the device.'),
+          error: RunError(
+            kind: RunErrorKind.buildFailed,
+            title: 'Build failed',
+            message: 'Unable to start the app on the device.',
+          ),
         ),
       );
       expect(process.stopped, isTrue);

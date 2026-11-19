@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const String _overflowBlock = '''
@@ -410,6 +411,7 @@ More detail.
     test('makes the file project-relative and the title the text of the line', () {
       final line = _parser().flutterError(
         const RunError(
+          kind: RunErrorKind.other,
           title: 'A RenderFlex overflowed by 42 pixels on the right.',
           message: 'The following assertion was thrown during layout:',
           file: 'file:///p/app/lib/main.dart',
@@ -423,6 +425,7 @@ More detail.
       expect(
         line.error,
         const RunError(
+          kind: RunErrorKind.other,
           title: 'A RenderFlex overflowed by 42 pixels on the right.',
           message: 'The following assertion was thrown during layout:',
           file: 'lib/main.dart',
@@ -441,6 +444,7 @@ More detail.
 
       final line = parser.flutterError(
         const RunError(
+          kind: RunErrorKind.other,
           title: 't',
           message: 'm',
           file: 'file:///private/var/p/app/lib/a.dart',
@@ -454,7 +458,13 @@ More detail.
 
     test('a package path of the project is under lib/', () {
       final line = _parser().flutterError(
-        const RunError(title: 't', message: 'm', file: 'package:app/src/a.dart', line: 3),
+        const RunError(
+          kind: RunErrorKind.other,
+          title: 't',
+          message: 'm',
+          file: 'package:app/src/a.dart',
+          line: 3,
+        ),
       );
 
       expect(line.error!.file, 'lib/src/a.dart');
@@ -464,6 +474,7 @@ More detail.
     test('a place outside the project gives way to the first project frame', () {
       final line = _parser().flutterError(
         const RunError(
+          kind: RunErrorKind.other,
           title: 'Bad state: boom',
           message: 'm',
           file: 'file:///sdk/packages/flutter/lib/src/material/app.dart',
@@ -483,6 +494,7 @@ More detail.
     test('without a project place keeps the location but names no file', () {
       final line = _parser().flutterError(
         const RunError(
+          kind: RunErrorKind.other,
           title: 't',
           message: 'm',
           file: 'file:///sdk/packages/flutter/lib/src/material/app.dart',

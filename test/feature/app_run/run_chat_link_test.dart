@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
@@ -297,7 +298,7 @@ void main() {
         time: _epoch,
         level: LogLevel.error,
         text: 'boom',
-        error: const RunError(title: 'Boom', message: 'boom'),
+        error: const RunError(kind: RunErrorKind.other, title: 'Boom', message: 'boom'),
       );
 
       workspaceOf(tester).sendRunErrorToAgent(entry);

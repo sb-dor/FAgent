@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -240,6 +241,7 @@ void main() {
     test('the agent text of an error has the place and a stack excerpt', () {
       final stack = List<String>.generate(30, (i) => '#$i frame $i').join('\n');
       final error = RunError(
+        kind: RunErrorKind.other,
         title: 'Overflow',
         message: 'A RenderFlex overflowed by 24 pixels on the right.',
         location: 'booking_card.dart:42:12',
@@ -257,7 +259,7 @@ void main() {
     });
 
     test('an error without a place or a stack is only the title and the message', () {
-      const error = RunError(title: 'Boom', message: 'It broke');
+      const error = RunError(kind: RunErrorKind.other, title: 'Boom', message: 'It broke');
 
       expect(error.forAgent(), isNot(contains('```')));
       expect(error.forAgent(), contains('It broke'));

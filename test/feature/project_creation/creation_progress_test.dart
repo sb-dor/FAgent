@@ -99,7 +99,6 @@ void main() {
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => '/opt/flutter/bin/flutter',
         runProcess: flutterVersionRunner,
-        step: Duration.zero,
       ),
     );
     if (withLongProject) {

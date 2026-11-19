@@ -7,6 +7,7 @@ import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.d
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -142,7 +143,7 @@ void main() {
       runs.setRunState(
         1,
         const RunFailed(
-          error: RunError(title: 'Build failed', message: 'boom'),
+          error: RunError(kind: RunErrorKind.buildFailed, title: 'Build failed', message: 'boom'),
         ),
       );
       final failed = jsonDecode(_text(await call('app_status'))) as Map<String, Object?>;
@@ -159,7 +160,7 @@ void main() {
           2,
           LogLevel.error,
           'project two broke',
-          error: const RunError(title: 'Two', message: 'm'),
+          error: const RunError(kind: RunErrorKind.other, title: 'Two', message: 'm'),
         );
     });
 
@@ -195,7 +196,7 @@ void main() {
         const RunBuilding(),
         const RunStopped(),
         const RunFailed(
-          error: RunError(title: 't', message: 'm'),
+          error: RunError(kind: RunErrorKind.other, title: 't', message: 'm'),
         ),
       ]) {
         runs.setRunState(1, state);
@@ -337,7 +338,11 @@ void main() {
           1,
           LogLevel.error,
           'old overflow',
-          error: const RunError(title: 'Old error', message: 'fixed since'),
+          error: const RunError(
+            kind: RunErrorKind.other,
+            title: 'Old error',
+            message: 'fixed since',
+          ),
         )
         ..setRunState(1, _running());
     });
@@ -361,7 +366,11 @@ void main() {
         1,
         LogLevel.error,
         'new overflow',
-        error: const RunError(title: 'New error', message: 'still broken'),
+        error: const RunError(
+          kind: RunErrorKind.other,
+          title: 'New error',
+          message: 'still broken',
+        ),
       );
 
       final text = _text(await call('runtime_errors'));
@@ -376,7 +385,7 @@ void main() {
         1,
         LogLevel.error,
         'late',
-        error: const RunError(title: 'Late', message: 'm'),
+        error: const RunError(kind: RunErrorKind.other, title: 'Late', message: 'm'),
       );
       await runs.stop(1);
 
@@ -394,6 +403,7 @@ void main() {
           LogLevel.error,
           'overflow',
           error: const RunError(
+            kind: RunErrorKind.layoutOverflow,
             title: 'Layout overflow',
             message: 'A RenderFlex overflowed by 24 pixels.',
             file: 'lib/booking_card.dart',
@@ -411,7 +421,11 @@ void main() {
     });
 
     test('adds the error of a failed start once', () async {
-      const error = RunError(title: 'Build failed', message: 'boom');
+      const error = RunError(
+        kind: RunErrorKind.buildFailed,
+        title: 'Build failed',
+        message: 'boom',
+      );
       runs.setRunState(1, const RunFailed(error: error));
 
       expect(_text(await call('runtime_errors')), startsWith('Build failed\nboom'));
@@ -427,7 +441,7 @@ void main() {
           1,
           LogLevel.error,
           'e$i',
-          error: RunError(title: 'Error $i', message: 'm'),
+          error: RunError(kind: RunErrorKind.other, title: 'Error $i', message: 'm'),
         );
       }
 

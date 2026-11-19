@@ -11,6 +11,6 @@ abstract interface class IFlutterSdkRepository {
   /// its version.
   Future<String?> pathFor(String? projectPath);
 
-  /// Runs `flutter doctor` and returns its checks in report order.
-  Future<List<DoctorCheck>> doctor();
+  /// Runs `flutter doctor` with the [flutter] executable and returns its checks in report order.
+  Future<List<DoctorCheck>> doctor(String flutter);
 }

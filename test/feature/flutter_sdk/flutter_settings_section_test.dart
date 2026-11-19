@@ -32,7 +32,7 @@ final class _FvmRepository implements IFlutterSdkRepository {
   Future<String?> pathFor(String? projectPath) => _fake.pathFor(projectPath);
 
   @override
-  Future<List<DoctorCheck>> doctor() => _fake.doctor();
+  Future<List<DoctorCheck>> doctor(String flutter) => _fake.doctor(flutter);
 }
 
 WorkspaceConfigWidgetState _workspace(WidgetTester tester) =>
@@ -52,11 +52,7 @@ String _composerText(WidgetTester tester) =>
     tester.state<ChatConfigWidgetState>(find.byType(ChatConfigWidget)).textController.text;
 
 FlutterSdkRepositoryImpl _fake({String? path = '/opt/flutter/bin/flutter'}) =>
-    FlutterSdkRepositoryImpl(
-      which: (_) => path,
-      runProcess: flutterVersionRunner,
-      step: Duration.zero,
-    );
+    FlutterSdkRepositoryImpl(which: (_) => path, runProcess: flutterVersionRunner);
 
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
@@ -137,7 +133,10 @@ void main() {
 
     expect(find.text('Android toolchain'), findsOneWidget);
     expect(find.text('cmdline-tools component is missing'), findsOneWidget);
-    expect(find.text('Channel stable, 3.27.1'), findsOneWidget);
+    expect(
+      find.text('Channel stable, 3.27.1, on macOS 15.1 24B83 darwin-arm64, locale en-US'),
+      findsOneWidget,
+    );
     // Only the check that is not fine can be fixed.
     expect(find.text('Fix with agent'), findsOneWidget);
     await disposeTestApp(tester, dependencies);

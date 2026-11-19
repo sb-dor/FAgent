@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io' as io;
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/doctor_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:l/l.dart';
@@ -15,20 +16,19 @@ typedef ProcessRunner = Future<io.ProcessResult> Function(
 });
 
 /// The Flutter SDK of a project, read from the machine: the path of `flutter`, the version
-/// (`flutter --version --machine`) and the project's fvm pin. The `flutter doctor` report is
-/// still made up: it needs the machine output of `flutter doctor`, which does not exist.
+/// (`flutter --version --machine`), the project's fvm pin and the `flutter doctor` report.
 final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   /// Creates the repository. [which] finds an executable on `PATH` by name; [environment] is the
   /// environment `flutter` runs in (the login shell's, since a GUI app does not inherit it);
   /// [runProcess] starts it; [versionTimeout] is how long [sdkFor] waits for the version, since a
-  /// cold or locked `flutter` can take long (or hang); [step] is the time "running" `flutter doctor`
-  /// takes.
+  /// cold or locked `flutter` can take long (or hang); [doctorTimeout] is how long [doctor] waits
+  /// for the report.
   FlutterSdkRepositoryImpl({
     required this._which,
     this._environment,
     this._runProcess = io.Process.run,
     this.versionTimeout = const Duration(seconds: 10),
-    this.step = const Duration(milliseconds: 300),
+    this.doctorTimeout = const Duration(minutes: 2),
   });
 
   final String? Function(String name) _which;
@@ -38,8 +38,8 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   /// How long [sdkFor] waits for `flutter --version`; the process itself is not killed.
   final Duration versionTimeout;
 
-  /// The time the made-up `flutter doctor` takes.
-  final Duration step;
+  /// How long [doctor] waits for `flutter doctor`; the process itself is not killed.
+  final Duration doctorTimeout;
 
   @override
   Future<FlutterSdk> sdkFor(String? projectPath) async {
@@ -57,21 +57,14 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
   Future<String?> pathFor(String? projectPath) async =>
       flutterExecutableFor(projectPath, which: _which);
 
+  /// `flutter doctor` exits with 1 when it finds a problem, so the exit code is not looked at: the
+  /// report is. A process that cannot start, or a timeout, throws.
   @override
-  Future<List<DoctorCheck>> doctor() async {
-    await Future<void>.delayed(step);
-    return const <DoctorCheck>[
-      DoctorCheck(title: 'Flutter', status: DoctorStatus.ok, detail: 'Channel stable, 3.27.1'),
-      DoctorCheck(
-        title: 'Android toolchain',
-        status: DoctorStatus.warning,
-        detail: 'cmdline-tools component is missing',
-      ),
-      DoctorCheck(title: 'Xcode', status: DoctorStatus.ok),
-      DoctorCheck(title: 'Chrome', status: DoctorStatus.ok),
-      DoctorCheck(title: 'Connected device', status: DoctorStatus.ok, detail: '2 available'),
-      DoctorCheck(title: 'Network resources', status: DoctorStatus.ok),
-    ];
+  Future<List<DoctorCheck>> doctor(String flutter) async {
+    final result = await _runProcess(flutter, const <String>[
+      'doctor',
+    ], environment: _environment).timeout(doctorTimeout);
+    return parseDoctorOutput('${result.stdout}');
   }
 
   /// The version and channel `flutter --version --machine` reports; `null` (and one log line)

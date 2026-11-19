@@ -54,12 +54,13 @@ final class FlutterSdkController extends StateController<FlutterSdkState>
     setState(FlutterSdkState.completed(sdk: _sdk = sdk, checks: _checks));
   }, error: (error, stackTrace) async => setState(_failed(error)));
 
-  /// Runs `flutter doctor`. Needs the SDK to be loaded first.
+  /// Runs `flutter doctor`. Needs the SDK to be loaded first, and a `flutter` to run.
   void runDoctor() => handle(() async {
     final sdk = _sdk;
-    if (isDisposed || sdk == null) return;
+    final flutter = sdk?.path;
+    if (isDisposed || sdk == null || flutter == null) return;
     setState(FlutterSdkState.completed(sdk: sdk, checks: _checks, doctorRunning: true));
-    final checks = await _repository.doctor();
+    final checks = await _repository.doctor(flutter);
     if (isDisposed) return;
     setState(FlutterSdkState.completed(sdk: sdk, checks: _checks = checks));
   }, error: (error, stackTrace) async => setState(_failed(error)));

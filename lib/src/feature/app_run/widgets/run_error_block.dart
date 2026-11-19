@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_error_title.dart';
 
 /// {@template run_error_block}
 /// An error of the running app in the logs: title, message and place, with the actions to send it
@@ -60,7 +61,7 @@ class _RunErrorBlockState extends State<RunErrorBlock> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             Text(
-              error.title,
+              runErrorTitle(localization, error),
               style: mono.copyWith(color: colors.danger, fontWeight: FontWeight.w600),
             ),
             Text(error.message, style: mono),

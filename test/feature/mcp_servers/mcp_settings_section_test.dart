@@ -126,7 +126,6 @@ void main() {
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => flutter,
         runProcess: flutterVersionRunner,
-        step: Duration.zero,
       ),
     );
     dependencies = wrap == null

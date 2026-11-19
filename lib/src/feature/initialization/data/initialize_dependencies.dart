@@ -199,7 +199,7 @@ final Map<String, _InitializationStep> _initializationSteps = <String, _Initiali
     analysisFor: (root) =>
         DartAnalysisRepositoryImpl(root: root, environment: dependencies.shellEnvironment),
   ),
-  // The SDK path, the Flutter version and the fvm version are real; the doctor report is made up.
+  // The SDK path, the Flutter version, the fvm version and the doctor report are read from the machine.
   'Create Flutter SDK repository': (dependencies) =>
       dependencies.flutterSdkRepository = FlutterSdkRepositoryImpl(
         which: dependencies.shellEnvironment.which,

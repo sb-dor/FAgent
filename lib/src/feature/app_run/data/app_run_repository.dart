@@ -17,6 +17,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:l/l.dart' show l;
 import 'package:path/path.dart' as p;
@@ -273,6 +274,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       run.setState(
         RunFailed(
           error: RunError(
+            kind: RunErrorKind.projectNotFound,
             title: 'Project folder not found',
             message: path == null
                 ? 'The folder of this project is unknown.'
@@ -286,7 +288,11 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     if (flutter == null) {
       run.setState(
         RunFailed(
-          error: RunError(title: 'Flutter SDK not found', message: flutterNotFoundMessage(path)),
+          error: RunError(
+            kind: RunErrorKind.flutterNotFound,
+            title: 'Flutter SDK not found',
+            message: flutterNotFoundMessage(path),
+          ),
         ),
       );
       return;
@@ -379,7 +385,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       l.w('AppRunRepository | ${full ? 'hot restart' : 'hot reload'} of $projectId failed: $error');
       message = '$error';
     }
-    _logFailure(run, launch, title, message);
+    _logFailure(run, launch, RunErrorKind.other, title, message);
     return Duration.zero;
   }
 
@@ -393,7 +399,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
         await _openUrl(_devToolsUrl(devToolsUri, vmServiceUri));
       } on Object catch (error, stackTrace) {
         l.w('AppRunRepository | cannot open DevTools of $projectId: $error', stackTrace);
-        _logFailure(run, launch, 'Opening DevTools failed', '$error');
+        _logFailure(run, launch, RunErrorKind.devToolsFailed, 'Opening DevTools failed', '$error');
       }
     }
   }
@@ -423,10 +429,10 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       final bytes = await launch.screenshot();
       return await saveScreenshotPng(root, bytes, name: 'screenshot-${_stamp(_now())}');
     } on DaemonRequestException catch (error) {
-      _logFailure(run, launch, title, '${error.error}');
+      _logFailure(run, launch, RunErrorKind.other, title, '${error.error}');
     } on Object catch (error, stackTrace) {
       l.w('AppRunRepository | screenshot of $projectId failed: $error', stackTrace);
-      _logFailure(run, launch, title, '$error');
+      _logFailure(run, launch, RunErrorKind.other, title, '$error');
     }
     return null;
   }
@@ -438,13 +444,20 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
         '-${two(time.hour)}${two(time.minute)}${two(time.second)}';
   }
 
-  /// Logs an error line with a [RunError] of [title], unless [launch] is no longer the run's.
-  void _logFailure(_ProjectRun run, _Launch launch, String title, String message) {
+  /// Logs an error line with a [RunError] of [kind] and [title], unless [launch] is no longer the
+  /// run's.
+  void _logFailure(
+    _ProjectRun run,
+    _Launch launch,
+    RunErrorKind kind,
+    String title,
+    String message,
+  ) {
     if (run.launch != launch) return;
     run.log(
       LogLevel.error,
       message.isEmpty ? title : '$title: $message',
-      error: RunError(title: title, message: message),
+      error: RunError(kind: kind, title: title, message: message),
     );
   }
 
@@ -609,7 +622,7 @@ final class _Launch {
       if (_stopping) {
         _finish(const RunStopped());
       } else {
-        _fail(RunError(title: 'Build failed', message: '$error'));
+        _fail(RunError(kind: RunErrorKind.buildFailed, title: 'Build failed', message: '$error'));
       }
       return;
     }
@@ -865,7 +878,11 @@ final class _Launch {
       _finish(RunFailed(error: parser.firstBuildError!));
     } else {
       _fail(
-        RunError(title: _running == null ? 'Build failed' : 'App exited', message: _failure(code)),
+        RunError(
+          kind: _running == null ? RunErrorKind.buildFailed : RunErrorKind.appExited,
+          title: _running == null ? 'Build failed' : 'App exited',
+          message: _failure(code),
+        ),
       );
     }
     // An exit nobody asked for (a crash, an exit before `app.start`, a kill from outside) still

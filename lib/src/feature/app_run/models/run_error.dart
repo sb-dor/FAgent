@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 
 /// A problem the running app reported: a framework exception, a build failure.
 @immutable
 final class RunError {
   /// Creates an error.
   const RunError({
+    required this.kind,
     required this.title,
     required this.message,
     this.location,
@@ -16,7 +18,10 @@ final class RunError {
   /// How many stack lines [forAgent] keeps.
   static const int agentStackLines = 20;
 
-  /// A short name, for example `Layout overflow`.
+  /// What the error is; the UI shows its title in the user's language by it.
+  final RunErrorKind kind;
+
+  /// A short name in English, for example `Layout overflow`; the agent gets it as it is.
   final String title;
 
   /// What went wrong, as the app printed it.
@@ -56,6 +61,7 @@ final class RunError {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is RunError &&
+          other.kind == kind &&
           other.title == title &&
           other.message == message &&
           other.location == location &&
@@ -64,7 +70,7 @@ final class RunError {
           other.stack == stack;
 
   @override
-  int get hashCode => Object.hash(title, message, location, file, line, stack);
+  int get hashCode => Object.hash(kind, title, message, location, file, line, stack);
 
   @override
   String toString() => 'RunError($title, $location)';

@@ -8,6 +8,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
@@ -236,14 +237,24 @@ void main() {
   group('the @error offer', () {
     test('names the file and the line', () async {
       expect(
-        await errorMention(const RunError(title: 'Boom', message: 'm', file: 'a.dart', line: 7)),
+        await errorMention(
+          const RunError(
+            kind: RunErrorKind.other,
+            title: 'Boom',
+            message: 'm',
+            file: 'a.dart',
+            line: 7,
+          ),
+        ),
         '@error Boom (a.dart:7)',
       );
     });
 
     test('a file without a line is only the file, never "file:null"', () async {
       expect(
-        await errorMention(const RunError(title: 'Boom', message: 'm', file: 'a.dart')),
+        await errorMention(
+          const RunError(kind: RunErrorKind.other, title: 'Boom', message: 'm', file: 'a.dart'),
+        ),
         '@error Boom (a.dart)',
       );
     });
@@ -251,14 +262,23 @@ void main() {
     test('prefers the location the app printed', () async {
       expect(
         await errorMention(
-          const RunError(title: 'Boom', message: 'm', location: 'a.dart:7:3', file: 'b.dart'),
+          const RunError(
+            kind: RunErrorKind.other,
+            title: 'Boom',
+            message: 'm',
+            location: 'a.dart:7:3',
+            file: 'b.dart',
+          ),
         ),
         '@error Boom (a.dart:7:3)',
       );
     });
 
     test('without a place there are no parentheses', () async {
-      expect(await errorMention(const RunError(title: 'Boom', message: 'm')), '@error Boom');
+      expect(
+        await errorMention(const RunError(kind: RunErrorKind.other, title: 'Boom', message: 'm')),
+        '@error Boom',
+      );
     });
   });
 
@@ -266,6 +286,7 @@ void main() {
     test('is the location, else file:line, else the file, else nothing', () {
       expect(
         const RunError(
+          kind: RunErrorKind.other,
           title: 't',
           message: 'm',
           location: 'x.dart:1:2',
@@ -274,15 +295,30 @@ void main() {
         ).place,
         'x.dart:1:2',
       );
-      expect(const RunError(title: 't', message: 'm', file: 'y.dart', line: 3).place, 'y.dart:3');
-      expect(const RunError(title: 't', message: 'm', file: 'y.dart').place, 'y.dart');
-      expect(const RunError(title: 't', message: 'm', line: 3).place, isNull);
-      expect(const RunError(title: 't', message: 'm').place, isNull);
+      expect(
+        const RunError(
+          kind: RunErrorKind.other,
+          title: 't',
+          message: 'm',
+          file: 'y.dart',
+          line: 3,
+        ).place,
+        'y.dart:3',
+      );
+      expect(
+        const RunError(kind: RunErrorKind.other, title: 't', message: 'm', file: 'y.dart').place,
+        'y.dart',
+      );
+      expect(
+        const RunError(kind: RunErrorKind.other, title: 't', message: 'm', line: 3).place,
+        isNull,
+      );
+      expect(const RunError(kind: RunErrorKind.other, title: 't', message: 'm').place, isNull);
     });
   });
 
   group('the offer is marked Preview when the run is made up', () {
-    const error = RunError(title: 'Boom', message: 'm');
+    const error = RunError(kind: RunErrorKind.other, title: 'Boom', message: 'm');
     test('mentions carry the flag of the link', () async {
       Future<bool?> flag({required bool preview}) async {
         final repository = _ScriptedRun(<LogEntry>[

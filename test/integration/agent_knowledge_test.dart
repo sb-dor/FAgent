@@ -100,11 +100,7 @@ void main() {
         database: database,
         appServer: server,
         probe: ScriptedMcpProbe(),
-        flutterSdk: FlutterSdkRepositoryImpl(
-          which: (_) => null,
-          runProcess: flutterVersionRunner,
-          step: Duration.zero,
-        ),
+        flutterSdk: FlutterSdkRepositoryImpl(which: (_) => null, runProcess: flutterVersionRunner),
       ),
       environment: environment,
     );

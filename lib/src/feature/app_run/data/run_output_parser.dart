@@ -1,6 +1,7 @@
 import 'package:flutter_code_agent/src/common/process/bounded_line_splitter.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 
 /// One finished line of the run log: its [level], its [text] and the [error] behind it, if any.
 typedef ParsedLine = ({LogLevel level, String text, RunError? error});
@@ -153,6 +154,7 @@ final class RunOutputParser {
       level: LogLevel.error,
       text: error.title,
       error: RunError(
+        kind: error.kind,
         title: error.title,
         message: error.message,
         file: file,
@@ -171,6 +173,7 @@ final class RunOutputParser {
         level: LogLevel.error,
         text: line,
         error: RunError(
+          kind: _isOverflow(message) ? RunErrorKind.layoutOverflow : RunErrorKind.exception,
           title: _isOverflow(message) ? 'Layout overflow' : 'Exception',
           message: message,
         ),
@@ -182,6 +185,7 @@ final class RunOutputParser {
       final path = compile.group(1)!;
       final lineNumber = int.parse(compile.group(2)!);
       final error = RunError(
+        kind: RunErrorKind.compilation,
         title: 'Compilation error',
         message: compile.group(4)!.trim(),
         file: _projectFile(path),
@@ -255,6 +259,7 @@ final class RunOutputParser {
       level: LogLevel.error,
       text: message.isEmpty ? libraryTitle : message.first,
       error: RunError(
+        kind: _isOverflow(messageText) ? RunErrorKind.layoutOverflow : RunErrorKind.other,
         title: _isOverflow(messageText) ? 'Layout overflow' : libraryTitle,
         message: messageText.isEmpty ? libraryTitle : messageText,
         file: file,
@@ -290,6 +295,7 @@ final class RunOutputParser {
       level: LogLevel.error,
       text: message,
       error: RunError(
+        kind: RunErrorKind.unhandledException,
         title: 'Unhandled exception',
         message: message,
         file: file,

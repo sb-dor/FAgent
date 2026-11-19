@@ -137,7 +137,6 @@ void main() {
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => sdkPath,
         runProcess: flutterVersionRunner,
-        step: Duration.zero,
       ),
     );
     await tester.pumpWidget(

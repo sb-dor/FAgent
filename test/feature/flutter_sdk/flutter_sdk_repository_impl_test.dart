@@ -30,7 +30,6 @@ void main() {
     environment: environment,
     runProcess: runProcess ?? runner(),
     versionTimeout: versionTimeout,
-    step: Duration.zero,
   );
 
   void write(String relative, String text) {
@@ -184,7 +183,6 @@ void main() {
           return '/x/flutter';
         },
         runProcess: runner(),
-        step: Duration.zero,
       ).sdkFor(null);
       expect(asked, 'flutter');
       expect(sdk.path, '/x/flutter');
@@ -218,13 +216,43 @@ void main() {
   });
 
   group('doctor', () {
-    test('reports six checks, the second a warning', () async {
-      final checks = await repository().doctor();
-      expect(checks, hasLength(6));
-      expect(checks[1].title, 'Android toolchain');
+    const report =
+        '[✓] Flutter (Channel stable, 3.27.1)\n'
+        '[!] Android toolchain - develop for Android devices (SDK 34)\n'
+        '    ✗ cmdline-tools component is missing\n';
+
+    test('runs flutter doctor in the environment and parses the report, even on exit 1', () async {
+      Map<String, String>? seen;
+      final checks = await repository(
+        environment: <String, String>{'PATH': '/x'},
+        runProcess: (executable, arguments, {environment}) async {
+          ran.add('$executable ${arguments.join(' ')}');
+          seen = environment;
+          return ProcessResult(1, 1, report, '');
+        },
+      ).doctor('/sdk/bin/flutter');
+      expect(ran, <String>['/sdk/bin/flutter doctor']);
+      expect(seen, <String, String>{'PATH': '/x'});
+      expect(checks, hasLength(2));
       expect(checks[1].status, DoctorStatus.warning);
       expect(checks[1].detail, 'cmdline-tools component is missing');
-      expect(checks.where((check) => check.status == DoctorStatus.ok), hasLength(5));
+    });
+
+    test('times out when flutter never answers', () {
+      final repo = FlutterSdkRepositoryImpl(
+        which: (_) => '/sdk/bin/flutter',
+        runProcess: (executable, arguments, {environment}) => Completer<ProcessResult>().future,
+        doctorTimeout: const Duration(milliseconds: 10),
+      );
+      expect(repo.doctor('/sdk/bin/flutter'), throwsA(isA<TimeoutException>()));
+    });
+
+    test('a process that cannot start throws', () {
+      final repo = repository(
+        runProcess: (executable, arguments, {environment}) =>
+            throw const ProcessException('flutter', <String>['doctor'], 'not found'),
+      );
+      expect(repo.doctor('/sdk/bin/flutter'), throwsA(isA<ProcessException>()));
     });
   });
 }

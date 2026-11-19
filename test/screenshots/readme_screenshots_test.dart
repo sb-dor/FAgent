@@ -19,6 +19,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
@@ -357,7 +358,6 @@ Dependencies _dependencies({ScriptedAppRunRepository? appRun, IWidgetPickerRepos
       which: (_) => '/Users/dev/development/flutter/bin/flutter',
       runProcess: (executable, arguments, {environment}) async =>
           io.ProcessResult(1, 0, '{"frameworkVersion":"3.47.9","channel":"stable"}', ''),
-      step: Duration.zero,
     ),
   );
 }
@@ -601,6 +601,7 @@ void _seedRun(ScriptedAppRunRepository run, int projectId) {
     message,
     level: LogLevel.error,
     error: const RunError(
+      kind: RunErrorKind.layoutOverflow,
       title: 'Layout overflow',
       message: message,
       location: 'order_tile.dart:28:12',
