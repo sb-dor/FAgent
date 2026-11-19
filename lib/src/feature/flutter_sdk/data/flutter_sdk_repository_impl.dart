@@ -62,15 +62,21 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
 
   /// `flutter doctor` exits with 1 when it finds a problem, so a report with checks is returned
   /// whatever the exit code. A failure that printed no check (a broken SDK) throws a
-  /// [FlutterDoctorFailedException]; a process that cannot start or a timeout throws too.
+  /// [FlutterDoctorFailedException], a timeout a [FlutterDoctorTimeoutException]; a process that
+  /// cannot start throws too.
   @override
   Future<List<DoctorCheck>> doctor(String flutter) async {
-    final result = await _runDoctor(
-      flutter,
-      const <String>['doctor'],
-      environment: _environment,
-      timeout: doctorTimeout,
-    );
+    final io.ProcessResult result;
+    try {
+      result = await _runDoctor(
+        flutter,
+        const <String>['doctor'],
+        environment: _environment,
+        timeout: doctorTimeout,
+      );
+    } on TimeoutException catch (_, stackTrace) {
+      Error.throwWithStackTrace(FlutterDoctorTimeoutException(doctorTimeout), stackTrace);
+    }
     final checks = parseDoctorOutput('${result.stdout}');
     if (checks.isEmpty && result.exitCode != 0) {
       final stderr = '${result.stderr}'.trim();

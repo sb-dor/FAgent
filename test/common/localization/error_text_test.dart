@@ -95,6 +95,10 @@ void main() {
 
   test('a timeout has its own sentence', () {
     expect(errorText(lcl, TimeoutException('x')), lcl.errorTimeout);
+    expect(
+      errorText(lcl, const FlutterDoctorTimeoutException(Duration(minutes: 2))),
+      lcl.errorTimeout,
+    );
   });
 
   test('Flutter not found, a busy chat and a busy project have their own sentences', () {

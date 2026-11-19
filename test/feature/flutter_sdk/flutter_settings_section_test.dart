@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart' show ProjectsTableCompanion;
@@ -33,6 +35,36 @@ final class _FvmRepository implements IFlutterSdkRepository {
 
   @override
   Future<List<DoctorCheck>> doctor(String flutter) => _fake.doctor(flutter);
+}
+
+/// The fake repository whose `flutter doctor` fails, and whose first [failLoads] reads of the SDK
+/// fail; it counts both.
+final class _FailingRepository implements IFlutterSdkRepository {
+  _FailingRepository(this._fake, {this.failLoads = 0});
+
+  final FlutterSdkRepositoryImpl _fake;
+  int failLoads;
+  int loads = 0;
+  int doctors = 0;
+
+  @override
+  Future<FlutterSdk> sdkFor(String? projectPath) async {
+    loads++;
+    if (failLoads > 0) {
+      failLoads--;
+      throw const FileSystemException('Cannot read', '/opt/flutter/version');
+    }
+    return _fake.sdkFor(projectPath);
+  }
+
+  @override
+  Future<String?> pathFor(String? projectPath) => _fake.pathFor(projectPath);
+
+  @override
+  Future<List<DoctorCheck>> doctor(String flutter) async {
+    doctors++;
+    throw const FlutterDoctorFailedException(1, 'the SDK is broken');
+  }
 }
 
 WorkspaceConfigWidgetState _workspace(WidgetTester tester) =>
@@ -143,6 +175,46 @@ void main() {
     );
     // Only the check that is not fine can be fixed.
     expect(find.text('Fix with agent'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a doctor failure keeps the sdk, says what failed and retries the doctor', (
+    tester,
+  ) async {
+    final repository = _FailingRepository(_fake());
+    await openSettings(tester, repository: repository);
+
+    await tester.tap(find.text('Run flutter doctor'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not read the Flutter setup'), findsNothing);
+    expect(find.text('/opt/flutter/bin/flutter'), findsOneWidget);
+    expect(find.textContaining('the SDK is broken'), findsOneWidget);
+    expect(repository.doctors, 1);
+    final loads = repository.loads;
+
+    await tester.tap(find.byKey(const ValueKey<String>('flutter-doctor-retry')));
+    await tester.pumpAndSettle();
+
+    expect(repository.doctors, 2);
+    expect(repository.loads, loads);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a load failure retries the load', (tester) async {
+    final repository = _FailingRepository(_fake(), failLoads: 1);
+    await openSettings(tester, repository: repository);
+
+    expect(find.text('Could not read the Flutter setup'), findsOneWidget);
+    expect(repository.loads, 1);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(repository.loads, 2);
+    expect(repository.doctors, 0);
+    expect(find.text('Could not read the Flutter setup'), findsNothing);
+    expect(find.text('/opt/flutter/bin/flutter'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });
 

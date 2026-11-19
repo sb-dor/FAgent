@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'flutter_sdk.freezed.dart';
@@ -26,7 +29,9 @@ abstract class FlutterSdk with _$FlutterSdk {
 
 /// `flutter doctor` failed without a report: it exited with [exitCode] and printed [output]
 /// (stderr, else stdout) instead of checks.
-class FlutterDoctorFailedException implements Exception {
+///
+/// It is the SDK's setup, not a bug of the app.
+final class FlutterDoctorFailedException extends ExpectedException {
   /// Creates the exception.
   const FlutterDoctorFailedException(this.exitCode, this.output);
 
@@ -38,6 +43,24 @@ class FlutterDoctorFailedException implements Exception {
 
   @override
   String toString() => 'FlutterDoctorFailedException($exitCode): $output';
+}
+
+/// `flutter doctor` did not finish within [duration] and was killed.
+///
+/// A cold or locked SDK, not a bug of the app; it reads as any other timeout.
+final class FlutterDoctorTimeoutException extends ExpectedException implements TimeoutException {
+  /// Creates the exception.
+  const FlutterDoctorTimeoutException(this.duration);
+
+  @override
+  final Duration duration;
+
+  @override
+  String get message => 'flutter doctor did not finish';
+
+  @override
+  String toString() =>
+      'FlutterDoctorTimeoutException: flutter doctor did not finish within ${duration.inSeconds} s';
 }
 
 /// The verdict of one `flutter doctor` check.

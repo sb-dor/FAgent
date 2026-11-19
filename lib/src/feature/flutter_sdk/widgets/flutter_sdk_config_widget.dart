@@ -87,10 +87,10 @@ class FlutterSdkConfigWidgetState extends State<FlutterSdkConfigWidget> {
     sdk.load(path);
   }
 
-  /// Reads the SDK of the selected project again.
+  /// Reads the SDK of the selected project again, after a load failed.
   void retry() => sdk.load(_loadedFor);
 
-  /// Runs `flutter doctor`.
+  /// Runs `flutter doctor`; also the retry after a doctor run failed.
   void runDoctor() => sdk.runDoctor();
 
   /// Starts a chat in the selected project that asks the agent to fix [check]. Does nothing

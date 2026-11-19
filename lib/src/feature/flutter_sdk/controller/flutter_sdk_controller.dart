@@ -14,14 +14,16 @@ sealed class FlutterSdkState with _$FlutterSdkState {
   const factory FlutterSdkState.inProgress() = FlutterSdk$InProgressState;
 
   /// The [sdk] is known. [checks] is the last `flutter doctor` report, `null` until it ran;
-  /// [doctorRunning] is `true` while a report is being made.
+  /// [doctorRunning] is `true` while a report is being made, and [doctorError] is why the last
+  /// run failed.
   const factory FlutterSdkState.completed({
     required FlutterSdk sdk,
     List<DoctorCheck>? checks,
     @Default(false) bool doctorRunning,
+    Object? doctorError,
   }) = FlutterSdk$CompletedState;
 
-  /// Something failed with [error]. [sdk] and [checks] keep what was known before.
+  /// Reading the SDK failed with [error]. [sdk] and [checks] keep what was known before.
   const factory FlutterSdkState.error({
     required Object error,
     FlutterSdk? sdk,
@@ -55,15 +57,27 @@ final class FlutterSdkController extends StateController<FlutterSdkState>
   }, error: (error, stackTrace) async => setState(_failed(error)));
 
   /// Runs `flutter doctor`. Needs the SDK to be loaded first, and a `flutter` to run.
-  void runDoctor() => handle(() async {
-    final sdk = _sdk;
-    final flutter = sdk?.path;
-    if (isDisposed || sdk == null || flutter == null) return;
-    setState(FlutterSdkState.completed(sdk: sdk, checks: _checks, doctorRunning: true));
-    final checks = await _repository.doctor(flutter);
-    if (isDisposed) return;
-    setState(FlutterSdkState.completed(sdk: sdk, checks: _checks = checks));
-  }, error: (error, stackTrace) async => setState(_failed(error)));
+  ///
+  /// A failed run keeps the SDK and the last report and puts its error in `doctorError`.
+  void runDoctor() => handle(
+    () async {
+      final sdk = _sdk;
+      final flutter = sdk?.path;
+      if (isDisposed || sdk == null || flutter == null) return;
+      setState(FlutterSdkState.completed(sdk: sdk, checks: _checks, doctorRunning: true));
+      final checks = await _repository.doctor(flutter);
+      if (isDisposed) return;
+      setState(FlutterSdkState.completed(sdk: sdk, checks: _checks = checks));
+    },
+    error: (error, stackTrace) async {
+      final sdk = _sdk;
+      setState(
+        sdk == null
+            ? _failed(error)
+            : FlutterSdkState.completed(sdk: sdk, checks: _checks, doctorError: error),
+      );
+    },
+  );
 
   FlutterSdkState _failed(Object error) =>
       FlutterSdkState.error(error: error, sdk: _sdk, checks: _checks);

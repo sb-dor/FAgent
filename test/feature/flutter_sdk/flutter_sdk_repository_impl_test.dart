@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_code_agent/src/common/process/run_process.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -254,6 +255,10 @@ void main() {
       expect(checks[1].detail, 'cmdline-tools component is missing');
     });
 
+    test('a failed doctor is expected, not a crash', () {
+      expect(const FlutterDoctorFailedException(1, 'boom'), isA<ExpectedException>());
+    });
+
     test('a failure without any check throws with what flutter printed', () {
       final repo = doctorRepository(
         (executable, arguments, {environment, timeout}) async => ProcessResult(1, 1, '', 'boom'),
@@ -279,7 +284,10 @@ void main() {
         seenTimeout = timeout;
         throw TimeoutException('flutter did not finish', timeout);
       });
-      expect(repo.doctor('/sdk/bin/flutter'), throwsA(isA<TimeoutException>()));
+      expect(
+        repo.doctor('/sdk/bin/flutter'),
+        throwsA(allOf(isA<TimeoutException>(), isA<ExpectedException>())),
+      );
       expect(seenTimeout, const Duration(milliseconds: 10));
     });
 

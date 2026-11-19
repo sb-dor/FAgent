@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
@@ -208,14 +209,16 @@ class _DoctorGroup extends StatelessWidget {
 
   Widget _build(BuildContext context, FlutterSdkConfigWidgetState scope) {
     final localization = Localization.of(context);
-    final (ready, running, checks) = switch (scope.sdk.state) {
-      FlutterSdk$CompletedState(:final sdk, :final checks, :final doctorRunning) => (
-        sdk.path != null,
-        doctorRunning,
-        checks,
-      ),
-      FlutterSdk$ErrorState(:final checks) => (false, false, checks),
-      _ => (false, false, null),
+    final (ready, running, checks, error) = switch (scope.sdk.state) {
+      FlutterSdk$CompletedState(
+        :final sdk,
+        :final checks,
+        :final doctorRunning,
+        :final doctorError,
+      ) =>
+        (sdk.path != null, doctorRunning, checks, doctorError),
+      FlutterSdk$ErrorState(:final checks) => (false, false, checks, null),
+      _ => (false, false, null, null),
     };
     return _Group(
       title: localization.flutterDoctorTitle,
@@ -230,8 +233,44 @@ class _DoctorGroup extends StatelessWidget {
               onPressed: ready && !running ? scope.runDoctor : null,
             ),
           ),
+          if (error != null) _DoctorErrorRow(error: error),
           if (checks != null)
             for (final check in checks) _CheckRow(check: check),
+        ],
+      ),
+    );
+  }
+}
+
+/// Why the last `flutter doctor` run failed, with a button that runs it again.
+class _DoctorErrorRow extends StatelessWidget {
+  const _DoctorErrorRow({required this.error});
+
+  final Object error;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = FlutterSdkConfigInhWidget.of(context);
+    final localization = Localization.of(context);
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: <Widget>[
+          Icon(Icons.error_outline, size: 18, color: colors.danger),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              errorText(localization, error),
+              style: Theme.of(context).textTheme.bodySmall!.copyWith(color: colors.danger),
+            ),
+          ),
+          const SizedBox(width: 12),
+          CompactButton(
+            key: const ValueKey<String>('flutter-doctor-retry'),
+            label: localization.retry,
+            onPressed: scope.runDoctor,
+          ),
         ],
       ),
     );
