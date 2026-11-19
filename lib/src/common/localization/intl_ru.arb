@@ -1,6 +1,6 @@
 {
   "@@locale": "ru",
-  "appTitle": "Flutter Code Agent",
+  "appTitle": "FAgent",
   "noProjectsYet": "Пока нет проектов",
   "openProject": "Открыть проект",
   "openProjectFailed": "Не удалось открыть папку: {error}",

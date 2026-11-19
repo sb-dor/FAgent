@@ -19,7 +19,7 @@ Future<void> $platformInitialization() async {
         : AppColors.light.bg,
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden,
-    title: 'Flutter Code Agent',
+    title: 'FAgent',
   );
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
     if (io.Platform.isMacOS) {

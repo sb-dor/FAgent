@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Flutter Code Agent",
+  "appTitle": "FAgent",
   "noProjectsYet": "No projects yet",
   "openProject": "Open project",
   "openProjectFailed": "Could not open the folder: {error}",

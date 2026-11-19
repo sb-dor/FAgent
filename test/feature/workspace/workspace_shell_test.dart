@@ -138,7 +138,7 @@ void main() {
     testWidgets('the title bar names the chat and its project', (tester) async {
       useWindow(tester, 1280, 800);
       await pumpShell(tester, withChat: true);
-      expect(find.text('Flutter Code Agent'), findsOneWidget);
+      expect(find.text('FAgent'), findsOneWidget);
 
       await openChat(tester);
       expect(find.text('Add a booking screen · avera-hotel'), findsOneWidget);
