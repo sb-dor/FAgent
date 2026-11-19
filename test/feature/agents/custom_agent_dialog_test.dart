@@ -185,6 +185,10 @@ void main() {
 
     expect(find.text('Edit ACP agent'), findsOneWidget);
     expect(find.text('--acp\n--fast'), findsOneWidget);
+    expect(find.text('A=1'), findsNothing);
+    expect(find.text('A=••••••'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show'));
+    await tester.pump();
     expect(find.text('A=1'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();

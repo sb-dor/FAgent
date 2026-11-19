@@ -729,5 +729,8 @@
   "errorFlutterNotFound": "The Flutter SDK was not found.",
   "errorChatBusy": "The agent is still working in this chat. Stop it first.",
   "errorProjectBusy": "An agent is working in a chat of this project. Stop it first.",
-  "errorUnknown": "Something went wrong."
+  "errorUnknown": "Something went wrong.",
+  "secretShow": "Show",
+  "secretHide": "Hide",
+  "secretsStoredUnencrypted": "Kept unencrypted in the app's database on this Mac."
 }

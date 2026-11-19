@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/widget/app_menu.dart';
+import 'package:flutter_code_agent/src/common/widget/secret_lines_field.dart';
 import 'package:flutter_code_agent/src/common/widget/selector_chip.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.dart';
 
@@ -189,14 +190,14 @@ class _CustomAgentDialogState extends State<CustomAgentDialog> {
                 multiline: true,
               ),
               gap,
-              _field(
-                id: 'environment',
+              SecretLinesField(
+                key: const ValueKey<String>('custom-agent-environment'),
                 controller: _environment,
+                separator: '=',
                 label: localization.agentFieldEnvironment,
                 hint: localization.agentFieldEnvironmentHint,
-                error: _environmentProblem,
-                multiline: true,
-                onChanged: () => _environmentProblem = null,
+                errorText: _environmentProblem,
+                onChanged: () => setState(() => _environmentProblem = null),
               ),
               gap,
               Text(

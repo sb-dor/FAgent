@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/common/widget/secret_lines_field.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/controller/mcp_server_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_input.dart';
@@ -240,13 +241,13 @@ class _AddMcpServerDialogState extends State<AddMcpServerDialog> {
                   hint: localization.mcpFieldArgsHint,
                 ),
                 gap,
-                _field(
-                  id: 'env',
+                SecretLinesField(
+                  key: const ValueKey<String>('mcp-field-env'),
                   controller: _env,
+                  separator: '=',
                   label: localization.mcpFieldEnv,
                   hint: localization.mcpFieldEnvHint,
-                  error: _badEnv ? localization.mcpErrorEnvLine : null,
-                  multiline: true,
+                  errorText: _badEnv ? localization.mcpErrorEnvLine : null,
                   onChanged: () => _edited(env: true),
                 ),
               ] else ...<Widget>[
@@ -258,13 +259,13 @@ class _AddMcpServerDialogState extends State<AddMcpServerDialog> {
                   onChanged: () => _edited(problems: const {McpServerProblem.invalidUrl}),
                 ),
                 gap,
-                _field(
-                  id: 'headers',
+                SecretLinesField(
+                  key: const ValueKey<String>('mcp-field-headers'),
                   controller: _headers,
+                  separator: ':',
                   label: localization.mcpFieldHeaders,
                   hint: localization.mcpFieldHeadersHint,
-                  error: _badHeaders ? localization.mcpErrorHeaderLine : null,
-                  multiline: true,
+                  errorText: _badHeaders ? localization.mcpErrorHeaderLine : null,
                   onChanged: () => _edited(headers: true),
                 ),
               ],

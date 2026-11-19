@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
+import 'package:flutter_code_agent/src/common/widget/secret_lines_field.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 
@@ -187,15 +188,17 @@ class _RunArgumentsDialogState extends State<RunArgumentsDialog> {
                 autofocus: true,
               ),
               gap,
-              _field(
-                id: 'defines',
+              SecretLinesField(
+                key: const ValueKey<String>('run-arguments-defines'),
                 controller: _defines,
+                separator: '=',
                 label: localization.runArgumentsDefinesField,
                 hint: localization.runArgumentsDefinesHint,
-                error: problem == RunArgumentsProblem.badDefine
+                errorText: problem == RunArgumentsProblem.badDefine
                     ? localization.runArgumentsBadDefine
                     : null,
-                multiline: true,
+                maxLines: 6,
+                onChanged: () => setState(() => _saveFailed = false),
               ),
               gap,
               _field(

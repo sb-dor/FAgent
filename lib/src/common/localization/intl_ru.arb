@@ -676,5 +676,8 @@
   "errorFlutterNotFound": "Flutter SDK не найден.",
   "errorChatBusy": "Агент ещё работает в этом чате. Сначала остановите его.",
   "errorProjectBusy": "В чате этого проекта работает агент. Сначала остановите его.",
-  "errorUnknown": "Что-то пошло не так."
+  "errorUnknown": "Что-то пошло не так.",
+  "secretShow": "Показать",
+  "secretHide": "Скрыть",
+  "secretsStoredUnencrypted": "Хранится без шифрования в базе данных приложения на этом Mac."
 }

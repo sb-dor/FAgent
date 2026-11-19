@@ -53,3 +53,17 @@ app.*.map.json
 *.gen.dart
 lib/src/common/localization/generated/
 .superpowers/
+
+# Secrets and signing material (see assets/knowledge/rules/security.md)
+*.jks
+*.keystore
+key.properties
+local.properties
+serviceAccountKey.json
+AuthKey_*.p8
+*.p12
+*.mobileprovision
+.env
+.env.*
+!.env.example
+env.g.dart

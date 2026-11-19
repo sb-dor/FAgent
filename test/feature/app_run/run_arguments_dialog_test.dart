@@ -60,7 +60,19 @@ void main() {
 
     expect(find.text('Run arguments'), findsOneWidget);
     expect(tester.widget<TextField>(field('flavor')).controller!.text, 'dev');
-    expect(tester.widget<TextField>(field('defines')).controller!.text, 'A=1\nB=2');
+    expect(find.text('A=••••••\nB=••••••'), findsOneWidget);
+    expect(find.text('Kept unencrypted in the app\'s database on this Mac.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Show'));
+    await tester.pump();
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(of: field('defines'), matching: find.byType(TextField)),
+          )
+          .controller!
+          .text,
+      'A=1\nB=2',
+    );
     expect(tester.widget<TextField>(field('extra')).controller!.text, '--verbose');
     expect(tester.getSize(find.byKey(const ValueKey<String>('run-arguments-content'))).width, 480);
     await tester.pumpWidget(const SizedBox.shrink());
