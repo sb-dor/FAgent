@@ -6,7 +6,7 @@ final class ProjectFolderUnknownException extends ExpectedException {
   const ProjectFolderUnknownException();
 
   @override
-  String toString() => 'ProjectFolderUnknownException: the project folder is unknown';
+  String toString() => 'The project folder is unknown.';
 }
 
 /// The running app has no root widget, so there is nothing to take a screenshot of.
@@ -15,7 +15,7 @@ final class NoRootWidgetException extends ExpectedException {
   const NoRootWidgetException();
 
   @override
-  String toString() => 'NoRootWidgetException: the app returned no root widget';
+  String toString() => 'The app returned no root widget.';
 }
 
 /// The running app could not render a screenshot.
@@ -24,5 +24,5 @@ final class ScreenshotFailedException extends ExpectedException {
   const ScreenshotFailedException();
 
   @override
-  String toString() => 'ScreenshotFailedException: the app could not render a screenshot';
+  String toString() => 'The app could not render a screenshot.';
 }

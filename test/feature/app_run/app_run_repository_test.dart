@@ -1573,7 +1573,8 @@ void main() {
         await pumpEventQueue();
 
         expect(seen.last.error?.title, 'Screenshot failed');
-        expect(seen.last.error?.message, contains('NoRootWidgetException'));
+        expect(seen.last.error?.message, contains('no root widget'));
+        expect(seen.last.error?.message, isNot(contains('Exception')));
       });
 
       test('a project whose folder is gone logs a ProjectFolderUnknownException', () async {
@@ -1585,7 +1586,7 @@ void main() {
         expect(await repository.screenshot(1), isNull);
         await pumpEventQueue();
 
-        expect(seen.last.error?.message, contains('ProjectFolderUnknownException'));
+        expect(seen.last.error?.message, contains('project folder is unknown'));
       });
 
       test('an app that renders nothing logs a ScreenshotFailedException', () async {
@@ -1599,7 +1600,7 @@ void main() {
         expect(await repository.screenshot(1), isNull);
         await pumpEventQueue();
 
-        expect(seen.last.error?.message, contains('ScreenshotFailedException'));
+        expect(seen.last.error?.message, contains('could not render a screenshot'));
       });
     });
   });

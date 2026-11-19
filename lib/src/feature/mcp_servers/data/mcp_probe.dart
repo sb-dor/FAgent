@@ -257,6 +257,10 @@ final class McpProbeImpl implements IMcpProbe {
   }
 }
 
+/// A transport over [process], for tests of the transport itself.
+@visibleForTesting
+Transport stdioTransportForTest(GroupedProcess process) => _GroupedStdioTransport(process);
+
 /// The client side of MCP over the stdin and stdout of a [GroupedProcess]: one JSON-RPC message
 /// per line. The caller owns the process, so [close] does not stop it.
 final class _GroupedStdioTransport implements Transport {

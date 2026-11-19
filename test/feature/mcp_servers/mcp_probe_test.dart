@@ -9,9 +9,10 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/process/grouped_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mcp_dart/mcp_dart.dart' show setMcpLogHandler;
+import 'package:mcp_dart/mcp_dart.dart' show JsonRpcNotification, setMcpLogHandler;
 import 'package:path/path.dart' as p;
 
 import '../../support/scripted_mcp_server_binary.dart';
@@ -82,6 +83,31 @@ void main() {
 
       expect(result, const McpProbeConnected(2));
       expect(uncaught, isEmpty);
+    });
+
+    group('transport', () {
+      const ping = JsonRpcNotification(method: 'ping');
+
+      test('send after the server exited throws McpServerClosedException', () async {
+        final process = await GroupedProcess.start('/bin/sh', <String>['-c', 'exit 0']);
+        addTearDown(process.stop);
+        final transport = stdioTransportForTest(process);
+        await transport.start();
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+
+        await expectLater(transport.send(ping), throwsA(isA<McpServerClosedException>()));
+        await transport.close();
+      });
+
+      test('send after close throws McpServerClosedException', () async {
+        final process = await GroupedProcess.start('/bin/sh', <String>['-c', 'sleep 5']);
+        addTearDown(process.stop);
+        final transport = stdioTransportForTest(process);
+        await transport.start();
+        await transport.close();
+
+        await expectLater(transport.send(ping), throwsA(isA<McpServerClosedException>()));
+      });
     });
 
     test('a server without tools is connected with 0', () async {

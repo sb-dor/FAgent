@@ -173,9 +173,9 @@ final class ChatQueueController extends StateController<ChatQueueState> {
         if (--_inFlight == 0) setState(state.copyWith(sending: false));
       },
       error: (error, stackTrace) async {
-        // The chat did not take it (it was busy again, its agent stopped, or its mode waits for the user's consent):
-        // nothing was sent, so it goes back. Any other failure is the chat's own (its status
-        // pauses the rest).
+        // The chat did not take it (it was busy again, its agent stopped, or its mode waits for
+        // the user's consent): nothing was sent, so it goes back. Any other failure is the chat's
+        // own (its status pauses the rest).
         if (error is StateError ||
             error is AgentStoppedException ||
             error is BypassNotAllowedException) {
