@@ -6,7 +6,11 @@ import 'package:flutter_code_agent/src/feature/session_config/models/config_opti
 import 'package:meta/meta.dart';
 
 /// {@template chat_runtime}
-/// One chat at one moment: its journal and its live state, as the chat feature reads them.
+/// One chat as the chat feature reads it: its journal and its live state.
+///
+/// Every field but [events] is a snapshot of the moment the value was made. [events] is a
+/// read-only view of the journal, which keeps growing: it also shows the events added after this
+/// value was made.
 /// {@endtemplate}
 @immutable
 final class ChatRuntime {
@@ -32,8 +36,9 @@ final class ChatRuntime {
   /// Agent that runs the chat.
   final String agentId;
 
-  /// The journal's visible events in `seq` order: a read-only view of the journal, not a copy, so
-  /// it shows later events too; read it when the feed is folded.
+  /// The journal's visible events in `seq` order: a live, read-only view of the growing journal,
+  /// not a snapshot like the other fields, so it shows later events too; read it when the feed is
+  /// folded.
   final List<SessionEvent> events;
 
   /// Permission request ids still open in this run.
