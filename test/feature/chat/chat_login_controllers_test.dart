@@ -22,6 +22,7 @@ void main() {
       expect(controller.methodsOf('codex'), memoryCodexAgent.methods);
       expect(controller.methodsOf('claude'), memoryClaudeAgent.methods);
       expect(controller.methodsOf('unknown'), isEmpty);
+      expect(controller.state['unknown'], isNull);
 
       agents.update(memoryCodexAgent.copyWith(methods: const <AgentLoginMethod>[]));
       await pumpEventQueue();
@@ -67,6 +68,8 @@ void main() {
       await pumpEventQueue();
 
       expect(controller.state, isA<ChatRecovery$ErrorState>());
+      // Mapped to a failed sign-in, not reported as an error.
+      expect((controller.state as ChatRecovery$ErrorState).error, isNull);
     });
 
     test('a terminal login reports its output', () async {
