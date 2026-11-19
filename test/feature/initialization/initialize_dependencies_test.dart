@@ -1,6 +1,6 @@
+import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/initialize_dependencies.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/initialization_exception.dart';
@@ -55,9 +55,35 @@ void main() {
         throwsA(isA<InitializationException>()),
       );
     }
-    expect(handlerInstalls - before, lessThanOrEqualTo(1));
-    expect(handlerInstalls, 1);
-    // keep the widgets binding quiet
-    expect(WidgetsBinding.instance, isNotNull);
+    expect(handlerInstalls - before, 1);
   });
+
+  test(
+    'a step past the deadline fails the run, and its closer runs when it finally completes',
+    () async {
+      final events = <String>[];
+      final late = Completer<void>();
+      final future = $initializeDependencies(
+        timeout: const Duration(milliseconds: 50),
+        steps: {'a': (_) {}, 'slow': (_) => late.future, 'after': (_) => events.add('after ran')},
+        closers: {
+          'a': (_) => events.add('close a'),
+          'slow': (_) => events.add('close slow'),
+          'after': (_) => events.add('close after'),
+        },
+      );
+      await expectLater(
+        future,
+        throwsA(
+          isA<InitializationException>()
+              .having((e) => e.step, 'step', 'slow')
+              .having((e) => e.cause, 'cause', isA<TimeoutException>()),
+        ),
+      );
+      expect(events, <String>['close a']);
+      late.complete();
+      await pumpEventQueue();
+      expect(events, <String>['close a', 'close slow']);
+    },
+  );
 }

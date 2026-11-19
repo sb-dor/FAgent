@@ -68,17 +68,20 @@ Map<String, InitializationCloser> get initializationClosersForTest => _initializ
 /// Initializes the app and returns a [Dependencies] object.
 ///
 /// When a step fails, the closers of the steps that finished run in reverse order (one that fails
-/// is logged, the rest still run), then an [InitializationException] is thrown.
+/// is logged, the rest still run), then an [InitializationException] is thrown. The steps share one
+/// [timeout]; a step that runs past it fails the run with a [TimeoutException].
 Future<Dependencies> $initializeDependencies({
   void Function(int progress, String message)? onProgress,
   @visibleForTesting Map<String, InitializationStep>? steps,
   @visibleForTesting Map<String, InitializationCloser>? closers,
+  Duration timeout = const Duration(minutes: 1),
 }) async {
   final stepMap = steps ?? _initializationSteps;
   final closerMap = closers ?? _initializationClosers;
   final dependencies = Dependencies();
   final totalSteps = stepMap.length;
   final finished = <String>[];
+  final clock = Stopwatch()..start();
   var currentStep = 0;
   for (final step in stepMap.entries) {
     try {
@@ -86,7 +89,28 @@ Future<Dependencies> $initializeDependencies({
       final percent = (currentStep * 100 ~/ totalSteps).clamp(0, 100);
       onProgress?.call(percent, step.key);
       l.v6('Initialization | $currentStep/$totalSteps ($percent%) | "${step.key}"');
-      await step.value(dependencies);
+      // A future cannot be cancelled: a step past the deadline keeps running, so its own closer
+      // runs when it completes, and the run goes on no further.
+      final running = Future<void>.sync(() => step.value(dependencies));
+      final remaining = timeout - clock.elapsed;
+      try {
+        await running.timeout(remaining.isNegative ? Duration.zero : remaining);
+      } on TimeoutException {
+        final close = closerMap[step.key];
+        unawaited(
+          running.then<void>((_) async {
+            try {
+              await close?.call(dependencies);
+            } on Object catch (closeError, closeStackTrace) {
+              l.w(
+                'Initialization | closing late "${step.key}" failed: $closeError',
+                closeStackTrace,
+              );
+            }
+          }, onError: (Object _) {}),
+        );
+        rethrow;
+      }
       finished.add(step.key);
     } on Object catch (error, stackTrace) {
       l.e('Initialization failed at step "${step.key}": $error', stackTrace);

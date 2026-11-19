@@ -24,7 +24,7 @@ Future<Dependencies> $initializeApp({
       onProgress: onProgress,
       // ignore: invalid_use_of_visible_for_testing_member, the steps of a test
       steps: steps,
-    ).timeout(const Duration(minutes: 1));
+    );
     await onSuccess?.call(dependencies);
     return dependencies;
   } on Object catch (error, stackTrace) {
