@@ -1,4 +1,5 @@
 import 'dart:io' as io;
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
@@ -128,6 +129,15 @@ class CodeImageView extends StatelessWidget {
   /// The image's path.
   final String path;
 
+  /// Widths are decoded in steps of this many pixels, so dragging a divider does not decode the
+  /// image again at every pixel.
+  static const int _decodeStep = 256;
+
+  /// The width to decode at for a pane of [pixels]: rounded up to a step, and at least one step
+  /// (a pane narrower than its padding has no width).
+  static int _decodeWidth(double pixels) =>
+      math.max(1, (pixels / _decodeStep).ceil()) * _decodeStep;
+
   @override
   Widget build(BuildContext context) => ColoredBox(
     color: context.colors.surfaceAlt,
@@ -139,8 +149,10 @@ class CodeImageView extends StatelessWidget {
             io.File(path),
             fit: BoxFit.scaleDown,
             cacheWidth: constraints.hasBoundedWidth
-                ? (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context)).round()
+                ? _decodeWidth(constraints.maxWidth * MediaQuery.devicePixelRatioOf(context))
                 : null,
+            // A new width decodes again: the old image stays until the new one is ready.
+            gaplessPlayback: true,
             errorBuilder: (context, error, stackTrace) =>
                 Icon(Icons.broken_image_outlined, size: 32, color: context.colors.muted),
           ),
