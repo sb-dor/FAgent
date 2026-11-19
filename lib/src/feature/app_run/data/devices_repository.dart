@@ -247,13 +247,25 @@ final class _DaemonSession {
     final (devices, emulators) = await (
       connection.request('device.getDevices'),
       _loadEmulators(connection),
-    ).wait;
+    ).wait.onError<ParallelWaitError<Object?, (AsyncError?, AsyncError?)>>(_firstError);
     _running.clear();
     for (final device in _parseDevices(devices)) {
       _running[device.id] = device;
     }
     _emulators = emulators;
     _publish();
+  }
+
+  /// Throws the own error of the first request that failed (a DaemonRequestException, say), as a
+  /// single request would: a record's `wait` wraps it in [error].
+  static Never _firstError(
+    ParallelWaitError<Object?, (AsyncError?, AsyncError?)> error,
+    StackTrace stackTrace,
+  ) {
+    if (error.errors case (final AsyncError failure, _) || (_, final AsyncError failure)) {
+      Error.throwWithStackTrace(failure.error, failure.stackTrace);
+    }
+    Error.throwWithStackTrace(error, stackTrace);
   }
 
   Future<void> _change({Map<String, Object?>? added, Object? removedId}) async {

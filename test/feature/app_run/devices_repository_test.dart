@@ -477,6 +477,24 @@ void main() {
       expect(started.single.stopped, isTrue);
     });
 
+    test('a rejected getDevices fails with the daemon error, not a ParallelWaitError', () async {
+      silentMethods.add('device.getDevices');
+      watch();
+      await connect();
+      final request = started.single.sent.firstWhere(
+        (request) => request['method'] == 'device.getDevices',
+      );
+      started.single.respond(request['id']! as int, error: 'boom');
+      await pumpEventQueue();
+
+      expect(
+        errors.single,
+        isA<DaemonRequestException>()
+            .having((e) => e.method, 'method', 'device.getDevices')
+            .having((e) => e.error, 'error', 'boom'),
+      );
+    });
+
     test('dispose stops the daemon and closes the streams', () async {
       watch();
       await connect();
