@@ -23,6 +23,36 @@ void main() {
   Future<List<int>> storedSeqs() async =>
       (await database.select(database.sessionEventsTable).get()).map((r) => r.seq).toList();
 
+  test('a row with an unknown origin or a broken payload is skipped', () async {
+    Future<void> insert(int seq, String origin, String payload) => database
+        .into(database.sessionEventsTable)
+        .insert(
+          SessionEventsTableCompanion.insert(
+            sessionId: sessionId,
+            seq: seq,
+            origin: origin,
+            kind: 'agent_message_chunk',
+            payload: payload,
+          ),
+        );
+    await insert(0, 'agent', '{}');
+    await insert(1, 'martian', '{}');
+    await insert(2, 'agent', 'not json');
+    await insert(3, 'agent', '[1]');
+    await insert(4, 'agent', '{}');
+
+    final store = await SessionEventStore.open(
+      database,
+      sessionId,
+      flushInterval: const Duration(hours: 1),
+    );
+
+    expect(store.events.map((e) => e.seq), <int>[0, 4]);
+    store.addAgentFrame('agent_message_chunk', <String, Object?>{});
+    expect(store.events.last.seq, 5);
+    await store.close();
+  });
+
   test('agent frames are visible at once and written in a batch', () async {
     final store = await SessionEventStore.open(
       database,

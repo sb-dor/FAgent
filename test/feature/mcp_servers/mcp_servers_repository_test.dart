@@ -66,6 +66,34 @@ void main() {
     expect(list.last.name, 'Dart MCP');
   });
 
+  test('a server whose config has the wrong types still lists', () async {
+    await database
+        .into(database.mcpServersTable)
+        .insert(
+          McpServersTableCompanion.insert(
+            name: 'broken',
+            transport: 'stdio',
+            config: '{"command": 42, "url": [], "args": "x"}',
+          ),
+        );
+    await database
+        .into(database.mcpServersTable)
+        .insert(
+          McpServersTableCompanion.insert(
+            name: 'good',
+            transport: 'stdio',
+            config: '{"command": "npx"}',
+          ),
+        );
+
+    final list = await servers();
+
+    expect(list.map((s) => s.name), containsAll(<String>['broken', 'good']));
+    final broken = list.firstWhere((s) => s.name == 'broken');
+    expect(broken.command, isNull);
+    expect(broken.url, isNull);
+  });
+
   group('the app server entry', () {
     test('is an http server on the address the app server listens on', () async {
       final app = (await servers()).first;

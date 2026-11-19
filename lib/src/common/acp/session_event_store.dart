@@ -39,23 +39,45 @@ final class SessionEventStore {
                 (e) => OrderingTerm.asc(e.seq),
               ]))
             .get();
-    final events = <SessionEvent>[for (final row in rows) _fromRow(row)];
+    final events = <SessionEvent>[
+      for (final row in rows)
+        if (_fromRow(row) case final SessionEvent event) event,
+    ];
     return SessionEventStore._(
       database,
       sessionId,
       events,
-      events.isEmpty ? 0 : events.last.seq + 1,
+      rows.isEmpty ? 0 : rows.last.seq + 1,
       flushInterval,
     );
   }
 
-  static SessionEvent _fromRow(SessionEventRow row) => SessionEvent(
-    seq: row.seq,
-    origin: SessionEventOrigin.values.byName(row.origin),
-    kind: row.kind,
-    payload: (jsonDecode(row.payload) as Map<Object?, Object?>).cast<String, Object?>(),
-    createdAt: row.createdAt,
-  );
+  /// The event stored in [row], or `null` (logged) when the row cannot be read.
+  static SessionEvent? _fromRow(SessionEventRow row) {
+    final origin = SessionEventOrigin.values.asNameMap()[row.origin];
+    if (origin == null) return _skip(row, 'unknown origin "${row.origin}"');
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(row.payload);
+    } on FormatException catch (error) {
+      return _skip(row, 'payload is not JSON (${error.message})');
+    }
+    if (decoded case final Map<Object?, Object?> map) {
+      return SessionEvent(
+        seq: row.seq,
+        origin: origin,
+        kind: row.kind,
+        payload: map.cast<String, Object?>(),
+        createdAt: row.createdAt,
+      );
+    }
+    return _skip(row, 'payload is not a JSON object');
+  }
+
+  static SessionEvent? _skip(SessionEventRow row, String reason) {
+    l.w('SessionEventStore | session ${row.sessionId}: skipped row ${row.seq}: $reason');
+    return null;
+  }
 
   final AppDatabase _database;
 

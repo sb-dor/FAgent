@@ -270,10 +270,16 @@ final class McpServersRepositoryImpl implements IMcpServersRepository {
       id: 'user:${row.id}',
       name: row.name,
       transport: transport,
-      command: config['command'] as String?,
+      command: switch (config['command']) {
+        final String value => value,
+        _ => null,
+      },
       args: _stringList(config['args']),
       env: _stringMap(config['env']),
-      url: config['url'] as String?,
+      url: switch (config['url']) {
+        final String value => value,
+        _ => null,
+      },
       headers: _stringMap(config['headers']),
       enabled: row.enabled,
       disabledIn: disabledIn,
