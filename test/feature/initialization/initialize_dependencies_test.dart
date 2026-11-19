@@ -47,6 +47,15 @@ void main() {
     expect(initializationStepsForTest.keys, containsAll(initializationClosersForTest.keys));
   });
 
+  test('the custom agents are followed through the agents repository, once it exists', () {
+    final steps = initializationStepsForTest.keys.toList();
+    expect(steps, isNot(contains('Create custom agents repository')));
+    expect(
+      steps.indexOf('Create agents repository'),
+      lessThan(steps.indexOf('Follow custom agents')),
+    );
+  });
+
   test('installs the error handlers once over two failed attempts', () async {
     final before = handlerInstalls;
     for (var i = 0; i < 2; i++) {

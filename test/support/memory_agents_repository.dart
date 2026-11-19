@@ -197,6 +197,24 @@ class MemoryAgentsRepository implements IAgentsRepository {
   @override
   Future<bool> hasBusyChats(String agentId) async => busyAgents.contains(agentId);
 
+  /// The custom agents among [agents] as definitions, again on every change.
+  @override
+  Stream<List<AgentDefinition>> watchCustomAgents() => watchAgents().map(
+    (agents) => <AgentDefinition>[
+      for (final agent in agents)
+        if (agent.custom case final draft? when agent.source == AgentSource.custom)
+          AgentDefinition(
+            id: agent.id,
+            displayName: draft.name,
+            executable: draft.executable,
+            arguments: draft.arguments,
+            environment: draft.environment,
+            rulesChannel: draft.rulesChannel,
+            source: AgentSource.custom,
+          ),
+    ],
+  );
+
   @override
   Future<void> addCustom(CustomAgentDraft draft) async {
     calls.add('addCustom:${draft.name}');

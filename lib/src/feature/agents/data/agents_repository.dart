@@ -4,17 +4,18 @@ import 'dart:io';
 
 import 'package:collection/collection.dart';
 import 'package:dart_acp_sdk/dart_acp_sdk.dart' show CancellationException, CancellationSource;
+import 'package:drift/drift.dart' hide CancellationException;
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
+import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/process/run_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_sign_in.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/claude_auth_status.dart';
-import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.dart';
@@ -33,6 +34,9 @@ typedef ProcessRunner = Future<ProcessResult> Function(
   Map<String, String>? environment,
   Duration? timeout,
 });
+
+/// The id prefix of the custom agents: `custom:<row id>`.
+const String _customIdPrefix = 'custom:';
 
 /// The agents the app knows, their state on this machine and the actions the Settings screen offers.
 abstract interface class IAgentsRepository {
@@ -73,13 +77,23 @@ abstract interface class IAgentsRepository {
   /// Whether a chat of [agentId] has a turn or a setup in flight.
   Future<bool> hasBusyChats(String agentId);
 
-  /// Adds a custom ACP agent; it shows up in [watchAgents] and is checked.
+  /// The ACP agents the user added, by creation time; again whenever one is added, changed or
+  /// removed. Cancel the subscription to stop watching.
+  ///
+  /// A stored agent whose arguments or environment are not valid JSON is left out.
+  Stream<List<AgentDefinition>> watchCustomAgents();
+
+  /// Adds a custom ACP agent with the id `custom:<n>`; it shows up in [watchAgents] and is checked.
   Future<void> addCustom(CustomAgentDraft draft);
 
   /// Replaces the custom agent [id]; its process restarts once no chat of it is busy.
+  ///
+  /// Throws [ArgumentError] when [id] is not a custom agent id.
   Future<void> updateCustom(String id, CustomAgentDraft draft);
 
   /// Removes the custom agent [id]; its process stops and its chats cannot continue.
+  ///
+  /// Throws [ArgumentError] when [id] is not a custom agent id.
   Future<void> removeCustom(String id);
 
   /// Opens Claude's settings file in the default editor; without the file, its folder in Finder.
@@ -90,7 +104,8 @@ abstract interface class IAgentsRepository {
 }
 
 /// {@template agents_repository_impl}
-/// [IAgentsRepository] over the agents of the [AgentHub] and the custom agents.
+/// [IAgentsRepository] over the agents of the [AgentHub] and the custom agents of the
+/// `custom_agents` table.
 ///
 /// Claude is checked through its CLI (`npx`, Node.js, `claude auth status`); every other agent is
 /// probed with a short ACP handshake ([IAgentProbe]), and Codex and Gemini CLI are then checked for
@@ -104,7 +119,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
     required this._hub,
     required this._environment,
     required this._catalog,
-    required this._customAgents,
+    required this._database,
     required this._probe,
     ProcessRunner? runProcess,
     Future<String> Function(AgentDefinition, ShellEnvironment)? preflight,
@@ -116,7 +131,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
   final AgentHub _hub;
   final ShellEnvironment _environment;
   final IAgentOptionsCatalog _catalog;
-  final ICustomAgentsRepository _customAgents;
+  final AppDatabase _database;
   final IAgentProbe _probe;
   final ProcessRunner _runProcess;
   final Future<String> Function(AgentDefinition, ShellEnvironment) _preflight;
@@ -214,7 +229,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
           onError: (Object error, StackTrace stackTrace) =>
               l.w('Agents | the options catalog failed: $error', stackTrace),
         );
-        custom = _customAgents.watch().listen(
+        custom = watchCustomAgents().listen(
           _onCustomAgents,
           onError: (Object error, StackTrace stackTrace) =>
               l.w('Agents | the custom agents failed: $error', stackTrace),
@@ -486,13 +501,82 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
       (await _hub.busySessions()).any((session) => session.agentId == agentId);
 
   @override
-  Future<void> addCustom(CustomAgentDraft draft) => _customAgents.add(draft);
+  Stream<List<AgentDefinition>> watchCustomAgents() =>
+      (_database.select(_database.customAgentsTable)..orderBy([
+            (table) => OrderingTerm.asc(table.createdAt),
+            (table) => OrderingTerm.asc(table.id),
+          ]))
+          .watch()
+          .map(_customDefinitions);
 
   @override
-  Future<void> updateCustom(String id, CustomAgentDraft draft) => _customAgents.update(id, draft);
+  Future<void> addCustom(CustomAgentDraft draft) async {
+    await _database
+        .into(_database.customAgentsTable)
+        .insert(
+          CustomAgentsTableCompanion.insert(
+            name: draft.name,
+            executable: draft.executable,
+            arguments: Value(jsonEncode(draft.arguments)),
+            environment: Value(jsonEncode(draft.environment)),
+            rulesChannel: Value(draft.rulesChannel.name),
+          ),
+        );
+  }
 
   @override
-  Future<void> removeCustom(String id) => _customAgents.remove(id);
+  Future<void> updateCustom(String id, CustomAgentDraft draft) async {
+    final rowId = _customRowId(id);
+    if (rowId == null) throw ArgumentError.value(id, 'id', 'not a custom agent id');
+    await (_database.update(
+      _database.customAgentsTable,
+    )..where((table) => table.id.equals(rowId))).write(
+      CustomAgentsTableCompanion(
+        name: Value(draft.name),
+        executable: Value(draft.executable),
+        arguments: Value(jsonEncode(draft.arguments)),
+        environment: Value(jsonEncode(draft.environment)),
+        rulesChannel: Value(draft.rulesChannel.name),
+      ),
+    );
+  }
+
+  @override
+  Future<void> removeCustom(String id) async {
+    final rowId = _customRowId(id);
+    if (rowId == null) throw ArgumentError.value(id, 'id', 'not a custom agent id');
+    await (_database.delete(
+      _database.customAgentsTable,
+    )..where((table) => table.id.equals(rowId))).go();
+  }
+
+  static int? _customRowId(String id) =>
+      id.startsWith(_customIdPrefix) ? int.tryParse(id.substring(_customIdPrefix.length)) : null;
+
+  static List<AgentDefinition> _customDefinitions(List<CustomAgentRow> rows) => [
+    for (final row in rows) ?_customDefinition(row),
+  ];
+
+  static AgentDefinition? _customDefinition(CustomAgentRow row) {
+    try {
+      final arguments = (jsonDecode(row.arguments) as List<Object?>).cast<String>();
+      final environment = (jsonDecode(row.environment) as Map<String, Object?>)
+          .cast<String, String>();
+      return AgentDefinition(
+        id: '$_customIdPrefix${row.id}',
+        displayName: row.name,
+        executable: row.executable,
+        arguments: List<String>.unmodifiable(arguments),
+        environment: Map<String, String>.unmodifiable(environment),
+        rulesChannel:
+            RulesChannel.values.asNameMap()[row.rulesChannel] ?? RulesChannel.firstMessage,
+        source: AgentSource.custom,
+      );
+    } on Object catch (error) {
+      l.w('Agents | skipping custom agent $_customIdPrefix${row.id}: $error');
+      return null;
+    }
+  }
 
   @override
   Future<void> openSettings(String agentId) async {

@@ -12,7 +12,6 @@ import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
-import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_probe_result.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_recovery_controller.dart';
@@ -139,7 +138,7 @@ void main() {
         hub: hub,
         environment: environment,
         catalog: AgentOptionsCatalogImpl(database: database),
-        customAgents: CustomAgentsRepositoryImpl(database: database),
+        database: database,
         probe: _NoProbe(),
       );
       final controller = ChatRecoveryController(

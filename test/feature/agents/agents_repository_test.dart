@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:async/async.dart';
 import 'package:dart_acp_sdk/dart_acp_sdk.dart' show CancellationException;
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
@@ -12,7 +14,6 @@ import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
-import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_probe_result.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
@@ -83,48 +84,6 @@ final class _SlowProbe extends _ScriptedProbe {
     await gate;
     return result;
   }
-}
-
-/// Custom agents in memory: records the calls and sends [value] to its watchers.
-final class _RecordingCustomAgents implements ICustomAgentsRepository {
-  List<AgentDefinition> value = const <AgentDefinition>[];
-  final List<String> calls = <String>[];
-  final Set<StreamController<List<AgentDefinition>>> _watchers = {};
-
-  void emit(List<AgentDefinition> agents) {
-    value = agents;
-    for (final watcher in _watchers.toList()) {
-      watcher.add(agents);
-    }
-  }
-
-  @override
-  Stream<List<AgentDefinition>> watch() {
-    final controller = StreamController<List<AgentDefinition>>();
-    controller
-      ..onListen = () {
-        _watchers.add(controller);
-        controller.add(value);
-      }
-      ..onCancel = () {
-        _watchers.remove(controller);
-        return controller.close();
-      };
-    return controller.stream;
-  }
-
-  @override
-  Future<String> add(CustomAgentDraft draft) async {
-    calls.add('add:${draft.name}');
-    return 'custom:1';
-  }
-
-  @override
-  Future<void> update(String id, CustomAgentDraft draft) async =>
-      calls.add('update:$id:${draft.name}');
-
-  @override
-  Future<void> remove(String id) async => calls.add('remove:$id');
 }
 
 typedef _Call = ({String executable, List<String> arguments, Duration? timeout});
@@ -205,7 +164,6 @@ void main() {
   late String statusOutput;
   late Future<ProcessResult> Function(List<String> arguments, Duration? timeout) onStatus;
   late _ScriptedProbe probe;
-  late _RecordingCustomAgents custom;
   late Directory home;
   final subscriptions = <StreamSubscription<Object?>>[];
 
@@ -222,7 +180,6 @@ void main() {
     statusOutput = '{"loggedIn":true,"email":"a@b.c"}';
     onStatus = (arguments, timeout) async => ProcessResult(1, 0, statusOutput, '');
     probe = _ScriptedProbe();
-    custom = _RecordingCustomAgents();
     home = Directory.systemTemp.createTempSync('agents_repository_home');
   });
 
@@ -252,7 +209,7 @@ void main() {
     hub: hub,
     environment: shell,
     catalog: catalog ?? _MemoryCatalog(),
-    customAgents: custom,
+    database: database,
     probe: probe,
     preflight: preflight ?? (_, _) async => '/usr/bin/npx',
     statusTimeout: statusTimeout,
@@ -668,36 +625,117 @@ void main() {
       subscriptions.add(repository.watchAgents().listen(seen.add));
       await pumpEventQueue();
 
-      custom.emit(const <AgentDefinition>[
-        AgentDefinition(
-          id: 'custom:2',
-          displayName: 'New one',
-          executable: '/opt/new',
-          source: AgentSource.custom,
-        ),
-      ]);
-      await pumpEventQueue();
+      await repository.addCustom(const CustomAgentDraft(name: 'New one', executable: '/opt/new'));
+      await _until(() => seen.last.length == 4 && seen.last.last.status == AgentStatus.ready);
 
-      expect(seen.last.map((a) => a.id), ['claude', 'codex', 'gemini', 'custom:2']);
-      expect(seen.last.last.status, AgentStatus.ready);
-      expect(probe.calls.map((c) => c.$1), contains('custom:2'));
+      expect(seen.last.map((a) => a.id), ['claude', 'codex', 'gemini', 'custom:1']);
+      expect(seen.last.last.name, 'New one');
+      expect(probe.calls.map((c) => c.$1), contains('custom:1'));
 
-      custom.emit(const <AgentDefinition>[]);
-      await pumpEventQueue();
+      await repository.removeCustom('custom:1');
+      await _until(() => seen.last.length == 3);
       expect(seen.last.map((a) => a.id), ['claude', 'codex', 'gemini']);
     });
   });
 
   group('custom agents', () {
-    test('add/update/remove custom delegate', () async {
+    const draft = CustomAgentDraft(
+      name: 'My agent',
+      executable: 'my-agent',
+      arguments: ['--acp', '--fast'],
+      environment: {'TOKEN': 'x'},
+      rulesChannel: RulesChannel.systemPrompt,
+    );
+
+    test("addCustom then watchCustomAgents emits custom:1 with the draft's fields", () async {
       final repository = newRepository();
-      const draft = CustomAgentDraft(name: 'Mine', executable: '/opt/mine');
+      final queue = StreamQueue(repository.watchCustomAgents());
+      addTearDown(queue.cancel);
+      expect(await queue.next, isEmpty);
 
       await repository.addCustom(draft);
-      await repository.updateCustom('custom:1', draft.copyWith(name: 'Renamed'));
+
+      expect(await queue.next, [
+        const AgentDefinition(
+          id: 'custom:1',
+          displayName: 'My agent',
+          executable: 'my-agent',
+          arguments: ['--acp', '--fast'],
+          environment: {'TOKEN': 'x'},
+          rulesChannel: RulesChannel.systemPrompt,
+          source: AgentSource.custom,
+        ),
+      ]);
+    });
+
+    test('a draft without options defaults to the first-message channel', () async {
+      final repository = newRepository();
+      await repository.addCustom(const CustomAgentDraft(name: 'Plain', executable: 'plain'));
+
+      final agent = (await repository.watchCustomAgents().first).single;
+      expect(agent.arguments, isEmpty);
+      expect(agent.environment, isEmpty);
+      expect(agent.rulesChannel, RulesChannel.firstMessage);
+    });
+
+    test('updateCustom changes the definition', () async {
+      final repository = newRepository();
+      await repository.addCustom(draft);
+      final queue = StreamQueue(repository.watchCustomAgents());
+      addTearDown(queue.cancel);
+      await queue.next;
+
+      await repository.updateCustom(
+        'custom:1',
+        const CustomAgentDraft(name: 'Renamed', executable: 'other', arguments: ['serve']),
+      );
+
+      final agent = (await queue.next).single;
+      expect(agent.id, 'custom:1');
+      expect(agent.displayName, 'Renamed');
+      expect(agent.executable, 'other');
+      expect(agent.arguments, ['serve']);
+      expect(agent.environment, isEmpty);
+      expect(agent.rulesChannel, RulesChannel.firstMessage);
+    });
+
+    test('removeCustom drops it', () async {
+      final repository = newRepository();
+      await repository.addCustom(draft);
+      await repository.addCustom(draft);
+      expect((await repository.watchCustomAgents().first).map((agent) => agent.id), [
+        'custom:1',
+        'custom:2',
+      ]);
+
       await repository.removeCustom('custom:1');
 
-      expect(custom.calls, ['add:Mine', 'update:custom:1:Renamed', 'remove:custom:1']);
+      expect((await repository.watchCustomAgents().first).map((agent) => agent.id), ['custom:2']);
+    });
+
+    test('updateCustom and removeCustom refuse an id that is not a custom agent', () async {
+      final repository = newRepository();
+
+      await expectLater(repository.updateCustom('codex', draft), throwsArgumentError);
+      await expectLater(repository.removeCustom('custom:x'), throwsArgumentError);
+    });
+
+    test('bad JSON in a row is skipped with a warning', () async {
+      final repository = newRepository();
+      await repository.addCustom(draft);
+      await database
+          .into(database.customAgentsTable)
+          .insert(
+            CustomAgentsTableCompanion.insert(
+              name: 'Broken',
+              executable: 'broken',
+              arguments: const Value('{not json'),
+            ),
+          );
+
+      final agents = await repository.watchCustomAgents().first;
+
+      expect(agents.map((agent) => agent.id), ['custom:1']);
     });
   });
 

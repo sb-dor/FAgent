@@ -14,7 +14,6 @@ import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
-import 'package:flutter_code_agent/src/feature/agents/data/custom_agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
@@ -125,7 +124,6 @@ Dependencies testDependencies({
     // A test never opens the browser: a link it taps goes to the test's own [openUrl].
     ..openUrl = openUrl ?? (_) async {}
     ..agentOptionsCatalog = AgentOptionsCatalogImpl(database: database)
-    ..customAgentsRepository = CustomAgentsRepositoryImpl(database: database)
     ..agentHub = hub
     ..chatQueues = ChatQueueRegistry(
       create: (sessionId) => ChatQueueController(
