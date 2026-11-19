@@ -208,8 +208,9 @@ void main() {
 
     expect(await hub.forget(chat), isTrue);
 
-    // A disposed notifier refuses new listeners.
-    expect(() => live.status.addListener(() {}), throwsFlutterError);
+    // A disposed notifier refuses new listeners. Flutter 3.50 reports that through
+    // `Listenable.onError`, which rethrows the StateError when no binding is initialized (as here).
+    expect(() => live.status.addListener(() {}), throwsStateError);
   });
 
   test('a chat that is running is not dropped by forget', () async {

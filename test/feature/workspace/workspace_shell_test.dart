@@ -73,6 +73,7 @@ void main() {
             );
       }
     });
+    addTearDown(() => disposeTestApp(tester, dependencies));
     await tester.pumpWidget(
       testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
     );

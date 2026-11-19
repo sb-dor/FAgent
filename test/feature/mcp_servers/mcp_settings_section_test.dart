@@ -142,6 +142,7 @@ void main() {
     for (final draft in own) {
       await tester.runAsync(() => dependencies.mcpServersRepository.add(draft));
     }
+    addTearDown(() => disposeTestApp(tester, dependencies));
     await tester.pumpWidget(
       testApp(
         const WorkspaceConfigWidget(),

@@ -89,6 +89,7 @@ void main() {
       run.watch(1);
       devices.watch();
       if (chooseDevice) run.choose(deviceId: 'ios-sim-16-pro');
+      addTearDown(() => disposeTestApp(tester, dependencies));
       await tester.pumpWidget(
         testApp(
           Align(
