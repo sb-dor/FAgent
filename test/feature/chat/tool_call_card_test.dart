@@ -32,4 +32,32 @@ void main() {
     expect(find.text(expected, findRichText: true), findsOneWidget);
     expect(expected.characters.length, 4001);
   });
+
+  testWidgets('output with more code units than the limit but fewer characters is not cut', (
+    tester,
+  ) async {
+    useDesktopView(tester);
+    final output = '👍🏽' * 1500;
+    expect(output.length, greaterThan(4000));
+    await tester.pumpWidget(
+      testApp(
+        SingleChildScrollView(
+          child: ToolCallCard(
+            call: ToolCallItem(
+              0,
+              toolCallId: 't',
+              title: 'Run ls',
+              kind: 'execute',
+              status: 'completed',
+              rawOutput: output,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Run ls', findRichText: true));
+    await tester.pump();
+
+    expect(find.text(output, findRichText: true), findsOneWidget);
+  });
 }

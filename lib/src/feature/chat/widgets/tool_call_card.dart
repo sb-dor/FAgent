@@ -72,6 +72,16 @@ class ToolCallCard extends StatefulWidget {
 class _ToolCallCardState extends State<ToolCallCard> {
   static const int _maxOutputChars = 4000;
 
+  /// [output] cut after [_maxOutputChars] characters, never inside one. A character is at least
+  /// one code unit, so a short output is not counted and a long one only up to the limit.
+  static String _cut(String output) {
+    if (output.length <= _maxOutputChars) return output;
+    final chars = output.characters;
+    return chars.take(_maxOutputChars + 1).length > _maxOutputChars
+        ? '${chars.take(_maxOutputChars)}…'
+        : output;
+  }
+
   late final DiffLinesCache _diffLines = DiffLinesCache(
     onReady: () {
       if (mounted) setState(() {});
@@ -107,7 +117,6 @@ class _ToolCallCardState extends State<ToolCallCard> {
     final lines = _diffLines.resolve(diffs);
     final texts = call.content.whereType<ToolTextContent>().toList();
     final output = call.rawOutput;
-    final chars = (output ?? '').characters;
     final hasBody = diffs.isNotEmpty || texts.isNotEmpty || (output != null && output.isNotEmpty);
     final path = call.locations.isEmpty ? null : call.locations.first;
     final label = toolRowLabel(title: call.title, path: path, projectRoot: widget.projectRoot);
@@ -153,10 +162,7 @@ class _ToolCallCardState extends State<ToolCallCard> {
                 if (output != null && output.isNotEmpty) ...<Widget>[
                   Text(Localization.of(context).toolOutput, style: theme.textTheme.labelSmall),
                   const SizedBox(height: 4),
-                  SelectableText(
-                    chars.length > _maxOutputChars ? '${chars.take(_maxOutputChars)}…' : output,
-                    style: AppText.mono(context),
-                  ),
+                  SelectableText(_cut(output), style: AppText.mono(context)),
                 ],
               ],
             ),

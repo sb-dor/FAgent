@@ -855,8 +855,11 @@ final class _Launch {
   }
 
   static String _capped(String line) {
+    // A character is at least one code unit: a short line is not counted, a long one only up to
+    // the limit unless it is cut.
+    if (line.length <= kLogLineLimit) return line;
     final characters = line.characters;
-    if (characters.length <= kLogLineLimit) return line;
+    if (characters.take(kLogLineLimit + 1).length <= kLogLineLimit) return line;
     final more = characters.length - kLogLineLimit;
     return '${characters.take(kLogLineLimit)}… ($more more character${more == 1 ? '' : 's'})';
   }

@@ -501,6 +501,20 @@ void main() {
       expect(cut.text, '${'z' * (kLogLineLimit - 1)}👍🏽… (7 more characters)');
     });
 
+    test('a line with more code units than the limit but fewer characters is not cut', () async {
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      final line = '👍🏽' * (kLogLineLimit ~/ 2);
+      expect(line.length, greaterThan(kLogLineLimit));
+      process.emitLine(line);
+      await pumpEventQueue();
+
+      expect(log.map((entry) => entry.text), contains(line));
+    });
+
     test('hotReload sends app.restart and records the time on success', () async {
       final seen = states(1);
       await startRun(1);
