@@ -89,7 +89,11 @@ void main() {
       final uri = (states.last as RunRunning).vmServiceUri;
       expect(uri, isNotNull);
 
-      final picker = WidgetPickerRepositoryImpl(runs: runs, projectRoot: (_) async => project);
+      final picker = WidgetPickerRepositoryImpl(
+        currentRun: runs.currentRun,
+        watchRun: runs.watchRun,
+        projectRoot: (_) async => project,
+      );
       addTearDown(picker.dispose);
       final vm = await vmServiceConnectUri(uri.toString());
       addTearDown(vm.dispose);

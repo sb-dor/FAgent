@@ -158,7 +158,11 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
         environment: environment.variables,
       )
       ..appRunRepository = runs
-      ..widgetPickerRepository = WidgetPickerRepositoryImpl(runs: runs, projectRoot: projectPath);
+      ..widgetPickerRepository = WidgetPickerRepositoryImpl(
+        currentRun: runs.currentRun,
+        watchRun: runs.watchRun,
+        projectRoot: projectPath,
+      );
   },
   // Remembers the settings every agent reports, for the Settings screen.
   'Create agent options catalog': (dependencies) =>

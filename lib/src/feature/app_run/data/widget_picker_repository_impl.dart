@@ -45,19 +45,21 @@ const Duration kPickRunEndTimeout = Duration(seconds: 2);
 final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
   /// {@macro widget_picker_repository_impl}
   ///
-  /// [projectRoot] gives the folder of a project (`null` when it is unknown): files are made
+  /// [currentRun] and [watchRun] read the run of a project. [projectRoot] gives the folder of a project (`null` when it is unknown): files are made
   /// relative to it and the widget's PNG goes into it. [connect] opens the client for a VM
   /// service address. [endTimeout] and [runEndTimeout] are [kPickEndTimeout] and
   /// [kPickRunEndTimeout] unless a test shortens them.
   WidgetPickerRepositoryImpl({
-    required this._runs,
+    required this._currentRun,
+    required this._watchRun,
     required this._projectRoot,
     this._connect = WidgetInspectorClient.connect,
     this._endTimeout = kPickEndTimeout,
     this._runEndTimeout = kPickRunEndTimeout,
   });
 
-  final IAppRunRepository _runs;
+  final RunState Function(int projectId) _currentRun;
+  final Stream<RunState> Function(int projectId) _watchRun;
   final Future<String?> Function(int projectId) _projectRoot;
   final Future<WidgetInspectorClient> Function(Uri vmServiceUri) _connect;
   final Duration _endTimeout;
@@ -92,7 +94,7 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
   }
 
   Future<PickResult> _runPick(_ProjectPicker project, _Pick pick) async {
-    final run = _runs.currentRun(project.projectId);
+    final run = _currentRun(project.projectId);
     final uri = run is RunRunning && run.mode == BuildMode.debug ? run.vmServiceUri : null;
     if (uri == null) return const PickFailed(PickFailure.notDebug);
     final WidgetInspectorClient client;
@@ -271,20 +273,18 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
   /// `flutter run` reports it), [PickFailure.connectionLost] when it keeps running.
   Future<PickResult> _lost(int projectId, Uri uri) async {
     final ended = Completer<bool>();
-    final subscription = _runs
-        .watchRun(projectId)
-        .listen(
-          (state) {
-            if (!(state is RunRunning && state.vmServiceUri == uri) && !ended.isCompleted) {
-              ended.complete(true);
-            }
-          },
-          onError: (Object error) {},
-          // The repository went away: the run with it.
-          onDone: () {
-            if (!ended.isCompleted) ended.complete(true);
-          },
-        );
+    final subscription = _watchRun(projectId).listen(
+      (state) {
+        if (!(state is RunRunning && state.vmServiceUri == uri) && !ended.isCompleted) {
+          ended.complete(true);
+        }
+      },
+      onError: (Object error) {},
+      // The repository went away: the run with it.
+      onDone: () {
+        if (!ended.isCompleted) ended.complete(true);
+      },
+    );
     try {
       final stopped = await ended.future.timeout(_runEndTimeout, onTimeout: () => false);
       if (stopped) return const PickCancelled();
@@ -321,13 +321,11 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
         (event) => _onEvent(project, event),
         onDone: () => _onConnectionDone(project, client),
       )
-      ..run = _runs
-          .watchRun(project.projectId)
-          .listen(
-            (state) => _onRun(project, client, state),
-            onError: (Object error, StackTrace stackTrace) =>
-                l.w('WidgetPicker | cannot follow the run of ${project.projectId}: $error'),
-          );
+      ..run = _watchRun(project.projectId).listen(
+        (state) => _onRun(project, client, state),
+        onError: (Object error, StackTrace stackTrace) =>
+            l.w('WidgetPicker | cannot follow the run of ${project.projectId}: $error'),
+      );
     return client;
   }
 

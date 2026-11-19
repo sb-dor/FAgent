@@ -116,7 +116,8 @@ void main() {
   /// nothing ([_endTimeout]) and for a run to end after its connection dropped ([_runEndTimeout]).
   WidgetPickerRepositoryImpl newPicker({Future<String?> Function(int projectId)? projectRoot}) =>
       WidgetPickerRepositoryImpl(
-        runs: runs,
+        currentRun: runs.currentRun,
+        watchRun: runs.watchRun,
         projectRoot: projectRoot ?? (projectId) async => roots[projectId],
         connect: (uri) async {
           final vm = nextVm(uri);
