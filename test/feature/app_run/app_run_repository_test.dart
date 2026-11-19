@@ -487,6 +487,19 @@ void main() {
       expect(plain.text, '${'y' * kLogLineLimit}… (1 more character)');
     });
 
+    test('a long line is cut after a whole emoji and the count is in characters', () async {
+      final log = logs(1);
+      await startRun(1);
+      final process = started.single;
+      await launch(process);
+
+      process.emitLine('${'z' * (kLogLineLimit - 1)}👍🏽${'w' * 7}');
+      await pumpEventQueue();
+
+      final cut = log.firstWhere((entry) => entry.text.startsWith('z'));
+      expect(cut.text, '${'z' * (kLogLineLimit - 1)}👍🏽… (7 more characters)');
+    });
+
     test('hotReload sends app.restart and records the time on success', () async {
       final seen = states(1);
       await startRun(1);

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'dart:io' as io;
 import 'dart:math' as math;
 
+import 'package:flutter/widgets.dart' show StringCharacters;
+
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
@@ -839,9 +841,10 @@ final class _Launch {
   }
 
   static String _capped(String line) {
-    if (line.length <= kLogLineLimit) return line;
-    final more = line.length - kLogLineLimit;
-    return '${line.substring(0, kLogLineLimit)}… ($more more character${more == 1 ? '' : 's'})';
+    final characters = line.characters;
+    if (characters.length <= kLogLineLimit) return line;
+    final more = characters.length - kLogLineLimit;
+    return '${characters.take(kLogLineLimit)}… ($more more character${more == 1 ? '' : 's'})';
   }
 
   void _emit(ParsedLine line) {

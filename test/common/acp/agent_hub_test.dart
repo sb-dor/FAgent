@@ -6,6 +6,7 @@ import 'package:dart_acp_sdk/dart_acp_sdk.dart' as acp;
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
@@ -124,6 +125,22 @@ void main() {
               : Value<String?>(acpSessionId),
         ),
       );
+
+  test('the chat title is cut by characters, never inside an emoji', () async {
+    final hub = newHub();
+    final chat = await newChat();
+    final prompt = '${'a' * 59}👍🏽 and more text after it';
+
+    await hub.prompt(chat, prompt);
+
+    final record = await (database.select(
+      database.sessionsTable,
+    )..where((s) => s.id.equals(chat))).getSingle();
+    expect(record.title, '${'a' * 59}👍🏽');
+    expect(record.title.characters.length, 60);
+    expect(utf8.decode(utf8.encode(record.title)), record.title);
+    expect(record.title, isNot(contains('\u{FFFD}')));
+  });
 
   test('the first prompt creates the agent session and journals the turn', () async {
     final hub = newHub();

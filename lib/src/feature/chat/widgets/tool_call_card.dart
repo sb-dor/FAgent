@@ -143,8 +143,8 @@ class _ToolCallCardState extends State<ToolCallCard> {
                   Text(Localization.of(context).toolOutput, style: theme.textTheme.labelSmall),
                   const SizedBox(height: 4),
                   SelectableText(
-                    output.length > _maxOutputChars
-                        ? '${output.substring(0, _maxOutputChars)}…'
+                    output.characters.length > _maxOutputChars
+                        ? '${output.characters.take(_maxOutputChars)}…'
                         : output,
                     style: AppText.mono(context),
                   ),

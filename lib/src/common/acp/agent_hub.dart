@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:dart_acp_sdk/dart_acp_sdk.dart' hide Error;
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
@@ -1240,7 +1241,7 @@ final class AgentHub {
           SessionsTableCompanion(
             updatedAt: Value<DateTime>(DateTime.now()),
             title: record.title.isEmpty
-                ? Value<String>(title.length > 60 ? title.substring(0, 60) : title)
+                ? Value<String>(title.characters.take(60).toString())
                 : const Value<String>.absent(),
           ),
         );
