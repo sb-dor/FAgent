@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/widget/app_card.dart';
+import 'package:flutter_code_agent/src/common/widget/diff_view.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/common/widget/pane_tabs.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
@@ -96,6 +98,48 @@ void main() {
 
     await tester.tap(find.text('Изменения'));
     expect(picked, 'changes');
+  });
+
+  testWidgets('DiffView paints its lines and frame from the dark tokens', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        const DiffView(path: 'lib/a.dart', oldText: 'a\nb', newText: 'a\nc'),
+        theme: AppTheme.dark(),
+      ),
+    );
+    Color rowColor(String line) => tester
+        .widget<ColoredBox>(
+          find.ancestor(of: find.text(line), matching: find.byType(ColoredBox)).first,
+        )
+        .color;
+
+    expect(rowColor('+c'), AppColors.dark.okSoft);
+    expect(rowColor('-b'), AppColors.dark.dangerSoft);
+    expect(tester.widget<Text>(find.text('+1')).style?.color, AppColors.dark.ok);
+
+    final frame = tester.widget<DecoratedBox>(
+      find.ancestor(of: find.text('lib/a.dart'), matching: find.byType(DecoratedBox)).first,
+    );
+    final decoration = frame.decoration as BoxDecoration;
+    expect(decoration.borderRadius, BorderRadius.circular(AppRadius.medium));
+    expect(decoration.border, Border.all(color: AppColors.dark.border));
+  });
+
+  testWidgets('PaneTabs draws the error badge in the onAccent token of the dark theme', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      testApp(
+        PaneTabs<String>(
+          tabs: const <PaneTab<String>>[PaneTab<String>(id: 'run', label: 'Run', errors: 2)],
+          selected: 'run',
+          onSelected: (_) {},
+        ),
+        theme: AppTheme.dark(),
+      ),
+    );
+    final badge = tester.widget<Text>(find.text('2'));
+    expect(badge.style?.color, AppColors.dark.onAccent);
   });
 
   testWidgets('EmptyState runs its action', (tester) async {

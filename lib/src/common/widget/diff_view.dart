@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/design/app_colors.dart';
+import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/utils/line_diff.dart';
 import 'package:path/path.dart' as p;
@@ -37,14 +39,14 @@ class DiffView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
+    final colors = context.colors;
     final lines = this.lines ?? LineDiff.compute(oldText, newText);
     final stats = LineDiff.stats(lines);
     final mono = theme.textTheme.bodySmall?.copyWith(fontFamily: 'Menlo', height: 1.35);
     return DecoratedBox(
       decoration: BoxDecoration(
-        border: Border.all(color: colors.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.border),
+        borderRadius: BorderRadius.circular(AppRadius.medium),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -65,18 +67,18 @@ class DiffView extends StatelessWidget {
                 else ...<Widget>[
                   Text(
                     '+${stats.added}',
-                    style: theme.textTheme.labelSmall?.copyWith(color: Colors.green.shade700),
+                    style: theme.textTheme.labelSmall?.copyWith(color: colors.ok),
                   ),
                   const SizedBox(width: 6),
                   Text(
                     '−${stats.removed}',
-                    style: theme.textTheme.labelSmall?.copyWith(color: colors.error),
+                    style: theme.textTheme.labelSmall?.copyWith(color: colors.danger),
                   ),
                 ],
               ],
             ),
           ),
-          Divider(height: 1, color: colors.outlineVariant),
+          Divider(height: 1, color: colors.border),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: SelectionArea(
@@ -86,8 +88,8 @@ class DiffView extends StatelessWidget {
                   for (final line in lines.take(maxLines))
                     ColoredBox(
                       color: switch (line.kind) {
-                        DiffLineKind.added => Colors.green.withValues(alpha: 0.14),
-                        DiffLineKind.removed => colors.error.withValues(alpha: 0.12),
+                        DiffLineKind.added => colors.okSoft,
+                        DiffLineKind.removed => colors.dangerSoft,
                         DiffLineKind.same => Colors.transparent,
                       },
                       child: Padding(

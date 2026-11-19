@@ -117,7 +117,10 @@ class _Tab<T> extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(horizontal: 4),
                         child: Text(
                           '$errors',
-                          style: style.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+                          style: style.copyWith(
+                            color: colors.onAccent,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
