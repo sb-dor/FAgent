@@ -88,7 +88,7 @@ class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
                           key: ValueKey<int>(workspace.projectId),
                           workspace: workspace,
                           onOpenExternally: (path) => _scope.openPath(path).ignore(),
-                          listFiles: () => _scope.listProjectFiles(workspace.root),
+                          listFiles: () => _scope.projectFilesController.list(workspace.root),
                         ),
                     ],
                   ),

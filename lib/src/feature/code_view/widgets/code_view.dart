@@ -9,7 +9,6 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
-import 'package:flutter_code_agent/src/feature/code_view/data/code_package_labels.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_analysis_footer.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_editor_view.dart';
@@ -49,8 +48,9 @@ class CodeView extends StatefulWidget {
 class _CodeViewState extends State<CodeView> {
   CodeWorkspace get _workspace => widget.workspace;
 
-  /// The project's package names, once read: the tooltips of read-only tabs.
-  CodePackageLabels? _labels;
+  /// The short name of a file outside the project, once the project's package names are read: the
+  /// tooltips of read-only tabs.
+  String Function(String path)? _packageLabel;
 
   @override
   void initState() {
@@ -62,7 +62,7 @@ class _CodeViewState extends State<CodeView> {
   void didUpdateWidget(CodeView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.workspace, widget.workspace)) {
-      _labels = null;
+      _packageLabel = null;
       _loadLabels();
     }
   }
@@ -70,12 +70,13 @@ class _CodeViewState extends State<CodeView> {
   void _loadLabels() {
     final workspace = _workspace;
     workspace.labels.then((labels) {
-      if (mounted && identical(workspace, _workspace)) setState(() => _labels = labels);
+      if (!mounted || !identical(workspace, _workspace)) return;
+      setState(() => _packageLabel = labels.labelFor);
     }).ignore();
   }
 
   String _labelFor(CodeDocument document) => document.readOnly
-      ? _labels?.labelFor(document.path) ?? document.path
+      ? _packageLabel?.call(document.path) ?? document.path
       : p.relative(document.path, from: _workspace.root);
 
   Future<void> _open(String path) async {

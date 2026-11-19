@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/dart_analysis/lsp_process.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/models/dart_analysis_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

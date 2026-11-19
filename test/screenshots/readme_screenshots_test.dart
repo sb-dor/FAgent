@@ -23,6 +23,7 @@ import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dar
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
@@ -115,7 +116,12 @@ void main() {
     screenshot('code.png: the Code view with a Dart file, diagnostics and completions', (
       tester,
     ) async {
-      final dependencies = _dependencies();
+      final analysis = MemoryDartAnalysisRepository(
+        onComplete: (path, text, position) => _completions,
+      );
+      final dependencies = _dependencies(
+        analysisFor: (root) => root == _shopRoot ? analysis : MemoryDartAnalysisRepository(),
+      );
       final seeded = await _seedProjects(tester, dependencies, rightPane: false);
       await _pumpWorkspace(tester, dependencies);
       await _openChat(tester, seeded);
@@ -130,8 +136,6 @@ void main() {
         projectId: seeded.shop,
         root: _shopRoot,
       );
-      final analysis = workspace.analysis! as MemoryDartAnalysisRepository
-        ..onComplete = (path, text, position) => _completions;
       await tester.runAsync(() => workspace.tabs.open('$_shopRoot/$_controllerFile'));
       await _settle(tester);
       final screen = (await tester.runAsync(() => workspace.tabs.open('$_shopRoot/$_screenFile')))!;
@@ -339,13 +343,18 @@ const String _testFile = 'test/feature/orders/orders_screen_test.dart';
 
 /// Dependencies with real-looking run, devices and agents (no Preview badges), the sample project
 /// files and the built-in rules.
-Dependencies _dependencies({ScriptedAppRunRepository? appRun, IWidgetPickerRepository? picker}) {
+Dependencies _dependencies({
+  ScriptedAppRunRepository? appRun,
+  IWidgetPickerRepository? picker,
+  IDartAnalysisRepository Function(String root)? analysisFor,
+}) {
   final files = MemoryCodeFilesRepository(files: _projectFiles);
   return testDependencies(
     appRunRepository: appRun ?? ScriptedAppRunRepository(),
     devicesRepository: MemoryDevicesRepository(step: const Duration(milliseconds: 1)),
     widgetPickerRepository: picker,
     codeFilesRepository: files,
+    analysisFor: analysisFor,
     agentsRepository: MemoryAgentsRepository(agents: _agents),
     skillsRepository: MemorySkillsRepository(
       items: _builtinKnowledge(),

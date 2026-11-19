@@ -23,6 +23,7 @@ import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_contro
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -90,6 +91,7 @@ Dependencies testDependencies({
   IRunConfigRepository? runConfigRepository,
   ICodeFilesRepository? codeFilesRepository,
   ICodeViewStateRepository? codeViewStateRepository,
+  IDartAnalysisRepository Function(String root)? analysisFor,
   ISkillsRepository? skillsRepository,
   IChatSkillsRepository? chatSkillsRepository,
   IAgentsRepository? agentsRepository,
@@ -152,7 +154,7 @@ Dependencies testDependencies({
     ..codeViews = CodeViewRegistry(
       files: codeFiles,
       state: codeState,
-      analysisFor: (root) => MemoryDartAnalysisRepository(),
+      analysisFor: analysisFor ?? (root) => MemoryDartAnalysisRepository(),
     )
     ..chatSkillsRepository = chatSkillsRepository ?? ChatSkillsRepositoryImpl(database: database)
     ..permissionRulesRepository = permissionRulesRepository ?? MemoryPermissionRulesRepository()

@@ -9,31 +9,9 @@ import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.da
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:flutter_code_agent/src/feature/code_view/models/dart_analysis_status.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
-
-part 'dart_analysis_repository.freezed.dart';
-
-/// What the Dart analysis of a project is doing.
-@freezed
-sealed class DartAnalysisStatus with _$DartAnalysisStatus {
-  /// No Dart file was opened yet: nothing runs.
-  const factory DartAnalysisStatus.idle() = DartAnalysis$IdleState;
-
-  /// The server is starting.
-  const factory DartAnalysisStatus.starting() = DartAnalysis$StartingState;
-
-  /// The server is up and done analyzing.
-  const factory DartAnalysisStatus.ready() = DartAnalysis$ReadyState;
-
-  /// The server is analyzing.
-  const factory DartAnalysisStatus.analyzing() = DartAnalysis$AnalyzingState;
-
-  /// No analysis: `dart` is missing, or the server failed or stopped ([reason]).
-  const factory DartAnalysisStatus.unavailable({required String reason}) =
-      DartAnalysis$UnavailableState;
-}
 
 /// The Dart analysis of one project: the files the Code view has open, completion, and the
 /// server's errors. Only `.dart` files take part.

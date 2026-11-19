@@ -8,10 +8,9 @@ import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
-import 'package:flutter_code_agent/src/feature/code_view/controller/code_format.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/dart_analysis_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/dart_completion_controller.dart';
-import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_completion_list.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_diagnostic_spans.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_find_panel.dart';
@@ -51,7 +50,7 @@ class CodeEditorView extends StatefulWidget {
   final VoidCallback onSave;
 
   /// The project's Dart analysis; completion needs it and a `.dart` file.
-  final IDartAnalysisRepository? analysis;
+  final DartAnalysisController? analysis;
 
   /// Opens what go to definition ([references] `false`) or find references found; `false` when
   /// nothing could be opened (the file is gone), so the editor says nothing was found.
@@ -152,11 +151,9 @@ class _CodeEditorViewState extends State<CodeEditorView> {
     // A read-only file is never edited: no completion, which inserts text past the editor's own
     // read-only gate.
     if (!widget.document.readOnly) {
-      _completion = DartCompletionController(document: widget.document, analysis: analysis)
-        ..addListener(_onCompletion);
+      _completion = analysis.completionFor(widget.document)..addListener(_onCompletion);
     }
-    _navigation = CodeNavigationController(document: widget.document, analysis: analysis)
-      ..addListener(_onNavigation);
+    _navigation = analysis.navigationFor(widget.document)..addListener(_onNavigation);
     final document = widget.document;
     document.decorator =
         ({
@@ -516,7 +513,7 @@ class _CodeEditorViewState extends State<CodeEditorView> {
           _FormatIntent: CallbackAction<_FormatIntent>(
             onInvoke: (_) {
               if (widget.analysis case final analysis?) {
-                formatDocument(widget.document, analysis).ignore();
+                analysis.format(widget.document).ignore();
               }
               return null;
             },

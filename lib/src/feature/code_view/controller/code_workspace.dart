@@ -6,10 +6,10 @@ import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnost
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
-import 'package:flutter_code_agent/src/feature/code_view/controller/code_format.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_tabs_controller.dart';
+import 'package:flutter_code_agent/src/feature/code_view/controller/dart_analysis_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/file_tree_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_package_labels.dart';
@@ -29,9 +29,11 @@ final class CodeWorkspace {
     required this.root,
     required ICodeFilesRepository files,
     required ICodeViewStateRepository state,
-    this.analysis,
+    IDartAnalysisRepository? analysis,
     bool Function()? formatOnSave,
   }) : _files = files,
+       _analysis = analysis,
+       analysis = analysis == null ? null : DartAnalysisController(repository: analysis),
        _formatOnSave = formatOnSave ?? _always {
     // One watch for both; it stops once both stopped listening.
     final changes = files
@@ -45,7 +47,7 @@ final class CodeWorkspace {
       state: state,
       changes: changes,
     );
-    _diagnostics = analysis?.diagnostics.listen(_onDiagnostics);
+    _diagnostics = _analysis?.diagnostics.listen(_onDiagnostics);
     tabs.beforeSave = _formatBeforeSave;
     tabs
       ..addListener(_dropClosedViews)
@@ -53,8 +55,12 @@ final class CodeWorkspace {
       ..restore().ignore();
   }
 
-  /// The Dart analysis of the project; `null` without one (tests).
-  final IDartAnalysisRepository? analysis;
+  /// The Dart analysis of the project for the widgets; `null` without one (tests).
+  final DartAnalysisController? analysis;
+
+  /// The repository behind [analysis]: the workspace tells it about open files and listens to its
+  /// diagnostics.
+  final IDartAnalysisRepository? _analysis;
 
   final ICodeFilesRepository _files;
 
@@ -66,7 +72,7 @@ final class CodeWorkspace {
   Future<void> _formatBeforeSave(CodeDocument document) async {
     final analysis = this.analysis;
     if (analysis == null || !_formatOnSave()) return;
-    await formatDocument(document, analysis);
+    await analysis.format(document);
   }
 
   /// Short names of files outside the project, from its `.dart_tool/package_config.json`; read
@@ -110,7 +116,7 @@ final class CodeWorkspace {
 
   /// Tells the analysis about tabs that opened and closed since the last change of [tabs].
   void _syncAnalysis() {
-    final analysis = this.analysis;
+    final analysis = _analysis;
     if (analysis == null) return;
     final open = tabs.tabs.where((tab) => tab.kind == CodeDocumentKind.text).toSet();
     for (final document in _analyzed.keys.where((document) => !open.contains(document)).toList()) {
@@ -285,7 +291,7 @@ final class CodeWorkspace {
     tree.dispose();
     tabs.dispose();
     history.dispose();
-    await analysis?.dispose();
+    await _analysis?.dispose();
   }
 }
 

@@ -5,7 +5,7 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_workspace.dart';
-import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
+import 'package:flutter_code_agent/src/feature/code_view/models/dart_analysis_status.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_analysis_footer.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_diagnostic_spans.dart';
 import 'package:flutter_code_agent/src/feature/code_view/widgets/code_explorer.dart';

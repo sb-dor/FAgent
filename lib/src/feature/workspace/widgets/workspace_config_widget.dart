@@ -45,6 +45,7 @@ import 'package:flutter_code_agent/src/feature/sessions/controller/sessions_cont
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
+import 'package:flutter_code_agent/src/feature/workspace/controller/project_files_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/pending_chat_draft.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_run_link.dart';
@@ -124,6 +125,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   /// The skills of the selected project, for the chats (the 🧩 chip, the `/` menu, the skill lines).
   /// The Skills screen has a library of its own.
   late final SkillLibraryController skillLibraryController;
+
+  /// The files of the selected project for the Code view's ⌘P.
+  late final ProjectFilesController projectFilesController;
+
   final WorkspaceDataController dataController = WorkspaceDataController();
 
   /// The run of the selected project and its ties to the selected chat.
@@ -217,6 +222,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       isPreview: runIsPreview,
     );
     skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
+    projectFilesController = ProjectFilesController(
+      repository: ProjectFilesRepositoryImpl(environment: dependencies.shellEnvironment),
+    );
     projectsController
       ..addListener(_followCodeWorkspace)
       ..addListener(_followSkills)
@@ -467,10 +475,6 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
 
   /// The Code view of the selected project; `null` without one.
   CodeWorkspace? get codeWorkspace => _codeWorkspace;
-
-  /// The files of the project in [root] for ⌘P, relative to it and without ignored ones.
-  Future<List<String>> listProjectFiles(String root) =>
-      ProjectFilesRepositoryImpl(environment: Dependencies.of(context).shellEnvironment).list(root);
 
   /// Picks a folder and opens it as a project.
   Future<void> pickAndOpenProject() async {
