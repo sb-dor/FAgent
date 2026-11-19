@@ -8,8 +8,9 @@ final class AgentExitedException extends ExpectedException {
   /// The exit code of the agent process.
   final int exitCode;
 
+  /// A plain sentence: the start message of the agent includes it.
   @override
-  String toString() => 'AgentExitedException: agent exited with code $exitCode';
+  String toString() => 'The agent exited with code $exitCode.';
 }
 
 /// The agent stopped while a chat was being prepared for its message.

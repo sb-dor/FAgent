@@ -192,11 +192,13 @@ void main() {
           onPermissionRequest: _allow,
         ),
         throwsA(
-          isA<AgentStartException>().having(
-            (e) => e.message,
-            'message',
-            contains('AgentExitedException: agent exited with code 3'),
-          ),
+          isA<AgentStartException>()
+              .having(
+                (e) => e.message,
+                'message',
+                'Exiting failed to start: The agent exited with code 3.',
+              )
+              .having((e) => e.message, 'message', isNot(contains('Exception'))),
         ),
       );
     },
