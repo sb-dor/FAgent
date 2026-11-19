@@ -74,8 +74,9 @@ import 'scripted_widget_picker_repository.dart';
 /// repository is a [MemoryProjectCreationRepository] unless the test passes its own
 /// [projectCreationRepository]; a created project is added through a
 /// [MemoryProjectOpeningRepository] (id 1) and trusted through a [MemoryProjectTrustRepository]
-/// unless the test passes its own [projectOpeningRepository] or [projectTrustRepository]. The app's MCP server is a real one that is never started unless the
-/// test passes its own [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
+/// unless the test passes its own [projectOpeningRepository] or [projectTrustRepository]. The
+/// app's MCP server is a real one that is never started unless the test passes its own
+/// [appMcpServer]. The MCP servers repository probes with a [ScriptedMcpProbe]
 /// that fails every server unless the test passes its own [mcpProbe]. Nothing is ever dropped on
 /// the window unless the test passes its own [dropZone] (`DropZone.fromStream` of a controller).
 /// The Code view reads the real file system unless the test passes its own [codeFilesRepository],

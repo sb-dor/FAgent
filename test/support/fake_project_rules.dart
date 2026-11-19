@@ -62,7 +62,7 @@ final class FakeProjectRules implements IProjectRulesRepository {
       for (final rule in rules)
         if (rule.enabled) rule,
     ];
-    await write(projectPath, enabled);
+    if (enabled.isNotEmpty) await write(projectPath, enabled);
     return <String>[for (final rule in enabled) rule.name];
   }
 

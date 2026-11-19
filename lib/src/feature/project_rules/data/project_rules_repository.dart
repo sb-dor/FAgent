@@ -38,8 +38,10 @@ abstract interface class IProjectRulesRepository {
 
 /// [IProjectRulesRepository] on the skills library (the rules' texts) and the projects table.
 final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
-  /// Creates the repository. It takes the skills and projects repositories because the project
-  /// creation repository calls [writeBuiltinRules] as a plain function, with no controller between.
+  /// Creates the repository.
+  ///
+  /// `_skills`: [write] and [builtinRules] read it; creation calls [writeBuiltinRules] directly.
+  /// `_projects` (only [markOffered]) stays a known deviation that a controller could absorb.
   ProjectRulesRepositoryImpl({required this._skills, required this._projects});
 
   final ISkillsRepository _skills;
