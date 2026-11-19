@@ -22,8 +22,8 @@ abstract interface class ISessionsRepository {
   /// Makes [agentId] run chat [sessionId], which has not started an agent session yet (its first
   /// message was not sent). The next time the chat opens it uses the new agent.
   ///
-  /// Throws a [StateError] when the chat already has an agent session: its agent can no longer
-  /// change.
+  /// Throws [ChatBusyException] when the chat already has an agent session or is starting one: its
+  /// agent can no longer change.
   Future<void> setAgent(int sessionId, String agentId);
 
   /// Names chat [sessionId] [title] (trimmed); an empty name changes nothing. The automatic title
@@ -36,7 +36,7 @@ abstract interface class ISessionsRepository {
   Future<void> delete(int sessionId);
 }
 
-/// A chat was not deleted: its agent is working.
+/// A chat was left as it is: its agent is working, or its agent session exists or is starting.
 final class ChatBusyException extends ExpectedException {
   /// Creates the exception for chat [sessionId].
   const ChatBusyException(this.sessionId);
@@ -45,7 +45,7 @@ final class ChatBusyException extends ExpectedException {
   final int sessionId;
 
   @override
-  String toString() => 'ChatBusyException: the agent works in chat $sessionId';
+  String toString() => 'ChatBusyException: chat $sessionId is busy with its agent';
 }
 
 /// Drift and AgentHub backed [ISessionsRepository].
@@ -103,13 +103,13 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
       sessions,
     )..where((s) => s.id.equals(sessionId))).getSingle();
     if (row.acpSessionId != null) {
-      throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
+      throw ChatBusyException(sessionId);
     }
     if (row.agentId == agentId) return;
     // The first message may already be on its way (the agent session is not stored yet while the
     // agent starts): the hub knows.
     if (!_hub.canChangeAgent(sessionId)) {
-      throw StateError('Chat $sessionId is starting; its agent cannot change');
+      throw ChatBusyException(sessionId);
     }
     // Only while the chat still has no agent session, so the new agent never meets the old one's.
     final changed =
@@ -117,14 +117,14 @@ final class SessionsRepositoryImpl implements ISessionsRepository {
               ..where((s) => s.id.equals(sessionId) & s.acpSessionId.isNull()))
             .write(SessionsTableCompanion(agentId: Value<String>(agentId)));
     if (changed == 0) {
-      throw StateError('Chat $sessionId already has an agent session; its agent cannot change');
+      throw ChatBusyException(sessionId);
     }
     if (!await _hub.forget(sessionId)) {
       // A prompt got in between: put the agent back unless its session was stored meanwhile.
       await (_database.update(sessions)
             ..where((s) => s.id.equals(sessionId) & s.acpSessionId.isNull()))
           .write(SessionsTableCompanion(agentId: Value<String>(row.agentId)));
-      throw StateError('Chat $sessionId is starting; its agent cannot change');
+      throw ChatBusyException(sessionId);
     }
   }
 }

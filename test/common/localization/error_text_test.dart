@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
@@ -37,6 +39,13 @@ void main() {
 
   test('a failed flutter doctor shows what it printed', () {
     expect(errorText(lcl, const FlutterDoctorFailedException(1, 'no git')), contains('no git'));
+  });
+
+  test('the agent and run failures have their own sentences', () {
+    expect(errorText(lcl, const AgentStoppedException()), lcl.errorAgentStopped);
+    expect(errorText(lcl, const ProjectFolderUnknownException()), lcl.errorProjectFolderUnknown);
+    expect(errorText(lcl, const NoRootWidgetException()), lcl.errorNoRootWidget);
+    expect(errorText(lcl, const ScreenshotFailedException()), lcl.errorScreenshotFailed);
   });
 
   test('a timeout has its own sentence', () {
@@ -111,6 +120,10 @@ void main() {
       const FlutterNotFoundException(),
       const ChatBusyException(1),
       const ProjectBusyException(1),
+      const AgentStoppedException(),
+      const ProjectFolderUnknownException(),
+      const NoRootWidgetException(),
+      const ScreenshotFailedException(),
       StateError('boom'),
     ];
     for (final error in errors) {

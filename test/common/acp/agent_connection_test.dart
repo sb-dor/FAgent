@@ -176,6 +176,32 @@ void main() {
     );
   });
 
+  test(
+    'a process that exits while it starts is an AgentStartException naming its exit code',
+    () async {
+      const exiting = AgentDefinition(
+        id: 'exiting',
+        displayName: 'Exiting',
+        executable: '/bin/sh',
+        arguments: <String>['-c', 'sleep 5 & exit 3'],
+      );
+      await expectLater(
+        AgentConnection.start(
+          definition: exiting,
+          environment: environment,
+          onPermissionRequest: _allow,
+        ),
+        throwsA(
+          isA<AgentStartException>().having(
+            (e) => e.message,
+            'message',
+            contains('AgentExitedException: agent exited with code 3'),
+          ),
+        ),
+      );
+    },
+  );
+
   group('preflight', () {
     test('rejects a missing executable', () async {
       const missing = AgentDefinition(

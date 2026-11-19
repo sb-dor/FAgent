@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dart_acp_sdk/dart_acp_sdk.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/acp/raw_acp_message.dart';
 import 'package:flutter_code_agent/src/common/process/bounded_line_splitter.dart';
@@ -189,7 +190,7 @@ final class AgentConnection {
     try {
       await Future.any<void>(<Future<void>>[
         connection._connection.lifecycle.ready,
-        process.exitCode.then<void>((code) => throw StateError('agent exited with code $code')),
+        process.exitCode.then<void>((code) => throw AgentExitedException(code)),
         aborted.future,
       ]).timeout(initializeTimeout);
       connection.initializeResult = initializeResult.isCompleted

@@ -1573,6 +1573,33 @@ void main() {
         await pumpEventQueue();
 
         expect(seen.last.error?.title, 'Screenshot failed');
+        expect(seen.last.error?.message, contains('NoRootWidgetException'));
+      });
+
+      test('a project whose folder is gone logs a ProjectFolderUnknownException', () async {
+        answerExtensions();
+        final seen = logs(1);
+        await runApp();
+        paths.remove(1);
+
+        expect(await repository.screenshot(1), isNull);
+        await pumpEventQueue();
+
+        expect(seen.last.error?.message, contains('ProjectFolderUnknownException'));
+      });
+
+      test('an app that renders nothing logs a ScreenshotFailedException', () async {
+        answerExtensions(
+          answer: (method) =>
+              method == 'ext.flutter.inspector.screenshot' ? <String, Object?>{'result': ''} : null,
+        );
+        final seen = logs(1);
+        await runApp();
+
+        expect(await repository.screenshot(1), isNull);
+        await pumpEventQueue();
+
+        expect(seen.last.error?.message, contains('ScreenshotFailedException'));
       });
     });
   });

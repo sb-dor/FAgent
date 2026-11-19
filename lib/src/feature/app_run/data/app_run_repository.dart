@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/flutter_error_listener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/build_mode.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
@@ -426,7 +427,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     const title = 'Screenshot failed';
     try {
       final root = await _projectPath(projectId);
-      if (root == null) throw StateError('The project folder is unknown.');
+      if (root == null) throw const ProjectFolderUnknownException();
       final bytes = await launch.screenshot();
       return await saveScreenshotPng(root, bytes, name: 'screenshot-${_stamp(_now())}');
     } on DaemonRequestException catch (error) {
@@ -690,7 +691,7 @@ final class _Launch {
         {'valueId': final String valueId} => valueId,
         _ => null,
       };
-      if (id == null) throw StateError('The app returned no root widget.');
+      if (id == null) throw const NoRootWidgetException();
       final shot = await _extension('ext.flutter.inspector.screenshot', <String, String>{
         'id': id,
         'width': '1600',
@@ -699,7 +700,7 @@ final class _Launch {
       });
       final data = shot['result'];
       if (data is! String || data.isEmpty) {
-        throw StateError('The app could not render a screenshot.');
+        throw const ScreenshotFailedException();
       }
       return base64Decode(data);
     } finally {

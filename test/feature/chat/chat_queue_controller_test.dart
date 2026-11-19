@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/feature/chat/controller/chat_queue_controller.dart';
@@ -30,7 +31,7 @@ final class _RecordingSending implements IPromptSendingRepository {
     if (hold case final hold?) await hold.future;
     if (failWith case final error?) {
       failWith = null;
-      // A StateError or a BypassNotAllowedException (an Exception).
+      // A StateError, or an Exception such as BypassNotAllowedException.
       Error.throwWithStackTrace(error, StackTrace.current);
     }
   }
@@ -153,6 +154,20 @@ void main() {
       status.value = SessionStatus.starting;
       queue.add(_prompt('later'));
       sending.failWith = StateError('Cannot send a prompt while the session is running');
+
+      status
+        ..value = SessionStatus.loading
+        ..value = SessionStatus.idle;
+      await settle();
+      await settle();
+
+      expect(queue.state.items.map((p) => p.text), <String>['later']);
+      expect(queue.state.paused, isTrue);
+    });
+    test('a send whose agent stopped goes back paused', () async {
+      status.value = SessionStatus.starting;
+      queue.add(_prompt('later'));
+      sending.failWith = const AgentStoppedException();
 
       status
         ..value = SessionStatus.loading

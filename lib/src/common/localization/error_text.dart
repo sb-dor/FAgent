@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
@@ -32,6 +34,10 @@ String errorText(GeneratedLocalization lcl, Object? error, {bool debug = kDebugM
       FlutterNotFoundException() => lcl.errorFlutterNotFound,
       FlutterDoctorFailedException(:final output) => lcl.errorFlutterDoctorFailed(output),
       ChatBusyException() => lcl.errorChatBusy,
+      AgentStoppedException() => lcl.errorAgentStopped,
+      ProjectFolderUnknownException() => lcl.errorProjectFolderUnknown,
+      NoRootWidgetException() => lcl.errorNoRootWidget,
+      ScreenshotFailedException() => lcl.errorScreenshotFailed,
       ProjectBusyException() => lcl.errorProjectBusy,
       OpenPathRefusedException(:final path) => lcl.errorOpenPathRefused(path),
       InvalidMcpServerException() => lcl.errorInvalidMcpServer,

@@ -167,7 +167,7 @@ void main() {
   test('setAgent refuses after the first message', () async {
     final chat = await newChat(acpSessionId: 'acp-1');
 
-    await expectLater(repository.setAgent(chat, 'second'), throwsStateError);
+    await expectLater(repository.setAgent(chat, 'second'), throwsA(isA<ChatBusyException>()));
 
     expect(await agentOf(chat), 'first');
   });
@@ -240,7 +240,7 @@ void main() {
 
     // The row has no agent session in the first moments, only the hub knows the chat is busy.
     expect(changeableWhileStarting, isFalse);
-    await expectLater(repository.setAgent(chat, 'second'), throwsStateError);
+    await expectLater(repository.setAgent(chat, 'second'), throwsA(isA<ChatBusyException>()));
 
     expect(await agentOf(chat), 'first');
     expect(hub.opened(chat), same(live));
@@ -257,7 +257,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(hub.canChangeAgent(chat), isFalse);
 
-    await expectLater(repository.setAgent(chat, 'second'), throwsStateError);
+    await expectLater(repository.setAgent(chat, 'second'), throwsA(isA<ChatBusyException>()));
     await prompt;
 
     expect(await agentOf(chat), 'first');

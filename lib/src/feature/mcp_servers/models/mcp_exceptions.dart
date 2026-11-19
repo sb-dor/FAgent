@@ -38,3 +38,17 @@ final class McpJsonException extends ExpectedException {
   @override
   String toString() => 'McpJsonException: $message';
 }
+
+/// The transport to an MCP server is closed, or the server closed its input.
+///
+/// A probe reports it as a failed probe; it is never shown as it is.
+final class McpServerClosedException implements Exception {
+  /// Creates the exception; [reason] says what closed.
+  const McpServerClosedException(this.reason);
+
+  /// What closed.
+  final String reason;
+
+  @override
+  String toString() => 'McpServerClosedException: $reason';
+}

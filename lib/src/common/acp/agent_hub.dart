@@ -7,6 +7,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
+import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_sign_in.dart';
@@ -304,7 +305,7 @@ final class AgentHub {
         ..canRetryPrompt.value = false;
       await _ensureReady(live);
       if (live.status.value != SessionStatus.idle) {
-        throw StateError('The agent stopped while the session was being prepared');
+        throw const AgentStoppedException();
       }
       // A new agent session's first prompt carries the rules, after the text
       // ([retryPrompt] takes the text from the first block). A repeated prompt

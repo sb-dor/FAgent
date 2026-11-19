@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/process/grouped_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:l/l.dart';
 import 'package:mcp_dart/mcp_dart.dart' hide McpServer;
@@ -309,12 +310,12 @@ final class _GroupedStdioTransport implements Transport {
 
   @override
   Future<void> send(JsonRpcMessage message, {int? relatedRequestId}) async {
-    if (_closed) throw StateError('The transport is closed');
+    if (_closed) throw const McpServerClosedException('the transport is closed');
     try {
       _process.stdin.writeln(jsonEncode(message.toJson()));
       await _process.stdin.flush();
     } on SocketException catch (error) {
-      throw StateError('The server closed its input: ${error.message}');
+      throw McpServerClosedException('the server closed its input: ${error.message}');
     }
   }
 
