@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agent_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
@@ -73,7 +74,7 @@ class AgentsConfigWidgetState extends State<AgentsConfigWidget> {
     showMessage(
       error is AgentSettingsMissingException
           ? localization.agentSettingsMissing
-          : localization.agentActionFailed('$error'),
+          : localization.agentActionFailed(errorText(localization, error)),
     );
     actions.acknowledge();
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/controller/permission_rules_controller.dart';
@@ -92,7 +93,12 @@ class PermissionRulesConfigWidgetState extends State<PermissionRulesConfigWidget
   void _onRemoveFailed(Object error) {
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-      SnackBar(content: Text(Localization.of(context).permissionsRemoveFailed('$error'))),
+      SnackBar(
+        content: Text(
+          Localization.of(context)
+              .permissionsRemoveFailed(errorText(Localization.of(context), error)),
+        ),
+      ),
     );
   }
 

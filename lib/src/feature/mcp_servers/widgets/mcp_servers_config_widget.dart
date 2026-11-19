@@ -2,6 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/controller/mcp_server_actions_controller.dart';
@@ -117,7 +118,7 @@ class McpServersConfigWidgetState extends State<McpServersConfigWidget> {
       case McpServerActions$FailedState(error: McpJsonException()):
         showMessage(localization.mcpImportFailed);
       case McpServerActions$FailedState(:final error):
-        showMessage(localization.mcpActionFailed('$error'));
+        showMessage(localization.mcpActionFailed(errorText(localization, error)));
       case McpServerActions$IdleState() ||
           McpServerActions$ProcessingState() ||
           McpServerActions$CompletedState():

@@ -705,5 +705,14 @@
   "chatActions": "Chat actions",
   "chatDeleteConfirm": "Delete the chat “{title}”? Its history is deleted.",
   "@chatDeleteConfirm": {"placeholders": {"title": {"type": "String"}}},
-  "chatDeleteBusy": "The agent is still working in this chat. Stop it first."
+  "chatDeleteBusy": "The agent is still working in this chat. Stop it first.",
+  "errorFile": "{path}: {reason}",
+  "@errorFile": {"placeholders": {"path": {"type": "String"}, "reason": {"type": "String"}}},
+  "errorProcess": "Could not start {command}.",
+  "@errorProcess": {"placeholders": {"command": {"type": "String"}}},
+  "errorTimeout": "It took too long. Try again.",
+  "errorFlutterNotFound": "The Flutter SDK was not found.",
+  "errorChatBusy": "The agent is still working in this chat. Stop it first.",
+  "errorProjectBusy": "An agent is working in a chat of this project. Stop it first.",
+  "errorUnknown": "Something went wrong."
 }

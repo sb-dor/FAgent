@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
@@ -283,7 +284,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         chatController.open(sessionId, keepView: true);
       case SessionAgent$ErrorState(:final error):
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(Localization.of(context).agentActionFailed('$error'))),
+          SnackBar(
+            content: Text(
+              Localization.of(context)
+                  .agentActionFailed(errorText(Localization.of(context), error)),
+            ),
+          ),
         );
       case _:
     }

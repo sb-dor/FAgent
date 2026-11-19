@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
@@ -83,7 +84,7 @@ class CreationProgress extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        '$error',
+                        errorText(Localization.of(context), error),
                         style: AppText.mono(context).copyWith(color: context.colors.danger),
                       ),
                     ),

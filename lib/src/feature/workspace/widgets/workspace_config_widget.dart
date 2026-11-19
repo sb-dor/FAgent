@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/constant/window_constants.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
+import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/devices_controller.dart';
@@ -796,11 +797,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       case ProjectRules$MissingState(:final projectId):
         _markRules(projectId, missing: true);
       case ProjectRules$FailedState(:final error):
-        _showMessage(
-          error is io.FileSystemException
-              ? '${Localization.of(context).somethingWentWrong}: ${error.osError?.message ?? error.message}'
-              : Localization.of(context).somethingWentWrong,
-        );
+        _showMessage(errorText(Localization.of(context), error));
       case ProjectRules$IdleState() || ProjectRules$WritingState():
         break;
     }
@@ -835,7 +832,12 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
         dataController.selectProject(project.id);
       case ProjectOpening$ErrorState(:final error):
         ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          SnackBar(content: Text(Localization.of(context).openProjectFailed('$error'))),
+          SnackBar(
+            content: Text(
+              Localization.of(context)
+                  .openProjectFailed(errorText(Localization.of(context), error)),
+            ),
+          ),
         );
       default:
         break;
