@@ -2,6 +2,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 
 /// Starts an agent; replaced in tests.
 typedef AgentConnector = Future<AgentConnection> Function(
@@ -51,7 +52,7 @@ final class AgentRemovedException implements Exception {
 /// A prompt was not sent: the chat's mode is `bypassPermissions` and the user
 /// has not allowed it ([AgentHub.acknowledgeBypass]). The prompt can be
 /// repeated afterwards.
-final class BypassNotAllowedException implements Exception {
+final class BypassNotAllowedException extends ExpectedException {
   /// Creates the exception.
   const BypassNotAllowedException();
 

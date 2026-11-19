@@ -4,11 +4,12 @@ import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:path/path.dart' as p;
 
 /// A project cannot be removed while an agent works in one of its chats.
-class ProjectBusyException implements Exception {
+final class ProjectBusyException extends ExpectedException {
   /// Creates the exception for project [projectId].
   const ProjectBusyException(this.projectId);
 
@@ -20,7 +21,7 @@ class ProjectBusyException implements Exception {
 }
 
 /// [openPath] refused to open a path: it is not absolute or nothing is there.
-class OpenPathRefusedException implements Exception {
+final class OpenPathRefusedException extends ExpectedException {
   /// Creates the exception for [path].
   const OpenPathRefusedException(this.path);
 

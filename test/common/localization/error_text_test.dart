@@ -2,12 +2,20 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/localization/error_text.dart';
 import 'package:flutter_code_agent/src/common/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/run_start_arguments.dart';
+import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
+import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
+import 'package:flutter_code_agent/src/feature/permission_rules/models/permission_rules_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/src/feature/sessions/data/sessions_repository.dart';
+import 'package:flutter_code_agent/src/feature/skills/models/knowledge_exceptions.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -39,6 +47,50 @@ void main() {
     expect(errorText(lcl, const FlutterNotFoundException()), lcl.errorFlutterNotFound);
     expect(errorText(lcl, const ChatBusyException(1)), lcl.errorChatBusy);
     expect(errorText(lcl, const ProjectBusyException(1)), lcl.errorProjectBusy);
+  });
+
+  group('every expected failure has its own sentence', () {
+    final ru = lookupGeneratedLocalization(const Locale('ru'));
+    final errors = <Object>[
+      const OpenPathRefusedException('/nowhere'),
+      const InvalidMcpServerException(McpServerProblem.invalidName),
+      const McpJsonException('bad json'),
+      const ReadOnlyKnowledgeException('rule:dart'),
+      const InvalidKnowledgeNameException('Bad Name'),
+      const KnowledgeExistsException('skill:x'),
+      const KnowledgeNotFoundException('skill:x'),
+      const InvalidKnowledgeException('no SKILL.md'),
+      const KnowledgeConflictException('skill:x'),
+      const AgentSettingsMissingException('codex'),
+      const RunConfigNotStartable.unsupported('Home', LaunchUnsupportedVariable(r'${env:HOME}')),
+      const FileNotTextException('/p/a.bin'),
+      const FileTooLargeException('/p/big.txt', 1),
+      const FileChangedOnDiskException('/p/a.txt', null),
+      const BypassNotAllowedException(),
+      const PermissionRulesUnreadableException('/p/.claude/settings.local.json'),
+    ];
+    for (final error in errors) {
+      test('${error.runtimeType}', () {
+        final en = errorText(lcl, error, debug: false);
+        expect(en, isNot(lcl.errorUnknown));
+        expect(errorText(ru, error, debug: false), isNot(en));
+      });
+    }
+
+    test('a message the user needs is in the sentence', () {
+      expect(
+        errorText(lcl, const McpJsonException('bad json'), debug: false),
+        contains('bad json'),
+      );
+      expect(
+        errorText(lcl, const KnowledgeExistsException('skill:x'), debug: false),
+        contains('x'),
+      );
+      expect(
+        errorText(lcl, const FileTooLargeException('/p/big.txt', 1), debug: false),
+        contains('/p/big.txt'),
+      );
+    });
   });
 
   test('an unknown error is its toString in debug', () {

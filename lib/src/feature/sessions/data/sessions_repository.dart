@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:flutter_code_agent/src/feature/sessions/models/chat_session.dart';
 
 /// Chats of every project.
@@ -36,7 +37,7 @@ abstract interface class ISessionsRepository {
 }
 
 /// A chat was not deleted: its agent is working.
-final class ChatBusyException implements Exception {
+final class ChatBusyException extends ExpectedException {
   /// Creates the exception for chat [sessionId].
   const ChatBusyException(this.sessionId);
 

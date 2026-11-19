@@ -1,5 +1,7 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
+
 /// A built-in skill or rule cannot be changed.
-final class ReadOnlyKnowledgeException implements Exception {
+final class ReadOnlyKnowledgeException extends ExpectedException {
   /// Creates the exception for the item [id].
   const ReadOnlyKnowledgeException(this.id);
 
@@ -11,7 +13,7 @@ final class ReadOnlyKnowledgeException implements Exception {
 }
 
 /// A name does not match `^[a-z0-9][a-z0-9-]{0,63}$`.
-final class InvalidKnowledgeNameException implements Exception {
+final class InvalidKnowledgeNameException extends ExpectedException {
   /// Creates the exception for [name].
   const InvalidKnowledgeNameException(this.name);
 
@@ -23,7 +25,7 @@ final class InvalidKnowledgeNameException implements Exception {
 }
 
 /// A skill or rule with this name already exists.
-final class KnowledgeExistsException implements Exception {
+final class KnowledgeExistsException extends ExpectedException {
   /// Creates the exception for the item [id].
   const KnowledgeExistsException(this.id);
 
@@ -35,7 +37,7 @@ final class KnowledgeExistsException implements Exception {
 }
 
 /// There is no skill or rule with this id (or no folder to look for it in).
-final class KnowledgeNotFoundException implements Exception {
+final class KnowledgeNotFoundException extends ExpectedException {
   /// Creates the exception for the item [id].
   const KnowledgeNotFoundException(this.id);
 
@@ -47,7 +49,7 @@ final class KnowledgeNotFoundException implements Exception {
 }
 
 /// A folder cannot be used as a skill, for example because it has no `SKILL.md`.
-final class InvalidKnowledgeException implements Exception {
+final class InvalidKnowledgeException extends ExpectedException {
   /// Creates the exception.
   const InvalidKnowledgeException(this.message);
 
@@ -60,7 +62,7 @@ final class InvalidKnowledgeException implements Exception {
 
 /// The file of an item changed on disk since the caller read it, so a save would overwrite
 /// someone else's edit.
-final class KnowledgeConflictException implements Exception {
+final class KnowledgeConflictException extends ExpectedException {
   /// Creates the exception for the item [id].
   const KnowledgeConflictException(this.id);
 

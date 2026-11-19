@@ -1,5 +1,7 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
+
 /// The agent has no settings file or folder yet, so there is nothing to open.
-final class AgentSettingsMissingException implements Exception {
+final class AgentSettingsMissingException extends ExpectedException {
   /// Creates the exception for the agent [agentId].
   const AgentSettingsMissingException(this.agentId);
 

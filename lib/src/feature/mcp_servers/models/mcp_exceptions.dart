@@ -1,3 +1,5 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
+
 /// Why an MCP server was not accepted.
 enum McpServerProblem {
   /// The name is empty, too long, has other characters than `A-Za-z0-9_.-` or is reserved.
@@ -14,7 +16,7 @@ enum McpServerProblem {
 }
 
 /// A server draft that the repository refused.
-final class InvalidMcpServerException implements Exception {
+final class InvalidMcpServerException extends ExpectedException {
   /// Creates the exception for [problem].
   const InvalidMcpServerException(this.problem);
 
@@ -26,7 +28,7 @@ final class InvalidMcpServerException implements Exception {
 }
 
 /// A `.mcp.json` text that is not JSON or has no `mcpServers` object.
-final class McpJsonException implements Exception {
+final class McpJsonException extends ExpectedException {
   /// Creates the exception with [message].
   const McpJsonException(this.message);
 

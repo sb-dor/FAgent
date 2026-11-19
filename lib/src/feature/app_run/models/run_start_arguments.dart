@@ -1,3 +1,4 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -38,7 +39,7 @@ abstract class RunStartArguments with _$RunStartArguments {
 
 /// The selected launch configuration [name] cannot start: the configuration is [unsupported], or
 /// the `launch.json` it comes from is [unreadable]. Exactly one of the two is set.
-final class RunConfigNotStartable implements Exception {
+final class RunConfigNotStartable extends ExpectedException {
   /// The configuration uses what the app cannot run.
   const RunConfigNotStartable.unsupported(this.name, LaunchUnsupported this.unsupported)
     : unreadable = null;

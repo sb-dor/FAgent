@@ -1,8 +1,10 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
+
 /// {@template flutter_not_found_exception}
 /// No Flutter SDK could be found: neither the project's fvm SDK nor `flutter`
 /// on the `PATH`.
 /// {@endtemplate}
-final class FlutterNotFoundException implements Exception {
+final class FlutterNotFoundException extends ExpectedException {
   /// {@macro flutter_not_found_exception}
   const FlutterNotFoundException();
 

@@ -1,3 +1,4 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:meta/meta.dart';
 
 /// {@template file_node}
@@ -117,7 +118,7 @@ final class FileChange {
 }
 
 /// The file is binary or not UTF-8: the editor does not open it.
-final class FileNotTextException implements Exception {
+final class FileNotTextException extends ExpectedException {
   /// Creates the exception.
   const FileNotTextException(this.path);
 
@@ -129,7 +130,7 @@ final class FileNotTextException implements Exception {
 }
 
 /// The file is larger than the editor opens.
-final class FileTooLargeException implements Exception {
+final class FileTooLargeException extends ExpectedException {
   /// Creates the exception.
   const FileTooLargeException(this.path, this.size);
 
@@ -144,7 +145,7 @@ final class FileTooLargeException implements Exception {
 }
 
 /// The file on disk is not what was read: a save would overwrite someone else's change.
-final class FileChangedOnDiskException implements Exception {
+final class FileChangedOnDiskException extends ExpectedException {
   /// Creates the exception.
   const FileChangedOnDiskException(this.path, this.actual);
 

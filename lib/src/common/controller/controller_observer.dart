@@ -1,10 +1,17 @@
 import 'package:control/control.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:l/l.dart';
 
 /// Observer for [Controller], react to changes in any controller.
 final class ControllerObserver implements IControllerObserver {
-  const ControllerObserver();
+  /// Creates the observer; [report] is where a bug goes, [ErrorUtil.logError] unless a test
+  /// replaces it.
+  const ControllerObserver({@visibleForTesting this.report});
+
+  /// Receives every error that is not an [ExpectedException].
+  final void Function(Object error, StackTrace stackTrace)? report;
 
   @override
   void onCreate(Controller controller) {
@@ -50,6 +57,11 @@ final class ControllerObserver implements IControllerObserver {
   @override
   void onError(Controller controller, Object error, StackTrace stackTrace) {
     final context = Controller.context;
+    if (error is ExpectedException) {
+      // The user or the outside world caused it and the UI shows it: not a crash.
+      l.i('Controller | ${controller.name}${context == null ? '' : '.${context.name}'} | $error');
+      return;
+    }
     if (context == null) {
       // Error occurred outside of the handler
       l.w('Controller | ${controller.name} | $error', stackTrace);
@@ -57,6 +69,6 @@ final class ControllerObserver implements IControllerObserver {
       // Error occurred inside the handler
       l.w('Controller | ${controller.name}.${context.name} | $error', stackTrace, context.meta);
     }
-    ErrorUtil.logError(error, stackTrace);
+    (report ?? ErrorUtil.logError)(error, stackTrace);
   }
 }

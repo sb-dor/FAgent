@@ -1,6 +1,8 @@
+import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
+
 /// A project's `.claude/settings.local.json` exists but cannot be used: it is not JSON, or its
 /// top level is not an object.
-final class PermissionRulesUnreadableException implements Exception {
+final class PermissionRulesUnreadableException extends ExpectedException {
   /// Creates the exception for the file at [path].
   const PermissionRulesUnreadableException(this.path);
 
