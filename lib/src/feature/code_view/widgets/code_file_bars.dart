@@ -134,11 +134,16 @@ class CodeImageView extends StatelessWidget {
     child: Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Image.file(
-          io.File(path),
-          fit: BoxFit.scaleDown,
-          errorBuilder: (context, error, stackTrace) =>
-              Icon(Icons.broken_image_outlined, size: 32, color: context.colors.muted),
+        child: LayoutBuilder(
+          builder: (context, constraints) => Image.file(
+            io.File(path),
+            fit: BoxFit.scaleDown,
+            cacheWidth: constraints.hasBoundedWidth
+                ? (constraints.maxWidth * MediaQuery.devicePixelRatioOf(context)).round()
+                : null,
+            errorBuilder: (context, error, stackTrace) =>
+                Icon(Icons.broken_image_outlined, size: 32, color: context.colors.muted),
+          ),
         ),
       ),
     ),
