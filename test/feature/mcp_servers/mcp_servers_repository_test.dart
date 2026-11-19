@@ -417,7 +417,7 @@ void main() {
     expect(seen.length, count);
   });
 
-  test('dispose closes the watchers and does not break a probe that finishes later', () async {
+  test('dispose ends the watchers and can be called twice', () async {
     final done = Completer<void>();
     final subscription = repository.watchServers().listen((_) {}, onDone: done.complete);
     await pumpEventQueue();
@@ -427,5 +427,28 @@ void main() {
     await done.future.timeout(const Duration(seconds: 2));
     await subscription.cancel();
     await repository.dispose();
+  });
+
+  test('a probe that finishes after dispose neither throws nor hangs the check', () async {
+    probe.held.add('builtin:dart');
+    final errors = <Object>[];
+    final finished = Completer<void>();
+    Future<void> run() async {
+      final check = repository.check(id: 'builtin:dart');
+      await pumpEventQueue();
+      await repository.dispose();
+      probe.release('builtin:dart');
+      await check;
+      await pumpEventQueue();
+    }
+
+    runZonedGuarded(() => unawaited(run().whenComplete(finished.complete)), (error, stackTrace) {
+      errors.add(error);
+      if (!finished.isCompleted) finished.complete();
+    });
+    await finished.future.timeout(const Duration(seconds: 5));
+
+    expect(probe.probedIds, contains('builtin:dart'));
+    expect(errors, isEmpty);
   });
 }
