@@ -213,17 +213,20 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     );
     skillLibraryController = SkillLibraryController(repository: dependencies.skillsRepository);
     projectsController
+      ..addListener(_followCodeWorkspace)
       ..addListener(_followSkills)
       ..addListener(_followRules);
     devicesController.addListener(_chooseDefaultDevice);
     runController.addListener(_chooseDefaultDevice);
     dataController
+      ..addListener(_followCodeWorkspace)
       ..addListener(_followSelectedProject)
       ..addListener(_followSkills)
       ..addListener(_carryCodeMode)
       ..addListener(_followRules)
       ..addListener(_draft.onSelectionChanged)
       ..chatHandle.addListener(_draft.onHandleChanged);
+    _followCodeWorkspace();
     _followSelectedProject();
     _followSkills();
     _followRules();
@@ -234,9 +237,11 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void dispose() {
     runLink.dispose();
     projectsController
+      ..removeListener(_followCodeWorkspace)
       ..removeListener(_followSkills)
       ..removeListener(_followRules);
     dataController
+      ..removeListener(_followCodeWorkspace)
       ..removeListener(_followSelectedProject)
       ..removeListener(_followSkills)
       ..removeListener(_carryCodeMode)
@@ -280,6 +285,15 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _followSelectedProject() {
     final id = dataController.projectId;
     if (id != null) runController.watch(id);
+  }
+
+  /// The Code view follows the selected project: it is made here, not while building.
+  void _followCodeWorkspace() {
+    final project = selectedProject;
+    _codeWorkspace = project == null
+        ? null
+        : Dependencies.of(context).codeViews
+              .workspaceFor(projectId: project.id, root: project.path);
   }
 
   /// The skills follow the selected project. They wait for the project list, since the folder of
@@ -444,13 +458,10 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     if (newest != null) dataController.selectSession(newest.id);
   }
 
+  CodeWorkspace? _codeWorkspace;
+
   /// The Code view of the selected project; `null` without one.
-  CodeWorkspace? get codeWorkspace {
-    final project = selectedProject;
-    if (project == null) return null;
-    return Dependencies.of(context).codeViews
-        .workspaceFor(projectId: project.id, root: project.path);
-  }
+  CodeWorkspace? get codeWorkspace => _codeWorkspace;
 
   /// The files of the project in [root] for ⌘P, relative to it and without ignored ones.
   Future<List<String>> listProjectFiles(String root) =>

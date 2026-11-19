@@ -96,6 +96,32 @@ void main() {
     matching: find.text(label),
   );
 
+  testWidgets('the project keeps one Code view across rebuilds, and none without a project', (
+    tester,
+  ) async {
+    final workspace = await pump(tester, selectProject: false);
+    expect(workspace.codeWorkspace, isNull);
+
+    workspace.dataController
+      ..selectProject(projects.first)
+      ..selectSession(session);
+    await settle(tester);
+    final first = workspace.codeWorkspace;
+    expect(first, isNotNull);
+
+    await tester.tap(segment('Code'));
+    await settle(tester);
+    await tester.tap(segment('Chat'));
+    await settle(tester);
+    await tester.pump();
+    expect(workspace.codeWorkspace, same(first));
+
+    workspace.dataController.selectProject(projects.last);
+    await settle(tester);
+    expect(workspace.codeWorkspace, isNot(same(first)));
+    await disposeTestApp(tester, dependencies);
+  });
+
   testWidgets('no project, no switch', (tester) async {
     await pump(tester, selectProject: false);
 
