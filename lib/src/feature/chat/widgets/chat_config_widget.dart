@@ -197,14 +197,11 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
     queueController = _queues.acquire(sessionId);
     unsavedGate = UnsavedFilesGate(files: dependencies.codeViews, projectId: widget.project.id);
     // Assigned before it opens: [_followStatus] reads it on the first change.
-    chatController = ChatController(
-      repository: ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository),
-    );
+    chatController = ChatController(repository: ChatRepositoryImpl(hub: hub));
     chatController
       ..addListener(_schedulePublish)
       ..addListener(_followStatus)
       ..open(sessionId);
-    final chatRepository = ChatRepositoryImpl(hub: hub, agents: dependencies.agentsRepository);
     agentsController = AgentsController(repository: dependencies.agentsRepository)..watch();
     sessionAgentController = SessionAgentController(
       repository: SessionsRepositoryImpl(
@@ -213,8 +210,12 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
         queuedChats: dependencies.chatQueues,
       ),
     )..addListener(_onAgentChanged);
-    recoveryController = ChatRecoveryController(repository: chatRepository);
-    loginMethodsController = ChatLoginMethodsController(repository: chatRepository)..watch();
+    recoveryController = ChatRecoveryController(
+      chat: ChatRepositoryImpl(hub: hub),
+      agents: dependencies.agentsRepository,
+    );
+    loginMethodsController = ChatLoginMethodsController(repository: dependencies.agentsRepository)
+      ..watch();
     promptController = PromptSendingController(repository: PromptSendingRepositoryImpl(hub: hub));
     permissionController = PermissionAnswerController(
       repository: PermissionAnswerRepositoryImpl(hub: hub),

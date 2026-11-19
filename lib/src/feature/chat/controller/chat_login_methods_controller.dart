@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
-import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:l/l.dart';
 
 /// Follows the sign-in methods of every agent (agent id → methods), so the chat's sign-in banner
@@ -14,7 +14,7 @@ final class ChatLoginMethodsController extends StateController<Map<String, List<
     super.initialState = const <String, List<AgentLoginMethod>>{},
   });
 
-  final IChatRepository _repository;
+  final IAgentsRepository _repository;
   StreamSubscription<Map<String, List<AgentLoginMethod>>>? _subscription;
 
   /// The methods of [agentId]; empty while it is not checked or unknown.
@@ -23,11 +23,18 @@ final class ChatLoginMethodsController extends StateController<Map<String, List<
   /// Starts following the methods. Calling it again changes nothing.
   void watch() => handle(() async {
     if (isDisposed || _subscription != null) return;
-    _subscription = _repository.watchLoginMethods().listen(
-      setState,
-      onError: (Object error, StackTrace stackTrace) =>
-          l.w('Chat | the sign-in methods failed: $error', stackTrace),
-    );
+    _subscription = _repository
+        .watchAgents()
+        .map(
+          (agents) => <String, List<AgentLoginMethod>>{
+            for (final agent in agents) agent.id: agent.methods,
+          },
+        )
+        .listen(
+          setState,
+          onError: (Object error, StackTrace stackTrace) =>
+              l.w('Chat | the sign-in methods failed: $error', stackTrace),
+        );
   });
 
   @override

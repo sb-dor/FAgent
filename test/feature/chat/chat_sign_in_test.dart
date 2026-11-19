@@ -143,7 +143,8 @@ void main() {
         probe: _NoProbe(),
       );
       final controller = ChatRecoveryController(
-        repository: ChatRepositoryImpl(hub: hub, agents: agents),
+        chat: ChatRepositoryImpl(hub: hub),
+        agents: agents,
       );
       addTearDown(() async {
         controller.dispose();

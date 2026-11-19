@@ -1,12 +1,7 @@
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
-import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
-import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/src/feature/chat/widgets/chat_problem_banner.dart';
@@ -144,82 +139,5 @@ void main() {
 
     await tester.pumpWidget(testApp(_banner(memoryClaudeAgent.methods, busy: true)));
     expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
-  });
-
-  group('ChatRepositoryImpl', () {
-    late AppDatabase database;
-    late AgentHub hub;
-
-    setUp(() {
-      database = AppDatabase(NativeDatabase.memory());
-      hub = AgentHub(
-        database: database,
-        environment: const ShellEnvironment(<String, String>{'PATH': '/usr/bin:/bin'}),
-      );
-    });
-
-    tearDown(() async {
-      await hub.dispose();
-      await database.close();
-    });
-
-    test('follows the login methods of the agents repository', () async {
-      final agents = MemoryAgentsRepository();
-      final repository = ChatRepositoryImpl(hub: hub, agents: agents);
-      final seen = <Map<String, List<AgentLoginMethod>>>[];
-      final subscription = repository.watchLoginMethods().listen(seen.add);
-      addTearDown(subscription.cancel);
-      await pumpEventQueue();
-
-      expect(seen.last['codex'], memoryCodexAgent.methods);
-      expect(seen.last['claude'], memoryClaudeAgent.methods);
-      expect(seen.last['unknown'], isNull);
-
-      agents.update(memoryCodexAgent.copyWith(methods: const <AgentLoginMethod>[]));
-      await pumpEventQueue();
-      expect(seen.last['codex'], isEmpty);
-    });
-
-    test('cancelLogin goes to the agents repository', () async {
-      final agents = MemoryAgentsRepository();
-
-      await ChatRepositoryImpl(hub: hub, agents: agents).cancelLogin('codex');
-
-      expect(agents.calls, <String>['cancelLogin:codex']);
-    });
-
-    test('a browser login waits for the sign-in and reports it', () async {
-      final agents = MemoryAgentsRepository(holdSignIns: true);
-      final repository = ChatRepositoryImpl(hub: hub, agents: agents);
-
-      final succeeded = repository.login('codex', 'chat-gpt', onOutput: (_) {});
-      await pumpEventQueue();
-      agents.finishSignIn('codex');
-
-      expect(await succeeded, isTrue);
-      expect(agents.calls, contains('login:codex:chat-gpt'));
-    });
-
-    test('a cancelled browser login did not succeed', () async {
-      final agents = MemoryAgentsRepository(holdSignIns: true);
-      final repository = ChatRepositoryImpl(hub: hub, agents: agents);
-
-      final succeeded = repository.login('codex', 'chat-gpt', onOutput: (_) {});
-      await pumpEventQueue();
-      await agents.cancelLogin('codex');
-
-      expect(await succeeded, isFalse);
-    });
-
-    test('a terminal login reports its output', () async {
-      final agents = MemoryAgentsRepository();
-      final repository = ChatRepositoryImpl(hub: hub, agents: agents);
-      final lines = <List<String>>[];
-
-      final succeeded = await repository.login('claude', 'claude-ai-login', onOutput: lines.add);
-
-      expect(succeeded, isTrue);
-      expect(lines.last, contains('Signed in'));
-    });
   });
 }
