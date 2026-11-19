@@ -68,4 +68,17 @@ void main() {
     expect(find.byTooltip('Hide'), findsOneWidget);
     expect(find.text(notice), findsOneWidget);
   });
+
+  testWidgets('header lines with a colon separator hide the value', (tester) async {
+    useDesktopView(tester);
+    final controller = TextEditingController(text: 'Authorization: Bearer t');
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      testApp(SecretLinesField(controller: controller, separator: ':', label: 'Headers')),
+    );
+
+    expect(find.byType(TextField), findsNothing);
+    expect(find.textContaining('Bearer'), findsNothing);
+    expect(find.text('Authorization: ••••••'), findsOneWidget);
+  });
 }

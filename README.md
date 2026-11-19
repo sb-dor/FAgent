@@ -132,8 +132,9 @@ Agents with their sign-in status and the default one, MCP servers (passed to eve
 on per project), permission rules, the Flutter SDK, appearance (theme, density), the language
 (English, Russian) and keyboard shortcuts.
 
-Environment variables, HTTP headers and `--dart-define` values typed for custom agents, MCP servers
-and runs are masked on screen but kept unencrypted in the app's database on this Mac.
+Environment variables, HTTP headers and `--dart-define` values you type for custom agents, MCP
+servers and runs can be hidden with a toggle, and are kept unencrypted in the app's database on this
+Mac.
 
 ## How the agent gets Flutter knowledge
 
