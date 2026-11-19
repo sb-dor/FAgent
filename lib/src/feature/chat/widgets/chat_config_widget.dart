@@ -221,10 +221,8 @@ class ChatConfigWidgetState extends State<ChatConfigWidget> {
       repository: PermissionAnswerRepositoryImpl(hub: hub),
     );
     configController = SessionConfigController(
-      repository: SessionConfigRepositoryImpl(
-        hub: hub,
-        settings: AppSettingsRepositoryImpl(database: dependencies.database),
-      ),
+      repository: SessionConfigRepositoryImpl(hub: hub),
+      settings: AppSettingsRepositoryImpl(database: dependencies.database),
     );
     fileMentionController = FileMentionController(
       repository: ProjectFilesRepositoryImpl(environment: dependencies.shellEnvironment),

@@ -1,4 +1,5 @@
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/session_config/data/session_config_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -21,10 +22,12 @@ final class SessionConfigController extends StateController<SessionConfigState>
     with DroppableControllerHandler {
   SessionConfigController({
     required this._repository,
+    required this._settings,
     super.initialState = const SessionConfigState.initial(),
   });
 
   final ISessionConfigRepository _repository;
+  final IAppSettingsRepository _settings;
 
   /// Sets [configId] to [value]. Choosing `bypassPermissions` is allowed only
   /// after the UI asked the user; the hub then allows bypass for the chat.
@@ -37,7 +40,12 @@ final class SessionConfigController extends StateController<SessionConfigState>
   /// Makes [values] what new chats of [agentId] start with.
   void saveDefaults(String agentId, Map<String, String> values) => handle(() async {
     setState(const SessionConfigState.inProgress());
-    await _repository.saveDefaults(agentId, values);
+    final current = await _settings.watch().first;
+    await _settings.update(
+      current.copyWith(
+        sessionDefaults: <String, Map<String, String>>{...current.sessionDefaults, agentId: values},
+      ),
+    );
     setState(const SessionConfigState.completed());
   }, error: (error, stackTrace) async => setState(SessionConfigState.error(error: error)));
 
