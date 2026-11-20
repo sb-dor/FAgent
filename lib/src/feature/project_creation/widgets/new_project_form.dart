@@ -12,15 +12,19 @@ import 'package:flutter_code_agent/src/feature/initialization/models/dependencie
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/package_name.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/option_chip.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/platform_chips.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:l/l.dart';
 
 /// {@template new_project_form}
-/// What the New project dialog asks: the package name, the organization, the folder, the
-/// platforms, the template and two switches, and below them the Flutter version with Cancel and
-/// Create.
+/// What the New project dialog asks: the project type, the package name, the organization, the
+/// folder, the platforms, the template and two switches, and below them the Flutter version with
+/// Cancel and Create.
+///
+/// The type comes first, as in `flutter create --template`: the platforms show only for an app and
+/// a plugin, and the template only for an app.
 ///
 /// The name is checked as `flutter create` does; "Create" is on only when everything is fine: the
 /// name, the organization, the folder (checked against the disk, the latest answer wins), the
@@ -48,6 +52,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
     FlutterPlatform.android,
     FlutterPlatform.macos,
   };
+  FlutterProjectType _type = FlutterProjectType.app;
   late NewProjectTemplate _template;
   bool _gitInit = true;
   bool _openChat = true;
@@ -122,7 +127,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
       _targetChecked &&
       _targetProblem == null &&
       !_folderFailed &&
-      _platforms.isNotEmpty &&
+      (!_type.hasPlatforms || _platforms.isNotEmpty) &&
       _sdkInfo?.path != null;
 
   /// Asks whether the folder can be created; the answer counts only if nothing changed meanwhile.
@@ -187,6 +192,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         org: _org.text,
         parent: parent,
         platforms: _platforms,
+        type: _type,
         template: _template,
         gitInit: _gitInit,
         openChat: _openChat,
@@ -234,6 +240,8 @@ class _NewProjectFormState extends State<NewProjectForm> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
+        _typeField(context),
+        gap,
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -244,48 +252,52 @@ class _NewProjectFormState extends State<NewProjectForm> {
         ),
         gap,
         _folderField(context),
-        gap,
-        _Field(
-          label: localization.newProjectPlatforms,
-          messages: <Widget>[
-            if (_platforms.isEmpty) _Message.error(localization.newProjectNoPlatform),
-          ],
-          child: PlatformChips(selected: _platforms, onToggle: _toggle),
-        ),
-        gap,
-        _Field(
-          label: localization.newProjectTemplate,
-          messages: <Widget>[if (_gitHint) _Message.hint(localization.comingLater)],
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              _TemplateCard(
-                key: const ValueKey<String>('template-architecture'),
-                title: localization.newProjectTemplateArchitecture,
-                description: localization.newProjectTemplateArchitectureHint,
-                selected: _template == NewProjectTemplate.architecture,
-                onTap: () => _chooseTemplate(NewProjectTemplate.architecture),
-              ),
-              const SizedBox(height: 6),
-              _TemplateCard(
-                key: const ValueKey<String>('template-plain'),
-                title: localization.newProjectTemplatePlain,
-                description: localization.newProjectTemplatePlainHint,
-                selected: _template == NewProjectTemplate.plain,
-                onTap: () => _chooseTemplate(NewProjectTemplate.plain),
-              ),
-              const SizedBox(height: 6),
-              _TemplateCard(
-                key: const ValueKey<String>('template-git'),
-                title: localization.newProjectTemplateGit,
-                description: localization.newProjectTemplateGitHint,
-                selected: false,
-                preview: true,
-                onTap: () => _chooseTemplate(NewProjectTemplate.git),
-              ),
+        if (_type.hasPlatforms) ...<Widget>[
+          gap,
+          _Field(
+            label: localization.newProjectPlatforms,
+            messages: <Widget>[
+              if (_platforms.isEmpty) _Message.error(localization.newProjectNoPlatform),
             ],
+            child: PlatformChips(selected: _platforms, onToggle: _toggle),
           ),
-        ),
+        ],
+        if (_type == FlutterProjectType.app) ...<Widget>[
+          gap,
+          _Field(
+            label: localization.newProjectTemplate,
+            messages: <Widget>[if (_gitHint) _Message.hint(localization.comingLater)],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                _TemplateCard(
+                  key: const ValueKey<String>('template-architecture'),
+                  title: localization.newProjectTemplateArchitecture,
+                  description: localization.newProjectTemplateArchitectureHint,
+                  selected: _template == NewProjectTemplate.architecture,
+                  onTap: () => _chooseTemplate(NewProjectTemplate.architecture),
+                ),
+                const SizedBox(height: 6),
+                _TemplateCard(
+                  key: const ValueKey<String>('template-plain'),
+                  title: localization.newProjectTemplatePlain,
+                  description: localization.newProjectTemplatePlainHint,
+                  selected: _template == NewProjectTemplate.plain,
+                  onTap: () => _chooseTemplate(NewProjectTemplate.plain),
+                ),
+                const SizedBox(height: 6),
+                _TemplateCard(
+                  key: const ValueKey<String>('template-git'),
+                  title: localization.newProjectTemplateGit,
+                  description: localization.newProjectTemplateGitHint,
+                  selected: false,
+                  preview: true,
+                  onTap: () => _chooseTemplate(NewProjectTemplate.git),
+                ),
+              ],
+            ),
+          ),
+        ],
         gap,
         Wrap(
           spacing: 18,
@@ -306,6 +318,46 @@ class _NewProjectFormState extends State<NewProjectForm> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _typeField(BuildContext context) {
+    final localization = Localization.of(context);
+    return _Field(
+      label: localization.newProjectType,
+      messages: <Widget>[
+        _Message.hint(switch (_type) {
+          FlutterProjectType.app => localization.newProjectTypeAppHint,
+          FlutterProjectType.package => localization.newProjectTypePackageHint,
+          FlutterProjectType.plugin => localization.newProjectTypePluginHint,
+          FlutterProjectType.packageFfi => localization.newProjectTypePackageFfiHint,
+          FlutterProjectType.module => localization.newProjectTypeModuleHint,
+        }),
+      ],
+      child: Wrap(
+        key: const ValueKey<String>('new-project-type'),
+        spacing: 6,
+        runSpacing: 6,
+        children: <Widget>[
+          for (final (type, label) in <(FlutterProjectType, String)>[
+            (FlutterProjectType.app, localization.newProjectTypeApp),
+            (FlutterProjectType.package, localization.newProjectTypePackage),
+            (FlutterProjectType.plugin, localization.newProjectTypePlugin),
+            (FlutterProjectType.packageFfi, localization.newProjectTypePackageFfi),
+            (FlutterProjectType.module, localization.newProjectTypeModule),
+          ])
+            OptionChip(
+              key: ValueKey<String>('type-${type.name}'),
+              label: label,
+              selected: type == _type,
+              exclusive: true,
+              onTap: () => setState(() {
+                _type = type;
+                _gitHint = false;
+              }),
+            ),
+        ],
+      ),
     );
   }
 

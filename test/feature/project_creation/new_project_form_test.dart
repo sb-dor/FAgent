@@ -459,6 +459,9 @@ void main() {
     await typeName(tester, 'avera_booking');
     await tester.tap(find.byKey(const ValueKey<String>('platform-macos')));
     await tester.tap(find.text('Plain flutter create'));
+    // The project type sits above the fields: the switches start below the fold.
+    await tester.ensureVisible(find.text('git init + first commit'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('git init + first commit'));
     await tester.pump();
 
@@ -473,6 +476,62 @@ void main() {
     expect(request.template, NewProjectTemplate.plain);
     expect(request.gitInit, isFalse);
     expect(request.openChat, isTrue);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('the type starts as an app with the platforms and the templates', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+
+    expect(find.text('Project type'), findsOneWidget);
+    expect(find.text('An application. Its code goes straight into lib/.'), findsOneWidget);
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.type, FlutterProjectType.app);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a package needs no platform and has no template', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+    for (final platform in <String>['ios', 'android', 'macos']) {
+      await tester.tap(find.byKey(ValueKey<String>('platform-$platform')));
+      await tester.pump();
+    }
+    expect(canCreate(tester), isFalse);
+
+    await tester.tap(find.text('Package'));
+    await tester.pump();
+
+    expect(find.text('Dart code to share: lib/<name>.dart and lib/src/.'), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('platform-ios')), findsNothing);
+    expect(find.text('Choose at least one platform'), findsNothing);
+    expect(find.text('My architecture'), findsNothing);
+    expect(canCreate(tester), isTrue);
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.type, FlutterProjectType.package);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a plugin keeps the platforms but has no template', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+
+    await tester.tap(find.text('Plugin'));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey<String>('platform-ios')), findsOneWidget);
+    expect(find.text('My architecture'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey<String>('platform-web')));
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    final request = memory.requests.single;
+    expect(request.type, FlutterProjectType.plugin);
+    expect(request.platforms, contains(FlutterPlatform.web));
     await disposeTestApp(tester, dependencies);
   });
 
@@ -557,6 +616,8 @@ void main() {
     expect(find.text('Новый Flutter-проект'), findsOneWidget);
     expect(find.text('Попробуйте "my_app"'), findsOneWidget);
     expect(find.text('Моя архитектура'), findsOneWidget);
+    expect(find.text('Тип проекта'), findsOneWidget);
+    expect(find.text('Пакет'), findsOneWidget);
     expect(find.text('Создать'), findsOneWidget);
     await disposeTestApp(tester, dependencies);
   });

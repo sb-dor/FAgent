@@ -34,7 +34,7 @@ flutter build apk --dart-define-from-file=config/prod.json
 ```
 
 ```dart
-// lib/src/_core/config/config.dart
+// lib/_core/config/config.dart
 abstract final class Config {
   static const String apiUrl = String.fromEnvironment(
     'API_URL',
@@ -56,7 +56,7 @@ abstract final class Config {
   and import its constants:
 
 ```bash
-echo "const String mapsKey = '$MAPS_KEY';" > lib/src/_core/config/env.dart
+echo "const String mapsKey = '$MAPS_KEY';" > lib/_core/config/env.dart
 ```
 
 - Keep one `Config` (in `_core/config/`) as the only place that reads the environment; the rest
@@ -270,7 +270,7 @@ generate_tests: true
 no_comments: true
 export: true
 use_part_of: false
-package: src/_core/resources        # lib/src/_core/resources/images.dart
+package: _core/resources            # lib/_core/resources/images.dart
 groups:
   - path: assets/images
     class_name: Images               # Images.logo == 'assets/images/logo.png'
@@ -298,7 +298,7 @@ groups:
 ```bash
 dart run icon_font_generator:generator assets/icons assets/fonts/app_icons.otf \
   --font-name AppIcons --class-name AppIcons \
-  --output-class-file lib/src/_core/design/app_icons.dart --no-ignore-shapes
+  --output-class-file lib/_core/design/app_icons.dart --no-ignore-shapes
 ```
 
   `--no-ignore-shapes` turns `<circle>`, `<rect>` and other shapes into paths (by default they

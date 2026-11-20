@@ -7,10 +7,11 @@ description: "Project layout and layers, and the shape of list, creation, deleti
 
 ## Rules
 
-- `lib/main.dart` is the entry; everything else is in `lib/src/`: `_core/` for code shared by
-  features, and one folder per feature directly in `lib/src/` (`lib/src/authentication/`), with no
-  `feature/` folder around them. A project that already has another layout (`common/`,
-  `feature/`) keeps it. See "Project structure".
+- An app has no `lib/src/`: `lib/main.dart` is the entry, `lib/_core/` holds the code shared by
+  features, and each feature is a folder directly in `lib/` (`lib/authentication/`), with no
+  `feature/` folder around them. A package (one in `packages/` too) keeps Dart's package layout:
+  `lib/<package>.dart` exports the public API, the code is in `lib/src/`. A project that already
+  has another layout (`lib/src/`, `common/`, `feature/`) keeps it. See "Project structure".
 - A feature has `models/`, `data/` (repository), `controller/`, `widgets/`. Name files
   `<feature>_<role>.dart`.
 - Dependencies point one way: widgets -> controller -> repository. A widget never touches a
@@ -34,7 +35,7 @@ description: "Project layout and layers, and the shape of list, creation, deleti
   (`required this.description` for a `String?`). Models are built from JSON and database rows in
   a few places; when a field is added later, the compiler then points at every place that must
   fill it, instead of the field silently staying `null`.
-- A control used by two or more features goes to `lib/src/_core/widget/`.
+- A control used by two or more features goes to `lib/_core/widget/`.
 - No Provider, Riverpod, MobX, GetX or BLoC for widget state.
 - Law of Demeter: talk to your direct collaborators, not to their insides (`car.start()`, not
   `car.engine.start()`). See "Law of Demeter".
@@ -59,26 +60,44 @@ description: "Project layout and layers, and the shape of list, creation, deleti
 
 ### Project structure
 
+An app:
+
 ```
 lib/
 ├── main.dart
-└── src/
-    ├── _core/            # shared by features: utilities, widgets, database, config, localization
-    ├── initialization/   # startup and the app's dependencies
-    ├── authentication/   # one folder per feature, directly in src/
-    └── home/
-test/                     # mirrors lib/src/: test/_core/, test/authentication/, ...
+├── _core/                # shared by features: utilities, widgets, database, config, localization
+├── initialization/       # startup and the app's dependencies
+├── authentication/       # one folder per feature, directly in lib/
+└── home/
+packages/                 # the repository's own packages (pub workspace members)
+└── api_client/
+test/                     # mirrors lib/: test/_core/, test/authentication/, ...
 ```
 
-- `lib/main.dart`, `lib/src/` and `lib/src/_core/` always exist; every other folder in `lib/src/`
-  is a feature. Nothing but `main.dart` sits directly under `lib/`.
+A package, on its own or in `packages/` of an app:
+
+```
+packages/api_client/
+├── lib/
+│   ├── api_client.dart   # the public API: exports from src/
+│   └── src/              # the code; other packages import only lib/api_client.dart
+└── test/                 # mirrors lib/src/
+```
+
+- An app's `lib/main.dart` and `lib/_core/` always exist; every other folder in an app's `lib/` is
+  a feature. An app has no `lib/src/`: nothing imports an app, so `src/` would hide nothing and
+  only add a level to every import and path.
+- A package keeps Dart's layout: `lib/<package>.dart` (and other public libraries) directly in
+  `lib/`, everything else in `lib/src/`, where other packages are not meant to reach. Inside
+  `lib/src/` a package with features lays them out as an app does (`lib/src/_core/`,
+  `lib/src/<feature>/`).
 - `_core` holds only what belongs to no single feature. The underscore sorts it before the
   features in every file list, and a feature is never named `_core`.
 - A `feature/` folder around the features adds a level to every import and to every path in the
   tree without saying anything a top-level folder does not.
-- If the project already has its folders (`lib/src/common/` and `lib/src/feature/`, or any other
-  layout), keep them: do not move existing code to match these rules. Create only what is
-  missing, in the layout the project uses.
+- If the project already has its folders (`lib/src/`, `lib/src/common/` and `lib/src/feature/`,
+  or any other layout), keep them: do not move existing code to match these rules. Create only
+  what is missing, in the layout the project uses.
 - Use `example` as a placeholder for the real feature name. Do not invent another architecture
   unless the surrounding code already requires it.
 
@@ -169,7 +188,7 @@ static void open(BuildContext context, {Example? example, DesktopController? des
   `Navigator.pop`.
 - Desktop navigation, when the project has a desktop shell, goes through
   `DesktopController.setModule(...)` and module factories. Module factories belong in the project's
-  home-module file (for example `lib/src/home/models/home_module_permission.dart`).
+  home-module file (for example `lib/home/models/home_module_permission.dart`).
 - Pass parameters through config widgets and module factories; no globals.
 - `clearModules: false` for child/detail/create screens opened from another desktop module. If a
   module is opened to pick an object, capture `currentModule` and return with
@@ -444,7 +463,7 @@ final class FeatureLocalDataProvider$SQLiteImpl implements IFeatureLocalDataProv
 ```
 
 ```
-lib/src/authentication/
+lib/authentication/
 ├── models/      user.dart
 ├── data/        auth_repository.dart
 │                auth_local_data_provider.dart
@@ -750,18 +769,18 @@ Add a Drift table only for offline drafts or local persistence. See `docs/rules/
 ### Localization
 
 All visible widget text is localized: add every key to every `.arb` file
-(`lib/src/_core/localization/intl_en.arb`, `intl_ru.arb`), use
+(`lib/_core/localization/intl_en.arb`, `intl_ru.arb`), use
 `Localization.of(context).exampleKey`, reuse keys first, never hardcode text, never edit generated
 localization files.
 
 ### Reusable widgets
 
-A control used in more than one feature goes to `lib/src/_core/widget/`. Keep feature-specific UI in
+A control used in more than one feature goes to `lib/_core/widget/`. Keep feature-specific UI in
 its feature folder; promote only genuinely reused controls. Reuse existing common widgets for
 tables, filters, reset/cancel buttons, status pills, empty/error/loading states, image viewers and
 shimmer placeholders.
 
-When the project has a design system (a `ui_library` package, `lib/src/_core/widget/` with design
+When the project has a design system (a `ui_library` package, `lib/_core/widget/` with design
 tokens), build screens from its components and tokens. If a component is missing, ask before
 adding it: a new shared component is a design decision, and styling it inline in a screen forks
 the design.
@@ -783,7 +802,8 @@ the design.
 
 ### Steps for a new feature
 
-1. Create `lib/src/<feature>/{models,data,controller,widgets}` (only what is needed).
+1. Create `lib/<feature>/{models,data,controller,widgets}` (only what is needed); in a package,
+   `lib/src/<feature>/`; in a project with its own layout, where its features are.
 2. Model and converter, repository interface plus Impl, freezed states and controller.
 3. Config widget (controllers in `initState`, disposed in `dispose`) and the screen widgets.
 4. Register app-wide services in the dependency initialization (see `docs/rules/dependencies.md`).
@@ -817,7 +837,7 @@ The analyzer reports every call of a deprecated member, under one of two names (
 - **`deprecated_member_use`**: the member comes from another package: the SDK, a pub package, or
   another package of the same repository (a path dependency). An info, on by default.
 - **`deprecated_member_use_from_same_package`**: the member is declared in the same package (code
-  in `lib/src/_core/` called from a feature). A lint, off in `flutter_lints`: it is reported only
+  in `lib/_core/` called from a feature). A lint, off in `flutter_lints`: it is reported only
   when `analysis_options.yaml` enables it under `linter: rules:`, and then as an info.
 
 `flutter analyze` exits with 1 on any info (`dart analyze` only with `--fatal-infos`), so a

@@ -5,7 +5,6 @@ import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
@@ -186,13 +185,19 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         final platforms = FlutterPlatform.values.where(request.platforms.contains);
         await _command(run, index, await _flutter(run), <String>[
           'create',
+          '--template',
+          request.type.template,
           '--org',
           request.org,
           '--project-name',
           request.name,
-          '--platforms',
-          platforms.map((platform) => platform.name).join(','),
-          if (request.template == NewProjectTemplate.architecture) '--no-pub',
+          // `flutter create` takes platforms only for an app and a plugin.
+          if (request.type.hasPlatforms) ...<String>[
+            '--platforms',
+            platforms.map((platform) => platform.name).join(','),
+          ],
+          // The skeleton step adds the packages first, then runs `pub get` itself.
+          if (request.skeleton) '--no-pub',
           path,
         ], workingDirectory: request.parent);
       case CreationStepKind.gitInit:
@@ -206,7 +211,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           ...skeletonPubAddArguments,
         ], workingDirectory: path);
         await _command(run, index, flutter, const <String>['pub', 'get'], workingDirectory: path);
-        // The drift database (`lib/src/_core/database/`) needs its generated part to compile.
+        // The drift database (`lib/_core/database/`) needs its generated part to compile.
         await _command(run, index, _dart(flutter), const <String>[
           'run',
           'build_runner',

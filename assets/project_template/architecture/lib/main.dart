@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
-import 'package:{{package}}/src/_core/utils/app_zone.dart';
-import 'package:{{package}}/src/_core/utils/error_util/error_util.dart';
-import 'package:{{package}}/src/_core/widget/app_error.dart';
-import 'package:{{package}}/src/initialization/data/initialization.dart';
-import 'package:{{package}}/src/initialization/widget/app.dart';
+import 'package:{{package}}/_core/utils/app_zone.dart';
+import 'package:{{package}}/_core/utils/error_util/error_util.dart';
+import 'package:{{package}}/_core/widget/app_error.dart';
+import 'package:{{package}}/initialization/data/initialization.dart';
+import 'package:{{package}}/initialization/widget/app.dart';
 
 void main() => appZone(() async {
   $initializeApp(

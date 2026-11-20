@@ -6,7 +6,7 @@ description: "Never edit generated files; run build_runner after touching annota
 # Generated files
 
 - Never edit `*.freezed.dart`, `*.g.dart`, `*.gen.dart`, `*.generated.dart` or localization output
-  under `lib/src/_core/localization/generated/`. They are gitignored; regenerate them.
+  under `lib/_core/localization/generated/`. They are gitignored; regenerate them.
 - Run build_runner after touching `@freezed`, a `part '*.freezed.dart'`/`'*.g.dart'`, Drift tables,
   JSON annotations or FlutterGen assets:
   `dart run build_runner build --delete-conflicting-outputs && dart format lib/`
@@ -37,23 +37,23 @@ targets:
     builders:
       freezed:
         generate_for:
-          - lib/src/**/controller/*.dart
+          - lib/**/controller/*.dart
 ```
 
 - freezed is for the states of the controllers (see "One recipe for states" in
   `docs/rules/controllers.md`), so it runs only in `controller/` folders. Checked: with this file,
-  a `@freezed` class in `lib/src/home/controller/` got its `.freezed.dart`, and one in
-  `lib/src/home/models/` got none, with no warning from build_runner.
+  a `@freezed` class in `lib/home/controller/` got its `.freezed.dart`, and one in
+  `lib/home/models/` got none, with no warning from build_runner.
 - Another generator gets its own entry when the project adds it, limited the same way:
 
 ```yaml
       drift_dev:
         generate_for:
           include:
-            - lib/src/_core/database/**
+            - lib/_core/database/**
         options:
           databases:
-            app_database: lib/src/_core/database/database.dart
+            app_database: lib/_core/database/database.dart
           data_class_to_companions: true
           mutable_classes: false
 ```

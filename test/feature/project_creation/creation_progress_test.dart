@@ -429,6 +429,9 @@ void main() {
     await openFromMenu(tester);
     await tester.enterText(find.byKey(_nameField), 'avera_booking');
     await tester.tap(find.text('Plain flutter create'));
+    // The project type sits above the fields: the switches start below the fold.
+    await tester.ensureVisible(find.byKey(const ValueKey<String>('new-project-git')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('new-project-git')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey<String>('new-project-create')));

@@ -405,7 +405,7 @@ with the first, it hides the bugs among thousands of mistyped passwords.
   refreshes the token, or signs the user out (see "HTTP middleware" in
   `docs/rules/dependencies.md`). The controller sets `error` and rethrows it like any other, and
   the crash reporter leaves it out: once a reporter is added, `$captureException`
-  (`lib/src/_core/utils/error_util/platform/` in a new project) returns early for it.
+  (`lib/_core/utils/error_util/platform/` in a new project) returns early for it.
 - Never catch `on Object` without the rethrow line: that silences every bug of the action.
 - With `bloc`, the same split: for an `ExpectedException` emit the error state and return; let
   everything else reach `onError` (`BlocObserver.onError`).
@@ -793,7 +793,7 @@ between hand-rolled paginators are where the silent bugs live.
    in a test or varied per screen.
 3. **`page` in the data is the next page to request**, not the one just loaded.
    `LocalPaginationUtil.checkIsListHasMorePageInt` computes it. The util lives at
-   `lib/src/_core/utils/local_pagination_util.dart` and infers "has more" from page fullness: a full
+   `lib/_core/utils/local_pagination_util.dart` and infers "has more" from page fullness: a full
    page (length == `limitInPage`) means another page probably exists, a short page means the end. No
    server `total` is required; keep `total` in the state only when the UI shows a count.
 4. **Two methods, never one.** `load(...)` fetches page 1 and resets the state; `paginate(...)`
@@ -893,7 +893,7 @@ Whole files, one per block; put each where the layout above says and adjust the 
 /// A failure the feature expects as an answer, not a bug: the user can read it and act. The data
 /// layer throws a subtype at the boundary; a controller sets its `error` state and does not
 /// rethrow it, so the observer and the crash reporter never see it. Lives in
-/// `lib/src/_core/model/`.
+/// `lib/_core/model/`.
 abstract base class ExpectedException implements Exception {
   /// Creates the exception.
   const ExpectedException();

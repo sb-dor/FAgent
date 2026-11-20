@@ -75,6 +75,9 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey<String>('new-project-name')), 'avera_booking');
     await tester.pumpAndSettle();
     if (!openChat) {
+      // The project type sits above the fields: the switches start below the fold.
+      await tester.ensureVisible(find.byKey(const ValueKey<String>('new-project-chat')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey<String>('new-project-chat')));
       await tester.pump();
     }

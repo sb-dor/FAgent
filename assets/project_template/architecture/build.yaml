@@ -12,4 +12,4 @@ targets:
       freezed:
         generate_for:
           # States of the controllers (docs/rules/controllers.md, "One recipe for states").
-          - lib/src/**/controller/*.dart
+          - lib/**/controller/*.dart

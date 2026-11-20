@@ -692,12 +692,12 @@ Only add a local table when the feature really needs persistence. Never edit `*.
 
 ### Steps
 
-1. Put the table class in `lib/src/_core/database/tables/<name>_table.dart`.
-2. Add the table to `@DriftDatabase(tables: [...])` in `lib/src/_core/database/database.dart`.
+1. Put the table class in `lib/_core/database/tables/<name>_table.dart`.
+2. Add the table to `@DriftDatabase(tables: [...])` in `lib/_core/database/database.dart`.
 3. Bump `schemaVersion` by one.
 4. Dump the new schema and regenerate the step helper:
-   `dart run drift_dev schema dump lib/src/_core/database/database.dart drift_schemas/` then
-   `dart run drift_dev schema steps drift_schemas/ lib/src/_core/database/database.steps.dart`.
+   `dart run drift_dev schema dump lib/_core/database/database.dart drift_schemas/` then
+   `dart run drift_dev schema steps drift_schemas/ lib/_core/database/database.steps.dart`.
 5. Add the new step to the `stepByStep(...)` call in `migration`, for example
    `from1To2: (migrator, schema) async => migrator.create(schema.exampleTable)`.
 6. Run `dart run build_runner build --delete-conflicting-outputs`.

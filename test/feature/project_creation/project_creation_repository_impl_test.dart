@@ -123,6 +123,7 @@ void main() {
   });
 
   NewProjectRequest request({
+    FlutterProjectType type = FlutterProjectType.app,
     NewProjectTemplate template = NewProjectTemplate.architecture,
     bool gitInit = true,
     Set<FlutterPlatform> platforms = const <FlutterPlatform>{
@@ -135,6 +136,7 @@ void main() {
     org: 'com.example',
     parent: parent.path,
     platforms: platforms,
+    type: type,
     template: template,
     gitInit: gitInit,
   );
@@ -165,6 +167,8 @@ void main() {
             _flutter,
             <String>[
               'create',
+              '--template',
+              'app',
               '--org',
               'com.example',
               '--project-name',
@@ -255,6 +259,47 @@ void main() {
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
     });
 
+    test('a package is created with its template, no platforms and no skeleton', () async {
+      final runs = await build()
+          .create(request(type: FlutterProjectType.package, gitInit: false))
+          .toList();
+
+      expect(started.first.arguments, <String>[
+        'create',
+        '--template',
+        'package',
+        '--org',
+        'com.example',
+        '--project-name',
+        'avera_booking',
+        path(),
+      ]);
+      expect(started.map((process) => process.arguments.first), <String>['create', 'analyze']);
+      expect(runs.last.steps.map((step) => step.kind), <CreationStepKind>[
+        CreationStepKind.flutterCreate,
+        CreationStepKind.analyze,
+        CreationStepKind.rules,
+      ]);
+    });
+
+    test('a plugin gets its platforms; an FFI package and a module get none', () async {
+      await build().create(request(type: FlutterProjectType.plugin, gitInit: false)).toList();
+      expect(started.first.arguments, containsAllInOrder(<String>['--template', 'plugin']));
+      expect(started.first.arguments, containsAllInOrder(<String>['--platforms', 'ios,android,macos']));
+      expect(started.first.arguments, isNot(contains('--no-pub')));
+
+      for (final (type, template) in const <(FlutterProjectType, String)>[
+        (FlutterProjectType.packageFfi, 'package_ffi'),
+        (FlutterProjectType.module, 'module'),
+      ]) {
+        started.clear();
+        Directory(path()).deleteSync(recursive: true);
+        await build().create(request(type: type, gitInit: false)).toList();
+        expect(started.first.arguments, containsAllInOrder(<String>['--template', template]));
+        expect(started.first.arguments, isNot(contains('--platforms')), reason: template);
+      }
+    });
+
     test('skeleton writes every template file filled', () async {
       final runs = await build().create(request(gitInit: false)).toList();
 
@@ -274,7 +319,7 @@ void main() {
         contains('## [1.0.0] - 2026-11-06'),
       );
       expect(
-        File(p.join(path(), 'lib', 'src', '_core', 'localization', 'intl_en.arb')).existsSync(),
+        File(p.join(path(), 'lib', '_core', 'localization', 'intl_en.arb')).existsSync(),
         isTrue,
       );
       final output = step(runs.last, CreationStepKind.skeleton).output;

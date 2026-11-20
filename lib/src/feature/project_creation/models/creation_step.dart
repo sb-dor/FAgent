@@ -1,4 +1,3 @@
-import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -89,7 +88,7 @@ final class CreationInterrupted implements Exception {
 List<CreationStepKind> creationStepsFor(NewProjectRequest request) => <CreationStepKind>[
   CreationStepKind.flutterCreate,
   if (request.gitInit) CreationStepKind.gitInit,
-  if (request.template == NewProjectTemplate.architecture) CreationStepKind.skeleton,
+  if (request.skeleton) CreationStepKind.skeleton,
   CreationStepKind.analyze,
   CreationStepKind.rules,
   if (request.gitInit) CreationStepKind.firstCommit,

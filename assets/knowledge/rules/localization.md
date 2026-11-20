@@ -7,10 +7,10 @@ description: "All visible text is localized; add every key to every .arb file; o
 
 - Every user-facing string uses `Localization.of(context).key`. No hardcoded text in widgets
   (temporary debug text excepted).
-- Add each new key to every `.arb` file, e.g. `lib/src/_core/localization/intl_en.arb` and
+- Add each new key to every `.arb` file, e.g. `lib/_core/localization/intl_en.arb` and
   `intl_ru.arb`. Reuse an existing key first.
 - Regenerate the strings with the project's localization tool; never edit files under
-  `lib/src/_core/localization/generated/`.
+  `lib/_core/localization/generated/`.
 - The tool is Flutter's `gen-l10n` (`l10n.yaml`, `flutter gen-l10n`, with `flutter_localizations`
   and `intl`): it turns the `.arb` keys into typed getters, so a missing or mistyped key does not
   compile. Not `easy_localization`: it reads the JSON files at run time and looks keys up by string
@@ -30,7 +30,7 @@ shows an error (a SnackBar, an error view, a dialog) calls it with the error fro
 long on purpose: every kind of error is handled in one place, and a new one is one more case.
 
 ```dart
-// lib/src/_core/localization/error_text.dart
+// lib/_core/localization/error_text.dart
 String errorText(Localization lcl, Object error) => switch (error) {
   APIClientException$Network(code: 'internal_server_error') => lcl.errorServer,
   APIClientException$Network() => lcl.errorNoConnection,
@@ -85,7 +85,7 @@ message, and the parts that are styled or tappable are marked with tags:
 - `gen-l10n` leaves the tags as they are, with placeholders and in plural cases (checked:
   `"Next due in <time>{time}</time>"` becomes `'Next due in <time>$time</time>'`, and
   `{count, plural, ... other{<b>{count}</b> files left}}` becomes `'<b>$count</b> files left'`).
-- `MarkupText` (`markup_text.dart` in Examples, in `lib/src/_core/widget/`) parses the message
+- `MarkupText` (`markup_text.dart` in Examples, in `lib/_core/widget/`) parses the message
   into `TextSpan`s with a stack of open tags; the call site passes the styles (from the theme) and
   the taps:
 

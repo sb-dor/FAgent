@@ -52,12 +52,33 @@ void main() {
     );
   });
 
-  test('shared code is in _core and features sit directly in lib/src', () {
-    for (final path in projectTemplateFiles.where((path) => path.startsWith('lib/src/'))) {
+  test('an app keeps its code directly in lib: _core and one folder per feature, no src', () {
+    final libFiles = projectTemplateFiles.where((path) => path.startsWith('lib/')).toList();
+    for (final path in libFiles) {
+      expect(path, isNot(startsWith('lib/src/')), reason: path);
+      expect(path, isNot(startsWith('lib/feature/')), reason: path);
       expect(path, isNot(contains('/common/')), reason: path);
-      expect(path, isNot(startsWith('lib/src/feature/')), reason: path);
     }
+    expect(
+      libFiles,
+      containsAll(<String>[
+        'lib/main.dart',
+        'lib/_core/utils/api_client.dart',
+        'lib/initialization/widget/app.dart',
+        'lib/home/widgets/home_screen.dart',
+      ]),
+    );
+    // The shared UI is a package: it keeps the package layout, `lib/ui.dart` and `lib/src/`.
+    expect(projectTemplateFiles, containsAll(<String>['packages/ui/lib/ui.dart']));
     expect(projectTemplateFiles, containsAll(<String>['Makefile', 'CHANGELOG.md']));
+  });
+
+  test('no app file imports or names a path under lib/src', () async {
+    for (final path in projectTemplateFiles.where((path) => !path.startsWith('packages/'))) {
+      final text = await rootBundle.loadString('$projectTemplateRoot$path');
+      expect(text, isNot(contains('{{package}}/src/')), reason: path);
+      expect(text, isNot(contains('lib/src/')), reason: path);
+    }
   });
 
   test('the Makefile is indented with tabs', () async {
