@@ -13,7 +13,14 @@ void main() {
   final knowledge = Directory('assets/knowledge');
   final rulesDirectory = Directory(p.join(knowledge.path, 'rules'));
 
-  final ruleFiles = rulesDirectory.listSync().whereType<File>().toList();
+  /// The knowledge files in [directory]. Hidden files such as Finder's `.DS_Store` are skipped:
+  /// they are local metadata that git ignores, not part of the knowledge.
+  Iterable<File> knowledgeFiles(Directory directory, {bool recursive = false}) => directory
+      .listSync(recursive: recursive)
+      .whereType<File>()
+      .where((file) => !p.basename(file.path).startsWith('.'));
+
+  final ruleFiles = knowledgeFiles(rulesDirectory).toList();
   String name(FileSystemEntity entity) => p.basenameWithoutExtension(entity.path);
   String rule(String name) => File(p.join(rulesDirectory.path, '$name.md')).readAsStringSync();
 
@@ -198,7 +205,7 @@ void main() {
 
   test('no built-in file carries this repository\'s own overrides', () {
     const forbidden = <String>['Desktop only', 'No ApiClient', 'flutter_code_agent'];
-    for (final entity in knowledge.listSync(recursive: true).whereType<File>()) {
+    for (final entity in knowledgeFiles(knowledge, recursive: true)) {
       final text = entity.readAsStringSync();
       for (final phrase in forbidden) {
         expect(text, isNot(contains(phrase)), reason: '${entity.path} contains "$phrase"');
