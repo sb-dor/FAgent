@@ -1006,7 +1006,7 @@ void main() {
         ],
         <Object?>[
           git(),
-          <String>['commit', '-m', 'Add Flutter app admin'],
+          <String>['commit', '-m', 'Add Flutter app admin', '--', 'apps/admin', 'pubspec.lock'],
           root(),
         ],
         <Object?>[
@@ -1106,10 +1106,47 @@ void main() {
         started.where((process) => process.executable == git()).map((process) => process.arguments),
         <List<String>>[
           <String>['add', 'apps/admin', 'pubspec.lock'],
-          <String>['commit', '-m', 'Add Flutter app admin'],
+          // The pathspec keeps what the user had staged out of the commit.
+          <String>['commit', '-m', 'Add Flutter app admin', '--', 'apps/admin', 'pubspec.lock'],
         ],
       );
     });
+
+    test('a file staged before the add stays staged and out of the commit', () async {
+      String gitIn(List<String> arguments) {
+        final result = Process.runSync('git', arguments, workingDirectory: root());
+        expect(result.exitCode, 0, reason: '${arguments.join(' ')}: ${result.stderr}');
+        return '${result.stdout}';
+      }
+
+      gitIn(<String>['init', '-q']);
+      gitIn(<String>['config', 'user.email', 'test@example.com']);
+      gitIn(<String>['config', 'user.name', 'Test']);
+      gitIn(<String>['config', 'commit.gpgsign', 'false']);
+      gitIn(<String>['add', '-A']);
+      gitIn(<String>['commit', '-q', '-m', 'Initial commit']);
+      File(file('notes.txt')).writeAsStringSync('mine\n');
+      gitIn(<String>['add', 'notes.txt']);
+      // The fake git runs the real one.
+      script = (process) {
+        if (process.executable != git()) return resolving(process);
+        final result = Process.runSync(
+          'git',
+          process.arguments,
+          workingDirectory: process.workingDirectory,
+        );
+        Timer.run(() => process.exit(result.exitCode));
+      };
+
+      final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.done);
+      final committed = gitIn(<String>['show', '--name-only', '--format=%s', 'HEAD']).split('\n');
+      expect(committed.first, 'Add Flutter app admin');
+      expect(committed, containsAll(<String>['apps/admin/pubspec.yaml', 'pubspec.lock']));
+      expect(committed, isNot(contains('notes.txt')));
+      expect(gitIn(<String>['diff', '--cached', '--name-only']), 'notes.txt\n');
+    }, skip: Process.runSync('git', <String>['--version']).exitCode == 0 ? false : 'no git');
 
     test('stop rolls back', () async {
       script = (process) {
@@ -1194,7 +1231,69 @@ void main() {
       expect(step(runs.last, CreationStepKind.commit).output.last, 'Removed apps/admin');
       expect(exists('apps/admin'), isFalse);
       expect(read('pubspec.lock'), lockBefore);
+      // What the add staged leaves the index again; nothing else is reset.
+      expect(
+        started
+            .where((process) => process.executable == git())
+            .map((process) => <Object?>[process.arguments, process.workingDirectory]),
+        <List<Object?>>[
+          <Object?>[
+            <String>['add', 'apps/admin', 'pubspec.lock'],
+            root(),
+          ],
+          <Object?>[
+            <String>['commit', '-m', 'Add Flutter app admin', '--', 'apps/admin', 'pubspec.lock'],
+            root(),
+          ],
+          <Object?>[
+            <String>['reset', '-q', '--', 'apps/admin', 'pubspec.lock'],
+            root(),
+          ],
+        ],
+      );
     });
+
+    for (final ending in <String>['stop', 'dispose']) {
+      test('$ending right after a successful commit keeps the member', () async {
+        ScriptedDaemonProcess? commit;
+        script = (process) {
+          if (process.executable != git() || process.arguments.first != 'commit') {
+            return resolving(process);
+          }
+          commit = process;
+          // Exited with 0, the pipes still draining: the step is not marked done yet.
+          Timer.run(() => process.exit(0, closePipes: false));
+        };
+        final repository = build();
+        final runs = <CreationRun>[];
+        final done = repository
+            .addMember(member(template: NewProjectTemplate.plain))
+            .listen(runs.add)
+            .asFuture<void>();
+        await until(() => commit != null);
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.running);
+
+        if (ending == 'stop') {
+          await repository.stop();
+        } else {
+          final disposed = repository.dispose();
+          await Future<void>.delayed(Duration.zero);
+          commit!.closePipes();
+          await disposed;
+        }
+        commit!.closePipes();
+        await done;
+
+        expect(exists('apps/admin/pubspec.yaml'), isTrue);
+        expect(read('pubspec.lock'), 'lock after\n');
+        expect(started.map((process) => process.arguments.first), isNot(contains('reset')));
+        expect(
+          runs.last.steps.expand((step) => step.output),
+          isNot(contains('Removed apps/admin')),
+        );
+      });
+    }
 
     test('a failed analyze does not roll back', () async {
       script = (process) {

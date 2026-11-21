@@ -228,9 +228,13 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     run.savedLock = lock.existsSync() ? await lock.readAsBytes() : null;
   }
 
-  /// Undoes an add that did not get to its commit: deletes the member's folder and puts the root's
-  /// `pubspec.lock` back. Touches nothing else. Never throws.
+  /// What an add stages and commits, relative to the root: its member's folder and the lock.
+  List<String> _addedPaths(NewMemberRequest member) => <String>[member.relative, 'pubspec.lock'];
+
+  /// Undoes an add that did not get to its commit: unstages what it staged, deletes the member's
+  /// folder and puts the root's `pubspec.lock` back. Touches nothing else. Never throws.
   Future<void> _rollBack(_Run run, NewMemberRequest member) async {
+    if (run.staged) await _unstage(member);
     String line;
     try {
       final folder = Directory(member.path);
@@ -248,6 +252,36 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     }
     final last = run.steps.lastIndexWhere((step) => step.status != CreationStepStatus.pending);
     if (last >= 0) run.addLine(last, line);
+  }
+
+  /// `git reset -q -- <member> pubspec.lock`: takes the add's own paths out of the index again.
+  /// Runs while the run is stopped or cancelled, so outside [_command]; its output is dropped.
+  /// Never throws.
+  Future<void> _unstage(NewMemberRequest member) async {
+    try {
+      final process = await _startProcess(
+        _git(),
+        <String>['reset', '-q', '--', ..._addedPaths(member)],
+        workingDirectory: member.projectPath,
+        environment: _environment.variables,
+      );
+      final subscriptions = <StreamSubscription<String>>[
+        process.stdoutLines.listen(null, onError: (Object _) {}),
+        process.stderrLines.listen(null, onError: (Object _) {}),
+      ];
+      try {
+        final exitCode = await process.exitCode.timeout(_rollbackWait);
+        if (exitCode != 0) {
+          l.w('Project creation | git reset of ${member.relative} exited $exitCode');
+        }
+      } finally {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      }
+    } on Object catch (error, stackTrace) {
+      l.w('Project creation | unstaging ${member.relative} failed: $error', stackTrace);
+    }
   }
 
   Future<void> _stopProcess(_Run run) async {
@@ -309,18 +343,27 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           'get',
         ], workingDirectory: root);
       case CreationStepKind.commit:
-        // Only what the add made: the user's own changes stay out of the commit.
+        // Only what the add made: with the pathspec, what the user had staged stays staged and out
+        // of the commit.
         final git = _git();
-        await _command(run, index, git, <String>[
-          'add',
-          member!.relative,
-          'pubspec.lock',
-        ], workingDirectory: root);
-        await _command(run, index, git, <String>[
-          'commit',
-          '-m',
-          'Add ${member.kind.commitLabel} ${member.folder}',
-        ], workingDirectory: root);
+        final paths = _addedPaths(member!);
+        run.staged = true;
+        await _command(run, index, git, <String>['add', ...paths], workingDirectory: root);
+        await _command(
+          run,
+          index,
+          git,
+          <String>[
+            'commit',
+            '-m',
+            'Add ${member.kind.commitLabel} ${member.folder}',
+            '--',
+            ...paths,
+          ],
+          workingDirectory: root,
+          // Committed is committed, even when a stop lands before the step is marked done.
+          succeeded: () => run.committed = true,
+        );
       case CreationStepKind.flutterCreate:
         final request = run.request;
         if (request.monorepo) {
@@ -749,12 +792,14 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
 
   /// Runs [executable] in [workingDirectory] with the shell environment, its stdout and stderr
   /// going into the output of step [index]. Throws [_StepFailure] on a non-zero exit code.
+  /// [succeeded] is called as soon as it exits with 0, before a stop or cancel can fail the step.
   Future<void> _command(
     _Run run,
     int index,
     String executable,
     List<String> arguments, {
     required String workingDirectory,
+    void Function()? succeeded,
   }) async {
     run.checkLive();
     final process = await _startProcess(
@@ -782,6 +827,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       // Stopped while it was starting.
       if (run.stopped || run.cancelled) await _stopProcess(run);
       final exitCode = await process.exitCode;
+      if (exitCode == 0) succeeded?.call();
       await Future.wait<void>(<Future<void>>[stdoutDone.future, stderrDone.future])
           .timeout(_drainTimeout, onTimeout: () => const <void>[]);
       run.checkLive();
@@ -863,6 +909,12 @@ final class _Run {
   /// An add got past its folder check: the member's folder is its own to delete.
   bool created = false;
 
+  /// An add ran `git add`: a rollback takes its paths out of the index again.
+  bool staged = false;
+
+  /// An add's `git commit` exited with 0: it is never rolled back.
+  bool committed = false;
+
   /// [ProjectCreationRepositoryImpl.stop] was called: the step fails, nothing further runs.
   bool stopped = false;
 
@@ -872,11 +924,14 @@ final class _Run {
   /// The new project; only the steps of a new project ask for it.
   NewProjectRequest get request => project ?? (throw StateError('Not a new project'));
 
-  /// Whether an add is past undoing: every step but `analyze` is done. The commit (or, without
-  /// one, the step before `analyze`) is the last one a rollback covers.
-  bool get kept => steps.every(
-    (step) => step.kind == CreationStepKind.analyze || step.status == CreationStepStatus.done,
-  );
+  /// Whether an add is past undoing: its commit went through, or every step but `analyze` is
+  /// done. The commit (or, without one, the step before `analyze`) is the last one a rollback
+  /// covers.
+  bool get kept =>
+      committed ||
+      steps.every(
+        (step) => step.kind == CreationStepKind.analyze || step.status == CreationStepStatus.done,
+      );
 
   /// Throws when the run must not go on.
   void checkLive() {
