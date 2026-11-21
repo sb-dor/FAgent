@@ -54,7 +54,7 @@ class _NewProjectDialogState extends State<NewProjectDialog> {
     final workspace = WorkspaceConfigInhWidget.of(context);
     final openChat = switch (_creation.state) {
       ProjectCreation$CompletedState(:final request) ||
-      ProjectCreation$FailedState(:final request) => request.openChat,
+      ProjectCreation$FailedState(:final request) => (request?.openChat ?? false),
       _ => false,
     };
     _close();

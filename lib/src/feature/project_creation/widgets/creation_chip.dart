@@ -38,9 +38,9 @@ class CreationChip extends StatelessWidget {
       final colors = context.colors;
       final (label, background, icon, finished) = switch (controller.state) {
         ProjectCreation$IdleState() => (null, colors.surface, const SizedBox.shrink(), false),
-        ProjectCreation$RunningState(:final request, :final steps) => (
+        ProjectCreation$RunningState(:final request, :final member, :final steps) => (
           localization.newProjectChipRunning(
-            request.name,
+            request?.name ?? member!.packageName,
             steps.where((step) => step.status == CreationStepStatus.done).length,
             steps.length,
           ),
@@ -52,14 +52,14 @@ class CreationChip extends StatelessWidget {
           ),
           false,
         ),
-        ProjectCreation$CompletedState(:final request) => (
-          localization.newProjectChipDone(request.name),
+        ProjectCreation$CompletedState(:final request, :final member) => (
+          localization.newProjectChipDone(request?.name ?? member!.packageName),
           colors.okSoft,
           Icon(Icons.check, size: 14, color: colors.ok),
           true,
         ),
-        ProjectCreation$FailedState(:final request) => (
-          localization.newProjectChipFailed(request.name),
+        ProjectCreation$FailedState(:final request, :final member) => (
+          localization.newProjectChipFailed(request?.name ?? member!.packageName),
           colors.dangerSoft,
           Icon(Icons.close, size: 14, color: colors.danger),
           true,

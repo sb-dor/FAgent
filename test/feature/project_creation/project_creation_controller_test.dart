@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
@@ -17,6 +19,18 @@ const _request = NewProjectRequest(
   name: 'avera_booking',
   org: 'com.example',
   parent: '/Users/test/StudioProjects',
+);
+
+const _member = NewMemberRequest(
+  projectId: 3,
+  projectPath: '/Users/test/StudioProjects/shop',
+  kind: MemberKind.flutterApp,
+  folder: 'admin',
+  packageName: 'shop_admin',
+  org: 'com.example',
+  platforms: <FlutterPlatform>{},
+  template: NewProjectTemplate.architecture,
+  gitRepo: true,
 );
 
 Future<void> _until(ProjectCreationController controller, bool Function() done) async {
@@ -265,6 +279,86 @@ void main() {
     expect(calls, isEmpty);
     expect(state.steps.first.status, CreationStepStatus.done);
     expect(state.steps[1].status, CreationStepStatus.running);
+  });
+
+  test('startAdd completes without adding a project', () async {
+    controller.startAdd(_member);
+    expect(controller.state, isA<ProjectCreation$RunningState>());
+
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    final state = controller.state as ProjectCreation$CompletedState;
+    expect(state.member, _member);
+    expect(state.request, isNull);
+    expect(state.projectId, isNull);
+    expect(state.steps.map((s) => s.kind), memberStepsFor(_member));
+    expect(state.steps.every((s) => s.status == CreationStepStatus.done), isTrue);
+    expect(repository.memberRequests, <NewMemberRequest>[_member]);
+    expect(calls, isEmpty);
+  });
+
+  test('startAdd failure is Failed with the step', () async {
+    final failing = build(MemoryProjectCreationRepository()..failAt = CreationStepKind.analyze);
+    addTearDown(failing.dispose);
+
+    failing.startAdd(_member);
+    await _until(failing, () => failing.state is! ProjectCreation$RunningState);
+
+    final state = failing.state as ProjectCreation$FailedState;
+    expect((state.error as CreationStepFailed).kind, CreationStepKind.analyze);
+    expect(state.member, _member);
+    expect(calls, isEmpty);
+  });
+
+  test('notes name the scripts that list members', () async {
+    repository.listingScripts = <String>['scripts/get.sh', 'Makefile'];
+
+    controller.startAdd(_member);
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    expect((controller.state as ProjectCreation$CompletedState).notes, <String>[
+      'scripts/get.sh',
+      'Makefile',
+    ]);
+  });
+
+  test('a created project has no notes, and a failed add reads none', () async {
+    repository.listingScripts = <String>['scripts/get.sh'];
+    controller.start(_request);
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+    expect((controller.state as ProjectCreation$CompletedState).notes, isEmpty);
+
+    final failing = build(MemoryProjectCreationRepository()..failAt = CreationStepKind.analyze)
+      ..startAdd(_member);
+    addTearDown(failing.dispose);
+    await _until(failing, () => failing.state is! ProjectCreation$RunningState);
+    expect(failing.state, isA<ProjectCreation$FailedState>());
+  });
+
+  test('startAdd is dropped while another run is going, and stop applies to it', () async {
+    controller
+      ..startAdd(_member)
+      ..start(_request)
+      ..stop();
+    expect(repository.requests, isEmpty);
+    expect(repository.stopCalls, 1);
+    await _until(controller, () => controller.state is! ProjectCreation$RunningState);
+  });
+
+  test('wraps the member checks of the repository', () async {
+    repository
+      ..takenPackages = <String>{'taken'}
+      ..uiPackage = false
+      ..gitRepo = false;
+    const path = '/Users/test/StudioProjects/shop';
+
+    expect(
+      await controller.checkMember(path, MemberKind.dartApp, 'a', 'taken'),
+      MemberProblem.packageTaken,
+    );
+    expect(await controller.suggestedPackageName(path, 'admin'), 'shop_admin');
+    expect(await controller.hasUiPackage(path), isFalse);
+    expect(await controller.isGitRepo(path), isFalse);
   });
 
   test('dispose cancels the subscription', () async {
