@@ -1145,6 +1145,44 @@ void main() {
       expect(read('apps/server/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
     });
 
+    // The member inherits the root's `avoid_print`: the `print` of the samples `dart create`
+    // writes failed the add's `flutter analyze`.
+    test('the samples of a Dart member write to stdout instead of print', () async {
+      script = (process) {
+        if (process.executable == dart() && process.arguments.first == 'create') {
+          final dir = process.arguments.last;
+          final name = p.basename(dir);
+          Directory(p.join(dir, 'example')).createSync(recursive: true);
+          Directory(p.join(dir, 'lib')).createSync(recursive: true);
+          File(p.join(dir, 'example', '${name}_example.dart')).writeAsStringSync(
+            "import 'package:$name/$name.dart';\n\nvoid main() {\n  print('awesome');\n}\n",
+          );
+          File(p.join(dir, 'lib', '$name.dart')).writeAsStringSync("// print('x');\n");
+        }
+        resolving(process);
+      };
+
+      await build()
+          .addMember(member(kind: MemberKind.dartApp, folder: 'server', gitRepo: false))
+          .toList();
+      await build()
+          .addMember(member(kind: MemberKind.dartPackage, folder: 'core', gitRepo: false))
+          .toList();
+
+      expect(
+        read('apps/server/example/server_example.dart'),
+        "import 'dart:io';\n\nimport 'package:shop_server/server.dart';\n\n"
+        "void main() {\n  stdout.writeln('awesome');\n}\n",
+      );
+      expect(
+        read('packages/core/example/core_example.dart'),
+        contains("stdout.writeln('awesome')"),
+      );
+      // Only the samples a member runs are touched, and a file without `print` stays as it was.
+      expect(read('apps/server/lib/server.dart'), "// print('x');\n");
+      expect(read('apps/server/bin/server.dart'), "import 'package:shop_server/server.dart';\n");
+    });
+
     test('commit stages only the member', () async {
       final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
 

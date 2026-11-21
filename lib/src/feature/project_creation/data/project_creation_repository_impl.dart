@@ -709,9 +709,28 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     // `dart create` names the package after the folder; its `bin/` and `test/` import it.
     if (created != null && created != packageName)
       await _renameImports(Directory(path), created, packageName);
+    if (kind == MemberKind.dartApp || kind == MemberKind.dartPackage)
+      await _printToStdout(Directory(path));
     // The member's own `analysis_options.yaml` would shadow the root's; it inherits it instead.
     await File(p.join(path, 'analysis_options.yaml'))
         .writeAsString('include: ../../analysis_options.yaml\n');
+  }
+
+  /// Makes the samples `dart create` writes into `bin/` and `example/` of [directory] call
+  /// `stdout.writeln` instead of `print`, which the root's `avoid_print` reports.
+  Future<void> _printToStdout(Directory directory) async {
+    final call = RegExp(r'\bprint\(');
+    for (final folder in const <String>['bin', 'example']) {
+      final samples = Directory(p.join(directory.path, folder));
+      if (!samples.existsSync()) continue;
+      await for (final entity in samples.list(recursive: true, followLinks: false)) {
+        if (entity is! File || !entity.path.endsWith('.dart')) continue;
+        final text = await entity.readAsString();
+        if (!call.hasMatch(text)) continue;
+        final io = text.contains("import 'dart:io';") ? '' : "import 'dart:io';\n\n";
+        await entity.writeAsString('$io${text.replaceAll(call, 'stdout.writeln(')}');
+      }
+    }
   }
 
   /// Replaces `package:[from]/` with `package:[to]/` in the Dart files under [directory].

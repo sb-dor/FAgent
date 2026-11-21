@@ -10,8 +10,10 @@ description: "Project layout and layers, and the shape of list, creation, deleti
 - An app has no `lib/src/`: `lib/main.dart` is the entry, `lib/_core/` holds the code shared by
   features, and each feature is a folder directly in `lib/` (`lib/authentication/`), with no
   `feature/` folder around them. A package (one in `packages/` too) keeps Dart's package layout:
-  `lib/<package>.dart` exports the public API, the code is in `lib/src/`. A project that already
-  has another layout (`lib/src/`, `common/`, `feature/`) keeps it. See "Project structure".
+  `lib/<package>.dart` exports the public API, the code is in `lib/src/`. In a monorepo every
+  member of `apps/` is laid out as an app, every member of `packages/` as a package. A project
+  that already has another layout (`lib/src/`, `common/`, `feature/`) keeps it. See "Project
+  structure".
 - A feature has `models/`, `data/` (repository), `controller/`, `widgets/`. Name files
   `<feature>_<role>.dart`.
 - Dependencies point one way: widgets -> controller -> repository. A widget never touches a
@@ -84,6 +86,20 @@ packages/api_client/
 └── test/                 # mirrors lib/src/
 ```
 
+A monorepo (a pub workspace with several apps):
+
+```
+pubspec.yaml              # <name>_workspace: workspace: [apps/*, packages/*], no lib/
+apps/
+├── desktop/              # an app: lib/main.dart, lib/_core/, lib/<feature>/, no src
+└── server/               # a Dart app
+packages/
+├── ui/                   # a package: lib/ui.dart and lib/src/
+└── core/
+scripts/, Makefile        # run for every member
+docs/rules/               # one set for the whole repository
+```
+
 - An app's `lib/main.dart` and `lib/_core/` always exist; every other folder in an app's `lib/` is
   a feature. An app has no `lib/src/`: nothing imports an app, so `src/` would hide nothing and
   only add a level to every import and path.
@@ -91,6 +107,11 @@ packages/api_client/
   `lib/`, everything else in `lib/src/`, where other packages are not meant to reach. Inside
   `lib/src/` a package with features lays them out as an app does (`lib/src/_core/`,
   `lib/src/<feature>/`).
+- In a monorepo the root has only the workspace's `pubspec.yaml` (no `lib/`), the scripts and the
+  rules; the code is in the members. Add a new app or package through FAgent's "Add to project",
+  or, outside FAgent, by the same layout: a folder in `apps/` or `packages/` whose `pubspec.yaml`
+  has `resolution: workspace` and the root's SDK constraint. The scripts and the `Makefile` walk
+  `apps/*` and `packages/*`, so a new member needs no change to them.
 - `_core` holds only what belongs to no single feature. The underscore sorts it before the
   features in every file list, and a feature is never named `_core`.
 - A `feature/` folder around the features adds a level to every import and to every path in the

@@ -467,6 +467,18 @@ void main() {
     }
   });
 
+  test('architecture.md describes a monorepo', () {
+    final text = rule('architecture');
+    for (final phrase in <String>[
+      'apps/',
+      'packages/',
+      'workspace: [apps/*, packages/*]',
+      'Add to project',
+    ]) {
+      expect(text, contains(phrase), reason: 'architecture.md does not mention "$phrase"');
+    }
+  });
+
   test('no rule teaches the old state names', () {
     for (final file in ruleFiles) {
       final text = file.readAsStringSync();

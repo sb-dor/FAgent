@@ -186,6 +186,16 @@ void main() {
     expect(pubspec, isNot(contains('dependencies:')));
   });
 
+  // A monorepo gives packages/ui the root's SDK constraint (Dart 3.14 and newer), where a private
+  // field can be a named initializing formal: `flutter analyze` of a new monorepo then failed on
+  // `prefer_initializing_formals` in popup.dart. The one-app ui package (^3.10.4) cannot use them.
+  test('the ui popup passes analyze at the language version of a monorepo', () async {
+    final popup = await rootBundle.loadString(
+      '${projectTemplateRoot}packages/ui/lib/src/components/layout/popup.dart',
+    );
+    expect(popup, startsWith('// ignore_for_file: prefer_initializing_formals'));
+  });
+
   test('pub add for a monorepo app points at the shared ui package', () {
     final arguments = skeletonPubAddArgumentsFor(uiPath: '../../packages/ui');
     expect(arguments, contains('ui@{path: ../../packages/ui}'));
