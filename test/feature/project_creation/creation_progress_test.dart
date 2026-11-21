@@ -45,7 +45,7 @@ Future<void> _elapse(WidgetTester tester, Duration duration) async {
 }
 
 /// A repository whose run prints [lines] in the first step.
-final class _ChattyRepository implements IProjectCreationRepository {
+final class _ChattyRepository with CreateOnlyProjectCreation {
   _ChattyRepository(this.lines);
 
   final List<String> lines;
@@ -526,7 +526,7 @@ void main() {
 }
 
 /// A run whose first step fails and then ends normally.
-final class _FailingRepository implements IProjectCreationRepository {
+final class _FailingRepository with CreateOnlyProjectCreation {
   @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 

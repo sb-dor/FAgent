@@ -841,47 +841,6 @@ void main() {
       expect(read('apps/app/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
     });
 
-    test('a Dart member is renamed and its imports follow', () async {
-      script = (process) {
-        if (process.executable == p.join(p.dirname(_flutter), 'dart') &&
-            process.arguments.first == 'create') {
-          final dir = process.arguments.last;
-          Directory(p.join(dir, 'bin')).createSync(recursive: true);
-          Directory(p.join(dir, '.dart_tool')).createSync(recursive: true);
-          File(p.join(dir, 'pubspec.yaml')).writeAsStringSync(
-            'name: server\n\nenvironment:\n  sdk: ^3.10.4\n\ndependencies:\n  path: ^1.0.0\n',
-          );
-          File(p.join(dir, 'bin', 'server.dart'))
-              .writeAsStringSync("import 'package:server/server.dart';\n");
-          File(p.join(dir, '.dart_tool', 'x.dart'))
-              .writeAsStringSync("import 'package:server/server.dart';\n");
-          File(p.join(dir, 'analysis_options.yaml'))
-              .writeAsStringSync('include: package:lints/recommended.yaml\n');
-        }
-        finish(process);
-      };
-      Directory(root()).createSync();
-      final request = monorepo(template: NewProjectTemplate.plain);
-      final member = p.join(root(), 'apps', 'server');
-
-      await build().createMemberForTest(
-        request,
-        kind: MemberKind.dartApp,
-        path: member,
-        packageName: 'shop_server',
-        sdkConstraint: '^3.14.0',
-      );
-
-      expect(started.single.arguments, <String>['create', '-t', 'console', '--no-pub', member]);
-      expect(started.single.workingDirectory, root());
-      final pubspec = read('apps/server/pubspec.yaml');
-      expect(pubspec, startsWith('name: shop_server\n'));
-      expect(pubspec, contains('sdk: ^3.14.0\n\nresolution: workspace\n'));
-      expect(read('apps/server/bin/server.dart'), "import 'package:shop_server/server.dart';\n");
-      expect(read('apps/server/.dart_tool/x.dart'), contains('package:server/'));
-      expect(read('apps/server/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
-    });
-
     test('empty monorepo runs pub get in the root', () async {
       final runs = await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
 
@@ -914,6 +873,487 @@ void main() {
 
       expect(read('pubspec.yaml'), contains('sdk: ^3.15.0'));
       expect(read('apps/app/pubspec.yaml'), contains('sdk: ^3.15.0'));
+    });
+  });
+
+  group('add member', () {
+    const lockBefore = 'lock before\n';
+    String root() => p.join(parent.path, 'shop');
+    String file(String relative) => p.joinAll(<String>[root(), ...relative.split('/')]);
+    String read(String relative) => File(file(relative)).readAsStringSync();
+    bool exists(String relative) =>
+        FileSystemEntity.typeSync(file(relative)) != FileSystemEntityType.notFound;
+    String dart() => p.join(p.dirname(_flutter), 'dart');
+
+    /// A monorepo on disk: the root `pubspec.yaml` (with `build_runner` when [buildRunner]),
+    /// `packages/ui` and, when [lock], a `pubspec.lock`.
+    void monorepoOnDisk({bool buildRunner = true, bool lock = true}) {
+      Directory(file('packages/ui')).createSync(recursive: true);
+      File(file('pubspec.yaml')).writeAsStringSync(
+        '${monorepoRootPubspec(name: 'shop', sdkConstraint: '^3.14.0')}'
+        '${buildRunner ? '\ndev_dependencies:\n  build_runner: ^2.11.0\n' : ''}',
+      );
+      File(file('packages/ui/pubspec.yaml')).writeAsStringSync('name: ui\n');
+      if (lock) File(file('pubspec.lock')).writeAsStringSync(lockBefore);
+    }
+
+    NewMemberRequest member({
+      MemberKind kind = MemberKind.flutterApp,
+      String folder = 'admin',
+      NewProjectTemplate template = NewProjectTemplate.architecture,
+      bool gitRepo = true,
+    }) => NewMemberRequest(
+      projectId: 1,
+      projectPath: root(),
+      kind: kind,
+      folder: folder,
+      packageName: 'shop_$folder',
+      org: 'com.example',
+      platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+      template: template,
+      gitRepo: gitRepo,
+    );
+
+    bool isPub(ScriptedDaemonProcess process) => process.arguments.first == 'pub';
+
+    /// [finish], with `dart create` writing its `pubspec.yaml` and `bin/` and every `pub` command
+    /// rewriting the root's lock, the way a resolution does.
+    void resolving(ScriptedDaemonProcess process) {
+      if (process.executable == dart() && process.arguments.first == 'create') {
+        final dir = process.arguments.last;
+        final name = p.basename(dir);
+        Directory(p.join(dir, 'bin')).createSync(recursive: true);
+        Directory(p.join(dir, '.dart_tool')).createSync(recursive: true);
+        File(p.join(dir, 'pubspec.yaml')).writeAsStringSync(
+          'name: $name\n\nenvironment:\n  sdk: ^3.10.4\n\ndependencies:\n  path: ^1.0.0\n',
+        );
+        File(p.join(dir, 'bin', '$name.dart'))
+            .writeAsStringSync("import 'package:$name/$name.dart';\n");
+        File(p.join(dir, '.dart_tool', 'x.dart'))
+            .writeAsStringSync("import 'package:$name/$name.dart';\n");
+        File(p.join(dir, 'analysis_options.yaml'))
+            .writeAsStringSync('include: package:lints/recommended.yaml\n');
+      }
+      if (isPub(process)) File(file('pubspec.lock')).writeAsStringSync('lock after\n');
+      finish(process);
+    }
+
+    /// The processes started, as `[executable, arguments, workingDirectory]`.
+    List<List<Object?>> commands() => <List<Object?>>[
+      for (final process in started)
+        <Object?>[process.executable, process.arguments, process.workingDirectory],
+    ];
+
+    setUp(() {
+      monorepoOnDisk();
+      script = resolving;
+    });
+
+    test('add flutter app with the skeleton', () async {
+      final runs = await build().addMember(member()).toList();
+
+      expect(runs.first.steps.map((step) => step.status), everyElement(CreationStepStatus.pending));
+      expect(runs.last.steps.map((step) => step.kind), <CreationStepKind>[
+        CreationStepKind.memberCreate,
+        CreationStepKind.skeleton,
+        CreationStepKind.commit,
+        CreationStepKind.analyze,
+      ]);
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      final admin = file('apps/admin');
+      expect(commands(), <List<Object?>>[
+        <Object?>[
+          _flutter,
+          <String>[
+            'create',
+            '--template',
+            'app',
+            '--org',
+            'com.example',
+            '--project-name',
+            'shop_admin',
+            '--platforms',
+            'macos',
+            '--no-pub',
+            admin,
+          ],
+          root(),
+        ],
+        <Object?>[
+          _flutter,
+          <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
+          admin,
+        ],
+        <Object?>[
+          _flutter,
+          <String>['pub', 'get'],
+          root(),
+        ],
+        <Object?>[
+          dart(),
+          <String>['run', 'build_runner', 'build', '--workspace', '--delete-conflicting-outputs'],
+          root(),
+        ],
+        <Object?>[
+          dart(),
+          <String>['fix', '--apply', '--code=directives_ordering'],
+          admin,
+        ],
+        <Object?>[
+          git(),
+          <String>['add', 'apps/admin', 'pubspec.lock'],
+          root(),
+        ],
+        <Object?>[
+          git(),
+          <String>['commit', '-m', 'Add Flutter app admin'],
+          root(),
+        ],
+        <Object?>[
+          _flutter,
+          <String>['analyze'],
+          admin,
+        ],
+      ]);
+      expect(
+        skeletonPubAddArgumentsFor(uiPath: '../../packages/ui'),
+        contains('ui@{path: ../../packages/ui}'),
+      );
+      expect(read('apps/admin/lib/main.dart'), contains("import 'package:shop_admin/"));
+      expect(
+        step(runs.last, CreationStepKind.skeleton).output,
+        contains('✎ apps/admin/lib/main.dart'),
+      );
+      final pubspec = read('apps/admin/pubspec.yaml');
+      expect(pubspec, contains('environment:\n  sdk: ^3.14.0\n\nresolution: workspace\n'));
+      expect(pubspec, contains('\nflutter:\n  generate: true\n\n'));
+      expect(read('apps/admin/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
+      expect(read('pubspec.lock'), 'lock after\n');
+    });
+
+    test('without build_runner in the root it builds the member alone', () async {
+      monorepoOnDisk(buildRunner: false);
+      await build().addMember(member(gitRepo: false)).toList();
+
+      expect(
+        commands(),
+        anyElement(
+          equals(<Object?>[
+            dart(),
+            <String>['run', 'build_runner', 'build', '--delete-conflicting-outputs'],
+            file('apps/admin'),
+          ]),
+        ),
+      );
+      expect(read('pubspec.yaml'), isNot(contains('build_runner')));
+    });
+
+    test('add dart package', () async {
+      // The root's constraint wins over the Dart of the SDK.
+      dartVersion = '3.15.2';
+      final runs = await build()
+          .addMember(member(kind: MemberKind.dartPackage, folder: 'core', gitRepo: false))
+          .toList();
+
+      expect(runs.last.steps.map((step) => step.kind), <CreationStepKind>[
+        CreationStepKind.memberCreate,
+        CreationStepKind.pubGet,
+        CreationStepKind.analyze,
+      ]);
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      final core = file('packages/core');
+      expect(commands(), <List<Object?>>[
+        <Object?>[
+          dart(),
+          <String>['create', '-t', 'package', '--no-pub', core],
+          root(),
+        ],
+        <Object?>[
+          _flutter,
+          <String>['pub', 'get'],
+          root(),
+        ],
+        <Object?>[
+          _flutter,
+          <String>['analyze'],
+          core,
+        ],
+      ]);
+      final pubspec = read('packages/core/pubspec.yaml');
+      expect(pubspec, startsWith('name: shop_core\n'));
+      expect(pubspec, contains('sdk: ^3.14.0\n\nresolution: workspace\n'));
+    });
+
+    test('a Dart app is renamed and its imports follow', () async {
+      await build()
+          .addMember(member(kind: MemberKind.dartApp, folder: 'server', gitRepo: false))
+          .toList();
+
+      final server = file('apps/server');
+      expect(started.first.arguments, <String>['create', '-t', 'console', '--no-pub', server]);
+      expect(started.first.workingDirectory, root());
+      expect(read('apps/server/pubspec.yaml'), startsWith('name: shop_server\n'));
+      expect(read('apps/server/bin/server.dart'), "import 'package:shop_server/server.dart';\n");
+      expect(read('apps/server/.dart_tool/x.dart'), contains('package:server/'));
+      expect(read('apps/server/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
+    });
+
+    test('commit stages only the member', () async {
+      final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.done);
+      expect(
+        started.where((process) => process.executable == git()).map((process) => process.arguments),
+        <List<String>>[
+          <String>['add', 'apps/admin', 'pubspec.lock'],
+          <String>['commit', '-m', 'Add Flutter app admin'],
+        ],
+      );
+    });
+
+    test('stop rolls back', () async {
+      script = (process) {
+        if (isCreate(process)) {
+          // Half made: the folder is there, the command never ends.
+          Directory(process.arguments.last).createSync(recursive: true);
+          File(p.join(process.arguments.last, 'pubspec.yaml')).writeAsStringSync(_createdPubspec);
+          return;
+        }
+        resolving(process);
+      };
+      final repository = build();
+      final runs = <CreationRun>[];
+      final done = repository.addMember(member()).listen(runs.add).asFuture<void>();
+      await until(() => started.isNotEmpty);
+
+      await repository.stop();
+      await done;
+
+      final create = step(runs.last, CreationStepKind.memberCreate);
+      expect(create.status, CreationStepStatus.failed);
+      expect(create.output, containsAllInOrder(<String>['Stopped', 'Removed apps/admin']));
+      expect(create.output.last, 'Removed apps/admin');
+      expect(exists('apps/admin'), isFalse);
+      expect(read('pubspec.lock'), lockBefore);
+      expect(started, hasLength(1));
+    });
+
+    test('a failed step before commit rolls back', () async {
+      script = (process) {
+        if (!isPub(process)) return resolving(process);
+        File(file('pubspec.lock')).writeAsStringSync('half resolved\n');
+        Timer.run(() {
+          process
+            ..emitError('Because shop_admin depends on nothing that exists...')
+            ..exit(1);
+        });
+      };
+      final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      final pubGet = step(runs.last, CreationStepKind.pubGet);
+      expect(pubGet.status, CreationStepStatus.failed);
+      expect(pubGet.output, <String>[
+        'Because shop_admin depends on nothing that exists...',
+        'Removed apps/admin',
+      ]);
+      expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.pending);
+      expect(exists('apps/admin'), isFalse);
+      expect(exists('apps'), isTrue);
+      expect(exists('packages/ui/pubspec.yaml'), isTrue);
+      expect(read('pubspec.lock'), lockBefore);
+      expect(started.map((process) => process.executable), isNot(contains(git())));
+    });
+
+    test('rollback deletes a lock that was not there before', () async {
+      File(file('pubspec.lock')).deleteSync();
+      script = (process) {
+        if (!isPub(process)) return resolving(process);
+        File(file('pubspec.lock')).writeAsStringSync('half resolved\n');
+        Timer.run(() => process.exit(1));
+      };
+      await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(exists('apps/admin'), isFalse);
+      expect(exists('pubspec.lock'), isFalse);
+    });
+
+    test('a failed commit rolls back', () async {
+      script = (process) {
+        if (process.executable != git() || process.arguments.first != 'commit') {
+          return resolving(process);
+        }
+        Timer.run(() {
+          process
+            ..emitError('Author identity unknown')
+            ..exit(128);
+        });
+      };
+      final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.failed);
+      expect(step(runs.last, CreationStepKind.commit).output.last, 'Removed apps/admin');
+      expect(exists('apps/admin'), isFalse);
+      expect(read('pubspec.lock'), lockBefore);
+    });
+
+    test('a failed analyze does not roll back', () async {
+      script = (process) {
+        if (process.arguments.first != 'analyze') return resolving(process);
+        Timer.run(() {
+          process
+            ..emitLine('info • deprecated_member_use')
+            ..exit(1);
+        });
+      };
+      final runs = await build().addMember(member()).toList();
+
+      final analyze = step(runs.last, CreationStepKind.analyze);
+      expect(analyze.status, CreationStepStatus.failed);
+      expect(analyze.output, <String>['info • deprecated_member_use']);
+      expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.done);
+      expect(started.map((process) => process.arguments.take(2).join(' ')), contains('commit -m'));
+      expect(exists('apps/admin/pubspec.yaml'), isTrue);
+      expect(read('pubspec.lock'), 'lock after\n');
+    });
+
+    test('without git a failed analyze does not roll back either', () async {
+      script = (process) {
+        if (process.arguments.first != 'analyze') return resolving(process);
+        Timer.run(() => process.exit(1));
+      };
+      await build().addMember(member(template: NewProjectTemplate.plain, gitRepo: false)).toList();
+
+      expect(exists('apps/admin/pubspec.yaml'), isTrue);
+      expect(read('pubspec.lock'), 'lock after\n');
+    });
+
+    test('dispose during add rolls back', () async {
+      script = (process) {
+        if (!isPub(process)) return resolving(process);
+        File(file('pubspec.lock')).writeAsStringSync('half resolved\n');
+      };
+      final repository = build();
+      final runs = <CreationRun>[];
+      final done = repository
+          .addMember(member(template: NewProjectTemplate.plain))
+          .listen(runs.add)
+          .asFuture<void>();
+      await until(() => started.any(isPub));
+      final before = runs.length;
+
+      await repository.dispose();
+
+      expect(started.last.stopped, isTrue);
+      expect(exists('apps/admin'), isFalse);
+      expect(read('pubspec.lock'), lockBefore);
+      await done;
+      expect(runs, hasLength(before));
+    });
+
+    test('an existing folder fails the add and is left alone', () async {
+      Directory(file('apps/admin')).createSync(recursive: true);
+      File(file('apps/admin/keep.txt')).writeAsStringSync('mine');
+      final runs = await build().addMember(member()).toList();
+
+      final create = step(runs.last, CreationStepKind.memberCreate);
+      expect(create.status, CreationStepStatus.failed);
+      expect(create.output, <String>['The folder already exists']);
+      expect(started, isEmpty);
+      expect(read('apps/admin/keep.txt'), 'mine');
+      expect(read('pubspec.lock'), lockBefore);
+    });
+  });
+
+  group('members', () {
+    late String project;
+    void write(String relative, String text) {
+      final target = File(p.joinAll(<String>[project, ...relative.split('/')]));
+      target.parent.createSync(recursive: true);
+      target.writeAsStringSync(text);
+    }
+
+    setUp(() {
+      project = p.join(parent.path, 'shop');
+      write('pubspec.yaml', monorepoRootPubspec(name: 'shop', sdkConstraint: '^3.14.0'));
+      write('packages/core/pubspec.yaml', 'name: shop_core\n');
+      write('apps/app/pubspec.yaml', 'name: shop_app\n');
+    });
+
+    test('checkMember', () async {
+      final repository = build();
+      expect(
+        await repository.checkMember(project, MemberKind.flutterApp, 'app', 'shop_new'),
+        MemberProblem.folderExists,
+      );
+      Directory(p.join(project, 'apps', 'empty')).createSync();
+      expect(
+        await repository.checkMember(project, MemberKind.dartApp, 'empty', 'shop_new'),
+        MemberProblem.folderExists,
+      );
+      expect(
+        await repository.checkMember(project, MemberKind.dartPackage, 'core2', 'shop_core'),
+        MemberProblem.packageTaken,
+      );
+      expect(
+        await repository.checkMember(project, MemberKind.dartPackage, 'root', 'shop_workspace'),
+        MemberProblem.packageTaken,
+      );
+      // `apps/core` is free: `core` is taken under `packages/` only.
+      expect(
+        await repository.checkMember(project, MemberKind.flutterApp, 'core', 'shop_desk'),
+        isNull,
+      );
+    });
+
+    test('suggestedPackageName', () async {
+      final repository = build();
+      expect(await repository.suggestedPackageName(project, 'admin'), 'shop_admin');
+
+      final cafe = p.join(parent.path, 'cafe_pos');
+      Directory(cafe).createSync();
+      File(p.join(cafe, 'pubspec.yaml')).writeAsStringSync('name: cafe_pos_workspace\n');
+      expect(await repository.suggestedPackageName(cafe, 'admin'), 'cafe_pos_admin');
+
+      final tools = p.join(parent.path, 'tools');
+      Directory(tools).createSync();
+      File(p.join(tools, 'pubspec.yaml')).writeAsStringSync('name: tools\n');
+      expect(await repository.suggestedPackageName(tools, 'admin'), 'tools_admin');
+    });
+
+    test('hasUiPackage', () async {
+      final repository = build();
+      expect(await repository.hasUiPackage(project), isFalse);
+      write('packages/ui/pubspec.yaml', 'name: ui\n');
+      expect(await repository.hasUiPackage(project), isTrue);
+    });
+
+    test('isGitRepo', () async {
+      final repository = build();
+      expect(await repository.isGitRepo(project), isFalse);
+      Directory(p.join(project, '.git')).createSync();
+      expect(await repository.isGitRepo(project), isTrue);
+    });
+
+    test('scriptsListingMembers: a cafe_pos-like test.bash', () async {
+      write(
+        'scripts/test.bash',
+        '#!/usr/bin/env bash\nset -euo pipefail\n(cd packages/core && dart test "\$@")\n',
+      );
+      // Mentions no folder of an existing member.
+      write('scripts/analyze.bash', 'flutter analyze packages/core_utils apps/*\n');
+      expect(await build().scriptsListingMembers(project), <String>['scripts/test.bash']);
+    });
+
+    test("scriptsListingMembers: the monorepo template's scripts", () async {
+      for (final relative in monorepoTemplateFiles) {
+        write(relative, File('$monorepoTemplateRoot$relative').readAsStringSync());
+      }
+      write('packages/ui/pubspec.yaml', 'name: ui\n');
+      expect(await build().scriptsListingMembers(project), isEmpty);
+    });
+
+    test('scriptsListingMembers without scripts/', () async {
+      expect(await build().scriptsListingMembers(project), isEmpty);
     });
   });
 }

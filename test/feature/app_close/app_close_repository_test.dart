@@ -18,6 +18,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/models/new_proje
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/memory_devices_repository.dart';
+import '../../support/memory_project_creation_repository.dart';
 import '../../support/scripted_app_run_repository.dart';
 import '../../support/scripted_widget_picker_repository.dart';
 
@@ -120,7 +121,7 @@ final class _RecordingAgentProbe implements IAgentProbe {
 }
 
 /// Records when it is disposed; throws when [error] is set.
-final class _RecordingCreation implements IProjectCreationRepository {
+final class _RecordingCreation with CreateOnlyProjectCreation {
   _RecordingCreation(this.events, {this.error});
 
   final List<String> events;

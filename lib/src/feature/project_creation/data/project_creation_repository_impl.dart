@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
-import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
+import 'package:flutter_code_agent/src/common/pub_workspace/pub_workspace.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/models/new_membe
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
+import 'package:yaml/yaml.dart';
 
 /// How many lines of output a step keeps (the last ones); the progress screen shows a few of them.
 const int kCreationOutputKept = 200;
@@ -24,8 +25,12 @@ const Duration _drainTimeout = Duration(seconds: 2);
 /// The last line of a step that [ProjectCreationRepositoryImpl.stop] cut off.
 const String _stoppedLine = 'Stopped';
 
-/// Runs `flutter create`, `git` and `flutter pub` for a new project and writes the architecture
-/// skeleton itself, one command at a time, each in its own process group.
+/// How long cancelling an add waits for it to roll back; a command that will not die may hold it.
+const Duration _rollbackWait = Duration(seconds: 5);
+
+/// Runs `flutter create`, `git` and `flutter pub` for a new project, or for a member added to a
+/// monorepo, and writes the architecture skeleton itself, one command at a time, each in its own
+/// process group.
 final class ProjectCreationRepositoryImpl implements IProjectCreationRepository {
   /// Creates the repository. [flutter] gives the `flutter` executable of the SDK the form shows
   /// (`null` when there is none); [writeRules] writes the enabled built-in rules into a project
@@ -89,20 +94,98 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   }
 
   @override
-  Stream<CreationRun> create(NewProjectRequest request) {
-    final controller = StreamController<CreationRun>();
-    final run = _Run(request, controller);
+  Stream<CreationRun> create(NewProjectRequest request) => _start(_Run.project(request));
+
+  @override
+  Stream<CreationRun> addMember(NewMemberRequest request) => _start(_Run.member(request));
+
+  @override
+  Future<MemberProblem?> checkMember(
+    String projectPath,
+    MemberKind kind,
+    String folder,
+    String packageName,
+  ) async {
+    final type = FileSystemEntity.typeSync(
+      p.join(projectPath, kind.parent, folder),
+      followLinks: false,
+    );
+    if (type != FileSystemEntityType.notFound) return MemberProblem.folderExists;
+    final taken = <String?>{
+      workspacePackageName(projectPath),
+      for (final member in workspaceMembers(projectPath)) member.packageName,
+    };
+    return taken.contains(packageName) ? MemberProblem.packageTaken : null;
+  }
+
+  @override
+  Future<String> suggestedPackageName(String projectPath, String folder) async {
+    const suffix = '_workspace';
+    final name = workspacePackageName(projectPath);
+    final project = name != null && name.endsWith(suffix) && name.length > suffix.length
+        ? name.substring(0, name.length - suffix.length)
+        : p.basename(projectPath);
+    return '${project}_$folder';
+  }
+
+  @override
+  Future<bool> hasUiPackage(String projectPath) async =>
+      File(p.join(projectPath, 'packages', 'ui', 'pubspec.yaml')).existsSync();
+
+  @override
+  Future<bool> isGitRepo(String projectPath) async =>
+      // A worktree has a `.git` file instead of a folder.
+      FileSystemEntity.typeSync(p.join(projectPath, '.git')) != FileSystemEntityType.notFound;
+
+  @override
+  Future<List<String>> scriptsListingMembers(String projectPath) async {
+    final scripts = Directory(p.join(projectPath, 'scripts'));
+    if (!scripts.existsSync()) return const <String>[];
+    final names = <RegExp>[
+      for (final member in workspaceMembers(projectPath))
+        // `packages/core`, not `packages/core_utils` or `mypackages/core`.
+        RegExp('(?<![\\w-])${RegExp.escape(member.folder)}(?![\\w-])'),
+    ];
+    if (names.isEmpty) return const <String>[];
+    final listing = <String>[];
+    try {
+      await for (final entity in scripts.list(recursive: true, followLinks: false)) {
+        if (entity is! File) continue;
+        final String text;
+        try {
+          text = await entity.readAsString();
+        } on FileSystemException {
+          continue; // Not text.
+        }
+        if (names.any((name) => name.hasMatch(text))) {
+          listing.add(p.split(p.relative(entity.path, from: projectPath)).join('/'));
+        }
+      }
+    } on FileSystemException catch (error, stackTrace) {
+      l.w('Project creation | reading scripts failed: $error', stackTrace);
+    }
+    return listing..sort();
+  }
+
+  /// The stream of [run]: runs its steps once it is listened to.
+  Stream<CreationRun> _start(_Run run) {
+    final controller = run.controller;
     controller
       ..onListen = () {
         _runs.add(run);
         Future<void>(() async {
           try {
+            if (run.member != null) await _saveLock(run);
             await _execute(run);
           } on Object catch (error, stackTrace) {
             if (!run.cancelled && !controller.isClosed) controller.addError(error, stackTrace);
           } finally {
+            if (run.member case final member? when run.created && !run.kept) {
+              await _rollBack(run, member);
+            }
             _runs.remove(run);
             if (!controller.isClosed) controller.close().ignore();
+            run.finished.complete();
           }
         }).ignore();
       }
@@ -123,11 +206,48 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     await Future.wait<void>(<Future<void>>[for (final run in _runs.toList()) _cancel(run)]);
   }
 
-  /// Ends [run] without a word: kills its command and closes its stream.
+  /// Ends [run] without a word: kills its command and closes its stream. An add waits until it
+  /// has rolled back.
   Future<void> _cancel(_Run run) async {
     run.cancelled = true;
     await _stopProcess(run);
     if (!run.controller.isClosed) run.controller.close().ignore();
+    if (run.member != null) {
+      await run.finished.future.timeout(
+        _rollbackWait,
+        onTimeout: () {
+          l.w('Project creation | the add did not end in time to roll back');
+        },
+      );
+    }
+  }
+
+  /// Keeps the root's `pubspec.lock` of an add (or that there is none), for [_rollBack].
+  Future<void> _saveLock(_Run run) async {
+    final lock = File(p.join(run.root, 'pubspec.lock'));
+    run.savedLock = lock.existsSync() ? await lock.readAsBytes() : null;
+  }
+
+  /// Undoes an add that did not get to its commit: deletes the member's folder and puts the root's
+  /// `pubspec.lock` back. Touches nothing else. Never throws.
+  Future<void> _rollBack(_Run run, NewMemberRequest member) async {
+    String line;
+    try {
+      final folder = Directory(member.path);
+      if (folder.existsSync()) await folder.delete(recursive: true);
+      final lock = File(p.join(member.projectPath, 'pubspec.lock'));
+      if (run.savedLock case final bytes?) {
+        await lock.writeAsBytes(bytes, flush: true);
+      } else if (lock.existsSync()) {
+        await lock.delete();
+      }
+      line = 'Removed ${member.relative}';
+    } on Object catch (error, stackTrace) {
+      l.w('Project creation | rolling back ${member.relative} failed: $error', stackTrace);
+      line = 'Could not remove ${member.relative}: $error';
+    }
+    final last = run.steps.lastIndexWhere((step) => step.status != CreationStepStatus.pending);
+    if (last >= 0) run.addLine(last, line);
   }
 
   Future<void> _stopProcess(_Run run) async {
@@ -176,20 +296,33 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   }
 
   Future<void> _runStep(_Run run, int index) async {
-    final request = run.request;
-    final path = request.path;
+    final root = run.root;
+    final member = run.member;
     switch (run.steps[index].kind) {
       case CreationStepKind.workspace:
         await _writeWorkspace(run, index);
+      case CreationStepKind.memberCreate:
+        await _createAddedMember(run, index, member!);
       case CreationStepKind.pubGet:
         await _command(run, index, await _flutter(run), const <String>[
           'pub',
           'get',
-        ], workingDirectory: path);
-      case CreationStepKind.memberCreate:
+        ], workingDirectory: root);
       case CreationStepKind.commit:
-        throw UnimplementedError('${run.steps[index].kind.name}: Task 5');
+        // Only what the add made: the user's own changes stay out of the commit.
+        final git = _git();
+        await _command(run, index, git, <String>[
+          'add',
+          member!.relative,
+          'pubspec.lock',
+        ], workingDirectory: root);
+        await _command(run, index, git, <String>[
+          'commit',
+          '-m',
+          'Add ${member.kind.commitLabel} ${member.folder}',
+        ], workingDirectory: root);
       case CreationStepKind.flutterCreate:
+        final request = run.request;
         if (request.monorepo) {
           // The workspace step checked the folder of the project.
           await _createMember(
@@ -228,13 +361,35 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           ],
           // The skeleton step adds the packages first, then runs `pub get` itself.
           if (request.skeleton) '--no-pub',
-          path,
+          root,
         ], workingDirectory: request.parent);
       case CreationStepKind.gitInit:
-        await _command(run, index, _git(), const <String>['init'], workingDirectory: path);
+        await _command(run, index, _git(), const <String>['init'], workingDirectory: root);
       case CreationStepKind.skeleton:
+        if (member != null) {
+          await _writeAppSkeleton(
+            run,
+            index,
+            appPath: member.path,
+            package: member.packageName,
+            monorepo: true,
+          );
+          // A root without `build_runner` cannot build the workspace; the member has it.
+          final atRoot = _dependsOn(_rootPubspec(root), 'build_runner');
+          await _installSkeleton(
+            run,
+            index,
+            appPath: member.path,
+            buildIn: atRoot ? root : member.path,
+            workspace: atRoot,
+            // Only the member's files: the rest of the repository is the user's.
+            fixIn: member.path,
+          );
+          return;
+        }
+        final request = run.request;
         final monorepo = request.monorepo;
-        if (monorepo) await _writeUiPackage(run, index, request.path, _sdkConstraint(run));
+        if (monorepo) await _writeUiPackage(run, index, root, _sdkConstraint(run));
         await _writeAppSkeleton(
           run,
           index,
@@ -242,56 +397,125 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           package: monorepo ? request.appPackageName : request.name,
           monorepo: monorepo,
         );
-        final flutter = await _flutter(run);
-        await _command(run, index, flutter, <String>[
-          'pub',
-          'add',
-          ...skeletonPubAddArgumentsFor(
-            uiPath: monorepo ? p.join('..', '..', 'packages', 'ui') : 'packages/ui',
-          ),
-        ], workingDirectory: request.appPath);
-        if (monorepo) {
+        await _installSkeleton(
+          run,
+          index,
+          appPath: request.appPath,
           // The root has no dependencies yet; `build_runner build --workspace` runs from it.
-          await _command(run, index, flutter, const <String>[
-            'pub',
-            'add',
-            'dev:build_runner',
-          ], workingDirectory: path);
-        }
-        await _command(run, index, flutter, const <String>['pub', 'get'], workingDirectory: path);
-        // The drift database (`lib/_core/database/`) needs its generated part to compile.
-        await _command(run, index, _dart(flutter), <String>[
-          'run',
-          'build_runner',
-          'build',
-          if (monorepo) '--workspace',
-          '--delete-conflicting-outputs',
-        ], workingDirectory: path);
-        // The template's imports are sorted for no package in particular; `directives_ordering`
-        // (analysis_options.yaml) wants them sorted for this one.
-        await _command(run, index, _dart(flutter), const <String>[
-          'fix',
-          '--apply',
-          '--code=directives_ordering',
-        ], workingDirectory: path);
+          addRootBuildRunner: monorepo,
+          buildIn: root,
+          workspace: monorepo,
+          fixIn: root,
+        );
       case CreationStepKind.analyze:
+        // An added member is checked alone; a new project as a whole.
         await _command(run, index, await _flutter(run), const <String>[
           'analyze',
-        ], workingDirectory: path);
+        ], workingDirectory: member?.path ?? root);
       case CreationStepKind.rules:
-        for (final name in await _writeRules(path)) {
+        for (final name in await _writeRules(root)) {
           run.addLine(index, '✎ docs/rules/$name.md');
         }
       case CreationStepKind.firstCommit:
         final git = _git();
-        await _command(run, index, git, const <String>['add', '-A'], workingDirectory: path);
+        await _command(run, index, git, const <String>['add', '-A'], workingDirectory: root);
         await _command(run, index, git, const <String>[
           'commit',
           '-m',
           'Initial commit',
-        ], workingDirectory: path);
+        ], workingDirectory: root);
     }
   }
+
+  /// The packages of the skeleton and their generated code: `pub add` in [appPath], `pub get` at
+  /// the root, `build_runner` in [buildIn] (over the whole [workspace] or that package alone), and
+  /// the imports sorted in [fixIn]. With [addRootBuildRunner] the root gets `build_runner` first.
+  Future<void> _installSkeleton(
+    _Run run,
+    int index, {
+    required String appPath,
+    required String buildIn,
+    required bool workspace,
+    required String fixIn,
+    bool addRootBuildRunner = false,
+  }) async {
+    final root = run.root;
+    final flutter = await _flutter(run);
+    await _command(run, index, flutter, <String>[
+      'pub',
+      'add',
+      ...skeletonPubAddArgumentsFor(
+        uiPath: appPath == root ? 'packages/ui' : p.join('..', '..', 'packages', 'ui'),
+      ),
+    ], workingDirectory: appPath);
+    if (addRootBuildRunner) {
+      await _command(run, index, flutter, const <String>[
+        'pub',
+        'add',
+        'dev:build_runner',
+      ], workingDirectory: root);
+    }
+    await _command(run, index, flutter, const <String>['pub', 'get'], workingDirectory: root);
+    // The drift database (`lib/_core/database/`) needs its generated part to compile.
+    await _command(run, index, _dart(flutter), <String>[
+      'run',
+      'build_runner',
+      'build',
+      if (workspace) '--workspace',
+      '--delete-conflicting-outputs',
+    ], workingDirectory: buildIn);
+    // The template's imports are sorted for no package in particular; `directives_ordering`
+    // (analysis_options.yaml) wants them sorted for this one.
+    await _command(run, index, _dart(flutter), const <String>[
+      'fix',
+      '--apply',
+      '--code=directives_ordering',
+    ], workingDirectory: fixIn);
+  }
+
+  /// The `memberCreate` step of an add: checks that the folder is free, then creates the member
+  /// with the SDK constraint of the root's `pubspec.yaml`.
+  Future<void> _createAddedMember(_Run run, int index, NewMemberRequest member) async {
+    // `flutter create` writes into an existing folder without a word.
+    final type = FileSystemEntity.typeSync(member.path, followLinks: false);
+    if (type != FileSystemEntityType.notFound) {
+      throw const _StepFailure('The folder already exists');
+    }
+    final environment = _rootPubspec(member.projectPath)?['environment'];
+    final constraint = environment is YamlMap ? environment['sdk'] : null;
+    if (constraint is! String) {
+      throw const _StepFailure('The root pubspec.yaml has no environment: sdk:');
+    }
+    // From here on the folder is the add's own, and a rollback may delete it.
+    run.created = true;
+    await _createMember(
+      run,
+      index,
+      kind: member.kind,
+      path: member.path,
+      packageName: member.packageName,
+      org: member.org,
+      platforms: member.platforms,
+      sdkConstraint: constraint,
+    );
+  }
+
+  /// The root `pubspec.yaml` of the project at [root]; `null` when it is missing or unreadable.
+  YamlMap? _rootPubspec(String root) {
+    try {
+      final yaml = loadYaml(File(p.join(root, 'pubspec.yaml')).readAsStringSync());
+      return yaml is YamlMap ? yaml : null;
+    } on Object catch (error, stackTrace) {
+      l.w('Project creation | reading $root/pubspec.yaml failed: $error', stackTrace);
+      return null;
+    }
+  }
+
+  /// Whether [pubspec] lists [package] in its dependencies or dev dependencies.
+  bool _dependsOn(YamlMap? pubspec, String package) => <Object?>[
+    pubspec?['dependencies'],
+    pubspec?['dev_dependencies'],
+  ].any((section) => section is YamlMap && section.containsKey(package));
 
   /// The `flutter` of the SDK the form shows, looked up once per creation.
   Future<String> _flutter(_Run run) async =>
@@ -379,34 +603,6 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       package: run.request.name,
     );
     await _joinWorkspace(File(p.join(root, 'packages', 'ui', 'pubspec.yaml')), sdkConstraint);
-  }
-
-  /// Runs [_createMember] alone, for tests: the member is added to the monorepo of [request]
-  /// without a step list. Task 5's "Add to project" calls [_createMember] itself.
-  @visibleForTesting
-  Future<void> createMemberForTest(
-    NewProjectRequest request, {
-    required MemberKind kind,
-    required String path,
-    required String packageName,
-    required String sdkConstraint,
-  }) async {
-    final controller = StreamController<CreationRun>();
-    final run = _Run(request, controller);
-    try {
-      await _createMember(
-        run,
-        0,
-        kind: kind,
-        path: path,
-        packageName: packageName,
-        org: request.org,
-        platforms: request.platforms,
-        sdkConstraint: sdkConstraint,
-      );
-    } finally {
-      controller.close().ignore();
-    }
   }
 
   /// Creates a member of a monorepo at [path] (`<root>/<apps|packages>/<folder>`) and joins it
@@ -522,7 +718,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       files: monorepo ? projectTemplateAppFiles : projectTemplateFiles,
       to: appPath,
       package: package,
-      label: monorepo ? '${p.relative(appPath, from: run.request.path)}/' : '',
+      label: monorepo ? '${p.split(p.relative(appPath, from: run.root)).join('/')}/' : '',
     );
     final pubspec = File(p.join(appPath, 'pubspec.yaml'));
     final lines = (await pubspec.readAsString()).split('\n');
@@ -622,16 +818,35 @@ String? _constraintOf(String? dartVersion) {
 List<String> _bounded(List<String> lines) =>
     lines.length <= kCreationOutputKept ? lines : lines.sublist(lines.length - kCreationOutputKept);
 
-/// One creation: its steps as of now and the command running for it.
+/// One creation, of a project or of a member added to a monorepo: its steps as of now and the
+/// command running for it.
 final class _Run {
-  _Run(this.request, this.controller)
-    : steps = <CreationStep>[
-        for (final kind in creationStepsFor(request)) CreationStep(kind: kind),
+  _Run.project(NewProjectRequest this.project)
+    : member = null,
+      root = project.path,
+      steps = <CreationStep>[
+        for (final kind in creationStepsFor(project)) CreationStep(kind: kind),
       ];
 
-  final NewProjectRequest request;
-  final StreamController<CreationRun> controller;
+  _Run.member(NewMemberRequest this.member)
+    : project = null,
+      root = member.projectPath,
+      steps = <CreationStep>[for (final kind in memberStepsFor(member)) CreationStep(kind: kind)];
+
+  /// The new project; `null` for an add.
+  final NewProjectRequest? project;
+
+  /// The member to add; `null` for a new project.
+  final NewMemberRequest? member;
+
+  /// The project folder: the new one, or the monorepo the member is added to.
+  final String root;
+
+  final StreamController<CreationRun> controller = StreamController<CreationRun>();
   List<CreationStep> steps;
+
+  /// Completes once the run is over, an add rolled back included.
+  final Completer<void> finished = Completer<void>();
 
   /// The command running now.
   DaemonProcess? process;
@@ -642,11 +857,26 @@ final class _Run {
   /// The SDK constraint of a monorepo, once the workspace step worked it out.
   String? sdkConstraint;
 
+  /// The root's `pubspec.lock` before an add; `null` when there was none.
+  Uint8List? savedLock;
+
+  /// An add got past its folder check: the member's folder is its own to delete.
+  bool created = false;
+
   /// [ProjectCreationRepositoryImpl.stop] was called: the step fails, nothing further runs.
   bool stopped = false;
 
   /// The subscription was cancelled or the repository disposed: nothing more is emitted.
   bool cancelled = false;
+
+  /// The new project; only the steps of a new project ask for it.
+  NewProjectRequest get request => project ?? (throw StateError('Not a new project'));
+
+  /// Whether an add is past undoing: every step but `analyze` is done. The commit (or, without
+  /// one, the step before `analyze`) is the last one a rollback covers.
+  bool get kept => steps.every(
+    (step) => step.kind == CreationStepKind.analyze || step.status == CreationStepStatus.done,
+  );
 
   /// Throws when the run must not go on.
   void checkLive() {

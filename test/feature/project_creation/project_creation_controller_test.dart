@@ -279,7 +279,7 @@ void main() {
   });
 }
 
-final class _FailingRepository implements IProjectCreationRepository {
+final class _FailingRepository with CreateOnlyProjectCreation {
   @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 
@@ -304,7 +304,7 @@ final class _FailingRepository implements IProjectCreationRepository {
 }
 
 /// A stream whose last snapshot has the step at [failAt] failed and ends without an error.
-final class _FailedStepRepository implements IProjectCreationRepository {
+final class _FailedStepRepository with CreateOnlyProjectCreation {
   _FailedStepRepository({this.failAt = 0});
 
   final int failAt;
@@ -341,7 +341,7 @@ final class _FailedStepRepository implements IProjectCreationRepository {
 
 /// A stream that leaves the second step running and ends normally, as after a dispose of the
 /// repository.
-final class _InterruptedRepository implements IProjectCreationRepository {
+final class _InterruptedRepository with CreateOnlyProjectCreation {
   @override
   Future<String> defaultParent() async => '/Users/test/StudioProjects';
 

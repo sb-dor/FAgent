@@ -34,7 +34,7 @@ Future<void> _settle(WidgetTester tester) async {
 }
 
 /// A repository whose target checks answer when the test says so.
-final class _SlowTargets implements IProjectCreationRepository {
+final class _SlowTargets with CreateOnlyProjectCreation {
   final Map<String, Completer<TargetProblem?>> answers = <String, Completer<TargetProblem?>>{};
 
   @override
@@ -54,7 +54,7 @@ final class _SlowTargets implements IProjectCreationRepository {
 }
 
 /// A repository whose default folder arrives when the test says so.
-final class _SlowParent implements IProjectCreationRepository {
+final class _SlowParent with CreateOnlyProjectCreation {
   final Completer<String> parent = Completer<String>();
 
   @override
@@ -74,7 +74,7 @@ final class _SlowParent implements IProjectCreationRepository {
 
 /// A repository whose folder questions fail like an unreadable (protected) parent does:
 /// [checkTarget] throws for every name but `fine`.
-final class _FailingFolders implements IProjectCreationRepository {
+final class _FailingFolders with CreateOnlyProjectCreation {
   _FailingFolders({this.failDefaultParent = false});
 
   final bool failDefaultParent;
