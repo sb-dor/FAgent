@@ -228,13 +228,10 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     run.savedLock = lock.existsSync() ? await lock.readAsBytes() : null;
   }
 
-  /// What an add stages and commits, relative to the root: its member's folder and the lock.
-  List<String> _addedPaths(NewMemberRequest member) => <String>[member.relative, 'pubspec.lock'];
-
   /// Undoes an add that did not get to its commit: unstages what it staged, deletes the member's
   /// folder and puts the root's `pubspec.lock` back. Touches nothing else. Never throws.
   Future<void> _rollBack(_Run run, NewMemberRequest member) async {
-    if (run.staged) await _unstage(member);
+    if (run.staged case final paths?) await _unstage(member, paths);
     String line;
     try {
       final folder = Directory(member.path);
@@ -254,14 +251,14 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     if (last >= 0) run.addLine(last, line);
   }
 
-  /// `git reset -q -- <member> pubspec.lock`: takes the add's own paths out of the index again.
-  /// Runs while the run is stopped or cancelled, so outside [_command]; its output is dropped.
-  /// Never throws.
-  Future<void> _unstage(NewMemberRequest member) async {
+  /// `git reset -q -- <paths>`: takes the [paths] the add staged out of the index again. Runs
+  /// while the run is stopped or cancelled, so outside [_command]; its output is dropped. Never
+  /// throws.
+  Future<void> _unstage(NewMemberRequest member, List<String> paths) async {
     try {
       final process = await _startProcess(
         _git(),
-        <String>['reset', '-q', '--', ..._addedPaths(member)],
+        <String>['reset', '-q', '--', ...paths],
         workingDirectory: member.projectPath,
         environment: _environment.variables,
       );
@@ -346,8 +343,20 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         // Only what the add made: with the pathspec, what the user had staged stays staged and out
         // of the commit.
         final git = _git();
-        final paths = _addedPaths(member!);
-        run.staged = true;
+        // A repository that ignores the lock (and does not track it) fails `git add` and the
+        // commit's pathspec on it: then only the member goes in. A tracked lock is never ignored.
+        final lockIgnored =
+            await _command(
+              run,
+              index,
+              git,
+              const <String>['check-ignore', '-q', 'pubspec.lock'],
+              workingDirectory: root,
+              accepted: const <int>{0, 1},
+            ) ==
+            0;
+        final paths = <String>[member!.relative, if (!lockIgnored) 'pubspec.lock'];
+        run.staged = paths;
         await _command(run, index, git, <String>['add', ...paths], workingDirectory: root);
         await _command(
           run,
@@ -791,14 +800,16 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   }
 
   /// Runs [executable] in [workingDirectory] with the shell environment, its stdout and stderr
-  /// going into the output of step [index]. Throws [_StepFailure] on a non-zero exit code.
-  /// [succeeded] is called as soon as it exits with 0, before a stop or cancel can fail the step.
-  Future<void> _command(
+  /// going into the output of step [index]. Returns its exit code; throws [_StepFailure] on one
+  /// that is not [accepted]. [succeeded] is called as soon as it exits with 0, before a stop or
+  /// cancel can fail the step.
+  Future<int> _command(
     _Run run,
     int index,
     String executable,
     List<String> arguments, {
     required String workingDirectory,
+    Set<int> accepted = const <int>{0},
     void Function()? succeeded,
   }) async {
     run.checkLive();
@@ -831,7 +842,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       await Future.wait<void>(<Future<void>>[stdoutDone.future, stderrDone.future])
           .timeout(_drainTimeout, onTimeout: () => const <void>[]);
       run.checkLive();
-      if (exitCode != 0) throw const _StepFailure(null);
+      if (!accepted.contains(exitCode)) throw const _StepFailure(null);
+      return exitCode;
     } finally {
       run.process = null;
       for (final subscription in subscriptions) {
@@ -909,8 +921,8 @@ final class _Run {
   /// An add got past its folder check: the member's folder is its own to delete.
   bool created = false;
 
-  /// An add ran `git add`: a rollback takes its paths out of the index again.
-  bool staged = false;
+  /// The paths an add gave to `git add`: a rollback takes them out of the index again.
+  List<String>? staged;
 
   /// An add's `git commit` exited with 0: it is never rolled back.
   bool committed = false;

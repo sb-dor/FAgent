@@ -878,6 +878,9 @@ void main() {
 
   group('add member', () {
     const lockBefore = 'lock before\n';
+
+    /// What the fake `git check-ignore -q pubspec.lock` answers.
+    var lockIgnored = false;
     String root() => p.join(parent.path, 'shop');
     String file(String relative) => p.joinAll(<String>[root(), ...relative.split('/')]);
     String read(String relative) => File(file(relative)).readAsStringSync();
@@ -935,8 +938,46 @@ void main() {
             .writeAsStringSync('include: package:lints/recommended.yaml\n');
       }
       if (isPub(process)) File(file('pubspec.lock')).writeAsStringSync('lock after\n');
+      if (process.executable == git() && process.arguments.first == 'check-ignore') {
+        // `check-ignore -q` prints nothing: 0 is ignored, 1 is not.
+        Timer.run(() => process.exit(lockIgnored ? 0 : 1));
+        return;
+      }
       finish(process);
     }
+
+    /// Runs real git in the root and expects it to succeed; returns its stdout.
+    String gitIn(List<String> arguments) {
+      final result = Process.runSync('git', arguments, workingDirectory: root());
+      expect(result.exitCode, 0, reason: '${arguments.join(' ')}: ${result.stderr}');
+      return '${result.stdout}';
+    }
+
+    /// Makes the root a real git repository with everything in it committed, and lets the fake
+    /// git run the real one.
+    void realGit() {
+      gitIn(<String>['init', '-q']);
+      gitIn(<String>['config', 'user.email', 'test@example.com']);
+      gitIn(<String>['config', 'user.name', 'Test']);
+      gitIn(<String>['config', 'commit.gpgsign', 'false']);
+      gitIn(<String>['add', '-A']);
+      gitIn(<String>['commit', '-q', '-m', 'Initial commit']);
+      script = (process) {
+        if (process.executable != git()) return resolving(process);
+        final result = Process.runSync(
+          'git',
+          process.arguments,
+          workingDirectory: process.workingDirectory,
+        );
+        Timer.run(() => process.exit(result.exitCode));
+      };
+    }
+
+    /// The subject and files of the last commit.
+    List<String> lastCommit() =>
+        gitIn(<String>['show', '--name-only', '--format=%s', 'HEAD']).trim().split('\n');
+
+    final noGit = Process.runSync('git', <String>['--version']).exitCode == 0 ? false : 'no git';
 
     /// The processes started, as `[executable, arguments, workingDirectory]`.
     List<List<Object?>> commands() => <List<Object?>>[
@@ -946,6 +987,7 @@ void main() {
 
     setUp(() {
       monorepoOnDisk();
+      lockIgnored = false;
       script = resolving;
     });
 
@@ -998,6 +1040,11 @@ void main() {
           dart(),
           <String>['fix', '--apply', '--code=directives_ordering'],
           admin,
+        ],
+        <Object?>[
+          git(),
+          <String>['check-ignore', '-q', 'pubspec.lock'],
+          root(),
         ],
         <Object?>[
           git(),
@@ -1105,6 +1152,7 @@ void main() {
       expect(
         started.where((process) => process.executable == git()).map((process) => process.arguments),
         <List<String>>[
+          <String>['check-ignore', '-q', 'pubspec.lock'],
           <String>['add', 'apps/admin', 'pubspec.lock'],
           // The pathspec keeps what the user had staged out of the commit.
           <String>['commit', '-m', 'Add Flutter app admin', '--', 'apps/admin', 'pubspec.lock'],
@@ -1113,40 +1161,46 @@ void main() {
     });
 
     test('a file staged before the add stays staged and out of the commit', () async {
-      String gitIn(List<String> arguments) {
-        final result = Process.runSync('git', arguments, workingDirectory: root());
-        expect(result.exitCode, 0, reason: '${arguments.join(' ')}: ${result.stderr}');
-        return '${result.stdout}';
-      }
-
-      gitIn(<String>['init', '-q']);
-      gitIn(<String>['config', 'user.email', 'test@example.com']);
-      gitIn(<String>['config', 'user.name', 'Test']);
-      gitIn(<String>['config', 'commit.gpgsign', 'false']);
-      gitIn(<String>['add', '-A']);
-      gitIn(<String>['commit', '-q', '-m', 'Initial commit']);
+      realGit();
       File(file('notes.txt')).writeAsStringSync('mine\n');
       gitIn(<String>['add', 'notes.txt']);
-      // The fake git runs the real one.
-      script = (process) {
-        if (process.executable != git()) return resolving(process);
-        final result = Process.runSync(
-          'git',
-          process.arguments,
-          workingDirectory: process.workingDirectory,
-        );
-        Timer.run(() => process.exit(result.exitCode));
-      };
 
       final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
 
       expect(step(runs.last, CreationStepKind.commit).status, CreationStepStatus.done);
-      final committed = gitIn(<String>['show', '--name-only', '--format=%s', 'HEAD']).split('\n');
+      final committed = lastCommit();
       expect(committed.first, 'Add Flutter app admin');
       expect(committed, containsAll(<String>['apps/admin/pubspec.yaml', 'pubspec.lock']));
       expect(committed, isNot(contains('notes.txt')));
       expect(gitIn(<String>['diff', '--cached', '--name-only']), 'notes.txt\n');
-    }, skip: Process.runSync('git', <String>['--version']).exitCode == 0 ? false : 'no git');
+    }, skip: noGit);
+
+    test('a repository that ignores pubspec.lock gets the member alone', () async {
+      File(file('pubspec.lock')).deleteSync();
+      File(file('.gitignore')).writeAsStringSync('pubspec.lock\n');
+      realGit();
+
+      final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      final committed = lastCommit();
+      expect(committed.first, 'Add Flutter app admin');
+      expect(committed, contains('apps/admin/pubspec.yaml'));
+      expect(committed, isNot(contains('pubspec.lock')));
+      expect(gitIn(<String>['status', '--porcelain']), isEmpty);
+      expect(read('pubspec.lock'), 'lock after\n');
+    }, skip: noGit);
+
+    test('a tracked pubspec.lock is committed even when .gitignore lists it', () async {
+      realGit();
+      File(file('.gitignore')).writeAsStringSync('pubspec.lock\n');
+      gitIn(<String>['add', '.gitignore']);
+      gitIn(<String>['commit', '-q', '-m', 'Ignore the lock']);
+
+      await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(lastCommit(), containsAll(<String>['apps/admin/pubspec.yaml', 'pubspec.lock']));
+    }, skip: noGit);
 
     test('stop rolls back', () async {
       script = (process) {
@@ -1238,6 +1292,10 @@ void main() {
             .map((process) => <Object?>[process.arguments, process.workingDirectory]),
         <List<Object?>>[
           <Object?>[
+            <String>['check-ignore', '-q', 'pubspec.lock'],
+            root(),
+          ],
+          <Object?>[
             <String>['add', 'apps/admin', 'pubspec.lock'],
             root(),
           ],
@@ -1249,6 +1307,29 @@ void main() {
             <String>['reset', '-q', '--', 'apps/admin', 'pubspec.lock'],
             root(),
           ],
+        ],
+      );
+    });
+
+    test('a failed commit with an ignored lock unstages the member alone', () async {
+      lockIgnored = true;
+      script = (process) {
+        if (process.executable != git() || process.arguments.first != 'commit') {
+          return resolving(process);
+        }
+        Timer.run(() => process.exit(1));
+      };
+      await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      expect(exists('apps/admin'), isFalse);
+      expect(read('pubspec.lock'), lockBefore);
+      expect(
+        started.where((process) => process.executable == git()).map((process) => process.arguments),
+        <List<String>>[
+          <String>['check-ignore', '-q', 'pubspec.lock'],
+          <String>['add', 'apps/admin'],
+          <String>['commit', '-m', 'Add Flutter app admin', '--', 'apps/admin'],
+          <String>['reset', '-q', '--', 'apps/admin'],
         ],
       );
     });
