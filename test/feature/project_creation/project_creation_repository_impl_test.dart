@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/data/project_cre
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -832,6 +833,53 @@ void main() {
       expect(again.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
       expect(started.first.arguments.first, 'create');
       expect(started.first.arguments.last, p.join(root(), 'apps', 'app'));
+    });
+
+    test('members inherit the root analysis options', () async {
+      await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+
+      expect(read('apps/app/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
+    });
+
+    test('a Dart member is renamed and its imports follow', () async {
+      script = (process) {
+        if (process.executable == p.join(p.dirname(_flutter), 'dart') &&
+            process.arguments.first == 'create') {
+          final dir = process.arguments.last;
+          Directory(p.join(dir, 'bin')).createSync(recursive: true);
+          Directory(p.join(dir, '.dart_tool')).createSync(recursive: true);
+          File(p.join(dir, 'pubspec.yaml')).writeAsStringSync(
+            'name: server\n\nenvironment:\n  sdk: ^3.10.4\n\ndependencies:\n  path: ^1.0.0\n',
+          );
+          File(p.join(dir, 'bin', 'server.dart'))
+              .writeAsStringSync("import 'package:server/server.dart';\n");
+          File(p.join(dir, '.dart_tool', 'x.dart'))
+              .writeAsStringSync("import 'package:server/server.dart';\n");
+          File(p.join(dir, 'analysis_options.yaml'))
+              .writeAsStringSync('include: package:lints/recommended.yaml\n');
+        }
+        finish(process);
+      };
+      Directory(root()).createSync();
+      final request = monorepo(template: NewProjectTemplate.plain);
+      final member = p.join(root(), 'apps', 'server');
+
+      await build().createMemberForTest(
+        request,
+        kind: MemberKind.dartApp,
+        path: member,
+        packageName: 'shop_server',
+        sdkConstraint: '^3.14.0',
+      );
+
+      expect(started.single.arguments, <String>['create', '-t', 'console', '--no-pub', member]);
+      expect(started.single.workingDirectory, root());
+      final pubspec = read('apps/server/pubspec.yaml');
+      expect(pubspec, startsWith('name: shop_server\n'));
+      expect(pubspec, contains('sdk: ^3.14.0\n\nresolution: workspace\n'));
+      expect(read('apps/server/bin/server.dart'), "import 'package:shop_server/server.dart';\n");
+      expect(read('apps/server/.dart_tool/x.dart'), contains('package:server/'));
+      expect(read('apps/server/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
     });
 
     test('empty monorepo runs pub get in the root', () async {

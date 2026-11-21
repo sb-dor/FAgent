@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
@@ -380,6 +381,34 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     await _joinWorkspace(File(p.join(root, 'packages', 'ui', 'pubspec.yaml')), sdkConstraint);
   }
 
+  /// Runs [_createMember] alone, for tests: the member is added to the monorepo of [request]
+  /// without a step list. Task 5's "Add to project" calls [_createMember] itself.
+  @visibleForTesting
+  Future<void> createMemberForTest(
+    NewProjectRequest request, {
+    required MemberKind kind,
+    required String path,
+    required String packageName,
+    required String sdkConstraint,
+  }) async {
+    final controller = StreamController<CreationRun>();
+    final run = _Run(request, controller);
+    try {
+      await _createMember(
+        run,
+        0,
+        kind: kind,
+        path: path,
+        packageName: packageName,
+        org: request.org,
+        platforms: request.platforms,
+        sdkConstraint: sdkConstraint,
+      );
+    } finally {
+      controller.close().ignore();
+    }
+  }
+
   /// Creates a member of a monorepo at [path] (`<root>/<apps|packages>/<folder>`) and joins it
   /// to the workspace: `resolution: workspace` and the root's [sdkConstraint]. No `pub get` runs:
   /// the workspace does it once, at its root.
@@ -424,16 +453,41 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           path,
         ], workingDirectory: root);
     }
-    await _joinWorkspace(File(p.join(path, 'pubspec.yaml')), sdkConstraint, name: packageName);
+    final created = await _joinWorkspace(
+      File(p.join(path, 'pubspec.yaml')),
+      sdkConstraint,
+      name: packageName,
+    );
+    // `dart create` names the package after the folder; its `bin/` and `test/` import it.
+    if (created != null && created != packageName)
+      await _renameImports(Directory(path), created, packageName);
+    // The member's own `analysis_options.yaml` would shadow the root's; it inherits it instead.
+    await File(p.join(path, 'analysis_options.yaml'))
+        .writeAsString('include: ../../analysis_options.yaml\n');
+  }
+
+  /// Replaces `package:[from]/` with `package:[to]/` in the Dart files under [directory].
+  Future<void> _renameImports(Directory directory, String from, String to) async {
+    await for (final entity in directory.list(recursive: true, followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final relative = p.split(p.relative(entity.path, from: directory.path));
+      if (relative.contains('.dart_tool') || relative.contains('build')) continue;
+      final text = await entity.readAsString();
+      if (text.contains('package:$from/')) {
+        await entity.writeAsString(text.replaceAll('package:$from/', 'package:$to/'));
+      }
+    }
   }
 
   /// Edits the `pubspec.yaml` of a member: [name] (when given), the SDK constraint of the root and
-  /// `resolution: workspace` after the `environment:` block.
-  Future<void> _joinWorkspace(File pubspec, String sdkConstraint, {String? name}) async {
+  /// `resolution: workspace` after the `environment:` block. Returns the name the package had.
+  Future<String?> _joinWorkspace(File pubspec, String sdkConstraint, {String? name}) async {
     final lines = (await pubspec.readAsString()).split('\n');
+    String? was;
     if (name != null) {
       final at = lines.indexWhere((line) => line.startsWith('name:'));
       if (at < 0) throw const _StepFailure('pubspec.yaml has no name:');
+      was = lines[at].substring('name:'.length).trim();
       lines[at] = 'name: $name';
     }
     final environment = lines.indexOf('environment:');
@@ -447,6 +501,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       lines.insertAll(end, const <String>['', 'resolution: workspace']);
     }
     await pubspec.writeAsString(lines.join('\n'));
+    return was;
   }
 
   /// Copies the template with the package name filled in, then edits `pubspec.yaml`: gen-l10n on
