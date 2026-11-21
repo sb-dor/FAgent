@@ -335,6 +335,18 @@ void main() {
     expect(failing.state, isA<ProjectCreation$FailedState>());
   });
 
+  test('a failing notes lookup still completes the add, with no notes', () async {
+    final throwing = build(_ThrowingNotesRepository());
+    addTearDown(throwing.dispose);
+
+    throwing.startAdd(_member);
+    await _until(throwing, () => throwing.state is! ProjectCreation$RunningState);
+
+    final state = throwing.state as ProjectCreation$CompletedState;
+    expect(state.notes, isEmpty);
+    expect(state.member, _member);
+  });
+
   test('startAdd is dropped while another run is going, and stop applies to it', () async {
     controller
       ..startAdd(_member)
@@ -371,6 +383,38 @@ void main() {
 
     expect(sliding.isDisposed, isTrue);
   });
+}
+
+/// A repository whose add succeeds but whose notes lookup throws.
+final class _ThrowingNotesRepository with CreateOnlyProjectCreation {
+  @override
+  Future<String> defaultParent() async => '/Users/test/StudioProjects';
+
+  @override
+  Future<TargetProblem?> checkTarget(String parent, String name) async => null;
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Stream<CreationRun> create(NewProjectRequest request) => const Stream<CreationRun>.empty();
+
+  @override
+  Stream<CreationRun> addMember(NewMemberRequest request) async* {
+    yield CreationRun(
+      steps: <CreationStep>[
+        for (final kind in memberStepsFor(request))
+          CreationStep(kind: kind, status: CreationStepStatus.done),
+      ],
+    );
+  }
+
+  @override
+  Future<List<String>> scriptsListingMembers(String projectPath) async =>
+      throw StateError('no scripts');
 }
 
 final class _FailingRepository with CreateOnlyProjectCreation {

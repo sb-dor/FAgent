@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
@@ -141,8 +142,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     afterSuccess: () async {
       try {
         return await _repository.scriptsListingMembers(request.projectPath);
-      } on Object {
+      } on Object catch (error, stackTrace) {
         // The notes are advice only; the member is added either way.
+        ErrorUtil.logError(error, stackTrace).ignore();
         return const <String>[];
       }
     },
