@@ -61,7 +61,10 @@ abstract interface class IAppRunRepository {
 
   /// Starts the app on [device] with the project's [arguments] and returns once the build began;
   /// follow it through [watchRun]. A running app is stopped and started again. `flutter run` runs
-  /// in the project folder; [environment] is added over the app's own environment.
+  /// in [appFolder] of the project (`apps/desktop`; `''`, the default, is the project folder), with
+  /// the Flutter SDK of the project and [target] relative to that folder; [environment] is added
+  /// over the app's own environment. Error locations and screenshots stay relative to the project
+  /// folder.
   Future<void> start(
     int projectId, {
     required Device device,
@@ -69,6 +72,7 @@ abstract interface class IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   });
 
   /// Stops the app. Does nothing when it is not running.
@@ -258,6 +262,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   }) async {
     if (_disposed) return;
     final run = _run(projectId);
@@ -271,15 +276,16 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     run.runStartSeq = run.nextSeq;
     final path = await _projectPath(projectId);
     if (!current()) return;
-    if (path == null || !io.Directory(path).existsSync()) {
+    final appPath = path == null || appFolder.isEmpty ? path : p.join(path, appFolder);
+    if (path == null || appPath == null || !io.Directory(appPath).existsSync()) {
       run.setState(
         RunFailed(
           error: RunError(
             kind: RunErrorKind.projectNotFound,
             title: 'Project folder not found',
-            message: path == null
+            message: appPath == null
                 ? 'The folder of this project is unknown.'
-                : '$path does not exist.',
+                : '$appPath does not exist.',
           ),
         ),
       );
@@ -298,7 +304,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       );
       return;
     }
-    final packageName = _packageName(path);
+    final packageName = _packageName(appPath);
 
     final flutterArgs = <String>[
       'run',
@@ -318,6 +324,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
         projectRoot: path,
         resolvedProjectRoot: _resolved(path),
         packageName: packageName,
+        appFolder: appFolder,
       ),
       connectErrors: _connectErrors,
       stopTimeout: _stopTimeout,
@@ -339,7 +346,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       () => _start(
         flutter,
         flutterArgs,
-        workingDirectory: path,
+        workingDirectory: appPath,
         environment: environment.isEmpty
             ? _environment
             : <String, String>{..._environment, ...environment},
@@ -487,7 +494,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     }
   }
 
-  /// The `name:` of the project's `pubspec.yaml`, else the name of its folder.
+  /// The `name:` of the `pubspec.yaml` in [path], else the name of the folder.
   static String _packageName(String path) {
     try {
       final yaml = loadYaml(io.File(p.join(path, 'pubspec.yaml')).readAsStringSync());

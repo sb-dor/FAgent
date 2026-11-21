@@ -91,6 +91,7 @@ void main() {
     late DateTime clock;
     late FlutterErrorListenerConnect connectErrors;
     late List<Uri> connectedTo;
+    late List<String> flutterAskedFor;
     final subscriptions = <StreamSubscription<Object?>>[];
 
     ScriptedDaemonProcess create() {
@@ -174,9 +175,13 @@ void main() {
       // Unless a test connects, the VM service never answers: the output text is all there is.
       connectErrors = (_) => Completer<IFlutterErrorListener>().future;
       connectedTo = <Uri>[];
+      flutterAskedFor = <String>[];
       repository = AppRunRepositoryImpl(
         projectPath: (id) async => paths[id],
-        flutter: (_) => flutterPath,
+        flutter: (path) {
+          flutterAskedFor.add(path);
+          return flutterPath;
+        },
         environment: const <String, String>{'PATH': '/usr/bin'},
         start: scriptedStarter(create, started: started),
         stopTimeout: const Duration(milliseconds: 50),
@@ -994,6 +999,79 @@ void main() {
         (await unhandledIn(3, '#0      main (package:folder_name/b.dart:4:1)')).file,
         'lib/b.dart',
       );
+    });
+
+    group('in an app folder', () {
+      late String monorepo;
+
+      setUp(() {
+        monorepo = project('shop', pubspecName: 'shop_workspace');
+        final app = io.Directory(p.join(monorepo, 'apps', 'desktop'))..createSync(recursive: true);
+        io.File(p.join(app.path, 'pubspec.yaml')).writeAsStringSync('name: shop_desktop\n');
+        paths[4] = monorepo;
+      });
+
+      Future<void> startApp() async {
+        await repository.start(
+          4,
+          device: _macos,
+          mode: BuildMode.debug,
+          target: 'lib/main.dart',
+          appFolder: 'apps/desktop',
+        );
+        await pumpEventQueue();
+      }
+
+      test('start in an app folder runs flutter there', () async {
+        await startApp();
+
+        final process = started.single;
+        expect(process.workingDirectory, p.join(monorepo, 'apps', 'desktop'));
+        expect(process.arguments, containsAllInOrder(<String>['-t', 'lib/main.dart']));
+        expect(flutterAskedFor.last, monorepo, reason: 'the SDK is the project root\'s');
+      });
+
+      test('error locations of an app are project-relative', () async {
+        final log = logs(4);
+        await startApp();
+        final process = started.single;
+        await launch(process);
+        for (final line in <String>[
+          '[ERROR:flutter/runtime/dart_vm_initializer.cc(40)] Unhandled Exception: Bad state: x',
+          '#0      main (package:shop_desktop/home.dart:3:5)',
+        ]) {
+          await emit(process, 'app.log', <String, Object?>{'appId': 'app-1', 'log': line});
+        }
+        process.emitError("lib/main.dart:3:1: Error: Expected ';' after this.");
+        await repository.stop(4);
+        await pumpEventQueue();
+
+        final errors = log.where((entry) => entry.error != null).map((entry) => entry.error!);
+        expect(errors.first.file, 'apps/desktop/lib/home.dart');
+        expect(errors.first.line, 3);
+        expect(
+          errors.last.file,
+          'apps/desktop/lib/main.dart',
+          reason: 'a path flutter prints relative to the app folder',
+        );
+      });
+
+      test('an app folder that is gone fails with "Project folder not found"', () async {
+        final seen = states(4);
+        await repository.start(
+          4,
+          device: _macos,
+          mode: BuildMode.debug,
+          target: 'lib/main.dart',
+          appFolder: 'apps/gone',
+        );
+        await pumpEventQueue();
+
+        expect(started, isEmpty);
+        final error = (seen.last as RunFailed).error;
+        expect(error.title, 'Project folder not found');
+        expect(error.message, '${p.join(monorepo, 'apps', 'gone')} does not exist.');
+      });
     });
 
     test('a second start stops the first process and ignores its late events', () async {

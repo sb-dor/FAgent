@@ -76,6 +76,7 @@ final class _SpyRunRepository implements IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   }) {
     started.add(device.id);
     return _inner.start(
@@ -85,6 +86,7 @@ final class _SpyRunRepository implements IAppRunRepository {
       target: target,
       arguments: arguments,
       environment: environment,
+      appFolder: appFolder,
     );
   }
 

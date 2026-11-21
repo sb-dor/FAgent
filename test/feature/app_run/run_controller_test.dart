@@ -88,6 +88,7 @@ final class _ScriptedRunRepository implements IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   }) async {}
 
   @override
@@ -919,6 +920,220 @@ void main() {
         expect(start.environment, <String, String>{'SENTRY': 'on'});
       },
     );
+  });
+
+  group('RunController apps', () {
+    late _ScriptedRunRepository scripted;
+    late MemoryRunConfigRepository config;
+
+    const apps = <String>['apps/desktop', 'apps/mobile'];
+    const mobile = LaunchConfig(
+      name: 'Mobile prod',
+      target: 'apps/mobile/lib/main_prod.dart',
+      flavor: 'prod',
+      cwd: 'apps/mobile',
+    );
+    const example = LaunchConfig(name: 'Example', cwd: 'packages/ui/example');
+    const plain = LaunchConfig(name: 'Plain', target: 'lib/main_dev.dart');
+
+    setUp(() {
+      scripted = _ScriptedRunRepository();
+      config = MemoryRunConfigRepository(
+        apps: <int, List<String>>{1: apps},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[mobile, example, plain]),
+        },
+      );
+    });
+
+    tearDown(() => scripted.dispose());
+
+    RunController follow(int projectId) {
+      final run = RunController(repository: scripted, configRepository: config)..watch(projectId);
+      addTearDown(run.dispose);
+      return run;
+    }
+
+    test('apps listed for a monorepo', () async {
+      final run = follow(1);
+      await pumpEventQueue();
+
+      expect(run.state.monorepo, isTrue);
+      expect(run.state.apps, apps);
+      expect(run.state.appFolder, 'apps/desktop', reason: 'the first app when none is stored');
+      expect(run.state.appLocked, isFalse);
+      expect((await run.startArgumentsFor(1)).appFolder, 'apps/desktop');
+    });
+
+    test('missing app falls back', () async {
+      config = MemoryRunConfigRepository(
+        apps: <int, List<String>>{1: apps},
+        selectedApps: <int, String>{1: 'apps/gone'},
+      );
+      final run = follow(1);
+      await pumpEventQueue();
+
+      expect(run.state.appFolder, 'apps/desktop');
+      expect((await run.startArgumentsFor(1)).appFolder, 'apps/desktop');
+    });
+
+    test('an app deleted while followed falls back on the next start', () async {
+      config = MemoryRunConfigRepository(
+        apps: <int, List<String>>{1: apps},
+        selectedApps: <int, String>{1: 'apps/mobile'},
+      );
+      final run = follow(1);
+      await pumpEventQueue();
+      expect(run.state.appFolder, 'apps/mobile');
+
+      config.apps[1] = <String>['apps/desktop'];
+
+      expect((await run.startArgumentsFor(1)).appFolder, 'apps/desktop');
+      expect(run.state.apps, <String>['apps/desktop']);
+      expect(run.state.appFolder, 'apps/desktop');
+    });
+
+    test('a configuration with cwd fixes and locks the app', () async {
+      final run = follow(1);
+      await pumpEventQueue();
+
+      run.chooseConfig('Mobile prod');
+      await pumpEventQueue();
+      expect(run.state.appFolder, 'apps/mobile');
+      expect(run.state.appLocked, isTrue);
+
+      final start = await run.startArgumentsFor(1);
+      expect(start.appFolder, 'apps/mobile');
+      expect(start.target, 'lib/main_prod.dart', reason: 'relative to the folder it runs in');
+      expect(start.arguments.flavor, 'prod');
+
+      run.chooseApp(1, 'apps/desktop');
+      await pumpEventQueue();
+      expect(run.state.appFolder, 'apps/mobile', reason: 'a locked chip does not change');
+      expect(config.savedApps, isEmpty);
+
+      run.chooseConfig('Plain');
+      await pumpEventQueue();
+      expect(run.state.appFolder, 'apps/desktop', reason: 'a config without cwd frees the chip');
+      expect(run.state.appLocked, isFalse);
+      expect((await run.startArgumentsFor(1)).appFolder, 'apps/desktop');
+
+      run.chooseConfig('Example');
+      await pumpEventQueue();
+      expect(run.state.appLocked, isTrue);
+      expect(
+        (await run.startArgumentsFor(1)).appFolder,
+        'packages/ui/example',
+        reason: 'a cwd that is not an app still runs there',
+      );
+
+      run.chooseConfig(null);
+      await pumpEventQueue();
+      expect(run.state.appFolder, 'apps/desktop', reason: 'Default keeps the chip free');
+      expect(run.state.appLocked, isFalse);
+    });
+
+    test('a restored configuration with cwd locks the app', () async {
+      config = MemoryRunConfigRepository(
+        apps: <int, List<String>>{1: apps},
+        selected: <int, String>{1: 'Mobile prod'},
+        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[mobile])},
+      );
+      final run = follow(1);
+      await pumpEventQueue();
+
+      expect(run.state.appFolder, 'apps/mobile');
+      expect(run.state.appLocked, isTrue);
+    });
+
+    test('arguments follow the app', () async {
+      await config.save(1, const RunArguments(flavor: 'desk'), appFolder: 'apps/desktop');
+      await config.save(1, const RunArguments(dartDefines: <String>['M=1']), appFolder: 'apps/mobile');
+      final run = follow(1);
+      await pumpEventQueue();
+      expect(run.state.arguments, const RunArguments(flavor: 'desk'));
+
+      run.chooseApp(1, 'apps/mobile');
+      await pumpEventQueue();
+
+      expect(run.state.appFolder, 'apps/mobile');
+      expect(run.state.arguments, const RunArguments(dartDefines: <String>['M=1']));
+      expect(config.savedApps.last, (1, 'apps/mobile'));
+      final start = await run.startArgumentsFor(1);
+      expect(start.appFolder, 'apps/mobile');
+      expect(start.arguments, const RunArguments(dartDefines: <String>['M=1']));
+
+      await config.save(1, const RunArguments(flavor: 'late'), appFolder: 'apps/desktop');
+      await pumpEventQueue();
+      expect(
+        run.state.arguments,
+        const RunArguments(dartDefines: <String>['M=1']),
+        reason: 'the other app\'s arguments never come over',
+      );
+
+      final saver = RunConfigController(repository: config);
+      addTearDown(saver.dispose);
+      saver.save(1, const RunArguments(flavor: 'm2'), appFolder: run.state.appFolder);
+      await pumpEventQueue();
+      expect(config.savedFor.last, (1, 'apps/mobile', const RunArguments(flavor: 'm2')));
+      expect(run.state.arguments, const RunArguments(flavor: 'm2'));
+    });
+
+    test('one-app project has no apps', () async {
+      config = MemoryRunConfigRepository(
+        initial: <int, RunArguments>{2: const RunArguments(flavor: 'dev')},
+        launch: <int, LaunchConfigs>{
+          2: const LaunchConfigsRead(<LaunchConfig>[LaunchConfig(name: 'Ex', cwd: 'example')]),
+        },
+      );
+      final run = follow(2);
+      await pumpEventQueue();
+
+      expect(run.state.monorepo, isFalse);
+      expect(run.state.apps, isEmpty);
+      expect(run.state.appFolder, '');
+      expect(run.state.appLocked, isFalse);
+      expect(
+        await run.startArgumentsFor(2),
+        const RunStartArguments(arguments: RunArguments(flavor: 'dev')),
+      );
+
+      run.chooseConfig('Ex');
+      await pumpEventQueue();
+      expect(run.state.appLocked, isFalse, reason: 'there is no chip to lock');
+      expect((await run.startArgumentsFor(2)).appFolder, 'example');
+    });
+
+    test('a start runs in the chosen app', () async {
+      final repository = ScriptedAppRunRepository(step: _step);
+      addTearDown(repository.dispose);
+      final run = RunController(repository: repository, configRepository: config)..watch(1);
+      addTearDown(run.dispose);
+      final actions = RunActionsController(
+        runRepository: repository,
+        pickerRepository: ScriptedWidgetPickerRepository(step: _step),
+      );
+      addTearDown(actions.dispose);
+      await pumpEventQueue();
+      run.chooseApp(1, 'apps/mobile');
+      await pumpEventQueue();
+
+      actions.start(1, device: _macos, mode: run.state.mode, arguments: () => run.startArgumentsFor(1));
+      await Future<void>.delayed(_step * 50);
+
+      expect(repository.starts.single.appFolder, 'apps/mobile');
+      expect(repository.starts.single.target, 'lib/main.dart');
+    });
+
+    test('a monorepo without a Flutter app has no apps', () async {
+      config = MemoryRunConfigRepository(apps: <int, List<String>>{1: const <String>[]});
+      final run = follow(1);
+      await pumpEventQueue();
+
+      expect(run.state.monorepo, isTrue);
+      expect(run.state.apps, isEmpty);
+      expect(run.state.appFolder, '');
+    });
   });
 
   group('RunController with launch.json on disk', () {

@@ -21,6 +21,7 @@ class RunArgumentsDialog extends StatefulWidget {
     required this.projectId,
     required this.arguments,
     required this.controller,
+    this.appFolder = '',
     super.key,
   });
 
@@ -32,10 +33,15 @@ class RunArgumentsDialog extends StatefulWidget {
     required int projectId,
     required RunArguments arguments,
     required RunConfigController controller,
+    String appFolder = '',
   }) => showDialog<void>(
     context: context,
-    builder: (_) =>
-        RunArgumentsDialog(projectId: projectId, arguments: arguments, controller: controller),
+    builder: (_) => RunArgumentsDialog(
+      projectId: projectId,
+      arguments: arguments,
+      controller: controller,
+      appFolder: appFolder,
+    ),
   );
 
   /// The project whose arguments are edited.
@@ -46,6 +52,9 @@ class RunArgumentsDialog extends StatefulWidget {
 
   /// Saves the arguments.
   final RunConfigController controller;
+
+  /// The app of the monorepo whose arguments are edited (`apps/desktop`); `''` for the project.
+  final String appFolder;
 
   @override
   State<RunArgumentsDialog> createState() => _RunArgumentsDialogState();
@@ -115,7 +124,7 @@ class _RunArgumentsDialogState extends State<RunArgumentsDialog> {
       _submitted = true;
       _saveFailed = false;
     });
-    widget.controller.save(widget.projectId, arguments);
+    widget.controller.save(widget.projectId, arguments, appFolder: widget.appFolder);
   }
 
   Widget _field({

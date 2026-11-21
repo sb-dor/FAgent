@@ -2,6 +2,7 @@ import 'package:flutter_code_agent/src/common/process/bounded_line_splitter.dart
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
+import 'package:path/path.dart' as p;
 
 /// One finished line of the run log: its [level], its [text] and the [error] behind it, if any.
 typedef ParsedLine = ({LogLevel level, String text, RunError? error});
@@ -17,15 +18,19 @@ typedef ParsedLine = ({LogLevel level, String text, RunError? error});
 final class RunOutputParser {
   /// {@macro run_output_parser}
   ///
-  /// [projectRoot] is the absolute path of the project, [packageName] its Dart package name: they
-  /// turn the paths in the output into project-relative ones. [resolvedProjectRoot] is the project
-  /// path with its symbolic links resolved, as the app names its files (on macOS `/var` is a link
-  /// to `/private/var`).
+  /// [projectRoot] is the absolute path of the project, [packageName] the Dart package name of
+  /// the app that runs: they turn the paths in the output into project-relative ones.
+  /// [resolvedProjectRoot] is the project path with its symbolic links resolved, as the app names
+  /// its files (on macOS `/var` is a link to `/private/var`). [appFolder] is the folder of the app
+  /// in the project (`apps/desktop`; `''` for the project folder): `package:<packageName>/…` and
+  /// the relative paths `flutter run` prints there are under it.
   RunOutputParser({
     required String projectRoot,
     required this.packageName,
     String? resolvedProjectRoot,
-  }) : _roots = <String>{
+    String appFolder = '',
+  }) : _appPrefix = appFolder.isEmpty ? '' : '$appFolder/',
+       _roots = <String>{
          for (final root in <String>[projectRoot, ?resolvedProjectRoot])
            if (root.endsWith('/')) root else '$root/',
        };
@@ -37,6 +42,9 @@ final class RunOutputParser {
   final String packageName;
 
   final Set<String> _roots;
+
+  /// The app folder with a trailing `/`; `''` for the project folder.
+  final String _appPrefix;
 
   static final RegExp _blockStart = RegExp('^═*╡ EXCEPTION CAUGHT BY (.+?) ╞');
   static final RegExp _blockEnd = RegExp(r'^═+$');
@@ -314,7 +322,7 @@ final class RunOutputParser {
   String? _projectFile(String path) {
     if (path.startsWith('package:')) {
       final prefix = 'package:$packageName/';
-      return path.startsWith(prefix) ? 'lib/${path.substring(prefix.length)}' : null;
+      return path.startsWith(prefix) ? '${_appPrefix}lib/${path.substring(prefix.length)}' : null;
     }
     if (!path.startsWith('file://') && _scheme.hasMatch(path)) return null;
     var absolute = path;
@@ -332,6 +340,7 @@ final class RunOutputParser {
       }
       return null;
     }
-    return absolute;
+    // Relative to the folder `flutter run` runs in.
+    return _appPrefix.isEmpty ? absolute : p.posix.normalize('$_appPrefix$absolute');
   }
 }

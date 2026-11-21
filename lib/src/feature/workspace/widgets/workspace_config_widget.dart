@@ -351,6 +351,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       context,
       projectId: projectId,
       arguments: runController.state.arguments,
+      appFolder: runController.state.appFolder,
       controller: runConfigController,
     );
   }

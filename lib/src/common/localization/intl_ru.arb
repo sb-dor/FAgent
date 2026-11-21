@@ -313,6 +313,8 @@
   "runChooseDeviceFirst": "Выберите устройство для запуска",
   "runDevicesFailed": "Не удалось получить устройства",
   "runNoDevices": "Нет устройств: запустите симулятор или эмулятор",
+  "runApp": "Приложение",
+  "runNoApps": "В apps/ нет Flutter-приложения",
   "runLaunchingEmulator": "Запускаю эмулятор…",
   "runLaunchFailed": "Не удалось запустить эмулятор",
   "runNoProject": "Выберите проект, чтобы запустить его приложение",

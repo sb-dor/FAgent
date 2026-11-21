@@ -95,6 +95,7 @@ class _RunTabState extends State<RunTab> {
       context,
       projectId: projectId,
       arguments: widget.run.state.arguments,
+      appFolder: widget.run.state.appFolder,
       controller: widget.runConfig,
     );
   }
@@ -181,6 +182,7 @@ class _RunTabState extends State<RunTab> {
               state: state,
               devices: widget.devices.state,
               isPreview: widget.isPreview,
+              onApp: (folder) => widget.run.chooseApp(projectId, folder),
               onDevice: _chooseDevice,
               onEditArguments: _editArguments,
               onRetryDevices: widget.devices.watch,

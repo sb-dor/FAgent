@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/src/feature/app_run/widgets/run_app_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_mode_chip.dart';
 import 'package:flutter_code_agent/src/feature/app_run/widgets/run_reload_switch.dart';
@@ -42,9 +43,9 @@ enum RunAction {
 }
 
 /// {@template run_header}
-/// The top of the Run tab: the device, mode and entry point chips, the action buttons (Run is split:
-/// the arrow chooses the run configuration of `launch.json`), the status line and the "reload after
-/// every agent turn" switch.
+/// The top of the Run tab: the app (in a monorepo), device, mode and entry point chips, the action
+/// buttons (Run is split: the arrow chooses the run configuration of `launch.json`), the status
+/// line and the "reload after every agent turn" switch.
 ///
 /// Where the device chip would be, the header says what is wrong with the devices instead: no
 /// Flutter SDK (with a link to its settings), a failure to get them (with a retry), or that there
@@ -57,6 +58,7 @@ class RunHeader extends StatelessWidget {
     required this.state,
     required this.devices,
     required this.isPreview,
+    required this.onApp,
     required this.onDevice,
     required this.onEditArguments,
     required this.onMode,
@@ -78,6 +80,9 @@ class RunHeader extends StatelessWidget {
 
   /// Whether the data is made up.
   final bool isPreview;
+
+  /// Called with the folder of the monorepo app the user chose.
+  final ValueChanged<String> onApp;
 
   /// Called with the id of the device the user chose.
   final ValueChanged<String> onDevice;
@@ -179,6 +184,13 @@ class RunHeader extends StatelessWidget {
               runSpacing: 6,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: <Widget>[
+                if (state.monorepo)
+                  RunAppChip(
+                    apps: state.apps,
+                    appFolder: state.appFolder,
+                    locked: state.appLocked,
+                    onSelected: onApp,
+                  ),
                 switch (devices) {
                   Devices$ErrorState(:final error) when error is FlutterNotFoundException =>
                     _DevicesProblem(

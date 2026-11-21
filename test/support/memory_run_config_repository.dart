@@ -5,11 +5,12 @@ import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repositor
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
 
 /// In-memory run arguments (per project and app folder), selections, apps and `launch.json`
-/// contents for tests. [saved] lists every [save] in order, [savedSelections] every
-/// [saveSelected], [savedApps] every [saveSelectedApp].
+/// contents for tests. [saved] lists every [save] in order ([savedFor] with the app folder),
+/// [savedSelections] every [saveSelected], [savedApps] every [saveSelectedApp].
 class MemoryRunConfigRepository implements IRunConfigRepository {
   /// Creates the repository, optionally with [initial] arguments of the project roots, [selected]
-  /// configurations, [selectedApps], runnable [apps] and [launch] contents per project.
+  /// configurations, [selectedApps], runnable [apps] and [launch] contents per project. A project
+  /// in [apps] is a monorepo, even with no apps.
   MemoryRunConfigRepository({
     Map<int, RunArguments> initial = const <int, RunArguments>{},
     Map<int, String> selected = const <int, String>{},
@@ -27,13 +28,17 @@ class MemoryRunConfigRepository implements IRunConfigRepository {
   /// Every `(projectId, arguments)` passed to [save], in order.
   final List<(int, RunArguments)> saved = <(int, RunArguments)>[];
 
+  /// Every `(projectId, appFolder, arguments)` passed to [save], in order.
+  final List<(int, String, RunArguments)> savedFor = <(int, String, RunArguments)>[];
+
   /// Every `(projectId, name)` passed to [saveSelected], in order.
   final List<(int, String?)> savedSelections = <(int, String?)>[];
 
   /// Every `(projectId, appFolder)` passed to [saveSelectedApp], in order.
   final List<(int, String?)> savedApps = <(int, String?)>[];
 
-  /// What [runnableApps] gives per project; none for a project not in it.
+  /// What [runnableApps] gives per project; none for a project not in it, which is not a monorepo
+  /// ([isMonorepo]).
   final Map<int, List<String>> apps;
 
   /// What [launchConfigs] gives per project, read anew on every call; [LaunchConfigsMissing] for a
@@ -75,6 +80,7 @@ class MemoryRunConfigRepository implements IRunConfigRepository {
   @override
   Future<void> save(int projectId, RunArguments arguments, {String appFolder = ''}) async {
     saved.add((projectId, arguments));
+    savedFor.add((projectId, appFolder, arguments));
     final error = saveError;
     if (error != null) throw error;
     final key = (projectId, appFolder);
@@ -131,6 +137,9 @@ class MemoryRunConfigRepository implements IRunConfigRepository {
       if (id == projectId && !controller.isClosed) controller.add(appFolder);
     }
   }
+
+  @override
+  Future<bool> isMonorepo(int projectId) async => apps.containsKey(projectId);
 
   @override
   Future<List<String>> runnableApps(int projectId) async => apps[projectId] ?? const <String>[];

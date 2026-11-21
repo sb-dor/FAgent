@@ -287,5 +287,19 @@ void main() {
     test('an unknown project has none', () async {
       expect(await repository.runnableApps(42), isEmpty);
     });
+
+    test('isMonorepo tells a workspace root from a one-app project', () async {
+      write('pubspec.yaml', 'name: cafe_workspace\nworkspace:\n  - apps/*\n');
+      final monorepo = await insertProject(root.path);
+      final app = io.Directory(p.join(root.path, 'single'))..createSync();
+      io.File(p.join(app.path, 'pubspec.yaml')).writeAsStringSync('name: single\n');
+      io.Directory(p.join(app.path, 'lib')).createSync();
+      final single = await insertProject(app.path);
+
+      expect(await repository.isMonorepo(monorepo), isTrue);
+      expect(await repository.runnableApps(monorepo), isEmpty, reason: 'no Flutter app in apps/');
+      expect(await repository.isMonorepo(single), isFalse);
+      expect(await repository.isMonorepo(42), isFalse);
+    });
   });
 }

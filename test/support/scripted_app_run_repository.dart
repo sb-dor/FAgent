@@ -82,6 +82,7 @@ typedef RunStart = ({
   String target,
   RunArguments arguments,
   Map<String, String> environment,
+  String appFolder,
 });
 
 /// A scripted run for tests: build, run, a layout overflow after the first hot reload.
@@ -201,6 +202,7 @@ class ScriptedAppRunRepository implements IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   }) async {
     if (_disposed) return;
     starts.add((
@@ -210,6 +212,7 @@ class ScriptedAppRunRepository implements IAppRunRepository {
       target: target,
       arguments: arguments,
       environment: environment,
+      appFolder: appFolder,
     ));
     final run = _run(projectId);
     if (run.state is RunBuilding || run.state is RunRunning) await stop(projectId);

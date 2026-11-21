@@ -6,14 +6,14 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'run_start_arguments.freezed.dart';
 
 /// {@template run_start_arguments}
-/// What one start passes to `flutter run` besides the device and the mode: the entry point, the
-/// arguments and the variables added to the environment.
+/// What one start passes to `flutter run` besides the device and the mode: the folder it runs in,
+/// the entry point, the arguments and the variables added to the environment.
 /// {@endtemplate}
 @freezed
 abstract class RunStartArguments with _$RunStartArguments {
   /// {@macro run_start_arguments}
   const factory RunStartArguments({
-    /// The entry point (`-t`).
+    /// The entry point (`-t`), relative to [appFolder].
     @Default('lib/main.dart') String target,
 
     /// The flavor, the defines and the other flags.
@@ -21,20 +21,35 @@ abstract class RunStartArguments with _$RunStartArguments {
 
     /// Variables added to the environment of `flutter run`, over the app's own.
     @Default(<String, String>{}) Map<String, String> environment,
+
+    /// The folder `flutter run` runs in, relative to the project (`apps/desktop`); `''` for the
+    /// project folder.
+    @Default('') String appFolder,
   }) = _RunStartArguments;
 
   /// The start of [config]: its target, flavor, defines, other flags and `env`, as the file gives
   /// them (a relative `--dart-define-from-file` path stays relative: `flutter run` runs in the
-  /// project folder). The project's Default arguments are not part of it.
-  factory RunStartArguments.fromLaunchConfig(LaunchConfig config) => RunStartArguments(
-    target: config.target,
-    arguments: RunArguments(
-      flavor: config.flavor,
-      dartDefines: config.dartDefines,
-      extraArgs: config.extraArgs,
-    ),
-    environment: config.environment,
-  );
+  /// folder of the start). The project's Default arguments are not part of it.
+  ///
+  /// It runs in the configuration's `cwd`, else in [appFolder] (the app the Run tab selects). A
+  /// target inside that folder is made relative to it (`apps/desktop/lib/main.dart` →
+  /// `lib/main.dart`), as `flutter run` there needs it.
+  factory RunStartArguments.fromLaunchConfig(LaunchConfig config, {String appFolder = ''}) {
+    final folder = config.cwd.isNotEmpty ? config.cwd : appFolder;
+    final target = folder.isNotEmpty && config.target.startsWith('$folder/')
+        ? config.target.substring(folder.length + 1)
+        : config.target;
+    return RunStartArguments(
+      target: target,
+      arguments: RunArguments(
+        flavor: config.flavor,
+        dartDefines: config.dartDefines,
+        extraArgs: config.extraArgs,
+      ),
+      environment: config.environment,
+      appFolder: folder,
+    );
+  }
 }
 
 /// The selected launch configuration [name] cannot start: the configuration is [unsupported], or

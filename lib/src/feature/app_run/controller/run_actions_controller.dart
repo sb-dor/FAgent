@@ -111,6 +111,7 @@ final class RunActionsController extends StateController<RunActionsState>
       target: start.target,
       arguments: start.arguments,
       environment: start.environment,
+      appFolder: start.appFolder,
     );
   });
 

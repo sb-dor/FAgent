@@ -52,6 +52,7 @@ final class _ScriptedRun implements IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   }) async {}
 
   @override

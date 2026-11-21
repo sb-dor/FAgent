@@ -38,7 +38,8 @@ abstract class RunViewState with _$RunViewState {
     /// The entry point for the next start.
     @Default('lib/main.dart') String target,
 
-    /// What the project adds to every `flutter run`: its saved flavor, defines and flags.
+    /// What the project (in a monorepo, the app at [appFolder]) adds to every `flutter run`: its
+    /// saved flavor, defines and flags.
     @Default(RunArguments()) RunArguments arguments,
 
     /// The name of the `.vscode/launch.json` configuration the next start runs; `null` for Default
@@ -47,11 +48,27 @@ abstract class RunViewState with _$RunViewState {
 
     /// What the last read of the project's `launch.json` gave; `null` before the first read.
     LaunchConfigs? launchConfigs,
+
+    /// Whether the project is a monorepo (a pub workspace root without an app of its own): the Run
+    /// tab then shows the App chip.
+    @Default(false) bool monorepo,
+
+    /// The folders of the Flutter apps of the monorepo (`apps/desktop`), in the order of the chip's
+    /// menu; empty for a one-app project and for a monorepo without a Flutter app.
+    @Default(<String>[]) List<String> apps,
+
+    /// The folder of the app the App chip shows, relative to the project (`apps/desktop`); `''`
+    /// for the project folder (a one-app project). [arguments] are this folder's.
+    @Default('') String appFolder,
+
+    /// Whether the selected configuration fixes [appFolder] with its `cwd`: the App chip cannot be
+    /// changed while it is selected.
+    @Default(false) bool appLocked,
   }) = _RunViewState;
 }
 
-/// Follows the run, the output, the run arguments and the launch configurations of one project at
-/// a time (the one open in the window).
+/// Follows the run, the output, the run arguments, the launch configurations and, in a monorepo,
+/// the apps of one project at a time (the one open in the window).
 ///
 /// The buffer here is cleared on a project switch; the repository keeps the project's history and
 /// replays it when the project is watched again.
@@ -67,7 +84,24 @@ final class RunController extends StateController<RunViewState> with SequentialC
   StreamSubscription<RunState>? _runSubscription;
   StreamSubscription<RunArguments>? _argumentsSubscription;
   StreamSubscription<String?>? _selectedSubscription;
+  StreamSubscription<String?>? _selectedAppSubscription;
   StreamSubscription<LogEntry>? _logsSubscription;
+
+  /// The app folder [_argumentsSubscription] follows.
+  String _argumentsFolder = '';
+
+  /// Whether the arguments of [_argumentsFolder] have arrived in the state.
+  bool _argumentsArrived = false;
+
+  /// The app the project has stored, which may be gone from disk; meaningful once
+  /// [_storedAppArrived].
+  String? _storedApp;
+
+  /// Whether the stored app of this follow has arrived.
+  bool _storedAppArrived = false;
+
+  /// Whether the apps of this follow have been read.
+  bool _appsRead = false;
 
   /// Whether this follow still has to switch the chips to the restored configuration: set by
   /// [watch], done once the stored selection and the first read of the file are both in.
@@ -103,11 +137,17 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// back to `debug` and `lib/main.dart`. The project's selected configuration and its
   /// `launch.json` are read; once both are in, a selected configuration with a device or a mode
   /// switches the chips to them, once for this follow (later reads leave the chips to the user).
+  ///
+  /// In a monorepo the apps are read and the stored app is selected, or the first app when none is
+  /// stored or the stored one is gone; the arguments then are that app's.
   void watch(int projectId) => handle(() async {
     if (state.projectId == projectId && _runSubscription != null) return;
     await _cancel();
     _restorePending = true;
     _selectionArrived = false;
+    _storedApp = null;
+    _storedAppArrived = false;
+    _appsRead = false;
     final deviceId = _deviceOverridden ? _userDeviceId : state.selectedDeviceId;
     _deviceOverridden = false;
     _modeOverridden = false;
@@ -115,15 +155,20 @@ final class RunController extends StateController<RunViewState> with SequentialC
     _runSubscription = _repository.watchRun(projectId).listen((run) {
       if (state.projectId == projectId) setState(state.copyWith(run: run));
     });
-    _argumentsSubscription = _configRepository.watch(projectId).listen((arguments) {
-      if (state.projectId == projectId) setState(state.copyWith(arguments: arguments));
-    });
+    _followArguments(projectId, '');
     _selectedSubscription = _configRepository.watchSelected(projectId).listen((name) {
       if (state.projectId != projectId) return;
       _selectionArrived = true;
       setState(state.copyWith(selectedConfig: name));
       _dropVanished(projectId);
       _restoreChips(projectId);
+      _resolveApp(projectId);
+    });
+    _selectedAppSubscription = _configRepository.watchSelectedApp(projectId).listen((folder) {
+      if (state.projectId != projectId) return;
+      _storedApp = folder;
+      _storedAppArrived = true;
+      _resolveApp(projectId);
     });
     _logsSubscription = _repository.logs(projectId).listen((entry) {
       if (state.projectId != projectId || entry.seq <= (_clearedThrough[projectId] ?? -1)) return;
@@ -137,16 +182,31 @@ final class RunController extends StateController<RunViewState> with SequentialC
       );
     });
     await _readConfigs(projectId);
+    await _readApps(projectId);
   });
 
-  /// Reads the `launch.json` of the current project again (the Run menu calls it before it opens).
-  /// A selected configuration that is no longer in the file goes back to Default.
+  /// Reads the `launch.json` and the apps of the current project again (the Run menu calls it
+  /// before it opens). A selected configuration that is no longer in the file goes back to Default.
   Future<void> refreshConfigs() async {
     await handle(() async {
       final projectId = state.projectId;
-      if (projectId != null) await _readConfigs(projectId);
+      if (projectId == null) return;
+      await _readConfigs(projectId);
+      await _readApps(projectId);
     });
   }
+
+  /// Chooses the app of the monorepo [projectId] (the project followed) the next start runs, by
+  /// its [folder] (`apps/mobile`), and stores the choice; the arguments become that app's. Does
+  /// nothing while the selected configuration fixes the app ([RunViewState.appLocked]) and for a
+  /// folder that is not one of [RunViewState.apps].
+  void chooseApp(int projectId, String folder) => handle(() async {
+    if (state.projectId != projectId || state.appLocked || !state.apps.contains(folder)) return;
+    _storedApp = folder;
+    _storedAppArrived = true;
+    _resolveApp(projectId);
+    await _configRepository.saveSelectedApp(projectId, folder);
+  });
 
   /// Chooses the configuration the next start runs, by [name]; `null` is Default. The choice is
   /// stored for the project. A configuration with a device or a mode switches the chips to them;
@@ -160,16 +220,20 @@ final class RunController extends StateController<RunViewState> with SequentialC
     _restorePending = false;
     setState(state.copyWith(selectedConfig: name));
     _applyConfigChips(name == null ? null : _configNamed(state.launchConfigs, name));
+    _resolveApp(projectId);
     await _configRepository.saveSelected(projectId, name);
   });
 
   /// What the next start of [projectId] (the project followed) passes to `flutter run` besides the
   /// device and the mode.
   ///
-  /// Default is the chosen [RunViewState.target] with the project's [RunViewState.arguments]. A
+  /// Default is the chosen [RunViewState.target] with the arguments of the app, run in the app the
+  /// App chip selects (the project folder in a one-app project). In a monorepo the apps are read
+  /// again first, so an app deleted from disk is not run: the first app takes its place. A
   /// selected configuration is read from `launch.json` right now, so an edit of the file counts
   /// without the menu being opened; the start is then the configuration's own target, flavor,
-  /// defines, flags and environment, without the Default arguments. Its `deviceId` and
+  /// defines, flags and environment, without the Default arguments, in its `cwd` or else in the
+  /// chip's app (see [RunStartArguments.fromLaunchConfig]). Its `deviceId` and
   /// `flutterMode` are not applied here: they switch the chips when the configuration is chosen
   /// ([chooseConfig]) or restored ([watch]), and the chips are the user's after that; the device
   /// and the mode of a start are the chips'. A configuration that is gone from the file starts
@@ -180,23 +244,89 @@ final class RunController extends StateController<RunViewState> with SequentialC
     if (state.projectId != projectId) {
       throw StateError('RunController follows ${state.projectId}, not $projectId');
     }
-    final defaults = RunStartArguments(target: state.target, arguments: state.arguments);
+    if (state.monorepo) await _readApps(projectId);
     final name = state.selectedConfig;
-    if (name == null) return defaults;
+    if (name == null) return _defaultStart(projectId);
 
     final configs = await _configRepository.launchConfigs(projectId);
     if (state.projectId == projectId) {
       setState(state.copyWith(launchConfigs: configs));
       _dropVanished(projectId);
+      _resolveApp(projectId);
     }
     if (configs case final LaunchConfigsUnreadable unreadable) {
       throw RunConfigNotStartable.unreadable(name, unreadable);
     }
     final config = _configNamed(configs, name);
-    if (config == null) return defaults;
+    if (config == null) return _defaultStart(projectId);
     if (config.unsupported case final reason?)
       throw RunConfigNotStartable.unsupported(name, reason);
-    return RunStartArguments.fromLaunchConfig(config);
+    return RunStartArguments.fromLaunchConfig(config, appFolder: _chipApp());
+  }
+
+  /// The Default start of [projectId]: the chosen target and the arguments of the chip's app, read
+  /// from the repository when the state does not hold them yet.
+  Future<RunStartArguments> _defaultStart(int projectId) async {
+    final folder = _chipApp();
+    final arguments = _argumentsArrived && _argumentsFolder == folder
+        ? state.arguments
+        : await _configRepository.watch(projectId, appFolder: folder).first;
+    return RunStartArguments(target: state.target, arguments: arguments, appFolder: folder);
+  }
+
+  /// Follows the arguments of the app at [folder] in [projectId] (`''` for the project folder),
+  /// unless they are followed already. The arguments of the app before are dropped right away, so
+  /// they never stand for the new app's.
+  void _followArguments(int projectId, String folder) {
+    if (_argumentsSubscription != null && _argumentsFolder == folder) return;
+    _argumentsSubscription?.cancel().ignore();
+    final switched = _argumentsSubscription != null;
+    _argumentsFolder = folder;
+    _argumentsArrived = false;
+    if (switched) setState(state.copyWith(arguments: const RunArguments()));
+    _argumentsSubscription = _configRepository.watch(projectId, appFolder: folder).listen((
+      arguments,
+    ) {
+      if (state.projectId != projectId || _argumentsFolder != folder) return;
+      _argumentsArrived = true;
+      setState(state.copyWith(arguments: arguments));
+    });
+  }
+
+  /// Reads whether [projectId] is a monorepo and its apps into the state, unless the window moved
+  /// on meanwhile, then selects the app ([_resolveApp]).
+  Future<void> _readApps(int projectId) async {
+    final monorepo = await _configRepository.isMonorepo(projectId);
+    final apps = monorepo ? await _configRepository.runnableApps(projectId) : const <String>[];
+    if (state.projectId != projectId) return;
+    _appsRead = true;
+    setState(state.copyWith(monorepo: monorepo, apps: apps));
+    _resolveApp(projectId);
+  }
+
+  /// The app the chip selects on its own: the stored one while it is one of the apps, else the
+  /// first; `''` for a project without apps and until the apps and the stored app are both in.
+  String _chipApp() {
+    final apps = state.apps;
+    if (!_appsRead || !_storedAppArrived || apps.isEmpty) return '';
+    final stored = _storedApp;
+    return stored != null && apps.contains(stored) ? stored : apps.first;
+  }
+
+  /// Sets the app of [projectId]: in a monorepo, the `cwd` of the selected configuration fixes it
+  /// and locks the chip (also a `cwd` that is not an app, such as a plugin's `example`); otherwise
+  /// it is the chip's own ([_chipApp]). The arguments follow it.
+  void _resolveApp(int projectId) {
+    if (state.projectId != projectId) return;
+    final name = state.selectedConfig;
+    final config = name == null ? null : _configNamed(state.launchConfigs, name);
+    final cwd = state.monorepo && config != null && config.unsupported == null ? config.cwd : '';
+    final locked = cwd.isNotEmpty;
+    final folder = locked ? cwd : _chipApp();
+    if (folder != state.appFolder || locked != state.appLocked) {
+      setState(state.copyWith(appFolder: folder, appLocked: locked));
+    }
+    _followArguments(projectId, folder);
   }
 
   /// Reads the `launch.json` of [projectId] into the state, unless the window moved on meanwhile.
@@ -206,6 +336,7 @@ final class RunController extends StateController<RunViewState> with SequentialC
     setState(state.copyWith(launchConfigs: configs));
     _dropVanished(projectId);
     _restoreChips(projectId);
+    _resolveApp(projectId);
   }
 
   /// Switches the chips to the device and the mode of the restored configuration, once per
@@ -314,10 +445,12 @@ final class RunController extends StateController<RunViewState> with SequentialC
     await _logsSubscription?.cancel();
     await _argumentsSubscription?.cancel();
     await _selectedSubscription?.cancel();
+    await _selectedAppSubscription?.cancel();
     _runSubscription = null;
     _logsSubscription = null;
     _argumentsSubscription = null;
     _selectedSubscription = null;
+    _selectedAppSubscription = null;
   }
 
   @override
@@ -326,6 +459,7 @@ final class RunController extends StateController<RunViewState> with SequentialC
     _logsSubscription?.cancel().ignore();
     _argumentsSubscription?.cancel().ignore();
     _selectedSubscription?.cancel().ignore();
+    _selectedAppSubscription?.cancel().ignore();
     super.dispose();
   }
 }

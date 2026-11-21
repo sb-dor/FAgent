@@ -359,6 +359,8 @@
   "runChooseDeviceFirst": "Choose a device to run on",
   "runDevicesFailed": "Could not get the devices",
   "runNoDevices": "No devices: start a simulator or an emulator",
+  "runApp": "App",
+  "runNoApps": "No Flutter app in apps/",
   "runLaunchingEmulator": "Starting the emulator…",
   "runLaunchFailed": "Could not start the emulator",
   "runNoProject": "Select a project to run its app",

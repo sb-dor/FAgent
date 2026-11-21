@@ -74,6 +74,7 @@ final class _ScriptedRunRepository implements IAppRunRepository {
     required String target,
     RunArguments arguments = const RunArguments(),
     Map<String, String> environment = const <String, String>{},
+    String appFolder = '',
   }) async {}
 
   @override
@@ -243,6 +244,30 @@ void main() {
       await tester.tap(find.byTooltip('Hot reload'));
       await elapse(tester);
     }
+
+    testWidgets('picking an app in the App chip makes it the app that runs', (tester) async {
+      final configs = MemoryRunConfigRepository(
+        apps: <int, List<String>>{
+          1: <String>['apps/desktop', 'apps/mobile'],
+        },
+      );
+      run.dispose();
+      run = RunController(
+        repository: dependencies.appRunRepository,
+        configRepository: configs,
+      );
+      await pumpTab(tester);
+      await tester.pump();
+
+      await tester.tap(find.text('desktop'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('mobile'));
+      await tester.pumpAndSettle();
+
+      expect(run.state.appFolder, 'apps/mobile');
+      expect(configs.savedApps, <(int, String?)>[(1, 'apps/mobile')]);
+      await disposeTestApp(tester, dependencies);
+    });
 
     testWidgets('without a project it shows the empty state', (tester) async {
       await pumpTab(tester, projectId: null);

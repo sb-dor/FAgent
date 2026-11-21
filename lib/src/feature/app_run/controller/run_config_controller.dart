@@ -20,7 +20,7 @@ sealed class RunConfigState with _$RunConfigState {
   const factory RunConfigState.completed() = RunConfig$CompletedState;
 }
 
-/// Saves the run arguments of a project (the "Run arguments" dialog).
+/// Saves the run arguments of a project or one of its apps (the "Run arguments" dialog).
 ///
 /// One save at a time: a tap during another one is dropped. The new arguments reach the Run tab
 /// through `RunController`, which follows the repository.
@@ -33,10 +33,11 @@ final class RunConfigController extends StateController<RunConfigState>
 
   final IRunConfigRepository _repository;
 
-  /// Stores [arguments] as the arguments of [projectId].
-  void save(int projectId, RunArguments arguments) => handle(() async {
+  /// Stores [arguments] as the arguments of the app at [appFolder] in [projectId] (`''` for the
+  /// project root).
+  void save(int projectId, RunArguments arguments, {String appFolder = ''}) => handle(() async {
     setState(const RunConfigState.inProgress());
-    await _repository.save(projectId, arguments);
+    await _repository.save(projectId, arguments, appFolder: appFolder);
     setState(const RunConfigState.completed());
   }, error: (error, stackTrace) async => setState(RunConfigState.error(error: error)));
 }

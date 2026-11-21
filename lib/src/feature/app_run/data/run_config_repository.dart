@@ -34,6 +34,10 @@ abstract interface class IRunConfigRepository {
   /// the selected configuration stay.
   Future<void> saveSelectedApp(int projectId, String? appFolder);
 
+  /// Whether [projectId] is a monorepo (a pub workspace root without an app of its own), read from
+  /// disk on every call; `false` for a project whose folder is unknown.
+  Future<bool> isMonorepo(int projectId);
+
   /// The folders of the apps the monorepo [projectId] can run (`apps/desktop`), read from disk on
   /// every call; empty for a one-app project or one whose folder is unknown.
   Future<List<String>> runnableApps(int projectId);
@@ -93,6 +97,12 @@ final class RunConfigRepositoryImpl implements IRunConfigRepository {
     RunConfigsTableCompanion(selectedApp: Value<String?>(appFolder)),
     clear: appFolder == null,
   );
+
+  @override
+  Future<bool> isMonorepo(int projectId) async {
+    final project = await _project(projectId);
+    return project != null && pub_workspace.isPubMonorepo(project.path);
+  }
 
   @override
   Future<List<String>> runnableApps(int projectId) async {
