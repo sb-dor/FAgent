@@ -194,124 +194,93 @@ void main() {
   });
 
   group('material_ui', () {
-    test('Flutter 3.47 and newer use it; older, unknown or garbled versions do not', () {
-      expect(kMaterialUiMinFlutter, '3.47');
-      for (final version in const <String?>[null, '', 'abc', '3', '3.44.0', '3.46.9', '2.99.0']) {
-        expect(usesMaterialUi(version), isFalse, reason: version);
-      }
-      for (final version in const <String>[
-        '3.47.0',
-        '3.47.0-1.0.pre',
-        '3.50.0',
-        '3.100.1',
-        '4.0.0',
-      ]) {
-        expect(usesMaterialUi(version), isTrue, reason: version);
-      }
-    });
-
-    test('rewrites the export of material.dart', () {
-      expect(
-        useMaterialUi("library;\n\nexport 'package:flutter/material.dart';\n"),
-        "library;\n\nexport 'package:material_ui/material_ui.dart';\n",
-      );
-    });
-
-    test('rewrites material and cupertino imports', () {
-      expect(
-        useMaterialUi(
-          "import 'dart:async';\n"
-          "import 'package:flutter/material.dart';\n"
-          "import 'package:flutter/cupertino.dart';\n"
-          "import 'package:flutter/widgets.dart';\n",
+    /// The Dart files of the template, filled for `my_app`, keyed by their template path.
+    Future<Map<String, String>> dartFiles() async => <String, String>{
+      for (final path in projectTemplateFiles.where((path) => path.endsWith('.dart')))
+        path: fillProjectTemplate(
+          await rootBundle.loadString('$projectTemplateRoot$path'),
+          package: 'my_app',
+          date: DateTime(2026, 11, 6),
         ),
-        "import 'dart:async';\n"
-        "import 'package:material_ui/material_ui.dart';\n"
-        "import 'package:cupertino_ui/cupertino_ui.dart';\n"
-        "import 'package:flutter/widgets.dart';\n",
-      );
-    });
-
-    test('leaves a file without those imports as it is', () {
-      const source = "import 'package:flutter/widgets.dart';\n\nvoid main() {}\n";
-      expect(useMaterialUi(source), source);
-    });
+    };
 
     test(
-      'app.dart takes the delegates from material_ui, cupertino_ui and flutter_localizations',
+      'no template file imports or exports the deprecated material.dart or cupertino.dart',
       () async {
-        final text = await rootBundle.loadString(
-          '${projectTemplateRoot}lib/initialization/widget/app.dart',
-        );
-        final rewritten = useMaterialUi(text);
-        expect(
-          rewritten,
-          startsWith(
-            "import 'package:material_ui/material_ui.dart';\n"
-            "import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;\n"
-            "import 'package:flutter_localizations/flutter_localizations.dart' "
-            'show GlobalWidgetsLocalizations;\n',
-          ),
-        );
-        // The code itself is untouched.
-        expect(
-          rewritten.substring(rewritten.indexOf('\n\n')),
-          text.substring(text.indexOf('\n\n')),
-        );
+        for (final MapEntry(key: path, value: text) in (await dartFiles()).entries) {
+          expect(text, isNot(contains('package:flutter/material.dart')), reason: path);
+          expect(text, isNot(contains('package:flutter/cupertino.dart')), reason: path);
+        }
       },
     );
 
-    test('a file that names a delegate without importing material_ui gets it shown', () {
-      expect(
-        useMaterialUi(
-          "import 'package:flutter_localizations/flutter_localizations.dart';\n"
-          'final a = GlobalMaterialLocalizations.delegate;\n',
-        ),
-        "import 'package:material_ui/material_ui.dart' show GlobalMaterialLocalizations;\n"
-        'final a = GlobalMaterialLocalizations.delegate;\n',
-      );
+    test('ui.dart exports material_ui', () async {
+      final ui = (await dartFiles())['packages/ui/lib/ui.dart']!;
+      expect(ui, contains("export 'package:material_ui/material_ui.dart';"));
     });
 
-    test('no template file imports a deprecated library after the rewrite', () async {
+    for (final path in const <String>[
+      'lib/initialization/widget/app.dart',
+      'lib/_core/widget/app_error.dart',
+    ]) {
+      test(
+        '$path takes the delegates from material_ui, cupertino_ui and flutter_localizations',
+        () async {
+          final text = await rootBundle.loadString('$projectTemplateRoot$path');
+          expect(
+            text,
+            startsWith(
+              "import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;\n"
+              "import 'package:flutter_localizations/flutter_localizations.dart' "
+              'show GlobalWidgetsLocalizations;\n'
+              "import 'package:material_ui/material_ui.dart';\n",
+            ),
+          );
+          expect(text, contains('GlobalMaterialLocalizations.delegate'));
+          expect(text, contains('GlobalCupertinoLocalizations.delegate'));
+          expect(text, contains('GlobalWidgetsLocalizations.delegate'));
+        },
+      );
+    }
+
+    test('flutter_localizations is imported only for GlobalWidgetsLocalizations', () async {
       final import = RegExp("^import '([^']+)'([^;]*);", multiLine: true);
-      for (final path in projectTemplateFiles.where((path) => path.endsWith('.dart'))) {
-        final text = await rootBundle.loadString('$projectTemplateRoot$path');
-        final rewritten = useMaterialUi(
-          fillProjectTemplate(text, package: 'my_app', date: DateTime(2026, 11, 6)),
-        );
-        expect(rewritten, isNot(contains('package:flutter/material.dart')), reason: path);
-        expect(rewritten, isNot(contains('package:flutter/cupertino.dart')), reason: path);
-        for (final match in import.allMatches(rewritten)) {
-          if (match.group(1) != 'package:flutter_localizations/flutter_localizations.dart')
+      for (final MapEntry(key: path, value: text) in (await dartFiles()).entries) {
+        for (final match in import.allMatches(text)) {
+          if (match.group(1) != 'package:flutter_localizations/flutter_localizations.dart') {
             continue;
+          }
           // Only what flutter_localizations has that is not deprecated.
           expect(match.group(2)!.trim(), 'show GlobalWidgetsLocalizations', reason: path);
         }
       }
     });
 
-    test('the rewritten template imports only packages its pub add installs', () async {
-      final packageImport = RegExp("import 'package:([a-z_0-9]+)/");
-      List<String> names(List<String> arguments) => <String>[
-        for (final argument in arguments)
-          RegExp('^(?:dev:)?([a-z_0-9]+)').firstMatch(argument)!.group(1)!,
-      ];
+    test('pub add always gets material_ui and cupertino_ui', () {
+      for (final arguments in <List<String>>[
+        skeletonPubAddArguments,
+        skeletonPubAddArgumentsFor(uiPath: '../../packages/ui'),
+      ]) {
+        expect(arguments, containsAll(<String>['material_ui', 'cupertino_ui']));
+      }
+      expect(uiPubAddArguments, <String>['material_ui']);
+    });
+
+    test('the template imports only packages its pub add installs', () async {
+      final packageImport = RegExp("(?:import|export) 'package:([a-z_0-9]+)/");
       final app = <String>[
         'my_app',
         'flutter',
         'flutter_test',
-        ...names(skeletonPubAddArgumentsFor(uiPath: 'packages/ui', materialUi: true)),
+        for (final argument in skeletonPubAddArguments)
+          RegExp('^(?:dev:)?([a-z_0-9]+)').firstMatch(argument)!.group(1)!,
       ];
       // packages/ui: its template pubspec, then what FAgent adds to it.
-      final ui = <String>['ui', 'flutter', 'intl', 'collection', ...uiMaterialUiPackages];
+      final ui = <String>['ui', 'flutter', 'intl', 'collection', ...uiPubAddArguments];
       final usedByUi = <String>{};
-      for (final path in projectTemplateFiles.where((path) => path.endsWith('.dart'))) {
-        final text = await rootBundle.loadString('$projectTemplateRoot$path');
-        final rewritten = useMaterialUi(
-          fillProjectTemplate(text, package: 'my_app', date: DateTime(2026, 11, 6)),
-        );
+      for (final MapEntry(key: path, value: text) in (await dartFiles()).entries) {
         final inUi = path.startsWith('packages/ui/');
-        for (final match in packageImport.allMatches(rewritten)) {
+        for (final match in packageImport.allMatches(text)) {
           final name = match.group(1)!;
           expect(inUi ? ui : app, contains(name), reason: '$path: ${match.group(0)}');
           if (inUi) usedByUi.add(name);
@@ -319,20 +288,9 @@ void main() {
       }
       // packages/ui gets exactly the ones its files import.
       expect(
-        uiMaterialUiPackages.toSet(),
+        uiPubAddArguments.toSet(),
         usedByUi.intersection(const <String>{'material_ui', 'cupertino_ui'}),
       );
-    });
-
-    test('pub add gets material_ui and cupertino_ui only when asked', () {
-      final arguments = skeletonPubAddArgumentsFor(uiPath: 'packages/ui', materialUi: true);
-      expect(arguments, containsAll(<String>['material_ui', 'cupertino_ui']));
-      expect(
-        arguments.where((argument) => argument != 'material_ui' && argument != 'cupertino_ui'),
-        skeletonPubAddArguments,
-      );
-      expect(skeletonPubAddArguments, isNot(contains('material_ui')));
-      expect(skeletonPubAddArguments, isNot(contains('cupertino_ui')));
     });
   });
 }

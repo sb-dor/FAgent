@@ -3,8 +3,8 @@ import 'dart:developer' as developer;
 import 'dart:ui' as ui show FragmentProgram, FragmentShader;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template shimmer}
 /// A widget that creates a shimmering effect similar

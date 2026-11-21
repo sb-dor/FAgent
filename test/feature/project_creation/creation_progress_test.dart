@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
@@ -17,7 +18,6 @@ import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_proj
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/flutter_version_runner.dart';
 import '../../support/memory_project_creation_repository.dart';
 import '../../support/test_app.dart';
 
@@ -98,7 +98,9 @@ void main() {
       projectCreationRepository: repository ?? memory,
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => '/opt/flutter/bin/flutter',
-        runProcess: flutterVersionRunner,
+        // "My architecture" needs Flutter 3.50.
+        runProcess: (executable, arguments, {environment}) async =>
+            io.ProcessResult(1, 0, '{"frameworkVersion":"3.50.0","channel":"stable"}', ''),
       ),
     );
     if (withLongProject) {

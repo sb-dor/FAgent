@@ -124,7 +124,7 @@ void main() {
     database = AppDatabase(NativeDatabase.memory());
     flutterPath = _flutter;
     dartVersion = '3.14.0';
-    flutterVersion = null;
+    flutterVersion = '3.50.0';
     ruleNames = <String>['a'];
     rulesWritten = <String>[];
     started = <ScriptedDaemonProcess>[];
@@ -215,6 +215,11 @@ void main() {
             _flutter,
             <String>['pub', 'add', ...skeletonPubAddArguments],
             path(),
+          ],
+          <Object?>[
+            _flutter,
+            <String>['pub', 'add', 'material_ui'],
+            p.join(path(), 'packages', 'ui'),
           ],
           <Object?>[
             _flutter,
@@ -438,6 +443,7 @@ void main() {
         environment: environment,
         writeRules: writeRules,
         loadAsset: (key) => File(key).readAsString(),
+        flutterVersion: () async => flutterVersion,
         startProcess: (executable, arguments, {workingDirectory, environment}) =>
             throw const ProcessException('flutter', <String>[], 'No such file or directory'),
       );
@@ -799,6 +805,11 @@ void main() {
             _flutter,
             <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
             p.join(root(), 'apps', 'app'),
+          ],
+          <Object?>[
+            _flutter,
+            <String>['pub', 'add', 'material_ui'],
+            p.join(root(), 'packages', 'ui'),
           ],
           <Object?>[
             _flutter,
@@ -1622,27 +1633,18 @@ void main() {
         relative: File(p.joinAll(<String>[to, ...relative.split('/')])).readAsStringSync(),
     };
 
-    /// The template's Dart files of [files], filled for [package] and, with [materialUi],
-    /// rewritten.
-    Future<Map<String, String>> expected(
-      List<String> files,
-      String package, {
-      required bool materialUi,
-    }) async => <String, String>{
+    /// The template's Dart files of [files], filled for [package]: copied as they are.
+    Map<String, String> expected(List<String> files, String package) => <String, String>{
       for (final relative in files.where((relative) => relative.endsWith('.dart')))
-        relative: () {
-          final filled = fillProjectTemplate(
-            File('$projectTemplateRoot$relative').readAsStringSync(),
-            package: package,
-            date: DateTime(2026, 11, 6),
-          );
-          return materialUi ? useMaterialUi(filled) : filled;
-        }(),
+        relative: fillProjectTemplate(
+          File('$projectTemplateRoot$relative').readAsStringSync(),
+          package: package,
+          date: DateTime(2026, 11, 6),
+        ),
     };
 
-    /// The commands of a one-app architecture project without git; [ui] is the `pub add` of
-    /// `packages/ui`, when there is one.
-    List<List<Object?>> oneApp({required bool materialUi}) => <List<Object?>>[
+    /// The commands of a one-app architecture project without git.
+    List<List<Object?>> oneApp() => <List<Object?>>[
       <Object?>[
         _flutter,
         <String>[
@@ -1662,19 +1664,14 @@ void main() {
       ],
       <Object?>[
         _flutter,
-        <String>[
-          'pub',
-          'add',
-          ...skeletonPubAddArgumentsFor(uiPath: 'packages/ui', materialUi: materialUi),
-        ],
+        <String>['pub', 'add', ...skeletonPubAddArguments],
         path(),
       ],
-      if (materialUi)
-        <Object?>[
-          _flutter,
-          <String>['pub', 'add', 'material_ui'],
-          p.join(path(), 'packages', 'ui'),
-        ],
+      <Object?>[
+        _flutter,
+        <String>['pub', 'add', 'material_ui'],
+        p.join(path(), 'packages', 'ui'),
+      ],
       <Object?>[
         _flutter,
         <String>['pub', 'get'],
@@ -1697,14 +1694,13 @@ void main() {
       ],
     ];
 
-    test('one app on Flutter 3.50 installs material_ui and rewrites the imports', () async {
-      flutterVersion = '3.50.0';
+    test('one app installs material_ui in the app and in ui and copies the template', () async {
       final runs = await build().create(request(gitInit: false)).toList();
 
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
-      expect(commands(), oneApp(materialUi: true));
+      expect(commands(), oneApp());
       final files = written(path(), projectTemplateFiles);
-      expect(files, await expected(projectTemplateFiles, 'avera_booking', materialUi: true));
+      expect(files, expected(projectTemplateFiles, 'avera_booking'));
       for (final entry in files.entries) {
         expect(entry.value, isNot(contains('package:flutter/material.dart')), reason: entry.key);
       }
@@ -1718,35 +1714,19 @@ void main() {
       );
     });
 
-    test('one app on Flutter 3.44 runs and writes what it always did', () async {
-      flutterVersion = '3.44.0';
-      await build().create(request(gitInit: false)).toList();
-
-      expect(commands(), oneApp(materialUi: false));
-      expect(
-        written(path(), projectTemplateFiles),
-        await expected(projectTemplateFiles, 'avera_booking', materialUi: false),
-      );
-    });
-
     String shop() => p.join(parent.path, 'shop');
 
-    List<List<Object?>> monorepoCommands({required bool materialUi}) => <List<Object?>>[
+    List<List<Object?>> monorepoCommands() => <List<Object?>>[
       <Object?>[
         _flutter,
-        <String>[
-          'pub',
-          'add',
-          ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui', materialUi: materialUi),
-        ],
+        <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
         p.join(shop(), 'apps', 'app'),
       ],
-      if (materialUi)
-        <Object?>[
-          _flutter,
-          <String>['pub', 'add', 'material_ui'],
-          p.join(shop(), 'packages', 'ui'),
-        ],
+      <Object?>[
+        _flutter,
+        <String>['pub', 'add', 'material_ui'],
+        p.join(shop(), 'packages', 'ui'),
+      ],
       <Object?>[
         _flutter,
         <String>['pub', 'add', 'dev:build_runner'],
@@ -1774,35 +1754,49 @@ void main() {
       ],
     ];
 
-    test('a monorepo on Flutter 3.50 installs material_ui in the app and in ui', () async {
-      flutterVersion = '3.50.0';
+    test('a monorepo installs material_ui in the app and in ui', () async {
       final runs = await build().create(monorepo()).toList();
 
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
-      expect(commands().skip(1), monorepoCommands(materialUi: true));
+      expect(commands().skip(1), monorepoCommands());
       expect(
         written(p.join(shop(), 'apps', 'app'), projectTemplateAppFiles),
-        await expected(projectTemplateAppFiles, 'shop_app', materialUi: true),
+        expected(projectTemplateAppFiles, 'shop_app'),
       );
-      expect(
-        written(shop(), projectTemplateUiFiles),
-        await expected(projectTemplateUiFiles, 'shop', materialUi: true),
-      );
+      expect(written(shop(), projectTemplateUiFiles), expected(projectTemplateUiFiles, 'shop'));
     });
 
-    test('a monorepo on Flutter 3.44 runs and writes what it always did', () async {
-      flutterVersion = '3.44.0';
-      await build().create(monorepo()).toList();
+    for (final version in const <String?>['3.47.2', null]) {
+      test('one app on Flutter ${version ?? 'unknown'} fails before flutter create', () async {
+        flutterVersion = version;
+        final runs = await build().create(request(gitInit: false)).toList();
 
-      expect(commands().skip(1), monorepoCommands(materialUi: false));
-      expect(
-        written(p.join(shop(), 'apps', 'app'), projectTemplateAppFiles),
-        await expected(projectTemplateAppFiles, 'shop_app', materialUi: false),
-      );
-      expect(
-        written(shop(), projectTemplateUiFiles),
-        await expected(projectTemplateUiFiles, 'shop', materialUi: false),
-      );
+        final create = step(runs.last, CreationStepKind.flutterCreate);
+        expect(create.status, CreationStepStatus.failed);
+        expect(create.output.last, 'Flutter 3.50 or newer is needed for My architecture');
+        expect(started, isEmpty);
+        expect(Directory(path()).existsSync(), isFalse);
+      });
+    }
+
+    test('a monorepo on Flutter 3.47 fails before it writes the workspace', () async {
+      flutterVersion = '3.47.2';
+      final runs = await build().create(monorepo()).toList();
+
+      final workspace = step(runs.last, CreationStepKind.workspace);
+      expect(workspace.status, CreationStepStatus.failed);
+      expect(workspace.output.last, 'Flutter 3.50 or newer is needed for My architecture');
+      expect(started, isEmpty);
+      expect(Directory(shop()).existsSync(), isFalse);
+    });
+
+    test('a plain project on Flutter 3.47 is not held back', () async {
+      flutterVersion = '3.47.2';
+      final runs = await build()
+          .create(request(template: NewProjectTemplate.plain, gitInit: false))
+          .toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
     });
 
     group('add member', () {
@@ -1817,27 +1811,24 @@ void main() {
         File(p.join(shop(), 'packages', 'ui', 'pubspec.yaml')).writeAsStringSync('name: ui\n');
       });
 
-      NewMemberRequest member() => NewMemberRequest(
-        projectId: 1,
-        projectPath: shop(),
-        kind: MemberKind.flutterApp,
-        folder: 'admin',
-        packageName: 'shop_admin',
-        org: 'com.example',
-        platforms: const <FlutterPlatform>{FlutterPlatform.macos},
-        template: NewProjectTemplate.architecture,
-        gitRepo: false,
-      );
+      NewMemberRequest member({NewProjectTemplate template = NewProjectTemplate.architecture}) =>
+          NewMemberRequest(
+            projectId: 1,
+            projectPath: shop(),
+            kind: MemberKind.flutterApp,
+            folder: 'admin',
+            packageName: 'shop_admin',
+            org: 'com.example',
+            platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+            template: template,
+            gitRepo: false,
+          );
 
       /// The commands after `flutter create`; the user's `packages/ui` is never touched.
-      List<List<Object?>> memberCommands({required bool materialUi}) => <List<Object?>>[
+      List<List<Object?>> memberCommands() => <List<Object?>>[
         <Object?>[
           _flutter,
-          <String>[
-            'pub',
-            'add',
-            ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui', materialUi: materialUi),
-          ],
+          <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
           admin(),
         ],
         <Object?>[
@@ -1862,27 +1853,38 @@ void main() {
         ],
       ];
 
-      test('an app added on Flutter 3.50 gets material_ui', () async {
-        flutterVersion = '3.50.0';
+      test('an added app gets material_ui and leaves packages/ui alone', () async {
         final runs = await build().addMember(member()).toList();
 
         expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
-        expect(commands().skip(1), memberCommands(materialUi: true));
+        expect(commands().skip(1), memberCommands());
         expect(
           written(admin(), projectTemplateAppFiles),
-          await expected(projectTemplateAppFiles, 'shop_admin', materialUi: true),
+          expected(projectTemplateAppFiles, 'shop_admin'),
+        );
+        expect(
+          File(p.join(shop(), 'packages', 'ui', 'pubspec.yaml')).readAsStringSync(),
+          'name: ui\n',
         );
       });
 
-      test('an app added on Flutter 3.44 is added as it always was', () async {
-        flutterVersion = '3.44.0';
-        await build().addMember(member()).toList();
+      test('an app added on Flutter 3.47 fails before flutter create', () async {
+        flutterVersion = '3.47.2';
+        final runs = await build().addMember(member()).toList();
 
-        expect(commands().skip(1), memberCommands(materialUi: false));
-        expect(
-          written(admin(), projectTemplateAppFiles),
-          await expected(projectTemplateAppFiles, 'shop_admin', materialUi: false),
-        );
+        final create = step(runs.last, CreationStepKind.memberCreate);
+        expect(create.status, CreationStepStatus.failed);
+        expect(create.output.last, 'Flutter 3.50 or newer is needed for My architecture');
+        expect(started, isEmpty);
+        expect(Directory(admin()).existsSync(), isFalse);
+        expect(Directory(p.join(shop(), 'packages', 'ui')).existsSync(), isTrue);
+      });
+
+      test('an empty app added on Flutter 3.47 is not held back', () async {
+        flutterVersion = '3.47.2';
+        final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+        expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
       });
     });
   });

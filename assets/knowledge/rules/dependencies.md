@@ -807,7 +807,7 @@ class DependenciesScope extends InheritedWidget {
 
 ```dart
 // file: settings_model.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The parts of [SettingsModel] a widget can depend on.
 enum SettingsAspect { locale, themeMode }

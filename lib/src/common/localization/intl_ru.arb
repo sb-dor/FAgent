@@ -591,6 +591,8 @@
   "newProjectTemplate": "Шаблон",
   "newProjectTemplateArchitecture": "Моя архитектура",
   "newProjectTemplateArchitectureHint": "flutter create, затем lib/_core, initialization и фича home",
+  "newProjectTemplateArchitectureNeedsFlutter": "Нужен Flutter {version} или новее",
+  "@newProjectTemplateArchitectureNeedsFlutter": {"placeholders": {"version": {"type": "String"}}},
   "newProjectTemplatePlain": "Чистый flutter create",
   "newProjectTemplatePlainHint": "Как из терминала, без скелета",
   "newProjectTemplateGit": "Из git-шаблона…",

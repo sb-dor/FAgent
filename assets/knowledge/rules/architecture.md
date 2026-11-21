@@ -1240,7 +1240,7 @@ final class ExampleRepositoryImpl implements IExampleRepository {
 ```dart
 // file: example_widget.dart
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'example_config_widget.dart';
 import 'example_controller.dart';

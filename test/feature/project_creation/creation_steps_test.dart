@@ -167,4 +167,22 @@ void main() {
       expect(supportsMonorepo(null), isFalse);
     });
   });
+
+  group('supportsArchitecture', () {
+    test('needs Flutter 3.50', () {
+      expect(kArchitectureMinFlutter, '3.50');
+      for (final version in const <String>[
+        '3.50.0',
+        '3.50.0-0.1.pre',
+        '3.51.2',
+        '3.100.0',
+        '4.0.0',
+      ]) {
+        expect(supportsArchitecture(version), isTrue, reason: version);
+      }
+      for (final version in const <String?>[null, '', 'abc', '3', '3.47.2', '3.49.9', '2.99.0']) {
+        expect(supportsArchitecture(version), isFalse, reason: version);
+      }
+    });
+  });
 }

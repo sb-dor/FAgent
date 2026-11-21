@@ -134,3 +134,20 @@ bool supportsMonorepo(String? dartVersion) {
   }
   return parts[0]! != min[0] ? parts[0]! > min[0] : parts[1]! >= min[1];
 }
+
+/// The oldest Flutter "My architecture" is made for: its template imports `material_ui` and
+/// `cupertino_ui`, which need it.
+const String kArchitectureMinFlutter = '3.50';
+
+/// Whether a Flutter SDK of [flutterVersion] (for example `3.50.0` or `3.50.0-0.1.pre`) can make
+/// the architecture skeleton; `false` when the version is unknown.
+bool supportsArchitecture(String? flutterVersion) {
+  final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(flutterVersion ?? '');
+  if (match == null) {
+    return false;
+  }
+  final min = kArchitectureMinFlutter.split('.').map(int.parse).toList();
+  final major = int.parse(match[1]!);
+  final minor = int.parse(match[2]!);
+  return major != min[0] ? major > min[0] : minor >= min[1];
+}

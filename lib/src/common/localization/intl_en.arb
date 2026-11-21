@@ -642,6 +642,8 @@
   "newProjectTemplate": "Template",
   "newProjectTemplateArchitecture": "My architecture",
   "newProjectTemplateArchitectureHint": "flutter create, then lib/_core, initialization and a home feature",
+  "newProjectTemplateArchitectureNeedsFlutter": "Needs Flutter {version} or newer",
+  "@newProjectTemplateArchitectureNeedsFlutter": {"placeholders": {"version": {"type": "String"}}},
   "newProjectTemplatePlain": "Plain flutter create",
   "newProjectTemplatePlainHint": "As from the terminal, without the skeleton",
   "newProjectTemplateGit": "From a git template…",

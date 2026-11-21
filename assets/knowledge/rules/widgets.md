@@ -78,6 +78,13 @@ description: "Widget conventions: ListenableBuilder, super.key, what goes in a s
   restyled where it is used. See "Components".
 - No `flutter_hooks`: a `State` creates what it owns in `initState` and disposes it in `dispose`,
   where the lifecycle can be read, instead of behind call order in `build`.
+- On Flutter 3.47 and newer, import Material from `package:material_ui/material_ui.dart` and
+  Cupertino from `package:cupertino_ui/cupertino_ui.dart`, never from the deprecated
+  `package:flutter/material.dart` or `package:flutter/cupertino.dart`; on an older Flutter keep
+  `package:flutter/material.dart` and `package:flutter/cupertino.dart`. A package not yet in
+  `pubspec.yaml` is added with `flutter pub add material_ui` or `flutter pub add cupertino_ui`,
+  after the pub.dev check of `docs/rules/package-freshness.md`. The localization delegates moved
+  too; see "Replaced APIs".
 - `Color.withOpacity`, `Radio(groupValue:, onChanged:)`, `OverlayPortal.targetsRootOverlay` and
   `SemanticsService.announce` are deprecated. See "Replaced APIs".
 - A widget or `State` that shows data overrides `debugFillProperties`, so the DevTools inspector
@@ -658,7 +665,7 @@ class _TicketClipper extends CustomClipper<Path> {
 
 ```dart
 // file: sign_in_form.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// What is wrong with the form. A value, not a sentence: the widget turns it into text.
 enum SignInError { invalidEmail, shortPassword }
@@ -1342,7 +1349,7 @@ over that space (idea from https://dartpad.dev/?id=60f41eb9f76d5513df0bfe80f9681
 
 ```dart
 // file: message_bubble.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// A chat message with its [time] in the bottom end corner, on the text's last line when it fits.
 class MessageBubble extends StatelessWidget {
@@ -1578,7 +1585,7 @@ filter is one of the costliest things to draw, more so on the web and on old pho
 // file: loading_overlay.dart
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Shows [child] and, while [processing], a blurred overlay with a spinner that takes every tap
 /// and keeps keyboard focus out of [child].
@@ -1897,7 +1904,7 @@ it as it is and every call returns the same instance instead of building a new `
 
 ```dart
 // file: app_theme.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The app's colors beyond the Material scheme, for its own components.
 @immutable
@@ -1991,7 +1998,7 @@ its colors, text styles and radii from the theme (see "Themes").
 
 ```dart
 // file: ui_button.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 enum UiButtonVariant { primary, outlined }
 
@@ -2107,6 +2114,13 @@ class _UiButtonStyle extends ButtonStyle {
 
 Old snippets still use these; the analyzer reports them as deprecated:
 
+- Material and Cupertino in the SDK (Flutter 3.47): the `material_ui` and `cupertino_ui` packages
+  (see "Rules"). Their localization delegates moved with them: `GlobalMaterialLocalizations` comes
+  from `material_ui`, `GlobalCupertinoLocalizations` from `cupertino_ui`
+  (`import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;`), and
+  `flutter_localizations` is imported only for the delegate it still owns
+  (`import 'package:flutter_localizations/flutter_localizations.dart'
+  show GlobalWidgetsLocalizations;`).
 - `color.withOpacity(.5)`: `color.withValues(alpha: .5)` (`withOpacity` loses precision). Read the
   channels as `color.r`, `.g`, `.b`, `.a`, not `red` or `value`.
 - `Radio(value: v, groupValue: selected, onChanged: ...)`: the radios sit under one

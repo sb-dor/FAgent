@@ -62,8 +62,8 @@ void main() {
     ],
   ].join('\n');
 
-  /// Expects every step of [run] done, `analyze` included: on a Flutter whose `material.dart` is
-  /// deprecated (3.47 and newer) the skeleton is on `material_ui`, so it reports nothing.
+  /// Expects every step of [run] done, `analyze` included: the skeleton imports `material_ui` and
+  /// `cupertino_ui`, so it reports nothing on the Flutter 3.50 or newer it needs.
   void expectFinished(CreationRun run, {String? what}) {
     final reason = '${what == null ? '' : '$what\n'}${report(run)}';
     for (final step in run.steps) {

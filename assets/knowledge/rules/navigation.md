@@ -223,7 +223,7 @@ Whole files, one per block; put each where the layout above says and adjust the 
 
 ```dart
 // file: app_pages.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Every screen of the app. Two pages are the same page when their keys are equal.
 sealed class AppPage extends MaterialPage<void> {
@@ -557,7 +557,7 @@ List<AppNavigatorGuard> signInGuards(bool Function() isSignedIn) => <AppNavigato
 
 ```dart
 // file: app.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'app_navigator.dart';
 import 'app_pages.dart';

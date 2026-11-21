@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
-import 'package:{{package}}/_core/utils/date_util.dart';
 import 'package:intl/intl.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:{{package}}/_core/utils/date_util.dart';
 
 /// {@template adaptive_date_picker}
 /// AdaptiveDatePicker widget.

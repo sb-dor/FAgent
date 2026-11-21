@@ -31,7 +31,9 @@ import 'package:l/l.dart';
 /// The name is checked as `flutter create` does; "Create" is on only when everything is fine: the
 /// name, the organization, the folder (checked against the disk, the latest answer wins), the
 /// platforms and a Flutter SDK. The organization and the template start as the Settings have them
-/// (a git template starts as the architecture), but the form never changes the Settings.
+/// (a git template starts as the architecture), but the form never changes the Settings. "My
+/// architecture" needs Flutter [kArchitectureMinFlutter]: on an older or unknown SDK it is off and
+/// the empty template is made.
 /// {@endtemplate}
 class NewProjectForm extends StatefulWidget {
   /// {@macro new_project_form}
@@ -132,6 +134,15 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   bool get _monorepoSupported => supportsMonorepo(_sdkInfo?.dartVersion);
 
+  bool get _architectureSupported => supportsArchitecture(_sdkInfo?.version);
+
+  /// The template the project is made from: "My architecture" falls back to the empty one on an
+  /// SDK that cannot make it.
+  NewProjectTemplate get _templateUsed =>
+      _template == NewProjectTemplate.architecture && !_architectureSupported
+      ? NewProjectTemplate.plain
+      : _template;
+
   /// Whether the project is made as a workspace: only an app, and only on an SDK that can.
   bool get _monorepo =>
       _type == FlutterProjectType.app &&
@@ -231,7 +242,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         parent: parent,
         platforms: _platforms,
         type: _type,
-        template: _template,
+        template: _templateUsed,
         gitInit: _gitInit,
         openChat: _openChat,
         structure: _monorepo ? ProjectStructure.monorepo : ProjectStructure.single,
@@ -319,7 +330,13 @@ class _NewProjectFormState extends State<NewProjectForm> {
           gap,
           CreationField(
             label: localization.newProjectTemplate,
-            messages: <Widget>[if (_gitHint) CreationMessage.hint(localization.comingLater)],
+            messages: <Widget>[
+              if (_sdkInfo != null && !_architectureSupported)
+                CreationMessage.hint(
+                  localization.newProjectTemplateArchitectureNeedsFlutter(kArchitectureMinFlutter),
+                ),
+              if (_gitHint) CreationMessage.hint(localization.comingLater),
+            ],
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
@@ -327,7 +344,8 @@ class _NewProjectFormState extends State<NewProjectForm> {
                   key: const ValueKey<String>('template-architecture'),
                   title: localization.newProjectTemplateArchitecture,
                   description: localization.newProjectTemplateArchitectureHint,
-                  selected: _template == NewProjectTemplate.architecture,
+                  selected: _templateUsed == NewProjectTemplate.architecture,
+                  enabled: _architectureSupported,
                   onTap: () => _chooseTemplate(NewProjectTemplate.architecture),
                 ),
                 const SizedBox(height: 6),
@@ -335,7 +353,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
                   key: const ValueKey<String>('template-plain'),
                   title: localization.newProjectTemplatePlain,
                   description: localization.newProjectTemplatePlainHint,
-                  selected: _template == NewProjectTemplate.plain,
+                  selected: _templateUsed == NewProjectTemplate.plain,
                   onTap: () => _chooseTemplate(NewProjectTemplate.plain),
                 ),
                 const SizedBox(height: 6),

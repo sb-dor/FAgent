@@ -106,6 +106,7 @@ class CreationTemplateCard extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.preview = false,
+    this.enabled = true,
     super.key,
   });
 
@@ -115,6 +116,9 @@ class CreationTemplateCard extends StatelessWidget {
   final bool preview;
   final VoidCallback onTap;
 
+  /// Whether the card can be chosen; a disabled one is muted and ignores taps.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -123,6 +127,7 @@ class CreationTemplateCard extends StatelessWidget {
     return Semantics(
       inMutuallyExclusiveGroup: true,
       checked: selected,
+      enabled: enabled,
       child: Material(
         color: selected ? colors.accentSoft : colors.bg,
         shape: RoundedRectangleBorder(
@@ -131,7 +136,7 @@ class CreationTemplateCard extends StatelessWidget {
         ),
         child: InkWell(
           borderRadius: radius,
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             child: Row(
@@ -153,7 +158,7 @@ class CreationTemplateCard extends StatelessWidget {
                       Text(
                         title,
                         style: textTheme.bodyMedium!.copyWith(
-                          color: colors.text,
+                          color: enabled ? colors.text : colors.muted,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

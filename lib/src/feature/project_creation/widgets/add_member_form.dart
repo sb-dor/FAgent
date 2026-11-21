@@ -3,7 +3,11 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/controller/flutter_sdk_controller.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
+import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/package_name.dart';
@@ -22,7 +26,8 @@ import 'package:l/l.dart';
 /// The package follows `<project>_<folder>` until it is typed. The folder and the package are
 /// checked as package names, and then against the project (the folder must be free and the package
 /// name not taken; the latest answer wins). A project without `packages/ui` offers only the empty
-/// template, as the skeleton needs that package. "Create" is on only when everything is fine.
+/// template, as the skeleton needs that package; so does a Flutter older than
+/// [kArchitectureMinFlutter] (or an unknown one). "Create" is on only when everything is fine.
 /// {@endtemplate}
 class AddMemberForm extends StatefulWidget {
   /// {@macro add_member_form}
@@ -37,6 +42,7 @@ class AddMemberForm extends StatefulWidget {
 
 class _AddMemberFormState extends State<AddMemberForm> {
   late final WorkspaceConfigWidgetState _scope;
+  late final FlutterSdkController _sdk;
   late final TextEditingController _folder;
   late final TextEditingController _package;
   late final TextEditingController _org;
@@ -85,6 +91,9 @@ class _AddMemberFormState extends State<AddMemberForm> {
     _template = settings.projectTemplate == NewProjectTemplate.plain
         ? NewProjectTemplate.plain
         : NewProjectTemplate.architecture;
+    _sdk = FlutterSdkController(repository: Dependencies.of(context).flutterSdkRepository)
+      ..addListener(_onSdk)
+      ..load(null);
     _loadProject();
   }
 
@@ -92,6 +101,9 @@ class _AddMemberFormState extends State<AddMemberForm> {
   void dispose() {
     _suggestNumber++;
     _checkNumber++;
+    _sdk
+      ..removeListener(_onSdk)
+      ..dispose();
     _folder.dispose();
     _package.dispose();
     _org.dispose();
@@ -99,6 +111,23 @@ class _AddMemberFormState extends State<AddMemberForm> {
   }
 
   String get _path => widget.project.path;
+
+  void _onSdk() => setState(() {});
+
+  FlutterSdk? get _sdkInfo => switch (_sdk.state) {
+    FlutterSdk$CompletedState(:final sdk) => sdk,
+    FlutterSdk$ErrorState(:final sdk) => sdk,
+    _ => null,
+  };
+
+  bool get _architectureSupported => supportsArchitecture(_sdkInfo?.version);
+
+  /// The template the app is made from: the skeleton falls back to the empty one without
+  /// `packages/ui` or on an SDK that cannot make it.
+  NewProjectTemplate get _templateUsed =>
+      _template == NewProjectTemplate.architecture && (_hasUi != true || !_architectureSupported)
+      ? NewProjectTemplate.plain
+      : _template;
 
   Future<void> _loadProject() async {
     try {
@@ -206,7 +235,7 @@ class _AddMemberFormState extends State<AddMemberForm> {
         packageName: _package.text,
         org: _org.text,
         platforms: _kind.hasPlatforms ? _platforms : const <FlutterPlatform>{},
-        template: _kind.hasPlatforms ? _template : NewProjectTemplate.plain,
+        template: _kind.hasPlatforms ? _templateUsed : NewProjectTemplate.plain,
         gitRepo: _gitRepo ?? false,
       ),
     );
@@ -405,6 +434,10 @@ class _AddMemberFormState extends State<AddMemberForm> {
       label: localization.newProjectTemplate,
       messages: <Widget>[
         if (_hasUi == false) CreationMessage.hint(localization.addMemberNoUiPackage),
+        if (skeleton && _sdkInfo != null && !_architectureSupported)
+          CreationMessage.hint(
+            localization.newProjectTemplateArchitectureNeedsFlutter(kArchitectureMinFlutter),
+          ),
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -414,7 +447,8 @@ class _AddMemberFormState extends State<AddMemberForm> {
               key: const ValueKey<String>('template-architecture'),
               title: localization.newProjectTemplateArchitecture,
               description: localization.newProjectTemplateArchitectureHint,
-              selected: _template == NewProjectTemplate.architecture,
+              selected: _templateUsed == NewProjectTemplate.architecture,
+              enabled: _architectureSupported,
               onTap: () => setState(() => _template = NewProjectTemplate.architecture),
             ),
             const SizedBox(height: 6),
@@ -423,7 +457,7 @@ class _AddMemberFormState extends State<AddMemberForm> {
             key: const ValueKey<String>('template-plain'),
             title: localization.newProjectTemplatePlain,
             description: localization.newProjectTemplatePlainHint,
-            selected: _template == NewProjectTemplate.plain,
+            selected: _templateUsed == NewProjectTemplate.plain,
             onTap: () => setState(() => _template = NewProjectTemplate.plain),
           ),
         ],

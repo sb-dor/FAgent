@@ -1029,7 +1029,7 @@ final class ExampleDeletionController extends StateController<ExampleDeletionSta
 ```dart
 // file: example_deletion_dialog.dart
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'example_deletion_controller.dart';
 
@@ -1332,7 +1332,7 @@ class ProductsDataController with ChangeNotifier {
 ```dart
 // file: products_list_widget.dart
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'products_controller.dart';
 

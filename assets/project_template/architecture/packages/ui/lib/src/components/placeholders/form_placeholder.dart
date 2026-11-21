@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:ui/src/components/placeholders/shimmer.dart';
 import 'package:ui/src/components/placeholders/text_placeholder.dart';
 

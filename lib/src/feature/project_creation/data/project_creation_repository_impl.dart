@@ -38,8 +38,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   /// (`rootBundle.loadString` in the app); [startProcess] starts the commands; [home] defaults to
   /// `$HOME`; [now] gives the date of the first `CHANGELOG.md` entry; [dartVersion] gives the Dart
   /// version of that SDK (for example `3.14.0`), which a monorepo needs for its SDK constraint;
-  /// [flutterVersion] gives its Flutter version (for example `3.50.0`): from 3.47 on the skeleton
-  /// uses `material_ui` and `cupertino_ui` (see [usesMaterialUi]).
+  /// [flutterVersion] gives its Flutter version (for example `3.50.0`): the skeleton needs
+  /// [kArchitectureMinFlutter] (see [supportsArchitecture]).
   ProjectCreationRepositoryImpl({
     required this._database,
     required Future<String?> Function() flutter,
@@ -337,6 +337,14 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   Future<void> _runStep(_Run run, int index) async {
     final root = run.root;
     final member = run.member;
+    // The form offers the skeleton only on a Flutter that has it; before anything is written.
+    if (index == 0 && (member?.skeleton ?? run.request.skeleton)) {
+      if (!supportsArchitecture(await _flutterVersion())) {
+        throw const _StepFailure(
+          'Flutter $kArchitectureMinFlutter or newer is needed for My architecture',
+        );
+      }
+    }
     switch (run.steps[index].kind) {
       case CreationStepKind.workspace:
         await _writeWorkspace(run, index);
@@ -488,10 +496,10 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     }
   }
 
-  /// The packages of the skeleton and their generated code: `pub add` in [appPath] (and, when the
-  /// run [_materialUi], in the `packages/ui` at [uiPath] the run wrote), `pub get` at the root,
-  /// `build_runner` in [buildIn] (over the whole [workspace] or that package alone), and the
-  /// imports sorted in [fixIn]. With [addRootBuildRunner] the root gets `build_runner` first.
+  /// The packages of the skeleton and their generated code: `pub add` in [appPath] (and in the
+  /// `packages/ui` at [uiPath] the run wrote), `pub get` at the root, `build_runner` in [buildIn]
+  /// (over the whole [workspace] or that package alone), and the imports sorted in [fixIn]. With
+  /// [addRootBuildRunner] the root gets `build_runner` first.
   Future<void> _installSkeleton(
     _Run run,
     int index, {
@@ -504,21 +512,19 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   }) async {
     final root = run.root;
     final flutter = await _flutter(run);
-    final materialUi = await _materialUi(run);
     await _command(run, index, flutter, <String>[
       'pub',
       'add',
       ...skeletonPubAddArgumentsFor(
         uiPath: appPath == root ? 'packages/ui' : p.join('..', '..', 'packages', 'ui'),
-        materialUi: materialUi,
       ),
     ], workingDirectory: appPath);
     // packages/ui declares its own dependencies; an add leaves the user's one alone.
-    if (materialUi && uiPath != null) {
+    if (uiPath != null) {
       await _command(run, index, flutter, const <String>[
         'pub',
         'add',
-        ...uiMaterialUiPackages,
+        ...uiPubAddArguments,
       ], workingDirectory: uiPath);
     }
     if (addRootBuildRunner) {
@@ -594,10 +600,6 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   Future<String> _flutter(_Run run) async =>
       run.flutter ??= (await _flutterPath()) ?? (throw const _StepFailure('Flutter SDK not found'));
 
-  /// Whether the run's SDK [usesMaterialUi], looked up once per creation.
-  Future<bool> _materialUi(_Run run) async =>
-      run.materialUi ??= usesMaterialUi(await _flutterVersion());
-
   /// The `dart` next to [flutter] in the SDK's `bin` folder.
   String _dart(String flutter) =>
       p.join(p.dirname(flutter), Platform.isWindows ? 'dart.bat' : 'dart');
@@ -647,9 +649,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     );
   }
 
-  /// Copies [files] of the assets at [assetRoot] into [to], with the package name filled in and,
-  /// when the run [_materialUi], the Dart files on `material_ui` ([useMaterialUi]). Each copy is a
-  /// line of the step's output: its path relative to [to], behind [label].
+  /// Copies [files] of the assets at [assetRoot] into [to], with the package name filled in. Each
+  /// copy is a line of the step's output: its path relative to [to], behind [label].
   Future<void> _copyTemplate(
     _Run run,
     int index, {
@@ -663,10 +664,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       final text = await _loadAsset('$assetRoot$relative');
       final file = File(p.joinAll(<String>[to, ...relative.split('/')]));
       await file.parent.create(recursive: true);
-      final filled = fillProjectTemplate(text, package: package, date: _now());
-      await file.writeAsString(
-        relative.endsWith('.dart') && await _materialUi(run) ? useMaterialUi(filled) : filled,
-      );
+      await file.writeAsString(fillProjectTemplate(text, package: package, date: _now()));
       run
         ..addLine(index, '✎ $label$relative')
         ..checkLive();
@@ -961,9 +959,6 @@ final class _Run {
 
   /// The SDK constraint of a monorepo, once the workspace step worked it out.
   String? sdkConstraint;
-
-  /// Whether the skeleton uses `material_ui`, once looked up.
-  bool? materialUi;
 
   /// The root's `pubspec.lock` before an add; `null` when there was none.
   Uint8List? savedLock;

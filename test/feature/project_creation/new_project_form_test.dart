@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/initialization/models/dependencie
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/creation_fields.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
@@ -119,6 +120,7 @@ void main() {
     WidgetTester tester, {
     String? sdkPath = '/opt/flutter/bin/flutter',
     String dartVersion = '3.14.0',
+    String? flutterVersion = '3.50.0',
     String? org,
     Locale locale = const Locale('en'),
     bool dark = false,
@@ -140,7 +142,8 @@ void main() {
         runProcess: (executable, arguments, {environment}) async => io.ProcessResult(
           1,
           0,
-          '{"frameworkVersion":"3.27.1","channel":"stable","dartSdkVersion":"$dartVersion (build)"}',
+          '{${flutterVersion == null ? '' : '"frameworkVersion":"$flutterVersion",'}'
+              '"channel":"stable","dartSdkVersion":"$dartVersion (build)"}',
           '',
         ),
       ),
@@ -208,7 +211,7 @@ void main() {
     expect(find.text('From a git template…'), findsOneWidget);
     expect(checked(tester, 'new-project-git'), isTrue);
     expect(checked(tester, 'new-project-chat'), isTrue);
-    expect(find.text('Flutter 3.27.1'), findsOneWidget);
+    expect(find.text('Flutter 3.50.0'), findsOneWidget);
     expect(canCreate(tester), isFalse);
     // Nothing is wrong on an empty form.
     expect(find.text('Choose at least one platform'), findsNothing);
@@ -493,6 +496,55 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
+  CreationTemplateCard card(WidgetTester tester, String key) =>
+      tester.widget<CreationTemplateCard>(find.byKey(ValueKey<String>(key)));
+
+  testWidgets('My architecture is on with Flutter 3.50', (tester) async {
+    await openDialog(tester);
+
+    expect(card(tester, 'template-architecture').enabled, isTrue);
+    expect(card(tester, 'template-architecture').selected, isTrue);
+    expect(find.text('Needs Flutter 3.50 or newer'), findsNothing);
+    await typeName(tester, 'avera_booking');
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+    expect(memory.requests.single.template, NewProjectTemplate.architecture);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  for (final version in const <String?>['3.47.2', null]) {
+    testWidgets(
+      'My architecture is off with Flutter ${version ?? 'unknown'}: the empty one is made',
+      (tester) async {
+        await openDialog(tester, flutterVersion: version);
+
+        expect(card(tester, 'template-architecture').enabled, isFalse);
+        expect(card(tester, 'template-architecture').selected, isFalse);
+        expect(card(tester, 'template-plain').selected, isTrue);
+        expect(find.text('Needs Flutter 3.50 or newer'), findsOneWidget);
+        await tester.ensureVisible(find.text('My architecture'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('My architecture'));
+        await tester.pump();
+        expect(card(tester, 'template-architecture').selected, isFalse);
+        if (version != null) {
+          await typeName(tester, 'avera_booking');
+          await tester.tap(createButton());
+          await tester.pumpAndSettle();
+          expect(memory.requests.single.template, NewProjectTemplate.plain);
+        }
+        await disposeTestApp(tester, dependencies);
+      },
+    );
+  }
+
+  testWidgets('the Flutter hint of My architecture is in Russian too', (tester) async {
+    await openDialog(tester, flutterVersion: '3.47.2', locale: const Locale('ru'));
+
+    expect(find.text('Нужен Flutter 3.50 или новее'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
+
   const structureKey = ValueKey<String>('new-project-structure');
   const folderKey = ValueKey<String>('new-project-app-folder');
   const packageKey = ValueKey<String>('new-project-app-package');
@@ -581,9 +633,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('the app package cannot take the name of packages/ui or of the root', (
-    tester,
-  ) async {
+  testWidgets('the app package cannot take the name of packages/ui or of the root', (tester) async {
     await openDialog(tester);
     await typeName(tester, 'shop');
     await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));

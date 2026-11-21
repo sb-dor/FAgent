@@ -717,7 +717,7 @@ Whole files, one per block; put each where the layout above says and adjust the 
 
 ```dart
 // file: preferences_entry.dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// One value in [SharedPreferencesAsync], declared once: its key and how it is written and read.

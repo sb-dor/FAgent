@@ -1,10 +1,14 @@
+import 'dart:io' as io;
+
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/add_member_dialog.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/creation_fields.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,6 +43,7 @@ void main() {
     Locale locale = const Locale('en'),
     bool ui = true,
     bool git = true,
+    String? flutterVersion = '3.50.0',
   }) async {
     tester.view
       ..physicalSize = const Size(1280, 800)
@@ -48,7 +53,19 @@ void main() {
       ..takenPackages = <String>{'shop_taken_name'}
       ..uiPackage = ui
       ..gitRepo = git;
-    dependencies = testDependencies(projectCreationRepository: memory);
+    dependencies = testDependencies(
+      projectCreationRepository: memory,
+      flutterSdkRepository: FlutterSdkRepositoryImpl(
+        which: (_) => '/opt/flutter/bin/flutter',
+        runProcess: (executable, arguments, {environment}) async => io.ProcessResult(
+          1,
+          0,
+          '{${flutterVersion == null ? '' : '"frameworkVersion":"$flutterVersion",'}'
+              '"channel":"stable","dartSdkVersion":"3.14.0 (build)"}',
+          '',
+        ),
+      ),
+    );
     addTearDown(() => disposeTestApp(tester, dependencies));
     await tester.pumpWidget(
       testApp(
@@ -144,6 +161,50 @@ void main() {
     expect(find.text('No packages/ui: only the empty template is available'), findsNothing);
     expect(shown('template-architecture'), isTrue);
     await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+  });
+
+  CreationTemplateCard card(WidgetTester tester, String key) =>
+      tester.widget<CreationTemplateCard>(find.byKey(ValueKey<String>(key)));
+
+  testWidgets('My architecture is on with Flutter 3.50', (tester) async {
+    await openDialog(tester);
+
+    expect(card(tester, 'template-architecture').enabled, isTrue);
+    expect(card(tester, 'template-architecture').selected, isTrue);
+    expect(find.text('Needs Flutter 3.50 or newer'), findsNothing);
+    await type(tester, _folder, 'admin');
+    await tester.tap(createButton());
+    await tester.pumpAndSettle(const Duration(seconds: 1));
+    expect(memory.memberRequests.single.template, NewProjectTemplate.architecture);
+  });
+
+  for (final version in const <String?>['3.47.2', null]) {
+    testWidgets(
+      'My architecture is off with Flutter ${version ?? 'unknown'}: the empty one is added',
+      (tester) async {
+        await openDialog(tester, flutterVersion: version);
+
+        expect(card(tester, 'template-architecture').enabled, isFalse);
+        expect(card(tester, 'template-architecture').selected, isFalse);
+        expect(card(tester, 'template-plain').selected, isTrue);
+        expect(find.text('Needs Flutter 3.50 or newer'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey<String>('template-architecture')));
+        await tester.pumpAndSettle();
+        expect(card(tester, 'template-architecture').selected, isFalse);
+        await type(tester, _folder, 'admin');
+        await tester.tap(createButton());
+        await tester.pumpAndSettle(const Duration(seconds: 1));
+        expect(memory.memberRequests.single.template, NewProjectTemplate.plain);
+      },
+    );
+  }
+
+  testWidgets('the Flutter hint of My architecture is in Russian too', (tester) async {
+    await openDialog(tester, flutterVersion: '3.47.2', locale: const Locale('ru'));
+
+    expect(find.text('Нужен Flutter 3.50 или новее'), findsOneWidget);
+    await tester.tap(find.byTooltip('Закрыть'));
     await tester.pumpAndSettle();
   });
 

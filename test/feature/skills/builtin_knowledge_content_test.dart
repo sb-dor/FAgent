@@ -479,6 +479,33 @@ void main() {
     }
   });
 
+  test('the rules import Material and Cupertino from material_ui and cupertino_ui', () {
+    final widgets = rule('widgets');
+    for (final phrase in <String>[
+      'package:material_ui/material_ui.dart',
+      'package:cupertino_ui/cupertino_ui.dart',
+      'flutter pub add material_ui',
+      'flutter pub add cupertino_ui',
+      'GlobalWidgetsLocalizations',
+    ]) {
+      expect(widgets, contains(phrase), reason: 'widgets.md does not mention "$phrase"');
+    }
+    for (final file in ruleFiles) {
+      final text = file.readAsStringSync();
+      expect(text, isNot(contains("import 'package:flutter/material.dart'")), reason: file.path);
+      expect(text, isNot(contains("import 'package:flutter/cupertino.dart'")), reason: file.path);
+      // The SDK's libraries are named only by the rule for an older Flutter.
+      for (final item in text.split(RegExp(r'\n(?=- )|\n\n'))) {
+        if (!item.contains('package:flutter/material.dart') &&
+            !item.contains('package:flutter/cupertino.dart')) {
+          continue;
+        }
+        expect(p.basename(file.path), 'widgets.md', reason: item);
+        expect(item, contains('on an older Flutter keep'), reason: item);
+      }
+    }
+  });
+
   test('no rule teaches the old state names', () {
     for (final file in ruleFiles) {
       final text = file.readAsStringSync();
