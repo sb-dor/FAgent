@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' as io;
 import 'dart:io' show FileSystemException;
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -17,7 +18,6 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/wor
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../../support/flutter_version_runner.dart';
 import '../../support/memory_project_creation_repository.dart';
 import '../../support/test_app.dart';
 
@@ -118,6 +118,7 @@ void main() {
   Future<void> openDialog(
     WidgetTester tester, {
     String? sdkPath = '/opt/flutter/bin/flutter',
+    String dartVersion = '3.14.0',
     String? org,
     Locale locale = const Locale('en'),
     bool dark = false,
@@ -136,7 +137,12 @@ void main() {
       projectCreationRepository: repository ?? memory,
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => sdkPath,
-        runProcess: flutterVersionRunner,
+        runProcess: (executable, arguments, {environment}) async => io.ProcessResult(
+          1,
+          0,
+          '{"frameworkVersion":"3.27.1","channel":"stable","dartSdkVersion":"$dartVersion (build)"}',
+          '',
+        ),
       ),
     );
     await tester.pumpWidget(
@@ -433,6 +439,8 @@ void main() {
     await openDialog(tester);
 
     expect(find.text('Coming later'), findsNothing);
+    await tester.ensureVisible(find.text('From a git template…'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
 
@@ -440,10 +448,14 @@ void main() {
     expect(find.text('Coming later'), findsOneWidget);
     expect(find.byType(SnackBar), findsNothing);
 
+    await tester.ensureVisible(find.text('My architecture'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('My architecture'));
     await tester.pump();
     expect(find.text('Coming later'), findsNothing);
 
+    await tester.ensureVisible(find.text('From a git template…'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('From a git template…'));
     await tester.pump();
     expect(find.text('Coming later'), findsOneWidget);
@@ -458,6 +470,8 @@ void main() {
     await openDialog(tester);
     await typeName(tester, 'avera_booking');
     await tester.tap(find.byKey(const ValueKey<String>('platform-macos')));
+    await tester.ensureVisible(find.text('Plain flutter create'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Plain flutter create'));
     // The project type sits above the fields: the switches start below the fold.
     await tester.ensureVisible(find.text('git init + first commit'));
@@ -476,6 +490,94 @@ void main() {
     expect(request.template, NewProjectTemplate.plain);
     expect(request.gitInit, isFalse);
     expect(request.openChat, isTrue);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  const structureKey = ValueKey<String>('new-project-structure');
+  const folderKey = ValueKey<String>('new-project-app-folder');
+  const packageKey = ValueKey<String>('new-project-app-package');
+  String textOf(WidgetTester tester, Key key) =>
+      tester.widget<TextField>(find.byKey(key)).controller!.text;
+
+  testWidgets('structure row only for an app', (tester) async {
+    await openDialog(tester);
+    expect(find.byKey(structureKey), findsOneWidget);
+    expect(find.byKey(const ValueKey<String>('structure-single')), findsOneWidget);
+
+    await tester.tap(find.text('Package'));
+    await tester.pump();
+
+    expect(find.byKey(structureKey), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('monorepo shows the first app fields', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'shop');
+    expect(find.byKey(folderKey), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+
+    expect(textOf(tester, folderKey), 'app');
+    expect(textOf(tester, packageKey), 'shop_app');
+    await typeName(tester, 'store');
+    expect(textOf(tester, packageKey), 'store_app');
+    await tester.enterText(find.byKey(packageKey), 'my_app');
+    await typeName(tester, 'shop');
+    expect(textOf(tester, packageKey), 'my_app');
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('monorepo request', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'shop');
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    final request = memory.requests.single;
+    expect(request.structure, ProjectStructure.monorepo);
+    expect(request.appFolder, 'app');
+    expect(request.appPackage, 'shop_app');
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('monorepo disabled on an old SDK', (tester) async {
+    await openDialog(tester, dartVersion: '3.13.0');
+    await typeName(tester, 'shop');
+
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(folderKey), findsNothing);
+    expect(find.textContaining('3.14'), findsOneWidget);
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+    expect(memory.requests.single.structure, ProjectStructure.single);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('invalid app package disables create', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'shop');
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+    expect(canCreate(tester), isTrue);
+
+    await tester.enterText(find.byKey(packageKey), 'Bad-Name');
+    await tester.pumpAndSettle();
+
+    expect(canCreate(tester), isFalse);
+    await tester.enterText(find.byKey(packageKey), 'class');
+    await tester.pumpAndSettle();
+    expect(canCreate(tester), isFalse);
+    await tester.enterText(find.byKey(folderKey), '');
+    await tester.enterText(find.byKey(packageKey), 'good');
+    await tester.pumpAndSettle();
+    expect(canCreate(tester), isFalse);
     await disposeTestApp(tester, dependencies);
   });
 
@@ -617,6 +719,9 @@ void main() {
     expect(find.text('Попробуйте "my_app"'), findsOneWidget);
     expect(find.text('Моя архитектура'), findsOneWidget);
     expect(find.text('Тип проекта'), findsOneWidget);
+    expect(find.text('Структура'), findsOneWidget);
+    expect(find.text('Одно приложение'), findsOneWidget);
+    expect(find.text('Монорепозиторий'), findsOneWidget);
     expect(find.text('Пакет'), findsOneWidget);
     expect(find.text('Создать'), findsOneWidget);
     await disposeTestApp(tester, dependencies);

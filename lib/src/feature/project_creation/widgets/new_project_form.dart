@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/feature/flutter_sdk/controller/flutter_sd
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/package_name.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/option_chip.dart';
@@ -44,6 +45,11 @@ class _NewProjectFormState extends State<NewProjectForm> {
   late final FlutterSdkController _sdk;
   late final TextEditingController _name;
   late final TextEditingController _org;
+  late final TextEditingController _appFolder;
+  late final TextEditingController _appPackage;
+
+  /// Whether the app package was typed: until then it follows `<name>_<folder>`.
+  bool _appPackageEdited = false;
 
   /// The folder `<parent>/<name>` goes into; `null` until the suggestion has arrived.
   String? _parent;
@@ -53,6 +59,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
     FlutterPlatform.macos,
   };
   FlutterProjectType _type = FlutterProjectType.app;
+  ProjectStructure _structure = ProjectStructure.single;
   late NewProjectTemplate _template;
   bool _gitInit = true;
   bool _openChat = true;
@@ -77,6 +84,8 @@ class _NewProjectFormState extends State<NewProjectForm> {
     final settings = _scope.settingsController.settings;
     _name = TextEditingController();
     _org = TextEditingController(text: settings.projectOrg);
+    _appFolder = TextEditingController(text: 'app');
+    _appPackage = TextEditingController();
     _template = settings.projectTemplate == NewProjectTemplate.git
         ? NewProjectTemplate.architecture
         : settings.projectTemplate;
@@ -105,6 +114,8 @@ class _NewProjectFormState extends State<NewProjectForm> {
       ..dispose();
     _name.dispose();
     _org.dispose();
+    _appFolder.dispose();
+    _appPackage.dispose();
     super.dispose();
   }
 
@@ -118,11 +129,32 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   PackageNameProblem? get _nameProblem => checkPackageName(_name.text);
 
+  bool get _monorepoSupported => supportsMonorepo(_sdkInfo?.dartVersion);
+
+  /// Whether the project is made as a workspace: only an app, and only on an SDK that can.
+  bool get _monorepo =>
+      _type == FlutterProjectType.app &&
+      _structure == ProjectStructure.monorepo &&
+      _monorepoSupported;
+
+  static final RegExp _folderPattern = RegExp(r'^[a-z][a-z0-9_]*$');
+
+  bool get _appFolderValid => _folderPattern.hasMatch(_appFolder.text);
+
+  PackageNameProblem? get _appPackageProblem => checkPackageName(_appPackage.text);
+
+  /// Keeps the app package at `<name>_<folder>` until it is typed.
+  void _followAppPackage() {
+    if (_appPackageEdited) return;
+    _appPackage.text = '${_name.text}_${_appFolder.text}';
+  }
+
   bool get _orgValid => AppSettings.orgPattern.hasMatch(_org.text);
 
   bool get _canCreate =>
       _nameProblem == null &&
       _orgValid &&
+      (!_monorepo || (_appFolderValid && _appPackageProblem == null)) &&
       _parent != null &&
       _targetChecked &&
       _targetProblem == null &&
@@ -196,6 +228,9 @@ class _NewProjectFormState extends State<NewProjectForm> {
         template: _template,
         gitInit: _gitInit,
         openChat: _openChat,
+        structure: _monorepo ? ProjectStructure.monorepo : ProjectStructure.single,
+        appFolder: _appFolder.text,
+        appPackage: _monorepo ? _appPackage.text : null,
       ),
     );
   }
@@ -241,6 +276,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         _typeField(context),
+        if (_type == FlutterProjectType.app) ...<Widget>[gap, _structureField(context)],
         gap,
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -250,6 +286,17 @@ class _NewProjectFormState extends State<NewProjectForm> {
             Expanded(child: _orgField(context)),
           ],
         ),
+        if (_monorepo) ...<Widget>[
+          gap,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Expanded(child: _appFolderField(context)),
+              const SizedBox(width: 10),
+              Expanded(child: _appPackageField(context)),
+            ],
+          ),
+        ],
         gap,
         _folderField(context),
         if (_type.hasPlatforms) ...<Widget>[
@@ -361,6 +408,86 @@ class _NewProjectFormState extends State<NewProjectForm> {
     );
   }
 
+  Widget _structureField(BuildContext context) {
+    final localization = Localization.of(context);
+    final needsDart = _sdkInfo != null && !_monorepoSupported;
+    return _Field(
+      label: localization.newProjectStructure,
+      messages: <Widget>[
+        _Message.hint(
+          needsDart
+              ? localization.newProjectStructureMonorepoNeedsDart(kMonorepoMinDart)
+              : _monorepo
+              ? localization.newProjectStructureMonorepoHint
+              : localization.newProjectStructureSingleHint,
+        ),
+      ],
+      child: Wrap(
+        key: const ValueKey<String>('new-project-structure'),
+        spacing: 6,
+        runSpacing: 6,
+        children: <Widget>[
+          OptionChip(
+            key: const ValueKey<String>('structure-single'),
+            label: localization.newProjectStructureSingle,
+            selected: !_monorepo,
+            exclusive: true,
+            onTap: () => setState(() => _structure = ProjectStructure.single),
+          ),
+          OptionChip(
+            key: const ValueKey<String>('structure-monorepo'),
+            label: localization.newProjectStructureMonorepo,
+            selected: _monorepo,
+            exclusive: true,
+            enabled: _monorepoSupported,
+            onTap: () => setState(() => _structure = ProjectStructure.monorepo),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _appFolderField(BuildContext context) {
+    final localization = Localization.of(context);
+    return _Field(
+      label: localization.newProjectAppFolder,
+      messages: <Widget>[
+        if (!_appFolderValid) _Message.error(localization.newProjectNameInvalid),
+      ],
+      child: _TextInput(
+        fieldKey: const ValueKey<String>('new-project-app-folder'),
+        controller: _appFolder,
+        error: !_appFolderValid,
+        onChanged: (_) => setState(_followAppPackage),
+        onSubmitted: (_) => _create(),
+      ),
+    );
+  }
+
+  Widget _appPackageField(BuildContext context) {
+    final localization = Localization.of(context);
+    final problem = _appPackageProblem;
+    return _Field(
+      label: localization.newProjectAppPackage,
+      messages: <Widget>[
+        if (problem != null)
+          _Message.error(switch (problem) {
+            PackageNameProblem.keyword => localization.newProjectNameKeyword,
+            PackageNameProblem.dependency => localization.newProjectNameDependency,
+            PackageNameProblem.invalid || PackageNameProblem.empty =>
+              localization.newProjectNameInvalid,
+          }),
+      ],
+      child: _TextInput(
+        fieldKey: const ValueKey<String>('new-project-app-package'),
+        controller: _appPackage,
+        error: problem != null,
+        onChanged: (_) => setState(() => _appPackageEdited = true),
+        onSubmitted: (_) => _create(),
+      ),
+    );
+  }
+
   Widget _nameField(BuildContext context) {
     final localization = Localization.of(context);
     final problem = _nameProblem;
@@ -389,7 +516,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         autofocus: true,
         error: bad,
         onChanged: (_) {
-          setState(() {});
+          setState(_followAppPackage);
           _checkTarget();
         },
         onSubmitted: (_) => _create(),

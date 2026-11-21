@@ -12,6 +12,7 @@ class OptionChip extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.exclusive = false,
+    this.enabled = true,
     super.key,
   });
 
@@ -27,6 +28,9 @@ class OptionChip extends StatelessWidget {
   /// Whether the chip is one of a group where only one is on (a radio), not a toggle.
   final bool exclusive;
 
+  /// Whether the chip can be tapped; a disabled one is muted.
+  final bool enabled;
+
   @override
   Widget build(BuildContext context) {
     final colors = context.colors;
@@ -36,6 +40,7 @@ class OptionChip extends StatelessWidget {
       checked: exclusive ? selected : null,
       inMutuallyExclusiveGroup: exclusive,
       button: true,
+      enabled: enabled,
       child: Material(
         color: selected ? colors.accentSoft : colors.bg,
         shape: RoundedRectangleBorder(
@@ -44,7 +49,7 @@ class OptionChip extends StatelessWidget {
         ),
         child: InkWell(
           borderRadius: radius,
-          onTap: onTap,
+          onTap: enabled ? onTap : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: Row(
@@ -57,7 +62,11 @@ class OptionChip extends StatelessWidget {
                 Text(
                   label,
                   style: Theme.of(context).textTheme.bodySmall!
-                      .copyWith(color: selected ? colors.accent : colors.text),
+                      .copyWith(color: !enabled
+                        ? colors.muted
+                        : selected
+                        ? colors.accent
+                        : colors.text),
                 ),
               ],
             ),
