@@ -98,6 +98,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
   /// Whether the monorepo has a `packages/ui` package.
   Future<bool> hasUiPackage(String projectPath) => _repository.hasUiPackage(projectPath);
 
+  /// Whether the monorepo's `packages/ui` is still on the SDK's Material or Cupertino.
+  Future<bool> uiUsesSdkMaterial(String projectPath) => _repository.uiUsesSdkMaterial(projectPath);
+
   /// Whether the project is a git repository.
   Future<bool> isGitRepo(String projectPath) => _repository.isGitRepo(projectPath);
 

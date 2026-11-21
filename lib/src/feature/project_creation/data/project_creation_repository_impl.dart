@@ -15,6 +15,12 @@ import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
 
+/// An `import` or `export` of the SDK's Material or Cupertino library.
+final RegExp _sdkMaterialDirective = RegExp(
+  r'''^\s*(?:import|export)\s+['"]package:flutter/(?:material|cupertino)\.dart['"]''',
+  multiLine: true,
+);
+
 /// How many lines of output a step keeps (the last ones); the progress screen shows a few of them.
 const int kCreationOutputKept = 200;
 
@@ -136,6 +142,17 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   @override
   Future<bool> hasUiPackage(String projectPath) async =>
       File(p.join(projectPath, 'packages', 'ui', 'pubspec.yaml')).existsSync();
+
+  @override
+  Future<bool> uiUsesSdkMaterial(String projectPath) async {
+    final lib = Directory(p.join(projectPath, 'packages', 'ui', 'lib'));
+    if (!lib.existsSync()) return false;
+    await for (final entity in lib.list(recursive: true, followLinks: false)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      if (_sdkMaterialDirective.hasMatch(await entity.readAsString())) return true;
+    }
+    return false;
+  }
 
   @override
   Future<bool> isGitRepo(String projectPath) async =>

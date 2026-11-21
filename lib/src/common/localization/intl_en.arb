@@ -685,6 +685,7 @@
   "addMemberFolderExists": "The folder already exists",
   "addMemberPackageTaken": "The project already has this package",
   "addMemberNoUiPackage": "No packages/ui: only the empty template is available",
+  "addMemberUiOnSdkMaterial": "packages/ui is on package:flutter/material.dart: only the empty template is available",
   "addMemberScriptsNote": "{script} lists members by name: add {folder} to it",
   "@addMemberScriptsNote": {"placeholders": {"script": {"type": "String"}, "folder": {"type": "String"}}},
   "projectRulesTitle": "Add the project rules?",

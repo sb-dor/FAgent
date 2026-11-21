@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
@@ -44,6 +45,8 @@ void main() {
     bool ui = true,
     bool git = true,
     String? flutterVersion = '3.50.0',
+    Future<void>? versionAnswered,
+    bool uiOnSdkMaterial = false,
   }) async {
     tester.view
       ..physicalSize = const Size(1280, 800)
@@ -52,18 +55,22 @@ void main() {
     memory = MemoryProjectCreationRepository(existing: const <String>{'/work/shop/apps/taken'})
       ..takenPackages = <String>{'shop_taken_name'}
       ..uiPackage = ui
+      ..uiOnSdkMaterial = uiOnSdkMaterial
       ..gitRepo = git;
     dependencies = testDependencies(
       projectCreationRepository: memory,
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => '/opt/flutter/bin/flutter',
-        runProcess: (executable, arguments, {environment}) async => io.ProcessResult(
-          1,
-          0,
-          '{${flutterVersion == null ? '' : '"frameworkVersion":"$flutterVersion",'}'
-              '"channel":"stable","dartSdkVersion":"3.14.0 (build)"}',
-          '',
-        ),
+        runProcess: (executable, arguments, {environment}) async {
+          await versionAnswered;
+          return io.ProcessResult(
+            1,
+            0,
+            '{${flutterVersion == null ? '' : '"frameworkVersion":"$flutterVersion",'}'
+                '"channel":"stable","dartSdkVersion":"3.14.0 (build)"}',
+            '',
+          );
+        },
       ),
     );
     addTearDown(() => disposeTestApp(tester, dependencies));
@@ -198,6 +205,81 @@ void main() {
         expect(memory.memberRequests.single.template, NewProjectTemplate.plain);
       },
     );
+  }
+
+  testWidgets('a Flutter app waits for the Flutter version before it can be created', (
+    tester,
+  ) async {
+    final answer = Completer<void>();
+    await openDialog(tester, versionAnswered: answer.future);
+
+    // While the version is looked up, the chosen template stays as it is, without a hint.
+    expect(card(tester, 'template-architecture').selected, isTrue);
+    expect(card(tester, 'template-architecture').enabled, isTrue);
+    expect(find.text('Needs Flutter 3.50 or newer'), findsNothing);
+    await type(tester, _folder, 'admin');
+    expect(canCreate(tester), isFalse);
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+    expect(memory.memberRequests, isEmpty);
+
+    answer.complete();
+    await tester.pumpAndSettle();
+    expect(canCreate(tester), isTrue);
+    await tester.tap(createButton());
+    await tester.pumpAndSettle(const Duration(seconds: 1));
+    expect(memory.memberRequests.single.template, NewProjectTemplate.architecture);
+  });
+
+  testWidgets('a Dart package does not wait for the Flutter version', (tester) async {
+    final answer = Completer<void>();
+    await openDialog(tester, versionAnswered: answer.future);
+
+    await pickKind(tester, MemberKind.dartPackage);
+    await type(tester, _folder, 'core');
+    expect(canCreate(tester), isTrue);
+    answer.complete();
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a late old Flutter turns My architecture off then', (tester) async {
+    final answer = Completer<void>();
+    await openDialog(tester, flutterVersion: '3.47.2', versionAnswered: answer.future);
+    expect(card(tester, 'template-architecture').selected, isTrue);
+
+    answer.complete();
+    await tester.pumpAndSettle();
+    expect(card(tester, 'template-architecture').enabled, isFalse);
+    expect(card(tester, 'template-plain').selected, isTrue);
+    expect(find.text('Needs Flutter 3.50 or newer'), findsOneWidget);
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+  });
+
+  for (final (locale, text) in <(Locale, String)>[
+    (
+      const Locale('en'),
+      'packages/ui is on package:flutter/material.dart: only the empty template is available',
+    ),
+    (
+      const Locale('ru'),
+      'packages/ui использует package:flutter/material.dart: доступен только пустой шаблон',
+    ),
+  ]) {
+    testWidgets('a packages/ui on the SDK Material offers only Empty (${locale.languageCode})', (
+      tester,
+    ) async {
+      await openDialog(tester, uiOnSdkMaterial: true, locale: locale);
+
+      expect(shown('template-architecture'), isFalse);
+      expect(shown('template-plain'), isTrue);
+      expect(find.text(text), findsOneWidget);
+      await type(tester, _folder, 'admin');
+      await tester.tap(createButton());
+      await tester.pumpAndSettle(const Duration(seconds: 1));
+      expect(memory.memberRequests.single.template, NewProjectTemplate.plain);
+    });
   }
 
   testWidgets('the Flutter hint of My architecture is in Russian too', (tester) async {

@@ -282,7 +282,7 @@ List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
   'drift_flutter',
   'web',
   'flutter_localizations@{sdk: flutter}',
-  // Material and Cupertino left the SDK in Flutter 3.47: the template imports these packages.
+  // Flutter 3.47 deprecated the SDK's Material and Cupertino: the template imports these.
   'material_ui',
   'cupertino_ui',
   'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',

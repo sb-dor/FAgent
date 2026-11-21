@@ -165,6 +165,10 @@ void main() {
       expect(supportsMonorepo('3.15.1'), isTrue);
       expect(supportsMonorepo('3.13.9'), isFalse);
       expect(supportsMonorepo(null), isFalse);
+      expect(supportsMonorepo('3.15.0-12.0.dev'), isTrue);
+      expect(supportsMonorepo('3.13.0-1.0.dev'), isFalse);
+      expect(supportsMonorepo(''), isFalse);
+      expect(supportsMonorepo('abc'), isFalse);
     });
   });
 

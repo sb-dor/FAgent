@@ -134,12 +134,18 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   bool get _monorepoSupported => supportsMonorepo(_sdkInfo?.dartVersion);
 
-  bool get _architectureSupported => supportsArchitecture(_sdkInfo?.version);
+  /// Whether the SDK lookup has finished, found or not.
+  bool get _sdkLoaded =>
+      _sdk.state is! FlutterSdk$InitialState && _sdk.state is! FlutterSdk$InProgressState;
+
+  /// Whether "My architecture" is off: the lookup finished with an older or unknown Flutter.
+  /// Until then the card shows the chosen template as it is.
+  bool get _architectureOff => _sdkLoaded && !supportsArchitecture(_sdkInfo?.version);
 
   /// The template the project is made from: "My architecture" falls back to the empty one on an
   /// SDK that cannot make it.
   NewProjectTemplate get _templateUsed =>
-      _template == NewProjectTemplate.architecture && !_architectureSupported
+      _template == NewProjectTemplate.architecture && _architectureOff
       ? NewProjectTemplate.plain
       : _template;
 
@@ -331,7 +337,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
           CreationField(
             label: localization.newProjectTemplate,
             messages: <Widget>[
-              if (_sdkInfo != null && !_architectureSupported)
+              if (_architectureOff)
                 CreationMessage.hint(
                   localization.newProjectTemplateArchitectureNeedsFlutter(kArchitectureMinFlutter),
                 ),
@@ -345,8 +351,11 @@ class _NewProjectFormState extends State<NewProjectForm> {
                   title: localization.newProjectTemplateArchitecture,
                   description: localization.newProjectTemplateArchitectureHint,
                   selected: _templateUsed == NewProjectTemplate.architecture,
-                  enabled: _architectureSupported,
-                  onTap: () => _chooseTemplate(NewProjectTemplate.architecture),
+                  enabled: !_architectureOff,
+                  onTap: () {
+                    // Until the SDK is known the choice could not be kept.
+                    if (_sdkLoaded) _chooseTemplate(NewProjectTemplate.architecture);
+                  },
                 ),
                 const SizedBox(height: 6),
                 CreationTemplateCard(

@@ -121,6 +121,7 @@ void main() {
     String? sdkPath = '/opt/flutter/bin/flutter',
     String dartVersion = '3.14.0',
     String? flutterVersion = '3.50.0',
+    Future<void>? versionAnswered,
     String? org,
     Locale locale = const Locale('en'),
     bool dark = false,
@@ -139,13 +140,16 @@ void main() {
       projectCreationRepository: repository ?? memory,
       flutterSdkRepository: FlutterSdkRepositoryImpl(
         which: (_) => sdkPath,
-        runProcess: (executable, arguments, {environment}) async => io.ProcessResult(
-          1,
-          0,
-          '{${flutterVersion == null ? '' : '"frameworkVersion":"$flutterVersion",'}'
-              '"channel":"stable","dartSdkVersion":"$dartVersion (build)"}',
-          '',
-        ),
+        runProcess: (executable, arguments, {environment}) async {
+          await versionAnswered;
+          return io.ProcessResult(
+            1,
+            0,
+            '{${flutterVersion == null ? '' : '"frameworkVersion":"$flutterVersion",'}'
+                '"channel":"stable","dartSdkVersion":"$dartVersion (build)"}',
+            '',
+          );
+        },
       ),
     );
     await tester.pumpWidget(
@@ -527,16 +531,32 @@ void main() {
         await tester.tap(find.text('My architecture'));
         await tester.pump();
         expect(card(tester, 'template-architecture').selected, isFalse);
-        if (version != null) {
-          await typeName(tester, 'avera_booking');
-          await tester.tap(createButton());
-          await tester.pumpAndSettle();
-          expect(memory.requests.single.template, NewProjectTemplate.plain);
-        }
+        await typeName(tester, 'avera_booking');
+        await tester.tap(createButton());
+        await tester.pumpAndSettle();
+        expect(memory.requests.single.template, NewProjectTemplate.plain);
         await disposeTestApp(tester, dependencies);
       },
     );
   }
+
+  testWidgets('while the Flutter version is looked up the chosen template stays', (tester) async {
+    final answer = Completer<void>();
+    await openDialog(tester, flutterVersion: '3.47.2', versionAnswered: answer.future);
+
+    expect(card(tester, 'template-architecture').selected, isTrue);
+    expect(card(tester, 'template-architecture').enabled, isTrue);
+    expect(find.text('Needs Flutter 3.50 or newer'), findsNothing);
+    await typeName(tester, 'avera_booking');
+    expect(canCreate(tester), isFalse);
+
+    answer.complete();
+    await tester.pumpAndSettle();
+    expect(card(tester, 'template-architecture').enabled, isFalse);
+    expect(card(tester, 'template-plain').selected, isTrue);
+    expect(find.text('Needs Flutter 3.50 or newer'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
 
   testWidgets('the Flutter hint of My architecture is in Russian too', (tester) async {
     await openDialog(tester, flutterVersion: '3.47.2', locale: const Locale('ru'));

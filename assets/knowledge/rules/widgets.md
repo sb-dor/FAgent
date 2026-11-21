@@ -2116,11 +2116,9 @@ Old snippets still use these; the analyzer reports them as deprecated:
 
 - Material and Cupertino in the SDK (Flutter 3.47): the `material_ui` and `cupertino_ui` packages
   (see "Rules"). Their localization delegates moved with them: `GlobalMaterialLocalizations` comes
-  from `material_ui`, `GlobalCupertinoLocalizations` from `cupertino_ui`
-  (`import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;`), and
-  `flutter_localizations` is imported only for the delegate it still owns
-  (`import 'package:flutter_localizations/flutter_localizations.dart'
-  show GlobalWidgetsLocalizations;`).
+  from `material_ui`, `GlobalCupertinoLocalizations` from `cupertino_ui` (imported with
+  `show GlobalCupertinoLocalizations`), and `flutter_localizations` is imported only for the
+  delegate it still owns, with `show GlobalWidgetsLocalizations`.
 - `color.withOpacity(.5)`: `color.withValues(alpha: .5)` (`withOpacity` loses precision). Read the
   channels as `color.r`, `.g`, `.b`, `.a`, not `red` or `value`.
 - `Radio(value: v, groupValue: selected, onChanged: ...)`: the radios sit under one

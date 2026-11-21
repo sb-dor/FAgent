@@ -25,9 +25,11 @@ import 'package:l/l.dart';
 ///
 /// The package follows `<project>_<folder>` until it is typed. The folder and the package are
 /// checked as package names, and then against the project (the folder must be free and the package
-/// name not taken; the latest answer wins). A project without `packages/ui` offers only the empty
-/// template, as the skeleton needs that package; so does a Flutter older than
-/// [kArchitectureMinFlutter] (or an unknown one). "Create" is on only when everything is fine.
+/// name not taken; the latest answer wins). A project without `packages/ui`, or with one still on
+/// the SDK's Material, offers only the empty template, as the skeleton needs that package on
+/// `material_ui`; so does a Flutter older than [kArchitectureMinFlutter] (or an unknown one).
+/// "Create" is on only when everything is fine, for a Flutter app once the Flutter version is
+/// known.
 /// {@endtemplate}
 class AddMemberForm extends StatefulWidget {
   /// {@macro add_member_form}
@@ -60,6 +62,9 @@ class _AddMemberFormState extends State<AddMemberForm> {
 
   /// Whether the project has `packages/ui`; `null` until known.
   bool? _hasUi;
+
+  /// Whether the project's `packages/ui` is still on the SDK's Material; `null` until known.
+  bool? _uiOnSdkMaterial;
 
   /// Whether the project is a git repository; `null` until known.
   bool? _gitRepo;
@@ -120,25 +125,36 @@ class _AddMemberFormState extends State<AddMemberForm> {
     _ => null,
   };
 
-  bool get _architectureSupported => supportsArchitecture(_sdkInfo?.version);
+  /// Whether the SDK lookup has finished, found or not.
+  bool get _sdkLoaded =>
+      _sdk.state is! FlutterSdk$InitialState && _sdk.state is! FlutterSdk$InProgressState;
 
-  /// The template the app is made from: the skeleton falls back to the empty one without
-  /// `packages/ui` or on an SDK that cannot make it.
+  /// Whether "My architecture" is off: the lookup finished with an older or unknown Flutter.
+  /// Until then the card shows the chosen template as it is.
+  bool get _architectureOff => _sdkLoaded && !supportsArchitecture(_sdkInfo?.version);
+
+  /// Whether the project can take the skeleton: it has a `packages/ui` on `material_ui`.
+  bool get _skeletonOffered => _hasUi == true && _uiOnSdkMaterial == false;
+
+  /// The template the app is made from: the skeleton falls back to the empty one when the project
+  /// cannot take it or the SDK cannot make it.
   NewProjectTemplate get _templateUsed =>
-      _template == NewProjectTemplate.architecture && (_hasUi != true || !_architectureSupported)
+      _template == NewProjectTemplate.architecture && (!_skeletonOffered || _architectureOff)
       ? NewProjectTemplate.plain
       : _template;
 
   Future<void> _loadProject() async {
     try {
       final hasUi = await _scope.projectCreation.hasUiPackage(_path);
+      final uiOnSdkMaterial = hasUi && await _scope.projectCreation.uiUsesSdkMaterial(_path);
       final gitRepo = await _scope.projectCreation.isGitRepo(_path);
       if (!mounted) return;
       setState(() {
         _hasUi = hasUi;
+        _uiOnSdkMaterial = uiOnSdkMaterial;
         _gitRepo = gitRepo;
-        // The skeleton needs packages/ui.
-        if (!hasUi) _template = NewProjectTemplate.plain;
+        // The skeleton needs packages/ui on material_ui.
+        if (!_skeletonOffered) _template = NewProjectTemplate.plain;
       });
     } on Object catch (error, stackTrace) {
       l.w('Add to project | read the project | $error', stackTrace);
@@ -160,7 +176,8 @@ class _AddMemberFormState extends State<AddMemberForm> {
       !_checkFailed &&
       _gitRepo != null &&
       !_projectFailed &&
-      (!_kind.hasPlatforms || (_orgValid && _platforms.isNotEmpty));
+      // A Flutter app's template depends on the SDK: it waits for the lookup.
+      (!_kind.hasPlatforms || (_orgValid && _platforms.isNotEmpty && _sdkLoaded));
 
   /// Keeps the package at `<project>_<folder>` until it is typed.
   void _followPackage() {
@@ -428,13 +445,16 @@ class _AddMemberFormState extends State<AddMemberForm> {
 
   Widget _templateField(BuildContext context) {
     final localization = Localization.of(context);
-    // Until it is known whether packages/ui exists, only the empty template is safe to show.
-    final skeleton = _hasUi ?? false;
+    // Until it is known whether packages/ui can take the skeleton, only the empty template is
+    // safe to show.
+    final skeleton = _skeletonOffered;
     return CreationField(
       label: localization.newProjectTemplate,
       messages: <Widget>[
         if (_hasUi == false) CreationMessage.hint(localization.addMemberNoUiPackage),
-        if (skeleton && _sdkInfo != null && !_architectureSupported)
+        if (_hasUi == true && _uiOnSdkMaterial == true)
+          CreationMessage.hint(localization.addMemberUiOnSdkMaterial),
+        if (skeleton && _architectureOff)
           CreationMessage.hint(
             localization.newProjectTemplateArchitectureNeedsFlutter(kArchitectureMinFlutter),
           ),
@@ -448,8 +468,11 @@ class _AddMemberFormState extends State<AddMemberForm> {
               title: localization.newProjectTemplateArchitecture,
               description: localization.newProjectTemplateArchitectureHint,
               selected: _templateUsed == NewProjectTemplate.architecture,
-              enabled: _architectureSupported,
-              onTap: () => setState(() => _template = NewProjectTemplate.architecture),
+              enabled: !_architectureOff,
+              onTap: () {
+                // Until the SDK is known the choice could not be kept.
+                if (_sdkLoaded) setState(() => _template = NewProjectTemplate.architecture);
+              },
             ),
             const SizedBox(height: 6),
           ],

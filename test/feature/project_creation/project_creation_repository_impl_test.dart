@@ -1588,6 +1588,28 @@ void main() {
       expect(await repository.hasUiPackage(project), isTrue);
     });
 
+    test('uiUsesSdkMaterial', () async {
+      final repository = build();
+      expect(await repository.uiUsesSdkMaterial(project), isFalse);
+      write('packages/ui/pubspec.yaml', 'name: ui\n');
+      write(
+        'packages/ui/lib/ui.dart',
+        "library;\n\nexport 'package:material_ui/material_ui.dart';\n",
+      );
+      write('packages/ui/lib/src/a.dart', "import 'package:flutter/widgets.dart';\n");
+      expect(await repository.uiUsesSdkMaterial(project), isFalse);
+
+      write('packages/ui/lib/ui.dart', "library;\n\nexport 'package:flutter/material.dart';\n");
+      expect(await repository.uiUsesSdkMaterial(project), isTrue);
+
+      write(
+        'packages/ui/lib/ui.dart',
+        "library;\n\nexport 'package:material_ui/material_ui.dart';\n",
+      );
+      write('packages/ui/lib/src/a.dart', "import 'package:flutter/cupertino.dart';\n");
+      expect(await repository.uiUsesSdkMaterial(project), isTrue);
+    });
+
     test('isGitRepo', () async {
       final repository = build();
       expect(await repository.isGitRepo(project), isFalse);

@@ -64,6 +64,12 @@ abstract interface class IProjectCreationRepository {
   /// depends on.
   Future<bool> hasUiPackage(String projectPath);
 
+  /// Whether a Dart file under `packages/ui/lib` of the monorepo at [projectPath] imports or
+  /// exports `package:flutter/material.dart` or `package:flutter/cupertino.dart`: a `packages/ui`
+  /// from before `material_ui`, whose widgets would not see the theme of a skeleton on
+  /// `material_ui`. `false` without `packages/ui`.
+  Future<bool> uiUsesSdkMaterial(String projectPath);
+
   /// Whether the project at [projectPath] is a git repository.
   Future<bool> isGitRepo(String projectPath);
 

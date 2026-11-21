@@ -123,17 +123,7 @@ List<CreationStepKind> memberStepsFor(NewMemberRequest request) => <CreationStep
 const String kMonorepoMinDart = '3.14';
 
 /// Whether a Flutter SDK with [dartVersion] (for example `3.14.0`) can make a monorepo.
-bool supportsMonorepo(String? dartVersion) {
-  if (dartVersion == null) {
-    return false;
-  }
-  final parts = dartVersion.split('.').map(int.tryParse).toList();
-  final min = kMonorepoMinDart.split('.').map(int.parse).toList();
-  if (parts.length < 2 || parts[0] == null || parts[1] == null) {
-    return false;
-  }
-  return parts[0]! != min[0] ? parts[0]! > min[0] : parts[1]! >= min[1];
-}
+bool supportsMonorepo(String? dartVersion) => _atLeast(dartVersion, kMonorepoMinDart);
 
 /// The oldest Flutter "My architecture" is made for: its template imports `material_ui` and
 /// `cupertino_ui`, which need it.
@@ -141,13 +131,18 @@ const String kArchitectureMinFlutter = '3.50';
 
 /// Whether a Flutter SDK of [flutterVersion] (for example `3.50.0` or `3.50.0-0.1.pre`) can make
 /// the architecture skeleton; `false` when the version is unknown.
-bool supportsArchitecture(String? flutterVersion) {
-  final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(flutterVersion ?? '');
+bool supportsArchitecture(String? flutterVersion) =>
+    _atLeast(flutterVersion, kArchitectureMinFlutter);
+
+/// Whether [version] (`major.minor` first, anything after it ignored) is [min] (`major.minor`) or
+/// newer; `false` for `null` or a version that does not start that way.
+bool _atLeast(String? version, String min) {
+  final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(version ?? '');
   if (match == null) {
     return false;
   }
-  final min = kArchitectureMinFlutter.split('.').map(int.parse).toList();
+  final [minMajor, minMinor] = min.split('.').map(int.parse).toList();
   final major = int.parse(match[1]!);
   final minor = int.parse(match[2]!);
-  return major != min[0] ? major > min[0] : minor >= min[1];
+  return major != minMajor ? major > minMajor : minor >= minMinor;
 }
