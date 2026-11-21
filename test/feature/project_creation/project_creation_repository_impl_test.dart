@@ -765,8 +765,14 @@ void main() {
       expect(pubspec, contains('\nflutter:\n  generate: true\n\n'));
       expect(pubspec, isNot(contains('shaders:')));
       expect(pubspec, isNot(contains('workspace:\n  - packages/ui')));
-      expect(read('packages/ui/pubspec.yaml'), contains('sdk: ^3.14.0'));
-      expect(read('packages/ui/pubspec.yaml'), contains('shaders/shimmer.frag'));
+      // packages/ui keeps its template's SDK constraint: on the root's (3.14 and newer) its
+      // private fields trip `prefer_initializing_formals`, which the one-app template must not
+      // change for. A workspace resolves members with different lower bounds.
+      final ui = read('packages/ui/pubspec.yaml');
+      expect(ui, contains('environment:\n  sdk: ^3.10.4\n'));
+      expect(ui, isNot(contains('^3.14.0')));
+      expect('resolution: workspace'.allMatches(ui), hasLength(1));
+      expect(ui, contains('shaders/shimmer.frag'));
       expect(
         step(runs.last, CreationStepKind.skeleton).output,
         containsAll(<String>['✎ apps/app/lib/main.dart', '✎ packages/ui/lib/ui.dart']),

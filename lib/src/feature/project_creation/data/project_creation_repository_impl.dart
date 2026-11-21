@@ -441,7 +441,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         }
         final request = run.request;
         final monorepo = request.monorepo;
-        if (monorepo) await _writeUiPackage(run, index, root, _sdkConstraint(run));
+        if (monorepo) await _writeUiPackage(run, index, root);
         await _writeAppSkeleton(
           run,
           index,
@@ -644,18 +644,17 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     }
   }
 
-  /// Writes `packages/ui` of a monorepo at [root] and joins it to the workspace.
-  Future<void> _writeUiPackage(_Run run, int index, String root, String sdkConstraint) async {
-    await _copyTemplate(
-      run,
-      index,
-      assetRoot: projectTemplateRoot,
-      files: projectTemplateUiFiles,
-      to: root,
-      package: run.request.name,
-    );
-    await _joinWorkspace(File(p.join(root, 'packages', 'ui', 'pubspec.yaml')), sdkConstraint);
-  }
+  /// Writes `packages/ui` of a monorepo at [root]. Its template pubspec already has
+  /// `resolution: workspace`, and it keeps its own SDK constraint: on the root's (3.14 and newer)
+  /// its private fields trip `prefer_initializing_formals`.
+  Future<void> _writeUiPackage(_Run run, int index, String root) => _copyTemplate(
+    run,
+    index,
+    assetRoot: projectTemplateRoot,
+    files: projectTemplateUiFiles,
+    to: root,
+    package: run.request.name,
+  );
 
   /// Creates a member of a monorepo at [path] (`<root>/<apps|packages>/<folder>`) and joins it
   /// to the workspace: `resolution: workspace` and the root's [sdkConstraint]. No `pub get` runs:

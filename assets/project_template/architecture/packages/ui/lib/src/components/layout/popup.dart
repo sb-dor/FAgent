@@ -1,8 +1,3 @@
-// ignore_for_file: prefer_initializing_formals
-// In a monorepo this package is on Dart 3.14 or newer, where the private fields below could be
-// named initializing formals (`required this._link`); the one-app ui package is on 3.10, where
-// they cannot.
-
 import 'dart:ui' show DisplayFeature, DisplayFeatureState;
 
 import 'package:flutter/material.dart';
