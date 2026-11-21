@@ -332,6 +332,7 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
         environment: dependencies.shellEnvironment,
         writeRules: dependencies.projectRulesRepository.writeBuiltinRules,
         loadAsset: rootBundle.loadString,
+        dartVersion: () async => (await dependencies.flutterSdkRepository.sdkFor(null)).dartVersion,
       ),
   'Create project opening and trust repositories': (dependencies) => dependencies
     ..projectOpeningRepository = ProjectOpeningRepositoryImpl(database: dependencies.database)

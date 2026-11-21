@@ -22,6 +22,9 @@ const String _createdPubspec = '''
 name: avera_booking
 description: "A new Flutter project."
 
+environment:
+  sdk: ^3.10.4
+
 dependencies:
   flutter:
     sdk: flutter
@@ -79,6 +82,9 @@ void main() {
     });
   }
 
+  /// What the `dartVersion` function returns.
+  late String? dartVersion;
+
   ProjectCreationRepositoryImpl build({String? home}) {
     final inner = scriptedStarter(ScriptedDaemonProcess.new, started: started);
     return ProjectCreationRepositoryImpl(
@@ -88,6 +94,7 @@ void main() {
       writeRules: writeRules,
       loadAsset: (key) => File(key).readAsString(),
       now: () => DateTime(2026, 11, 6),
+      dartVersion: () async => dartVersion,
       startProcess: (executable, arguments, {workingDirectory, environment}) async {
         final process = await inner(
           executable,
@@ -111,6 +118,7 @@ void main() {
     environment = ShellEnvironment(<String, String>{'PATH': bin, 'HOME': root.path});
     database = AppDatabase(NativeDatabase.memory());
     flutterPath = _flutter;
+    dartVersion = '3.14.0';
     ruleNames = <String>['a'];
     rulesWritten = <String>[];
     started = <ScriptedDaemonProcess>[];
@@ -139,6 +147,18 @@ void main() {
     type: type,
     template: template,
     gitInit: gitInit,
+  );
+
+  NewProjectRequest monorepo({
+    NewProjectTemplate template = NewProjectTemplate.architecture,
+    bool gitInit = false,
+  }) => NewProjectRequest(
+    name: 'shop',
+    org: 'com.example',
+    parent: parent.path,
+    template: template,
+    gitInit: gitInit,
+    structure: ProjectStructure.monorepo,
   );
 
   String path() => p.join(parent.path, 'avera_booking');
@@ -285,7 +305,10 @@ void main() {
     test('a plugin gets its platforms; an FFI package and a module get none', () async {
       await build().create(request(type: FlutterProjectType.plugin, gitInit: false)).toList();
       expect(started.first.arguments, containsAllInOrder(<String>['--template', 'plugin']));
-      expect(started.first.arguments, containsAllInOrder(<String>['--platforms', 'ios,android,macos']));
+      expect(
+        started.first.arguments,
+        containsAllInOrder(<String>['--platforms', 'ios,android,macos']),
+      );
       expect(started.first.arguments, isNot(contains('--no-pub')));
 
       for (final (type, template) in const <(FlutterProjectType, String)>[
@@ -669,6 +692,180 @@ void main() {
       expect(await build().defaultParent(), home);
       Directory(p.join(home, 'StudioProjects')).createSync();
       expect(await build().defaultParent(), p.join(home, 'StudioProjects'));
+    });
+  });
+
+  group('monorepo', () {
+    String root() => p.join(parent.path, 'shop');
+    String read(String relative) =>
+        File(p.joinAll(<String>[root(), ...relative.split('/')])).readAsStringSync();
+    bool exists(String relative) =>
+        FileSystemEntity.typeSync(p.joinAll(<String>[root(), ...relative.split('/')])) !=
+        FileSystemEntityType.notFound;
+    Future<String> asset(String key) => File(key).readAsString();
+
+    test('monorepo workspace step writes the root', () async {
+      final runs = await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+
+      expect(step(runs.last, CreationStepKind.workspace).status, CreationStepStatus.done);
+      expect(read('pubspec.yaml'), monorepoRootPubspec(name: 'shop', sdkConstraint: '^3.14.0'));
+      for (final relative in monorepoTemplateFiles) {
+        expect(read(relative), await asset('$monorepoTemplateRoot$relative'), reason: relative);
+      }
+      expect(
+        read('analysis_options.yaml'),
+        await asset('${projectTemplateRoot}analysis_options.yaml'),
+      );
+      expect(read('CHANGELOG.md'), contains('## [1.0.0] - 2026-11-06'));
+      expect(exists('tool/dart/rename_project.dart'), isFalse);
+      expect(exists('lib'), isFalse);
+      expect(read('.gitignore'), contains('.dart_tool/'));
+    });
+
+    test('monorepo flutter create runs in apps/<folder>', () async {
+      await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+
+      expect(started.first.arguments, <String>[
+        'create',
+        '--template',
+        'app',
+        '--org',
+        'com.example',
+        '--project-name',
+        'shop_app',
+        '--platforms',
+        'ios,android,macos',
+        '--no-pub',
+        p.join(root(), 'apps', 'app'),
+      ]);
+      expect(started.first.workingDirectory, root());
+    });
+
+    test('member pubspec joins the workspace', () async {
+      await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+
+      final pubspec = read('apps/app/pubspec.yaml');
+      expect(pubspec, contains('environment:\n  sdk: ^3.14.0\n\nresolution: workspace\n'));
+      expect(pubspec, isNot(contains('^3.10.4')));
+    });
+
+    test('monorepo skeleton', () async {
+      final runs = await build().create(monorepo()).toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      expect(exists('apps/app/lib/main.dart'), isTrue);
+      expect(exists('apps/app/lib/_core/utils/api_client.dart'), isTrue);
+      expect(exists('lib'), isFalse);
+      expect(read('apps/app/lib/main.dart'), contains("import 'package:shop_app/"));
+      for (final relative in projectTemplateUiFiles) {
+        expect(exists(relative), isTrue, reason: relative);
+      }
+      final pubspec = read('apps/app/pubspec.yaml');
+      expect(pubspec, contains('\nflutter:\n  generate: true\n\n'));
+      expect(pubspec, isNot(contains('shaders:')));
+      expect(pubspec, isNot(contains('workspace:\n  - packages/ui')));
+      expect(read('packages/ui/pubspec.yaml'), contains('sdk: ^3.14.0'));
+      expect(read('packages/ui/pubspec.yaml'), contains('shaders/shimmer.frag'));
+      expect(
+        step(runs.last, CreationStepKind.skeleton).output,
+        containsAll(<String>['✎ apps/app/lib/main.dart', '✎ packages/ui/lib/ui.dart']),
+      );
+
+      final dart = p.join(p.dirname(_flutter), 'dart');
+      expect(
+        started
+            .skip(1)
+            .map(
+              (process) => <Object?>[
+                process.executable,
+                process.arguments,
+                process.workingDirectory,
+              ],
+            ),
+        <List<Object?>>[
+          <Object?>[
+            _flutter,
+            <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
+            p.join(root(), 'apps', 'app'),
+          ],
+          <Object?>[
+            _flutter,
+            <String>['pub', 'add', 'dev:build_runner'],
+            root(),
+          ],
+          <Object?>[
+            _flutter,
+            <String>['pub', 'get'],
+            root(),
+          ],
+          <Object?>[
+            dart,
+            <String>['run', 'build_runner', 'build', '--workspace', '--delete-conflicting-outputs'],
+            root(),
+          ],
+          <Object?>[
+            dart,
+            <String>['fix', '--apply', '--code=directives_ordering'],
+            root(),
+          ],
+          <Object?>[
+            _flutter,
+            <String>['analyze'],
+            root(),
+          ],
+        ],
+      );
+    });
+
+    test('monorepo target check', () async {
+      Directory(root()).createSync();
+      final runs = await build().create(monorepo()).toList();
+
+      final workspace = step(runs.last, CreationStepKind.workspace);
+      expect(workspace.status, CreationStepStatus.failed);
+      expect(workspace.output.last, 'The folder already exists');
+      expect(started, isEmpty);
+
+      Directory(root()).deleteSync();
+      started.clear();
+      final again = await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+      expect(again.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      expect(started.first.arguments.first, 'create');
+      expect(started.first.arguments.last, p.join(root(), 'apps', 'app'));
+    });
+
+    test('empty monorepo runs pub get in the root', () async {
+      final runs = await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+
+      expect(runs.last.steps.map((step) => step.kind), <CreationStepKind>[
+        CreationStepKind.workspace,
+        CreationStepKind.flutterCreate,
+        CreationStepKind.pubGet,
+        CreationStepKind.analyze,
+        CreationStepKind.rules,
+      ]);
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      expect(started.map((process) => process.arguments.join(' ')), contains('pub get'));
+      expect(started[1].workingDirectory, root());
+      expect(exists('packages/ui'), isFalse);
+    });
+
+    test('unknown Dart version fails the workspace step', () async {
+      dartVersion = null;
+      final runs = await build().create(monorepo()).toList();
+
+      final workspace = step(runs.last, CreationStepKind.workspace);
+      expect(workspace.status, CreationStepStatus.failed);
+      expect(workspace.output.last, 'Dart version unknown');
+      expect(exists('pubspec.yaml'), isFalse);
+    });
+
+    test('sdk constraint comes from the SDKs Dart', () async {
+      dartVersion = '3.15.2';
+      await build().create(monorepo(template: NewProjectTemplate.plain)).toList();
+
+      expect(read('pubspec.yaml'), contains('sdk: ^3.15.0'));
+      expect(read('apps/app/pubspec.yaml'), contains('sdk: ^3.15.0'));
     });
   });
 }
