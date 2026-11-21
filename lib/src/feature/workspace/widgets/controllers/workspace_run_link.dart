@@ -84,8 +84,13 @@ class WorkspaceRunLink extends ChangeNotifier {
   /// Whether the chosen device is an emulator that is still booting; the app cannot start on it yet.
   bool get isLaunching => _projectId != null && _selectedDevice()?.kind == DeviceKind.available;
 
-  /// Whether there is a device to start the app on: one is chosen, listed and running.
-  bool get canStart => _projectId != null && _selectedDevice()?.kind == DeviceKind.running;
+  /// Whether the selected project is a monorepo with no app to run ([RunViewState.noApp]).
+  bool get noApp => _projectId != null && _run.state.noApp;
+
+  /// Whether the app can be started: the project has an app to run (not [noApp]) and a device is
+  /// chosen, listed and running.
+  bool get canStart =>
+      _projectId != null && !noApp && _selectedDevice()?.kind == DeviceKind.running;
 
   /// Starts the app of the selected project on the chosen device, with the selected launch
   /// configuration (read again now) or Default.
@@ -93,7 +98,7 @@ class WorkspaceRunLink extends ChangeNotifier {
     final projectId = _projectId;
     final state = _run.state;
     final device = _selectedDevice();
-    if (projectId == null || device == null || device.kind != DeviceKind.running) return;
+    if (projectId == null || noApp || device == null || device.kind != DeviceKind.running) return;
     _actions.start(
       projectId,
       device: device,

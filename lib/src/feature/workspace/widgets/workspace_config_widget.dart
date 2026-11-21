@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/devices_contro
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_actions_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
@@ -180,7 +181,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       projectOpening: dependencies.projectOpeningRepository,
       projectTrust: dependencies.projectTrustRepository,
       projectRules: dependencies.projectRulesRepository,
-    );
+    )..addListener(_onProjectCreation);
     sessionsController = SessionsController(
       repository: SessionsRepositoryImpl(
         database: dependencies.database,
@@ -272,7 +273,9 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     runConfigController.dispose();
     skillLibraryController.dispose();
     devicesController.dispose();
-    projectCreation.dispose();
+    projectCreation
+      ..removeListener(_onProjectCreation)
+      ..dispose();
     projectOpeningController
       ..removeListener(_onProjectOpened)
       ..dispose();
@@ -294,6 +297,24 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
     agentsController.dispose();
     super.dispose();
   }
+
+  /// The add of a member that ended (also a failed one: a member whose analyze failed stays) is
+  /// read into the Run tab of its project when that project is followed, so a new app is in the
+  /// App chip without the Run menu being opened.
+  void _onProjectCreation() {
+    final state = projectCreation.state;
+    final member = switch (state) {
+      ProjectCreation$CompletedState(:final member) ||
+      ProjectCreation$FailedState(:final member) => member,
+      _ => null,
+    };
+    if (member == null || identical(state, _handledCreation)) return;
+    _handledCreation = state;
+    if (runController.state.projectId == member.projectId) runController.refreshConfigs().ignore();
+  }
+
+  /// The last finished add [_onProjectCreation] dealt with, so one result is not taken twice.
+  ProjectCreationState? _handledCreation;
 
   /// The run and its logs follow the selected project.
   void _followSelectedProject() {
@@ -405,10 +426,16 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   void _onRunAction() {
     final state = runActionsController.state;
     if (state case RunActions$ErrorState(:final error)) {
-      // A start the app refused (an unsupported configuration, an unreadable `launch.json`) says
-      // why; the other failures are in the run's logs.
-      if (error is RunConfigNotStartable && !identical(state, _handledError) && mounted) {
-        _showMessage(Localization.of(context).runRefusedText(error));
+      // A start the app refused (an unsupported configuration, an unreadable `launch.json`, a
+      // monorepo without an app) says why; the other failures are in the run's logs.
+      if (!identical(state, _handledError) && mounted) {
+        final localization = Localization.of(context);
+        final message = switch (error) {
+          final RunConfigNotStartable refusal => localization.runRefusedText(refusal),
+          RunNoAppException() => localization.runNoApps,
+          _ => null,
+        };
+        if (message != null) _showMessage(message);
       }
       _handledError = state;
       return;

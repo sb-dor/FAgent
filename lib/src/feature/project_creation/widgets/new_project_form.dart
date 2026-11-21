@@ -144,6 +144,11 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   PackageNameProblem? get _appPackageProblem => checkPackageName(_appPackage.text);
 
+  /// Whether the app package takes a name the monorepo already has: `ui` (`packages/ui`) or the
+  /// root's `<name>_workspace`. Two packages of one workspace with one name break `pub get`.
+  bool get _appPackageTaken =>
+      _appPackage.text == 'ui' || _appPackage.text == '${_name.text}_workspace';
+
   /// Keeps the app package at `<name>_<folder>` until it is typed.
   void _followAppPackage() {
     if (_appPackageEdited) return;
@@ -155,7 +160,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
   bool get _canCreate =>
       _nameProblem == null &&
       _orgValid &&
-      (!_monorepo || (_appFolderValid && _appPackageProblem == null)) &&
+      (!_monorepo || (_appFolderValid && _appPackageProblem == null && !_appPackageTaken)) &&
       _parent != null &&
       _targetChecked &&
       _targetProblem == null &&
@@ -477,12 +482,14 @@ class _NewProjectFormState extends State<NewProjectForm> {
             PackageNameProblem.dependency => localization.newProjectNameDependency,
             PackageNameProblem.invalid ||
             PackageNameProblem.empty => localization.newProjectNameInvalid,
-          }),
+          })
+        else if (_appPackageTaken)
+          CreationMessage.error(localization.newProjectAppPackageTaken),
       ],
       child: CreationTextInput(
         fieldKey: const ValueKey<String>('new-project-app-package'),
         controller: _appPackage,
-        error: problem != null,
+        error: problem != null || _appPackageTaken,
         onChanged: (_) => setState(() => _appPackageEdited = true),
         onSubmitted: (_) => _create(),
       ),

@@ -271,6 +271,9 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         if (exitCode != 0) {
           l.w('Project creation | git reset of ${member.relative} exited $exitCode');
         }
+      } on TimeoutException {
+        await process.stop();
+        l.w('Project creation | git reset of ${member.relative} did not end in time; killed it');
       } finally {
         for (final subscription in subscriptions) {
           await subscription.cancel();

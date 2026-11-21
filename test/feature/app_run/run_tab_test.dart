@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
@@ -517,6 +518,25 @@ void main() {
       await elapse(tester);
       expect(find.text('Choose a device'), findsNothing);
       expect(find.byTooltip('Run'), findsOneWidget);
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('Run is disabled in a monorepo without a Flutter app', (tester) async {
+      run.dispose();
+      run = RunController(
+        repository: dependencies.appRunRepository,
+        configRepository: MemoryRunConfigRepository(
+          apps: <int, List<String>>{1: const <String>[]},
+        ),
+      );
+      await pumpTab(tester);
+      await tester.pump();
+
+      final startButton = tester.widget<InkWell>(
+        find.ancestor(of: find.byIcon(Icons.play_arrow), matching: find.byType(InkWell)).first,
+      );
+      expect(startButton.onTap, isNull, reason: 'flutter run would run in the workspace root');
+      expect(find.byTooltip('No Flutter app in apps/'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
 
@@ -1376,6 +1396,41 @@ void main() {
 
       expect(find.text(r"“Broken” can't run. Unsupported: ${env:HOME}"), findsOneWidget);
       expect(find.byTooltip('Stop the app'), findsNothing, reason: 'nothing started');
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a monorepo without a Flutter app cannot start from the title bar', (
+      tester,
+    ) async {
+      dependencies = testDependencies(
+        devicesRepository: fakeDevices,
+        runConfigRepository: MemoryRunConfigRepository(
+          apps: <int, List<String>>{1: const <String>[]},
+        ),
+      );
+      final state = await pump(tester);
+      await settle(tester);
+
+      expect(state.runLink.canStart, isFalse);
+      // The Run button of the pane and the one of the title bar both say why.
+      expect(find.byTooltip('No Flutter app in apps/'), findsNWidgets(2));
+      await disposeTestApp(tester, dependencies);
+    });
+
+    testWidgets('a start refused for want of an app says so', (tester) async {
+      final state = await pump(tester);
+      await settle(tester);
+
+      state.runActionsController.start(
+        state.runController.state.projectId!,
+        device: kTestDevices.firstWhere((device) => device.kind == DeviceKind.running),
+        mode: BuildMode.debug,
+        arguments: () async => throw const RunNoAppException(),
+      );
+      await tester.pump(const Duration(milliseconds: 20));
+      await tester.pump();
+
+      expect(find.text('No Flutter app in apps/'), findsOneWidget);
       await disposeTestApp(tester, dependencies);
     });
 

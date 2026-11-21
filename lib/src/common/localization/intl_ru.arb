@@ -585,6 +585,7 @@
   "@newProjectStructureMonorepoNeedsDart": {"placeholders": {"version": {"type": "String"}}},
   "newProjectAppFolder": "Папка первого приложения",
   "newProjectAppPackage": "Пакет первого приложения",
+  "newProjectAppPackageTaken": "Это имя уже занято в проекте",
   "newProjectPlatforms": "Платформы",
   "newProjectNoPlatform": "Выберите хотя бы одну платформу",
   "newProjectTemplate": "Шаблон",

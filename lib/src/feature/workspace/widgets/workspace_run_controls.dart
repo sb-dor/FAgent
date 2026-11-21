@@ -66,6 +66,8 @@ class WorkspaceRunControls extends StatelessWidget {
               Tooltip(
                 message: link.canStart
                     ? localization.runStart
+                    : link.noApp
+                    ? localization.runNoApps
                     : link.isLaunching
                     ? localization.runLaunchingEmulator
                     : localization.runChooseDeviceFirst,

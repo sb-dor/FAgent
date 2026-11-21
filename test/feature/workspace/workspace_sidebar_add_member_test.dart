@@ -3,11 +3,17 @@ import 'dart:io';
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/add_member_dialog.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/memory_run_config_repository.dart';
 import '../../support/test_app.dart';
 
 /// Lets drift's real-async work finish, then rebuilds.
@@ -107,6 +113,40 @@ void main() {
     expect(find.byType(AddMemberDialog), findsOneWidget);
     expect(find.text('New project member'), findsOneWidget);
     expect(tester.widget<AddMemberDialog>(find.byType(AddMemberDialog)).project.name, 'shop');
+  });
+
+  testWidgets('an added Flutter app is in the App chip as soon as the add ends', (tester) async {
+    final configs = MemoryRunConfigRepository(apps: <int, List<String>>{1: const <String>[]});
+    dependencies = testDependencies(runConfigRepository: configs);
+    await pumpSidebar(tester, <String, bool>{'shop': true});
+    final workspace = WorkspaceConfigInhWidget.of(tester.element(find.byType(WorkspaceWidget)));
+    workspace.dataController.selectProject(1);
+    await _settle(tester);
+    expect(workspace.runController.state.projectId, 1);
+    expect(workspace.runController.state.apps, isEmpty);
+
+    // The add writes the app; the Run menu is never opened and nothing starts.
+    configs.apps[1] = <String>['apps/admin'];
+    workspace.projectCreation.startAdd(
+      NewMemberRequest(
+        projectId: 1,
+        projectPath: '${root.path}/shop',
+        kind: MemberKind.flutterApp,
+        folder: 'admin',
+        packageName: 'shop_admin',
+        org: 'com.example',
+        platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+        template: NewProjectTemplate.plain,
+        gitRepo: false,
+      ),
+    );
+    for (var i = 0; i < 5; i++) {
+      await _settle(tester);
+    }
+
+    expect(workspace.projectCreation.state, isA<ProjectCreation$CompletedState>());
+    expect(workspace.runController.state.apps, <String>['apps/admin']);
+    expect(workspace.runController.state.appFolder, 'apps/admin');
   });
 
   testWidgets('the menu is in Russian too', (tester) async {

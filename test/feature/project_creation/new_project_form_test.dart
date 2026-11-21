@@ -581,6 +581,40 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
+  testWidgets('the app package cannot take the name of packages/ui or of the root', (
+    tester,
+  ) async {
+    await openDialog(tester);
+    await typeName(tester, 'shop');
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+
+    for (final taken in const <String>['ui', 'shop_workspace']) {
+      await tester.enterText(find.byKey(packageKey), taken);
+      await tester.pumpAndSettle();
+      expect(canCreate(tester), isFalse, reason: '$taken breaks pub get');
+      expect(find.text('The project already uses this name'), findsOneWidget);
+    }
+    await tester.enterText(find.byKey(packageKey), 'shop_desktop');
+    await tester.pumpAndSettle();
+    expect(canCreate(tester), isTrue);
+    expect(find.text('The project already uses this name'), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a taken app package is worded in Russian too', (tester) async {
+    await openDialog(tester, locale: const Locale('ru'));
+    await typeName(tester, 'shop');
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(packageKey), 'ui');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Это имя уже занято в проекте'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
+
   testWidgets('the type starts as an app with the platforms and the templates', (tester) async {
     await openDialog(tester);
     await typeName(tester, 'avera_booking');

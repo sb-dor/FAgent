@@ -126,7 +126,8 @@ class RunHeader extends StatelessWidget {
     };
     final selected = deviceList.where((device) => device.id == state.selectedDeviceId).firstOrNull;
     final launching = selected?.kind == DeviceKind.available;
-    final canStart = selected?.kind == DeviceKind.running;
+    // A monorepo without an app would run `flutter run` in the workspace root, which has none.
+    final canStart = selected?.kind == DeviceKind.running && !state.noApp;
     // A device that is chosen but not in the list: the one a run configuration names, not connected.
     final unavailableDeviceId =
         devices is Devices$CompletedState &&
@@ -246,7 +247,9 @@ class RunHeader extends StatelessWidget {
                       ? localization.runStart
                       : localization.runWithConfig(state.selectedConfig!),
                   enabled: canStart,
-                  disabledReason: unavailableDeviceId != null
+                  disabledReason: state.noApp
+                      ? localization.runNoApps
+                      : unavailableDeviceId != null
                       ? localization.runDeviceUnavailable(unavailableDeviceId)
                       : launching
                       ? (launchFailed

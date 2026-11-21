@@ -72,8 +72,9 @@ the same problem, so Run is part of this work.
   en + ru strings through gen-l10n.
 - The creation pipeline's guarantees stay: steps shown with their output, "Stop" kills the process
   and marks the step failed, quitting the app kills it and adds nothing.
-- Workspace members must share the root's SDK constraint; pub workspaces with globs
-  (`apps/*`) need the SDK cafe_pos uses (`^3.14.0`) or newer, which FAgent's Flutter already has.
+- Workspace members are resolved together with the root (a workspace accepts members with
+  different lower bounds); pub workspaces with globs (`apps/*`) need the SDK cafe_pos uses
+  (`^3.14.0`) or newer, which FAgent's Flutter already has.
 - Known and out of scope: on Flutter 3.50 the skeleton's Analyze step fails on the
   `material.dart` deprecation infos (same on `main` today). A monorepo inherits it.
 
@@ -133,7 +134,9 @@ Monorepo request, steps in order:
    `.gitignore`.
 2. `gitInit`.
 3. `member` (Flutter app `apps/<appFolder>`): the member builder below, with the skeleton.
-4. `member` (`packages/ui`): written from the template, as today.
+4. `member` (`packages/ui`): written from the template, as today. It keeps the template's own SDK
+   constraint (`^3.10.4`): on the root's (Dart 3.14 and newer) its `popup.dart` trips
+   `prefer_initializing_formals`.
 5. `skeleton` tail: `pub get` at the root, `build_runner build --workspace`, `dart fix --apply
    --code=directives_ordering`.
 6. `analyze` at the root (covers every member), `rules` (into the root), `firstCommit`.
@@ -143,7 +146,8 @@ The member builder, for a member of kind K in folder F with package name N:
   [--platforms …] --no-pub <root>/<apps|packages>/F`. Dart app / Dart package: `dart create -t
   console|package --no-pub <path>` and then fix the package name to N.
 - Edit the member's `pubspec.yaml`: add `resolution: workspace`, set its SDK constraint to the
-  root's.
+  root's (every member FAgent creates with `flutter create` / `dart create`; `packages/ui` keeps
+  its template's, see step 4).
 - Flutter app with the "My architecture" template: write the app part of the skeleton into the
   member folder, `flutter pub add` the skeleton's packages there, with `ui@{path: ../../packages/ui}`
   instead of `packages/ui`.
@@ -234,7 +238,7 @@ of a created monorepo before relying on it.
 - Screenshots stay in the project root's `.dart_tool/flutter_code_agent/screenshots`; picked
   widgets' files stay relative to the project root (`apps/desktop/lib/...`), which is what the
   agent, working in the root, needs.
-- One-app projects: no chip, `appFolder` stays `null`, behaviour unchanged.
+- One-app projects: no chip, `appFolder` stays `''` (the project root), behaviour unchanged.
 
 ### Rules
 

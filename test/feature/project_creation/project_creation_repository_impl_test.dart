@@ -1355,6 +1355,27 @@ void main() {
       );
     });
 
+    test('a git reset that hangs is killed and the rollback goes on', () async {
+      script = (process) {
+        if (process.executable != git()) return resolving(process);
+        switch (process.arguments.first) {
+          case 'commit':
+            Timer.run(() => process.exit(128));
+          case 'reset':
+            // Never exits on its own.
+            break;
+          default:
+            resolving(process);
+        }
+      };
+      final runs = await build().addMember(member(template: NewProjectTemplate.plain)).toList();
+
+      final reset = started.singleWhere((process) => process.arguments.first == 'reset');
+      expect(reset.stopped, isTrue);
+      expect(step(runs.last, CreationStepKind.commit).output.last, 'Removed apps/admin');
+      expect(exists('apps/admin'), isFalse);
+    }, timeout: const Timeout(Duration(seconds: 30)));
+
     test('a failed commit with an ignored lock unstages the member alone', () async {
       lockIgnored = true;
       script = (process) {

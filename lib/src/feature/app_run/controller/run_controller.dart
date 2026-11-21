@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
@@ -65,6 +66,12 @@ abstract class RunViewState with _$RunViewState {
     /// changed while it is selected.
     @Default(false) bool appLocked,
   }) = _RunViewState;
+
+  const RunViewState._();
+
+  /// Whether the project is a monorepo with no app to run: none under `apps/` (or none selected
+  /// yet) and no selected configuration fixes a folder. Nothing can start then.
+  bool get noApp => monorepo && appFolder.isEmpty;
 }
 
 /// Follows the run, the output, the run arguments, the launch configurations and, in a monorepo,
@@ -239,12 +246,23 @@ final class RunController extends StateController<RunViewState> with SequentialC
   /// and the mode of a start are the chips'. A configuration that is gone from the file starts
   /// Default and the choice goes back to Default.
   ///
+  /// Before the apps of the follow are read they are read first, so a monorepo is known as one. A
+  /// monorepo start without a folder to run in (no Flutter app under `apps/` and no configuration
+  /// `cwd`) throws [RunNoAppException]: the workspace root has no app of its own.
+  ///
   /// Throws [RunConfigNotStartable] when the configuration cannot run or the file cannot be read.
   Future<RunStartArguments> startArgumentsFor(int projectId) async {
     if (state.projectId != projectId) {
       throw StateError('RunController follows ${state.projectId}, not $projectId');
     }
-    if (state.monorepo) await _readApps(projectId);
+    if (state.monorepo || !_appsRead) await _readApps(projectId);
+    final start = await _startArguments(projectId);
+    if (state.monorepo && start.appFolder.isEmpty) throw const RunNoAppException();
+    return start;
+  }
+
+  /// [startArgumentsFor] once the apps are read: the Default start, or the selected configuration's.
+  Future<RunStartArguments> _startArguments(int projectId) async {
     final name = state.selectedConfig;
     if (name == null) return _defaultStart(projectId);
 

@@ -168,6 +168,45 @@ void main() {
     expect(repository.starts.single.arguments, const RunArguments(flavor: 'dev'));
   });
 
+  test('a monorepo without a Flutter app offers no start anywhere', () async {
+    final repository = ScriptedAppRunRepository(step: const Duration(milliseconds: 1));
+    final config = MemoryRunConfigRepository(apps: <int, List<String>>{1: const <String>[]});
+    const macos = Device(
+      id: 'macos',
+      name: 'macOS',
+      platform: DevicePlatform.macos,
+      kind: DeviceKind.running,
+    );
+    final data = WorkspaceDataController()..selectProject(1);
+    final run = RunController(repository: repository, configRepository: config)..watch(1);
+    final actions = RunActionsController(
+      runRepository: repository,
+      pickerRepository: ScriptedWidgetPickerRepository(),
+    );
+    final link = WorkspaceRunLink(
+      data: data,
+      run: run,
+      actions: actions,
+      reloadAfterTurn: () => false,
+      selectedDevice: () => macos,
+    );
+    addTearDown(() async {
+      link.dispose();
+      actions.dispose();
+      run.dispose();
+      data.dispose();
+      await repository.dispose();
+    });
+    await pumpEventQueue();
+
+    expect(link.canStart, isFalse);
+    expect(link.noApp, isTrue);
+    expect(link.mentions!.canStart, isFalse, reason: 'the composer offers no /run');
+    link.runCommand('run');
+    await pumpEventQueue();
+    expect(repository.starts, isEmpty);
+  });
+
   group('hot reload outside debug', () {
     const macos = Device(
       id: 'macos',

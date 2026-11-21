@@ -636,6 +636,7 @@
   "@newProjectStructureMonorepoNeedsDart": {"placeholders": {"version": {"type": "String"}}},
   "newProjectAppFolder": "First app folder",
   "newProjectAppPackage": "First app package",
+  "newProjectAppPackageTaken": "The project already uses this name",
   "newProjectPlatforms": "Platforms",
   "newProjectNoPlatform": "Choose at least one platform",
   "newProjectTemplate": "Template",

@@ -11,6 +11,7 @@ import 'package:flutter_code_agent/src/feature/app_run/controller/run_controller
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
@@ -34,6 +35,21 @@ const Device _macos = Device(
 );
 
 const _step = Duration(milliseconds: 1);
+
+/// A [MemoryRunConfigRepository] whose first [isMonorepo] waits for [gate]: the apps of a follow
+/// are not read until the test lets them.
+final class _GatedRunConfigRepository extends MemoryRunConfigRepository {
+  _GatedRunConfigRepository({super.apps});
+
+  final Completer<void> gate = Completer<void>();
+  var _calls = 0;
+
+  @override
+  Future<bool> isMonorepo(int projectId) async {
+    if (_calls++ == 0) await gate.future;
+    return super.isMonorepo(projectId);
+  }
+}
 
 /// A repository that emits exactly what a test pushes.
 final class _ScriptedRunRepository implements IAppRunRepository {
@@ -1133,6 +1149,52 @@ void main() {
       expect(run.state.monorepo, isTrue);
       expect(run.state.apps, isEmpty);
       expect(run.state.appFolder, '');
+    });
+
+    test('a monorepo without a Flutter app cannot start', () async {
+      config = MemoryRunConfigRepository(apps: <int, List<String>>{1: const <String>[]});
+      final run = follow(1);
+      await pumpEventQueue();
+
+      expect(run.state.noApp, isTrue);
+      await expectLater(run.startArgumentsFor(1), throwsA(isA<RunNoAppException>()));
+    });
+
+    test('a configuration with cwd starts a monorepo without a Flutter app', () async {
+      config = MemoryRunConfigRepository(
+        apps: <int, List<String>>{1: const <String>[]},
+        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[example])},
+      );
+      final run = follow(1);
+      await pumpEventQueue();
+      run.chooseConfig('Example');
+      await pumpEventQueue();
+
+      expect(run.state.noApp, isFalse);
+      expect((await run.startArgumentsFor(1)).appFolder, 'packages/ui/example');
+    });
+
+    test('a project with an app or a one-app project can start', () async {
+      final run = follow(1);
+      await pumpEventQueue();
+      expect(run.state.noApp, isFalse);
+
+      config = MemoryRunConfigRepository();
+      final single = follow(2);
+      await pumpEventQueue();
+      expect(single.state.noApp, isFalse);
+    });
+
+    test('a start before the apps are read reads them first', () async {
+      final gated = _GatedRunConfigRepository(apps: <int, List<String>>{1: const <String>[]});
+      final run = RunController(repository: scripted, configRepository: gated)..watch(1);
+      addTearDown(run.dispose);
+      await pumpEventQueue();
+      expect(run.state.projectId, 1);
+      expect(run.state.monorepo, isFalse, reason: 'the apps are not read yet');
+
+      await expectLater(run.startArgumentsFor(1), throwsA(isA<RunNoAppException>()));
+      gated.gate.complete();
     });
   });
 

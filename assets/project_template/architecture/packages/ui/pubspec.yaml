@@ -24,7 +24,7 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # The app lists the shader too (its pubspec.yaml); `Shimmer` loads it as
-  # `packages/ui/shaders/shimmer.frag`.
+  # The shader is declared here; an app may list it in its own pubspec.yaml as
+  # well. `Shimmer` loads it as `packages/ui/shaders/shimmer.frag`.
   shaders:
     - shaders/shimmer.frag

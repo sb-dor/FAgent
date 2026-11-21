@@ -26,3 +26,14 @@ final class ScreenshotFailedException extends ExpectedException {
   @override
   String toString() => 'The app could not render a screenshot.';
 }
+
+/// A monorepo has no app to run: there is no Flutter app under `apps/` (or the apps are not known
+/// yet) and no selected configuration names a folder with its `cwd`. `flutter run` would run in the
+/// workspace root, which has no `lib/main.dart`.
+final class RunNoAppException extends ExpectedException {
+  /// Creates the exception.
+  const RunNoAppException();
+
+  @override
+  String toString() => 'The monorepo has no Flutter app to run.';
+}
