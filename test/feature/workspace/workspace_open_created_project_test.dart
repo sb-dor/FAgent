@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/add_member_dialog.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
+import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_widget.dart';
@@ -115,6 +117,37 @@ void main() {
     expect(data.sessionId, isNotNull);
     expect(await chatCount(tester, createdProjectId), 1);
     expect(await chatCount(tester, otherProjectId), 0);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('open project from the Add to project dialog opens the created project', (
+    tester,
+  ) async {
+    await pumpShell(tester);
+    final workspace = workspaceOf(tester);
+    final data = workspace.dataController..selectProject(otherProjectId);
+    await tester.pump();
+    await createProject(tester, openChat: true);
+    // Minimize the finished New project run, then open Add to project: it shows the same run.
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(NewProjectDialog), findsNothing);
+    workspace
+        .openAddMember(Project(id: otherProjectId, path: '/other', name: 'other', isFlutter: true))
+        .ignore();
+    await tester.pumpAndSettle();
+    expect(find.byType(AddMemberDialog), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('creation-open-project')));
+    await tester.pumpAndSettle();
+    for (var i = 0; i < 5; i++) {
+      await settle(tester);
+    }
+
+    expect(find.byType(AddMemberDialog), findsNothing);
+    expect(workspace.projectCreation.state, isA<ProjectCreation$IdleState>());
+    expect(data.projectId, createdProjectId);
+    expect(await chatCount(tester, createdProjectId), 1);
     await disposeTestApp(tester, dependencies);
   });
 
