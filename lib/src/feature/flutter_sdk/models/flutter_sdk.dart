@@ -19,6 +19,9 @@ abstract class FlutterSdk with _$FlutterSdk {
     /// The channel of [version], for example `stable`.
     String? channel,
 
+    /// The Dart version of the SDK, for example `3.6.0`.
+    String? dartVersion,
+
     /// The version the project pins with fvm; `null` when it does not use fvm.
     String? fvmVersion,
 

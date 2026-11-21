@@ -51,6 +51,15 @@ enum FlutterProjectType {
   bool get hasPlatforms => this == app || this == plugin;
 }
 
+/// How an app project is laid out.
+enum ProjectStructure {
+  /// One Flutter app at the project root.
+  single,
+
+  /// A pub workspace: the app in `apps/<folder>`, more apps and packages added later.
+  monorepo,
+}
+
 /// What the New project wizard asks for.
 @freezed
 abstract class NewProjectRequest with _$NewProjectRequest {
@@ -80,12 +89,30 @@ abstract class NewProjectRequest with _$NewProjectRequest {
 
     /// Whether to open a chat in the new project.
     @Default(true) bool openChat,
+
+    /// One app or a workspace; only an app can be a monorepo.
+    @Default(ProjectStructure.single) ProjectStructure structure,
+
+    /// The folder of the first app under `apps/` in a monorepo.
+    @Default('app') String appFolder,
+
+    /// The package name of the first app in a monorepo; `null` means `<name>_<appFolder>`.
+    String? appPackage,
   }) = _NewProjectRequest;
 
   const NewProjectRequest._();
 
   /// The project folder.
   String get path => p.join(parent, name);
+
+  /// Whether the project is a pub workspace: [structure] only applies to an app.
+  bool get monorepo => type == FlutterProjectType.app && structure == ProjectStructure.monorepo;
+
+  /// The package name of the first app in a monorepo.
+  String get appPackageName => appPackage ?? '${name}_$appFolder';
+
+  /// Where the app is: the project folder, or `apps/<appFolder>` in a monorepo.
+  String get appPath => monorepo ? p.join(path, 'apps', appFolder) : path;
 
   /// Whether the architecture skeleton is written: only into an app that starts from it.
   bool get skeleton =>

@@ -72,6 +72,15 @@ void main() {
       expect(ran, <String>['$flutter --version --machine']);
     });
 
+    test('reads the Dart version up to the first space', () async {
+      final sdk = await repository(
+        runProcess: runner(
+          stdout: '{"frameworkVersion":"3.47.1","channel":"stable","dartSdkVersion":"3.14.0 (build 3.14.0-1.0.dev)"}',
+        ),
+      ).sdkFor(null);
+      expect(sdk.dartVersion, '3.14.0');
+    });
+
     test('reads version and channel', () async {
       final sdk = await repository().sdkFor(null);
       expect(sdk.version, '3.47.1');

@@ -173,6 +173,11 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     final request = run.request;
     final path = request.path;
     switch (run.steps[index].kind) {
+      case CreationStepKind.workspace:
+      case CreationStepKind.memberCreate:
+      case CreationStepKind.pubGet:
+      case CreationStepKind.commit:
+        throw UnimplementedError('${run.steps[index].kind.name}: Task 4/5');
       case CreationStepKind.flutterCreate:
         // `flutter create` writes into an existing folder without a word.
         final problem = await checkTarget(request.parent, request.name);

@@ -26,6 +26,10 @@ List<String> _stepOutput(CreationStepKind kind, String name) => switch (kind) {
   CreationStepKind.analyze => const <String>['No issues found!'],
   CreationStepKind.rules => const <String>['✎ docs/rules/architecture.md'],
   CreationStepKind.gitInit || CreationStepKind.firstCommit => const <String>[],
+  CreationStepKind.workspace ||
+  CreationStepKind.memberCreate ||
+  CreationStepKind.pubGet ||
+  CreationStepKind.commit => const <String>[],
 };
 
 /// [IProjectCreationRepository] for tests: no file system, no timers beyond [step].

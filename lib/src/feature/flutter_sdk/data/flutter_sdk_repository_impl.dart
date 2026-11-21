@@ -52,6 +52,7 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
       path: path,
       version: version?.version,
       channel: version?.channel,
+      dartVersion: version?.dartVersion,
       fvmVersion: projectPath == null ? null : _fvmVersion(projectPath),
     );
   }
@@ -88,12 +89,14 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
     return checks;
   }
 
-  /// The version and channel `flutter --version --machine` reports; `null` (and one log line)
+  /// The version, channel and Dart version `flutter --version --machine` reports; `null` (and one log line)
   /// when the command fails or prints no JSON with them.
   ///
   /// `flutter` may print a banner before the JSON, so the text from the first `{` to the last
   /// `}` is parsed.
-  Future<({String? version, String? channel})?> _versionOf(String flutter) async {
+  Future<({String? version, String? channel, String? dartVersion})?> _versionOf(
+    String flutter,
+  ) async {
     try {
       final result = await _runProcess(flutter, const <String>[
         '--version',
@@ -113,7 +116,13 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
         return null;
       }
       final channel = json is Map<String, Object?> ? json['channel'] : null;
-      return (version: version, channel: channel is String && channel.isNotEmpty ? channel : null);
+      final dart = json is Map<String, Object?> ? json['dartSdkVersion'] : null;
+      final dartVersion = dart is String ? dart.split(' ').first : null;
+      return (
+        version: version,
+        channel: channel is String && channel.isNotEmpty ? channel : null,
+        dartVersion: dartVersion == null || dartVersion.isEmpty ? null : dartVersion,
+      );
     } on TimeoutException {
       l.w('Flutter SDK | $flutter --version did not finish in $versionTimeout');
     } on io.ProcessException catch (error, stackTrace) {
