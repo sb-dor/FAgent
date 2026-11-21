@@ -52,7 +52,7 @@ class AppDatabase extends _$AppDatabase {
       );
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -94,6 +94,19 @@ class AppDatabase extends _$AppDatabase {
       },
       from11To12: (m, schema) async {
         await m.addColumn(schema.projects, schema.projects.rulesOffered);
+      },
+      from12To13: (m, schema) async {
+        // The primary key gains app_folder, which SQLite can only do by rebuilding the table.
+        // Existing rows become the project's root row.
+        await m.alterTable(
+          TableMigration(
+            schema.runConfigs,
+            newColumns: <GeneratedColumn<Object>>[
+              schema.runConfigs.appFolder,
+              schema.runConfigs.selectedApp,
+            ],
+          ),
+        );
       },
     ),
     // SQLite ignores foreign keys (and ON DELETE CASCADE) unless enabled per connection.

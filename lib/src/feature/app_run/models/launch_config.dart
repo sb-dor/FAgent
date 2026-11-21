@@ -34,6 +34,11 @@ abstract class LaunchConfig with _$LaunchConfig {
     /// The build mode; `null` for the one picked in the app.
     BuildMode? mode,
 
+    /// The folder the configuration runs in, relative to the project (`apps/desktop`, `example`);
+    /// `''` when the file names none, names the project folder, or names one the app cannot run in
+    /// ([unsupported] says why).
+    @Default('') String cwd,
+
     /// Variables added to the environment of `flutter run`.
     @Default(<String, String>{}) Map<String, String> environment,
 
@@ -67,7 +72,7 @@ final class LaunchUnsupportedVariable extends LaunchUnsupported {
   int get hashCode => Object.hash(LaunchUnsupportedVariable, name);
 }
 
-/// The configuration's `cwd` is not the project folder.
+/// The configuration's `cwd` is outside the project folder.
 final class LaunchCwdOutsideProject extends LaunchUnsupported {
   /// Creates the reason.
   const LaunchCwdOutsideProject(this.cwd);

@@ -7,6 +7,7 @@ import '../../generated_migrations/schema.dart';
 import '../../generated_migrations/schema_v1.dart' as v1;
 import '../../generated_migrations/schema_v10.dart' as v10;
 import '../../generated_migrations/schema_v11.dart' as v11;
+import '../../generated_migrations/schema_v12.dart' as v12;
 import '../../generated_migrations/schema_v2.dart' as v2;
 import '../../generated_migrations/schema_v3.dart' as v3;
 import '../../generated_migrations/schema_v4.dart' as v4;
@@ -211,11 +212,14 @@ void main() {
     addTearDown(database.close);
     await verifier.migrateAndValidate(database, 10);
 
-    final row = await database.select(database.runConfigsTable).getSingle();
-    expect(row.flavor, 'dev');
-    expect(row.dartDefines, '["A=1"]');
-    expect(row.extraArgs, '--verbose');
-    expect(row.selectedConfig, isNull);
+    // Columns of v10 only: today's table class has columns later versions added.
+    final row = await database
+        .customSelect('SELECT flavor, dart_defines, extra_args, selected_config FROM run_configs')
+        .getSingle();
+    expect(row.read<String>('flavor'), 'dev');
+    expect(row.read<String>('dart_defines'), '["A=1"]');
+    expect(row.read<String>('extra_args'), '--verbose');
+    expect(row.readNullable<String>('selected_config'), isNull);
   });
 
   test('v10 → v11 creates code_view_state and keeps data', () async {
@@ -233,7 +237,8 @@ void main() {
     addTearDown(database.close);
     await verifier.migrateAndValidate(database, 11);
 
-    expect((await database.select(database.runConfigsTable).getSingle()).selectedConfig, 'Dev');
+    final row = await database.customSelect('SELECT selected_config FROM run_configs').getSingle();
+    expect(row.read<String>('selected_config'), 'Dev');
     expect(await database.select(database.codeViewStateTable).get(), isEmpty);
   });
 
@@ -252,5 +257,46 @@ void main() {
     final project = await database.select(database.projectsTable).getSingle();
     expect(project.path, '/work/app');
     expect(project.rulesOffered, isFalse);
+  });
+
+  test('migration v12 → v13 keeps arguments and the selected configuration', () async {
+    final schema = await verifier.schemaAt(12);
+    final old = v12.DatabaseAtV12(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/a', 'a', 0), "
+      "('/work/b', 'b', 0)",
+    );
+    await old.customStatement(
+      'INSERT INTO run_configs (project_id, flavor, dart_defines, extra_args, selected_config) '
+      "VALUES (1, 'dev', '[\"A=1\"]', '--verbose', 'Dev'), (2, NULL, '[]', '', NULL)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 13);
+
+    final rows = await (database.select(
+      database.runConfigsTable,
+    )..orderBy([(row) => OrderingTerm.asc(row.projectId)])).get();
+    expect(rows, hasLength(2));
+    final first = rows.first;
+    expect(first.projectId, 1);
+    expect(first.appFolder, '');
+    expect(first.flavor, 'dev');
+    expect(first.dartDefines, '["A=1"]');
+    expect(first.extraArgs, '--verbose');
+    expect(first.selectedConfig, 'Dev');
+    expect(first.selectedApp, isNull);
+    expect(rows.last.appFolder, '');
+    expect(rows.last.selectedConfig, isNull);
+
+    // The new key lets a project keep a row per app.
+    await database
+        .into(database.runConfigsTable)
+        .insert(
+          RunConfigsTableCompanion.insert(projectId: 1, appFolder: const Value('apps/desktop')),
+        );
+    expect(await database.select(database.runConfigsTable).get(), hasLength(3));
   });
 }

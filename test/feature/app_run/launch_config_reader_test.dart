@@ -160,10 +160,27 @@ void main() {
       );
     });
 
+    test('cwd inside the project is supported', () {
+      final desktop = readOne(r'"cwd": "${workspaceFolder}/apps/desktop"');
+      expect(desktop.cwd, 'apps/desktop');
+      expect(desktop.unsupported, isNull);
+
+      final example = readOne('"cwd": "example"');
+      expect(example.cwd, 'example');
+      expect(example.unsupported, isNull);
+
+      expect(readOne('"cwd": "$root/packages/core/"').cwd, 'packages/core');
+      expect(readOne('"cwd": "./apps/desktop/lib/.."').cwd, 'apps/desktop');
+      expect(readOne('"name": "c"').cwd, '');
+    });
+
     test('a cwd outside the project is unsupported', () {
+      final other = readOne('"cwd": "../other"');
+      expect(other.unsupported, const LaunchCwdOutsideProject('../other'));
+      expect(other.cwd, '');
       expect(
-        readOne(r'"cwd": "${workspaceFolder}/packages/core"').unsupported,
-        const LaunchCwdOutsideProject(r'${workspaceFolder}/packages/core'),
+        readOne(r'"cwd": "${workspaceFolder}/../other"').unsupported,
+        const LaunchCwdOutsideProject(r'${workspaceFolder}/../other'),
       );
       expect(
         readOne('"cwd": "/somewhere/else"').unsupported,
@@ -184,7 +201,9 @@ void main() {
         '$root/',
         '$root/./',
       ]) {
-        expect(readOne('"cwd": "$cwd"').unsupported, isNull, reason: cwd);
+        final config = readOne('"cwd": "$cwd"');
+        expect(config.unsupported, isNull, reason: cwd);
+        expect(config.cwd, '', reason: cwd);
       }
     });
 

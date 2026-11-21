@@ -173,4 +173,119 @@ void main() {
   test('launchConfigs of an unknown project is missing', () async {
     expect(await repository.launchConfigs(42), isA<LaunchConfigsMissing>());
   });
+
+  test('arguments are kept per app', () async {
+    final project = await insertProject('/work/cafe');
+    await repository.save(project, dev, appFolder: 'apps/desktop');
+
+    expect(await repository.watch(project, appFolder: 'apps/desktop').first, dev);
+    expect(await repository.watch(project, appFolder: 'apps/mobile').first, const RunArguments());
+    expect(
+      await repository.watch(project).first,
+      const RunArguments(),
+      reason: 'the root keeps its own arguments',
+    );
+
+    await repository.save(project, const RunArguments(flavor: 'prod'), appFolder: 'apps/mobile');
+    expect(await repository.watch(project, appFolder: 'apps/desktop').first, dev);
+    expect(await database.select(database.runConfigsTable).get(), hasLength(2));
+  });
+
+  test('selected app round trip', () async {
+    final project = await insertProject('/work/cafe');
+    expect(await repository.watchSelectedApp(project).first, isNull);
+
+    await repository.saveSelectedApp(project, 'apps/desktop');
+    expect(await repository.watchSelectedApp(project).first, 'apps/desktop');
+    expect(await repository.watch(project).first, const RunArguments());
+
+    await repository.save(project, dev, appFolder: 'apps/desktop');
+    expect(
+      await repository.watchSelectedApp(project).first,
+      'apps/desktop',
+      reason: "saving an app's arguments keeps the selected app",
+    );
+
+    await repository.saveSelectedApp(project, null);
+    expect(await repository.watchSelectedApp(project).first, isNull);
+    expect(await repository.watch(project, appFolder: 'apps/desktop').first, dev);
+  });
+
+  test('clearing the selected app of a project without a row stores nothing', () async {
+    final project = await insertProject('/work/cafe');
+    await repository.saveSelectedApp(project, null);
+    expect(await database.select(database.runConfigsTable).get(), isEmpty);
+  });
+
+  test('watchSelectedApp emits again when the selected app is saved', () async {
+    final project = await insertProject('/work/cafe');
+    final seen = <String?>[];
+    final subscription = repository.watchSelectedApp(project).listen(seen.add);
+    addTearDown(subscription.cancel);
+    await pumpEventQueue();
+
+    await repository.saveSelectedApp(project, 'apps/desktop');
+    await pumpEventQueue();
+
+    expect(seen, <String?>[null, 'apps/desktop']);
+  });
+
+  test('selectedConfig still on the root row', () async {
+    final project = await insertProject('/work/cafe');
+    await repository.save(project, dev, appFolder: 'apps/desktop');
+    await repository.saveSelected(project, 'Desktop');
+    await repository.saveSelectedApp(project, 'apps/desktop');
+
+    expect(await repository.watchSelected(project).first, 'Desktop');
+    final rows = await database.select(database.runConfigsTable).get();
+    final root = rows.singleWhere((row) => row.appFolder == '');
+    final desktop = rows.singleWhere((row) => row.appFolder == 'apps/desktop');
+    expect(root.selectedConfig, 'Desktop');
+    expect(root.selectedApp, 'apps/desktop');
+    expect(desktop.selectedConfig, isNull);
+    expect(desktop.selectedApp, isNull);
+
+    await repository.saveSelected(project, null);
+    expect(await repository.watchSelected(project).first, isNull);
+    expect(await repository.watchSelectedApp(project).first, 'apps/desktop');
+    expect(await repository.watch(project, appFolder: 'apps/desktop').first, dev);
+  });
+
+  group('runnableApps', () {
+    late io.Directory root;
+
+    setUp(() => root = io.Directory.systemTemp.createTempSync('run_config_repository_apps'));
+    tearDown(() => root.deleteSync(recursive: true));
+
+    void write(String path, String content) => io.File(p.join(root.path, path))
+      ..createSync(recursive: true)
+      ..writeAsStringSync(content);
+
+    void flutterApp(String folder) {
+      write('$folder/pubspec.yaml', 'name: x\ndependencies:\n  flutter:\n    sdk: flutter\n');
+      write('$folder/lib/main.dart', 'void main() {}');
+    }
+
+    test('a cafe_pos-like monorepo lists its Flutter apps', () async {
+      write('pubspec.yaml', 'name: cafe_workspace\nworkspace:\n  - apps/*\n  - packages/*\n');
+      flutterApp('apps/desktop');
+      write('apps/server/pubspec.yaml', 'name: cafe_server\n');
+      write('apps/server/lib/main.dart', 'void main() {}');
+      write('packages/core/pubspec.yaml', 'name: core\n');
+      final project = await insertProject(root.path);
+
+      expect(await repository.runnableApps(project), <String>['apps/desktop']);
+    });
+
+    test('a one-app project has none', () async {
+      flutterApp('.');
+      final project = await insertProject(root.path);
+
+      expect(await repository.runnableApps(project), isEmpty);
+    });
+
+    test('an unknown project has none', () async {
+      expect(await repository.runnableApps(42), isEmpty);
+    });
+  });
 }

@@ -96,6 +96,18 @@ LaunchConfig? _parseConfig(Map<Object?, Object?> entry, String root) {
   final preLaunchTask = entry['preLaunchTask'];
 
   final split = _splitFlags(args);
+  final unsupported = _unsupportedReason(
+    <String?>[
+      if (program is String) program,
+      if (cwd is String) cwd,
+      for (final key in const <String>['args', 'toolArgs'])
+        if (entry[key] case final List<Object?> list) ...list.whereType<String>(),
+      if (entry['env'] case final Map<Object?, Object?> env) ...env.values.map((v) => '$v'),
+      if (deviceId is String) deviceId,
+    ],
+    cwd is String ? cwd : null,
+    root,
+  );
   return LaunchConfig(
     name: name,
     target: program is String && program.isNotEmpty
@@ -106,26 +118,16 @@ LaunchConfig? _parseConfig(Map<Object?, Object?> entry, String root) {
     extraArgs: split.rest.map(_quote).join(' '),
     deviceId: deviceId is String && deviceId.isNotEmpty ? deviceId : split.deviceId,
     mode: _modeOf(flutterMode) ?? split.mode,
+    cwd: unsupported == null && cwd is String ? _relativeCwd(cwd, root) ?? '' : '',
     environment: environment,
-    unsupported: _unsupportedReason(
-      <String?>[
-        if (program is String) program,
-        if (cwd is String) cwd,
-        for (final key in const <String>['args', 'toolArgs'])
-          if (entry[key] case final List<Object?> list) ...list.whereType<String>(),
-        if (entry['env'] case final Map<Object?, Object?> env) ...env.values.map((v) => '$v'),
-        if (deviceId is String) deviceId,
-      ],
-      cwd is String ? cwd : null,
-      root,
-    ),
+    unsupported: unsupported,
     hasPreLaunchTask: preLaunchTask is String && preLaunchTask.isNotEmpty,
   );
 }
 
-/// The first `${…}` variable other than `${workspaceFolder}` among [values], or a `cwd` that is
-/// not the project folder (as the file spells it, with `${workspaceFolder}` still in it); `null`
-/// when the configuration can run.
+/// The first `${…}` variable other than `${workspaceFolder}` among [values], or a `cwd` outside
+/// the project folder (as the file spells it, with `${workspaceFolder}` still in it); `null` when
+/// the configuration can run.
 LaunchUnsupported? _unsupportedReason(Iterable<String?> values, String? cwd, String root) {
   for (final value in values) {
     if (value == null) continue;
@@ -133,16 +135,19 @@ LaunchUnsupported? _unsupportedReason(Iterable<String?> values, String? cwd, Str
       if (match[0] != _workspaceFolder) return LaunchUnsupportedVariable(match[0]!);
     }
   }
-  if (cwd != null && cwd.isNotEmpty && !_isProjectFolder(_substitute(cwd, root), root)) {
-    return LaunchCwdOutsideProject(cwd);
-  }
+  if (cwd != null && _relativeCwd(cwd, root) == null) return LaunchCwdOutsideProject(cwd);
   return null;
 }
 
-/// Whether [cwd] (already free of `${workspaceFolder}`) names [root], relative or absolute, with
-/// `.`, `..` and trailing slashes resolved.
-bool _isProjectFolder(String cwd, String root) =>
-    p.equals(p.normalize(p.join(root, cwd)), p.normalize(root));
+/// [cwd] as the file spells it, relative to [root], with `${workspaceFolder}`, `.`, `..` and
+/// trailing slashes resolved: `''` for the project folder, `null` when it is outside it.
+String? _relativeCwd(String cwd, String root) {
+  final folder = p.normalize(p.join(root, _substitute(cwd, root)));
+  final project = p.normalize(root);
+  if (p.equals(folder, project)) return '';
+  if (!p.isWithin(project, folder)) return null;
+  return p.relative(folder, from: project);
+}
 
 String _substitute(String value, String root) => value.replaceAll(_workspaceFolder, root);
 
