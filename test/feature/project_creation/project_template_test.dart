@@ -132,4 +132,64 @@ void main() {
     }
     expect(names, hasLength(names.toSet().length));
   });
+
+  test('repo, app and ui files make up the one-app list', () {
+    final repo = projectTemplateRepoFiles.toSet();
+    final app = projectTemplateAppFiles.toSet();
+    final ui = projectTemplateUiFiles.toSet();
+    expect(<String>{...repo, ...app, ...ui}, projectTemplateFiles.toSet());
+    expect(
+      repo.length + app.length + ui.length,
+      projectTemplateFiles.length,
+      reason: 'the three lists overlap or repeat a file',
+    );
+    expect(repo.intersection(app), isEmpty);
+    expect(repo.intersection(ui), isEmpty);
+    expect(app.intersection(ui), isEmpty);
+  });
+
+  test('every monorepo template file is an asset', () async {
+    for (final path in monorepoTemplateFiles) {
+      final text = await rootBundle.loadString('$monorepoTemplateRoot$path');
+      expect(text, isNotEmpty, reason: path);
+    }
+  });
+
+  test('monorepo scripts find members themselves', () async {
+    final scripts = <String, String>{
+      for (final name in const <String>['analyze', 'format', 'generate', 'test'])
+        name: await rootBundle.loadString('${monorepoTemplateRoot}scripts/$name.bash'),
+    };
+    expect(scripts['test'], allOf(contains('apps/*/'), contains('packages/*/')));
+    for (final entry in scripts.entries) {
+      expect(entry.value, isNot(contains('apps/app')), reason: entry.key);
+      expect(entry.value, isNot(contains('packages/ui')), reason: entry.key);
+    }
+  });
+
+  test('monorepo Makefile runs one app', () async {
+    final makefile = await rootBundle.loadString('${monorepoTemplateRoot}Makefile');
+    expect(makefile, contains('run:'));
+    expect(makefile, contains('APP'));
+    expect(makefile, contains(r'cd apps/$(APP)'));
+    expect(makefile.split('\n').where((line) => line.startsWith('\t@')), isNotEmpty);
+    expect(makefile, isNot(contains('\n    @')));
+  });
+
+  test('root pubspec is a workspace of apps and packages', () {
+    final pubspec = monorepoRootPubspec(name: 'shop', sdkConstraint: '^3.14.0');
+    expect(pubspec, contains('name: shop_workspace'));
+    expect(pubspec, contains('publish_to: none'));
+    expect(pubspec, contains('sdk: ^3.14.0'));
+    expect(pubspec, contains('- apps/*'));
+    expect(pubspec, contains('- packages/*'));
+    expect(pubspec, isNot(contains('dependencies:')));
+  });
+
+  test('pub add for a monorepo app points at the shared ui package', () {
+    final arguments = skeletonPubAddArgumentsFor(uiPath: '../../packages/ui');
+    expect(arguments, contains('ui@{path: ../../packages/ui}'));
+    expect(arguments, isNot(contains('ui@{path: packages/ui}')));
+    expect(skeletonPubAddArguments, contains('ui@{path: packages/ui}'));
+  });
 }
