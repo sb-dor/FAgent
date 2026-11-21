@@ -48,6 +48,7 @@ void main() {
       writeRules: (_) async => const <String>[],
       loadAsset: (key) => io.File(key).readAsString(),
       dartVersion: () async => found.dartVersion,
+      flutterVersion: () async => found.version,
     );
     addTearDown(repository.dispose);
     return (repository, flutter!, environment);
@@ -61,27 +62,12 @@ void main() {
     ],
   ].join('\n');
 
-  /// Expects every step of [run] done. On a Flutter whose `material.dart` is deprecated (3.47 and
-  /// newer) the skeleton's imports of it are infos that fail `flutter analyze`: an `analyze` that
-  /// reports nothing else passes, and the steps after it stay pending.
+  /// Expects every step of [run] done, `analyze` included: on a Flutter whose `material.dart` is
+  /// deprecated (3.47 and newer) the skeleton is on `material_ui`, so it reports nothing.
   void expectFinished(CreationRun run, {String? what}) {
     final reason = '${what == null ? '' : '$what\n'}${report(run)}';
-    final analyze = run.steps.indexWhere((step) => step.kind == CreationStepKind.analyze);
-    final issues = analyze < 0
-        ? const <String>[]
-        : run.steps[analyze].output.where((line) => line.contains(' • ')).toList();
-    final failedOnDeprecations =
-        analyze >= 0 &&
-        run.steps[analyze].status == CreationStepStatus.failed &&
-        issues.isNotEmpty &&
-        issues.every((line) => line.trimRight().endsWith('• deprecated_member_use'));
-    for (final (index, step) in run.steps.indexed) {
-      final expected = !failedOnDeprecations || index < analyze
-          ? CreationStepStatus.done
-          : index == analyze
-          ? CreationStepStatus.failed
-          : CreationStepStatus.pending;
-      expect(step.status, expected, reason: '${step.kind.name}\n$reason');
+    for (final step in run.steps) {
+      expect(step.status, CreationStepStatus.done, reason: '${step.kind.name}\n$reason');
     }
   }
 
@@ -193,8 +179,7 @@ void main() {
       }
 
       await run('bash', const <String>['scripts/test.bash']);
-      // Infos are allowed: the skeleton's `material.dart` imports are deprecated on newer Flutter.
-      await run(flutter, const <String>['analyze', '--no-fatal-infos']);
+      await run(flutter, const <String>['analyze']);
       // The macOS build compiles the shimmer shader the app takes from packages/ui.
       await run(flutter, const <String>[
         'build',

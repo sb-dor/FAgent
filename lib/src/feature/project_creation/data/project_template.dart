@@ -238,6 +238,58 @@ workspace:
   - packages/*
 ''';
 
+/// The oldest Flutter whose `material.dart` and `cupertino.dart` (and the Material and Cupertino
+/// delegates of `flutter_localizations`) are deprecated in favour of the `material_ui` and
+/// `cupertino_ui` packages. `flutter analyze` fails a new project on their infos.
+const String kMaterialUiMinFlutter = '3.47';
+
+/// Whether a project made with Flutter [flutterVersion] (for example `3.50.0`) imports
+/// `material_ui` and `cupertino_ui` instead of the SDK's libraries; `false` when it is unknown.
+bool usesMaterialUi(String? flutterVersion) {
+  final match = RegExp(r'^(\d+)\.(\d+)').firstMatch(flutterVersion ?? '');
+  if (match == null) return false;
+  final min = kMaterialUiMinFlutter.split('.').map(int.parse).toList();
+  final major = int.parse(match[1]!);
+  final minor = int.parse(match[2]!);
+  return major != min[0] ? major > min[0] : minor >= min[1];
+}
+
+/// The packages `packages/ui` gets when the project uses `material_ui`: its files import
+/// `material.dart`, none `cupertino.dart`.
+const List<String> uiMaterialUiPackages = <String>['material_ui'];
+
+const String _material = "'package:flutter/material.dart'";
+const String _materialUi = "'package:material_ui/material_ui.dart'";
+const String _cupertino = "'package:flutter/cupertino.dart'";
+const String _cupertinoUi = "'package:cupertino_ui/cupertino_ui.dart'";
+const String _localizationsImport =
+    "import 'package:flutter_localizations/flutter_localizations.dart';";
+const String _localizationsWidgetsImport =
+    "import 'package:flutter_localizations/flutter_localizations.dart' "
+    'show GlobalWidgetsLocalizations;';
+
+/// [dartSource] (a template file) for a Flutter that [usesMaterialUi]: every import and export of
+/// `material.dart` becomes one of `material_ui`, of `cupertino.dart` one of `cupertino_ui`, and a
+/// plain import of `flutter_localizations` (which also exports the deprecated Material and
+/// Cupertino delegates) shows only `GlobalWidgetsLocalizations`, the other delegates coming from
+/// `material_ui` and `cupertino_ui`. `dart fix --code=directives_ordering` sorts the imports
+/// afterwards.
+String useMaterialUi(String dartSource) {
+  var text = dartSource.replaceAll(_material, _materialUi).replaceAll(_cupertino, _cupertinoUi);
+  if (!text.contains(_localizationsImport)) return text;
+  final imports = <String>[
+    if (text.contains('GlobalMaterialLocalizations') && !text.contains('import $_materialUi;'))
+      "import 'package:material_ui/material_ui.dart' show GlobalMaterialLocalizations;",
+    if (text.contains('GlobalCupertinoLocalizations') && !text.contains('import $_cupertinoUi;'))
+      "import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;",
+    if (text.contains('GlobalWidgetsLocalizations')) _localizationsWidgetsImport,
+  ];
+  return text.replaceFirst(
+    imports.isEmpty ? '$_localizationsImport\n' : _localizationsImport,
+    imports.join('\n'),
+  );
+}
+
 /// Replaces every `{{package}}` in a template file with the package name of the new project, and
 /// every `{{date}}` with [date] as `YYYY-MM-DD` (the first entry of `CHANGELOG.md`).
 String fillProjectTemplate(String text, {required String package, required DateTime date}) =>
@@ -255,39 +307,42 @@ const String controlGitUrl = 'https://github.com/PlugFox/control.git';
 const String controlGitRef = '685a9bc6ef60c987b99b5526e125813adba54e2a';
 
 /// The arguments of the one `flutter pub add` that installs the packages of the skeleton.
-/// [uiPath] is where `packages/ui` is, relative to the package that depends on it.
-List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
-  // No versions: `pub add` takes the newest release that fits the SDK, at every creation.
-  'l',
-  'http',
-  'meta',
-  'win32',
-  'shared_preferences',
-  'freezed_annotation',
-  'intl',
-  'collection',
-  'async',
-  'path',
-  'convert',
-  'path_provider',
-  'platform_info',
-  'rxdart',
-  'url_launcher',
-  'window_manager',
-  'drift',
-  'drift_flutter',
-  'web',
-  'flutter_localizations@{sdk: flutter}',
-  'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',
-  // The workspace member with the shared UI (`packages/ui`, listed under `workspace:`).
-  'ui@{path: $uiPath}',
-  'dev:freezed',
-  'dev:build_runner',
-  'dev:drift_dev',
-  'dev:flutter_launcher_icons',
-  'dev:flutter_native_splash',
-  'dev:integration_test@{sdk: flutter}',
-];
+/// [uiPath] is where `packages/ui` is, relative to the package that depends on it; with
+/// [materialUi] (see [usesMaterialUi]) it adds `material_ui` and `cupertino_ui`.
+List<String> skeletonPubAddArgumentsFor({required String uiPath, bool materialUi = false}) =>
+    <String>[
+      // No versions: `pub add` takes the newest release that fits the SDK, at every creation.
+      'l',
+      'http',
+      'meta',
+      'win32',
+      'shared_preferences',
+      'freezed_annotation',
+      'intl',
+      'collection',
+      'async',
+      'path',
+      'convert',
+      'path_provider',
+      'platform_info',
+      'rxdart',
+      'url_launcher',
+      'window_manager',
+      'drift',
+      'drift_flutter',
+      'web',
+      'flutter_localizations@{sdk: flutter}',
+      if (materialUi) ...<String>['material_ui', 'cupertino_ui'],
+      'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',
+      // The workspace member with the shared UI (`packages/ui`, listed under `workspace:`).
+      'ui@{path: $uiPath}',
+      'dev:freezed',
+      'dev:build_runner',
+      'dev:drift_dev',
+      'dev:flutter_launcher_icons',
+      'dev:flutter_native_splash',
+      'dev:integration_test@{sdk: flutter}',
+    ];
 
 /// [skeletonPubAddArgumentsFor] for a one-app project, where `packages/ui` is inside it.
 final List<String> skeletonPubAddArguments = skeletonPubAddArgumentsFor(uiPath: 'packages/ui');
