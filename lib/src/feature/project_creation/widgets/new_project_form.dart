@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/feature/project_creation/data/project_cre
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/package_name.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/creation_fields.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/option_chip.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/platform_chips.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/controllers/workspace_data_controller.dart';
@@ -301,23 +302,23 @@ class _NewProjectFormState extends State<NewProjectForm> {
         _folderField(context),
         if (_type.hasPlatforms) ...<Widget>[
           gap,
-          _Field(
+          CreationField(
             label: localization.newProjectPlatforms,
             messages: <Widget>[
-              if (_platforms.isEmpty) _Message.error(localization.newProjectNoPlatform),
+              if (_platforms.isEmpty) CreationMessage.error(localization.newProjectNoPlatform),
             ],
             child: PlatformChips(selected: _platforms, onToggle: _toggle),
           ),
         ],
         if (_type == FlutterProjectType.app) ...<Widget>[
           gap,
-          _Field(
+          CreationField(
             label: localization.newProjectTemplate,
-            messages: <Widget>[if (_gitHint) _Message.hint(localization.comingLater)],
+            messages: <Widget>[if (_gitHint) CreationMessage.hint(localization.comingLater)],
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                _TemplateCard(
+                CreationTemplateCard(
                   key: const ValueKey<String>('template-architecture'),
                   title: localization.newProjectTemplateArchitecture,
                   description: localization.newProjectTemplateArchitectureHint,
@@ -325,7 +326,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
                   onTap: () => _chooseTemplate(NewProjectTemplate.architecture),
                 ),
                 const SizedBox(height: 6),
-                _TemplateCard(
+                CreationTemplateCard(
                   key: const ValueKey<String>('template-plain'),
                   title: localization.newProjectTemplatePlain,
                   description: localization.newProjectTemplatePlainHint,
@@ -333,7 +334,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
                   onTap: () => _chooseTemplate(NewProjectTemplate.plain),
                 ),
                 const SizedBox(height: 6),
-                _TemplateCard(
+                CreationTemplateCard(
                   key: const ValueKey<String>('template-git'),
                   title: localization.newProjectTemplateGit,
                   description: localization.newProjectTemplateGitHint,
@@ -370,10 +371,10 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   Widget _typeField(BuildContext context) {
     final localization = Localization.of(context);
-    return _Field(
+    return CreationField(
       label: localization.newProjectType,
       messages: <Widget>[
-        _Message.hint(switch (_type) {
+        CreationMessage.hint(switch (_type) {
           FlutterProjectType.app => localization.newProjectTypeAppHint,
           FlutterProjectType.package => localization.newProjectTypePackageHint,
           FlutterProjectType.plugin => localization.newProjectTypePluginHint,
@@ -411,10 +412,10 @@ class _NewProjectFormState extends State<NewProjectForm> {
   Widget _structureField(BuildContext context) {
     final localization = Localization.of(context);
     final needsDart = _sdkInfo != null && !_monorepoSupported;
-    return _Field(
+    return CreationField(
       label: localization.newProjectStructure,
       messages: <Widget>[
-        _Message.hint(
+        CreationMessage.hint(
           needsDart
               ? localization.newProjectStructureMonorepoNeedsDart(kMonorepoMinDart)
               : _monorepo
@@ -449,12 +450,12 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   Widget _appFolderField(BuildContext context) {
     final localization = Localization.of(context);
-    return _Field(
+    return CreationField(
       label: localization.newProjectAppFolder,
       messages: <Widget>[
-        if (!_appFolderValid) _Message.error(localization.newProjectNameInvalid),
+        if (!_appFolderValid) CreationMessage.error(localization.newProjectNameInvalid),
       ],
-      child: _TextInput(
+      child: CreationTextInput(
         fieldKey: const ValueKey<String>('new-project-app-folder'),
         controller: _appFolder,
         error: !_appFolderValid,
@@ -467,18 +468,18 @@ class _NewProjectFormState extends State<NewProjectForm> {
   Widget _appPackageField(BuildContext context) {
     final localization = Localization.of(context);
     final problem = _appPackageProblem;
-    return _Field(
+    return CreationField(
       label: localization.newProjectAppPackage,
       messages: <Widget>[
         if (problem != null)
-          _Message.error(switch (problem) {
+          CreationMessage.error(switch (problem) {
             PackageNameProblem.keyword => localization.newProjectNameKeyword,
             PackageNameProblem.dependency => localization.newProjectNameDependency,
-            PackageNameProblem.invalid || PackageNameProblem.empty =>
-              localization.newProjectNameInvalid,
+            PackageNameProblem.invalid ||
+            PackageNameProblem.empty => localization.newProjectNameInvalid,
           }),
       ],
-      child: _TextInput(
+      child: CreationTextInput(
         fieldKey: const ValueKey<String>('new-project-app-package'),
         controller: _appPackage,
         error: problem != null,
@@ -494,23 +495,23 @@ class _NewProjectFormState extends State<NewProjectForm> {
     final messages = <Widget>[];
     switch (problem) {
       case PackageNameProblem.invalid:
-        messages.add(_Message.error(localization.newProjectNameInvalid));
+        messages.add(CreationMessage.error(localization.newProjectNameInvalid));
         final suggestion = suggestPackageName(_name.text);
         if (suggestion != null) {
-          messages.add(_Message.error(localization.newProjectNameTry(suggestion)));
+          messages.add(CreationMessage.error(localization.newProjectNameTry(suggestion)));
         }
       case PackageNameProblem.keyword:
-        messages.add(_Message.error(localization.newProjectNameKeyword));
+        messages.add(CreationMessage.error(localization.newProjectNameKeyword));
       case PackageNameProblem.dependency:
-        messages.add(_Message.error(localization.newProjectNameDependency));
+        messages.add(CreationMessage.error(localization.newProjectNameDependency));
       case PackageNameProblem.empty || null:
         break;
     }
     final bad = problem != null && problem != PackageNameProblem.empty;
-    return _Field(
+    return CreationField(
       label: localization.newProjectName,
-      messages: bad ? messages : <Widget>[_Message.hint(localization.newProjectNameHint)],
-      child: _TextInput(
+      messages: bad ? messages : <Widget>[CreationMessage.hint(localization.newProjectNameHint)],
+      child: CreationTextInput(
         fieldKey: const ValueKey<String>('new-project-name'),
         controller: _name,
         autofocus: true,
@@ -526,15 +527,15 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   Widget _orgField(BuildContext context) {
     final localization = Localization.of(context);
-    return _Field(
+    return CreationField(
       label: localization.newProjectOrg,
       messages: <Widget>[
         if (_orgValid)
-          _Message.hint(localization.newProjectOrgHint)
+          CreationMessage.hint(localization.newProjectOrgHint)
         else
-          _Message.error(localization.flutterOrgInvalid),
+          CreationMessage.error(localization.flutterOrgInvalid),
       ],
-      child: _TextInput(
+      child: CreationTextInput(
         fieldKey: const ValueKey<String>('new-project-org'),
         controller: _org,
         error: !_orgValid,
@@ -554,12 +555,12 @@ class _NewProjectFormState extends State<NewProjectForm> {
         : '${parent.endsWith('/') ? parent : '$parent/'}${_name.text}';
     final problem = _targetChecked ? _targetProblem : null;
     final failed = _folderFailed;
-    return _Field(
+    return CreationField(
       label: localization.newProjectFolder,
       messages: <Widget>[
-        if (failed) _Message.error(localization.newProjectFolderUnreadable),
+        if (failed) CreationMessage.error(localization.newProjectFolderUnreadable),
         if (problem != null)
-          _Message.error(switch (problem) {
+          CreationMessage.error(switch (problem) {
             TargetProblem.exists => localization.newProjectFolderExists,
             TargetProblem.parentMissing => localization.newProjectParentMissing,
           }),
@@ -677,167 +678,6 @@ class _NewProjectFormState extends State<NewProjectForm> {
           child: Text(localization.newProjectCreate),
         ),
       ],
-    );
-  }
-}
-
-/// A label over a control with the hint or the errors under it.
-class _Field extends StatelessWidget {
-  const _Field({required this.label, required this.child, this.messages = const <Widget>[]});
-
-  final String label;
-  final Widget child;
-  final List<Widget> messages;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    mainAxisSize: MainAxisSize.min,
-    children: <Widget>[
-      Padding(
-        padding: const EdgeInsets.only(bottom: 5),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall!
-              .copyWith(color: context.colors.muted, fontWeight: FontWeight.w600),
-        ),
-      ),
-      child,
-      for (final message in messages)
-        Padding(padding: const EdgeInsets.only(top: 4), child: message),
-    ],
-  );
-}
-
-/// A line under a field: a muted hint or a red error.
-class _Message extends StatelessWidget {
-  const _Message.hint(this.text) : error = false;
-
-  const _Message.error(this.text) : error = true;
-
-  final String text;
-  final bool error;
-
-  @override
-  Widget build(BuildContext context) => Text(
-    text,
-    style: Theme.of(context).textTheme.bodySmall!
-        .copyWith(fontSize: 11, color: error ? context.colors.danger : context.colors.muted),
-  );
-}
-
-/// A single-line monospace field with the border of the dialog.
-class _TextInput extends StatelessWidget {
-  const _TextInput({
-    required this.fieldKey,
-    required this.controller,
-    required this.onChanged,
-    required this.onSubmitted,
-    required this.error,
-    this.autofocus = false,
-  });
-
-  final Key fieldKey;
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final ValueChanged<String> onSubmitted;
-  final bool error;
-  final bool autofocus;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    OutlineInputBorder border(Color color) => OutlineInputBorder(
-      borderRadius: BorderRadius.circular(AppRadius.medium - 2),
-      borderSide: BorderSide(color: color),
-    );
-    return TextField(
-      key: fieldKey,
-      controller: controller,
-      autofocus: autofocus,
-      style: AppText.mono(context, size: 13).copyWith(color: colors.text),
-      cursorColor: colors.accent,
-      onChanged: onChanged,
-      onSubmitted: onSubmitted,
-      decoration: InputDecoration(
-        isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        enabledBorder: border(error ? colors.danger : colors.border),
-        focusedBorder: border(error ? colors.danger : colors.accent),
-      ),
-    );
-  }
-}
-
-/// One of the template radio cards.
-class _TemplateCard extends StatelessWidget {
-  const _TemplateCard({
-    required this.title,
-    required this.description,
-    required this.selected,
-    required this.onTap,
-    this.preview = false,
-    super.key,
-  });
-
-  final String title;
-  final String description;
-  final bool selected;
-  final bool preview;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.colors;
-    final textTheme = Theme.of(context).textTheme;
-    final radius = BorderRadius.circular(AppRadius.medium);
-    return Semantics(
-      inMutuallyExclusiveGroup: true,
-      checked: selected,
-      child: Material(
-        color: selected ? colors.accentSoft : colors.bg,
-        shape: RoundedRectangleBorder(
-          borderRadius: radius,
-          side: BorderSide(color: selected ? colors.accent : colors.border),
-        ),
-        child: InkWell(
-          borderRadius: radius,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.only(top: 1),
-                  child: Icon(
-                    selected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                    size: 16,
-                    color: selected ? colors.accent : colors.muted,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        title,
-                        style: textTheme.bodyMedium!.copyWith(
-                          color: colors.text,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      Text(description, style: textTheme.bodySmall!.copyWith(color: colors.muted)),
-                    ],
-                  ),
-                ),
-                if (preview) ...<Widget>[const SizedBox(width: 8), const PreviewBadge()],
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }

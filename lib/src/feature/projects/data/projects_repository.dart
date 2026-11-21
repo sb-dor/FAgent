@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/src/common/pub_workspace/pub_workspace.dart';
 import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
 import 'package:path/path.dart' as p;
@@ -60,6 +61,10 @@ abstract interface class IProjectsRepository {
 
   /// Remembers that the app offered its rules to project [projectId], so it does not ask again.
   Future<void> markRulesOffered(int projectId);
+
+  /// Whether the project folder at [path] is a pub workspace root without an app of its own, a
+  /// monorepo members can be added to.
+  Future<bool> isMonorepo(String path);
 }
 
 /// Drift-backed [IProjectsRepository].
@@ -117,6 +122,9 @@ final class ProjectsRepositoryImpl implements IProjectsRepository {
       (_database.update(_database.projectsTable)..where((p) => p.id.equals(projectId))).write(
         const ProjectsTableCompanion(rulesOffered: Value<bool>(true)),
       );
+
+  @override
+  Future<bool> isMonorepo(String path) async => isPubMonorepo(path);
 
   @override
   Future<void> openPath(String path) async {

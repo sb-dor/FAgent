@@ -45,6 +45,9 @@ final class ProjectsController extends StateController<ProjectsState>
   /// relative or missing path, and another error when it cannot open it.
   Future<void> openPath(String path) => _repository.openPath(path);
 
+  /// Whether the project at [path] is a monorepo.
+  Future<bool> isMonorepo(String path) => _repository.isMonorepo(path);
+
   @override
   void dispose() {
     _subscription?.cancel().ignore();

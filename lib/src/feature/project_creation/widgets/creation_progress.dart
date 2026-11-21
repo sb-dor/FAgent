@@ -20,7 +20,8 @@ const int kCreationOutputLines = 6;
 /// While the creation runs it offers "Stop" (kills the running command, the creation then ends as
 /// failed) and "Minimize" (closes the dialog, the creation goes on). When it has finished
 /// (completed or failed) it offers "Close", which calls [onClose], and, if the project was added
-/// to the app, "Open project", which calls [onOpenProject] with its id. It shows nothing for an
+/// to the app, "Open project", which calls [onOpenProject] with its id. It shows an added member's run the same way, with one line after a
+/// success for each script that lists the project's members by name. It shows nothing for an
 /// idle [controller]: the dialog shows the form then.
 /// {@endtemplate}
 class CreationProgress extends StatelessWidget {
@@ -48,23 +49,44 @@ class CreationProgress extends StatelessWidget {
     builder: (context, _) {
       final localization = Localization.of(context);
       final state = controller.state;
-      final (request, steps, error, projectId) = switch (state) {
-        ProjectCreation$IdleState() => (null, const <CreationStep>[], null, null),
-        ProjectCreation$RunningState(:final request, :final steps) => (request, steps, null, null),
-        ProjectCreation$CompletedState(:final request, :final steps, :final projectId) => (
+      final (request, member, steps, error, projectId) = switch (state) {
+        ProjectCreation$IdleState() => (null, null, const <CreationStep>[], null, null),
+        ProjectCreation$RunningState(:final request, :final member, :final steps) => (
           request,
+          member,
           steps,
           null,
-          projectId,
+          null,
         ),
-        ProjectCreation$FailedState(:final request, :final steps, :final error, :final projectId) =>
-          (request, steps, error, projectId),
+        ProjectCreation$CompletedState(
+          :final request,
+          :final member,
+          :final steps,
+          :final projectId,
+        ) =>
+          (request, member, steps, null, projectId),
+        ProjectCreation$FailedState(
+          :final request,
+          :final member,
+          :final steps,
+          :final error,
+          :final projectId,
+        ) =>
+          (request, member, steps, error, projectId),
       };
-      if (request == null) return const SizedBox.shrink();
+      // A created project is named by its name, an added member by its package.
+      final name = request?.name ?? member?.packageName;
+      if (name == null) return const SizedBox.shrink();
+      final notes = switch (state) {
+        ProjectCreation$CompletedState(:final notes) when member != null => <String>[
+          for (final script in notes) localization.addMemberScriptsNote(script, member.relative),
+        ],
+        _ => const <String>[],
+      };
       final title = switch (state) {
-        ProjectCreation$CompletedState() => localization.newProjectCreated(request.name),
-        ProjectCreation$FailedState() => localization.newProjectFailed(request.name),
-        _ => localization.newProjectCreating(request.name),
+        ProjectCreation$CompletedState() => localization.newProjectCreated(name),
+        ProjectCreation$FailedState() => localization.newProjectFailed(name),
+        _ => localization.newProjectCreating(name),
       };
       final running = state is ProjectCreation$RunningState;
       final stopping = state is ProjectCreation$RunningState && state.stopping;
@@ -80,6 +102,15 @@ class CreationProgress extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
                   for (final step in steps) _StepRow(step: step),
+                  for (final note in notes)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        note,
+                        style: Theme.of(context).textTheme.bodySmall!
+                            .copyWith(color: context.colors.muted),
+                      ),
+                    ),
                   if (error != null && error is! CreationStepFailed)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),

@@ -170,4 +170,7 @@ final class _RecordingProjects implements IProjectsRepository {
 
   @override
   Future<void> openPath(String path) async {}
+
+  @override
+  Future<bool> isMonorepo(String path) async => false;
 }

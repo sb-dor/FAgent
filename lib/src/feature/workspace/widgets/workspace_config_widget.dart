@@ -28,6 +28,7 @@ import 'package:flutter_code_agent/src/feature/code_view/models/code_view_state.
 import 'package:flutter_code_agent/src/feature/file_mention/data/project_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/controller/project_creation_controller.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/widgets/add_member_dialog.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/widgets/new_project_dialog.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/controller/project_opening_controller.dart';
 import 'package:flutter_code_agent/src/feature/project_opening/data/project_opening_repository.dart';
@@ -152,7 +153,7 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
   Future<String?> pickNewProjectParent() =>
       pickFolder(Localization.of(context).newProjectPickFolder);
 
-  /// Whether the New project dialog is open.
+  /// Whether the New project or Add to project dialog is open.
   bool _newProjectOpen = false;
 
   /// The window-level settings (panels, theme, language).
@@ -495,6 +496,35 @@ class WorkspaceConfigWidgetState extends State<WorkspaceConfigWidget> {
       );
     } finally {
       _newProjectOpen = false;
+    }
+  }
+
+  /// Shows the Add to project dialog for the monorepo [project]; does nothing while a New project
+  /// or Add to project dialog is already open.
+  Future<void> openAddMember(Project project) async {
+    if (_newProjectOpen) return;
+    _newProjectOpen = true;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        // The dialog's route is not below this widget, so it gets the scope handed over.
+        builder: (_) => WorkspaceConfigInhWidget(
+          state: this,
+          child: AddMemberDialog(project: project),
+        ),
+      );
+    } finally {
+      _newProjectOpen = false;
+    }
+  }
+
+  /// Whether the project at [path] is a monorepo (a failed look counts as no).
+  Future<bool> isMonorepo(String path) async {
+    try {
+      return await projectsController.isMonorepo(path);
+    } on Object {
+      return false;
     }
   }
 

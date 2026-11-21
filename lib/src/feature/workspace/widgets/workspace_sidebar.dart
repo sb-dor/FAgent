@@ -16,7 +16,7 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sideb
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_sidebar_row.dart';
 
-enum _ProjectAction { reveal, settings, remove }
+enum _ProjectAction { reveal, settings, addToProject, remove }
 
 enum _ChatAction { rename, delete }
 
@@ -239,6 +239,8 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
   }
 
   Future<void> _openProjectMenu(Project project, Rect anchor) async {
+    final monorepo = await _scope.isMonorepo(project.path);
+    if (!mounted) return;
     final localization = Localization.of(context);
     final action = await showAppMenu<_ProjectAction>(
       context: context,
@@ -257,6 +259,12 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
               title: localization.projectSettings,
               icon: Icons.tune,
             ),
+            if (monorepo)
+              AppMenuItem<_ProjectAction>(
+                value: _ProjectAction.addToProject,
+                title: localization.addToProject,
+                icon: Icons.add_box_outlined,
+              ),
             AppMenuItem<_ProjectAction>(
               value: _ProjectAction.remove,
               title: localization.removeProject,
@@ -273,6 +281,8 @@ class _WorkspaceSidebarState extends State<WorkspaceSidebar> {
         _scope.revealProject(project).ignore();
       case _ProjectAction.settings:
         _scope.dataController.openView(WorkspaceView.skills);
+      case _ProjectAction.addToProject:
+        _scope.openAddMember(project).ignore();
       case _ProjectAction.remove:
         _scope.removeProject(project).ignore();
       case null:

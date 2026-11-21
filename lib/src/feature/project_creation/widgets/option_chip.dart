@@ -61,12 +61,13 @@ class OptionChip extends StatelessWidget {
                 ],
                 Text(
                   label,
-                  style: Theme.of(context).textTheme.bodySmall!
-                      .copyWith(color: !enabled
+                  style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                    color: !enabled
                         ? colors.muted
                         : selected
                         ? colors.accent
-                        : colors.text),
+                        : colors.text,
+                  ),
                 ),
               ],
             ),
