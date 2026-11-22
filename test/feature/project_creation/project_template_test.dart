@@ -571,7 +571,9 @@ void main() {
         expect(files[path], isNot(contains('FlutterError.onError')), reason: path);
         expect(files[path], isNot(contains('recordFlutter')), reason: path);
       }
+      // Of the app's code; the reporter's test imports it for a fake.
       for (final MapEntry(key: path, value: text) in files.entries) {
+        if (!path.startsWith('lib/')) continue;
         final crashlytics = text.contains("import 'package:firebase_crashlytics/");
         expect(crashlytics, path == 'lib/_core/telemetry/crashlytics_gateway.dart', reason: path);
       }

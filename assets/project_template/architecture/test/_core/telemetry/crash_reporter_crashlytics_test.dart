@@ -105,7 +105,7 @@ void main() {
     final gateway = await createCrashReportGateway(
       projectPackages: const <String>{'{{package}}'},
       initializeFirebase: () async => null,
-      crashlytics: crashlytics,
+      createGateway: () => CrashlyticsGateway(crashlytics: crashlytics),
       logError: (error, stackTrace, {hint, fatal = false}) async => fail('nothing to log'),
     );
 
