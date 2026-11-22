@@ -21,7 +21,8 @@ final class TelemetryToggle {
 final class TelemetryRuntime {
   /// Builds the queue, the `ErrorReporter` core and the sender over the log database [db].
   ///
-  /// [isExpected] decides that an error is expected and stays out of the queue. [projectPackages]
+  /// [isExpected] decides that an error is expected and stays out of the queue; [hideDetails] is
+  /// `ErrorReporter.hideDetails` (`hideDataDetails` by default). [projectPackages]
   /// are the packages of the project: they tell the fingerprint which frames are its own. The
   /// sender works only when [enabled] (the user's switch) and [reporterConfigured]: without a
   /// configured reporter nothing is sent.
@@ -32,6 +33,7 @@ final class TelemetryRuntime {
     required String platform,
     required bool Function(Object error) isExpected,
     required Set<String> projectPackages,
+    Object Function(Object error)? hideDetails,
     bool enabled = false,
     DateTime? consentSince,
     this.reporterConfigured = true,
@@ -46,7 +48,12 @@ final class TelemetryRuntime {
          projectPackages: projectPackages,
          consentSince: consentSince,
        ) {
-    reporter = ErrorReporter(outbox: outbox, buffer: this.buffer, isExpected: isExpected);
+    reporter = ErrorReporter(
+      outbox: outbox,
+      buffer: this.buffer,
+      isExpected: isExpected,
+      hideDetails: hideDetails,
+    );
     sender = TelemetrySender(
       outbox: outbox,
       gateway: gateway,

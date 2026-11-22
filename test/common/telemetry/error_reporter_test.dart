@@ -1,6 +1,8 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart' show LazyDatabase, driftRuntimeOptions;
+import 'package:drift/drift.dart'
+    show DatabaseConnection, DriftWrappedException, LazyDatabase, Variable, driftRuntimeOptions;
+import 'package:drift/isolate.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/telemetry/error_outbox.dart';
 import 'package:flutter_code_agent/src/common/telemetry/error_reporter.dart';
@@ -8,6 +10,7 @@ import 'package:flutter_code_agent/src/common/telemetry/log_buffer.dart';
 import 'package:flutter_code_agent/src/common/telemetry/telemetry_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:l/l.dart';
+import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 TelemetryDatabase _db() => TelemetryDatabase.forTesting(NativeDatabase.memory());
 
@@ -158,6 +161,81 @@ void main() {
       expect(await c.outbox.length(), 1);
       await db.close();
       return 0;
+    });
+  });
+
+  group('errors whose text holds data go to the queue as their type, without the text', () {
+    const secret = 'anna@example.com';
+    final sqlite = SqliteException(
+      extendedResultCode: 2067,
+      message: 'UNIQUE constraint failed: users.email',
+      causingStatement: 'INSERT INTO users (email) VALUES (?)',
+      parametersToStatement: const [secret],
+    );
+
+    Future<OutboxEntry> report(Object error) => _quiet(() async {
+      final db = _db();
+      addTearDown(db.close);
+      final c = _Case(db);
+      final sub = l.listen(c.buffer.add);
+      addTearDown(sub.cancel);
+
+      await c.reporter.logError(error, StackTrace.current, hint: 'save the user');
+
+      return (await c.outbox.oldest(10)).single;
+    });
+
+    void expectHidden(OutboxEntry entry, String type) {
+      expect(entry.type, type);
+      final sent = [entry.message, entry.stack, entry.hint, ...entry.breadcrumbs].join('\n');
+      for (final text in [secret, 'INSERT INTO', 'users', '"token"']) {
+        expect(sent, isNot(contains(text)), reason: text);
+      }
+    }
+
+    test('SqliteException', () async {
+      expectHidden(await report(sqlite), 'SqliteException');
+    });
+
+    test('DriftWrappedException', () async {
+      final entry = await report(
+        DriftWrappedException(message: 'insert into users $secret', cause: sqlite),
+      );
+
+      expectHidden(entry, 'DriftWrappedException');
+      expect(entry.message, contains('extendedResultCode 2067'));
+    });
+
+    test('DriftRemoteException', () async {
+      // A real one: the statement fails behind a drift isolate in this isolate.
+      final server = DriftIsolate.inCurrent(
+        () => DatabaseConnection(NativeDatabase.memory()),
+        killIsolateWhenDone: false,
+      );
+      final remote = TelemetryDatabase.forTesting(await server.connect(singleClientMode: true));
+      addTearDown(remote.close);
+      Object? error;
+      try {
+        await remote
+            .customSelect(
+              'SELECT * FROM users WHERE email = ?',
+              variables: [const Variable(secret)],
+            )
+            .get();
+      } on DriftRemoteException catch (e) {
+        error = e;
+      }
+      expect(error, isA<DriftRemoteException>());
+      expect('$error', contains('users'));
+
+      expectHidden(await report(error!), 'DriftRemoteException');
+    });
+
+    test('FormatException', () async {
+      expectHidden(
+        await report(const FormatException('Unexpected character', '{"token": "$secret"', 9)),
+        'FormatException',
+      );
     });
   });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_code_agent/src/common/telemetry/error_outbox.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/telemetry/log_buffer.dart';
 import 'package:flutter_code_agent/src/common/telemetry/redact.dart';
 import 'package:l/l.dart';
@@ -25,13 +26,16 @@ final class LoggedMessage {
 /// call from the core itself (a log failure reporting itself) is skipped: the zone marks only the
 /// work of that call, neighbouring calls do not suffer.
 final class ErrorReporter {
-  /// Creates the core. [isExpected] decides that an error is expected and stays out of the queue.
+  /// Creates the core. [isExpected] decides that an error is expected and stays out of the queue;
+  /// [hideDetails] turns an error into the one the queue gets ([hideDataDetails] by default).
   ErrorReporter({
     required this.outbox,
     required this.buffer,
     required this.isExpected,
+    Object Function(Object error)? hideDetails,
     void Function(String text)? console,
-  }) : console = console ?? _stderr;
+  }) : hideDetails = hideDetails ?? hideDataDetails,
+       console = console ?? _stderr;
 
   /// How many of the last log lines are attached to an error.
   static const int breadcrumbCount = 100;
@@ -46,6 +50,11 @@ final class ErrorReporter {
 
   /// Whether the error is expected.
   bool Function(Object error) isExpected;
+
+  /// The error as the queue gets it: one whose text can hold data comes back as a
+  /// [HiddenDetailsError], so neither the queue nor the crash reporter sees that text. The log keeps
+  /// the full (cleaned) text.
+  final Object Function(Object error) hideDetails;
 
   /// Where failures of the core itself are written; `stderr` by default.
   void Function(String text) console;
@@ -79,7 +88,7 @@ final class ErrorReporter {
     // Only the queue needs the log lines: an expected error does not count them.
     final crumbs = breadcrumbs ?? buffer.lastLines(breadcrumbCount);
     await outbox.add(
-      error: error,
+      error: hideDetails(error),
       stack: stackTrace,
       hint: hint,
       level: fatal ? 'fatal' : 'error',

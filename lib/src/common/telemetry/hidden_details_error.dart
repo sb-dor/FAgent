@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'package:drift/isolate.dart' show DriftRemoteException;
 import 'package:flutter_code_agent/src/common/telemetry/error_outbox.dart';
 import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
@@ -17,9 +18,13 @@ final class HiddenDetailsError implements Exception, ReportedError {
   final String _summary;
 
   static String _describe(Object error) {
-    final cause = error is DriftWrappedException ? error.cause : error;
+    final cause = switch (error) {
+      DriftWrappedException(:final cause) => cause,
+      DriftRemoteException(:final remoteCause) => remoteCause,
+      _ => error,
+    };
     final buffer = StringBuffer(error.runtimeType.toString());
-    if (error is DriftWrappedException && cause != null) {
+    if (!identical(cause, error) && cause != null) {
       buffer.write(', cause ${cause.runtimeType}');
     }
     if (cause is SqliteException) {
@@ -33,3 +38,15 @@ final class HiddenDetailsError implements Exception, ReportedError {
   @override
   String toString() => '$_summary (details hidden)';
 }
+
+/// The default of `ErrorReporter.hideDetails`: the errors whose text can hold the app's data go to
+/// the queue as a [HiddenDetailsError]. `SqliteException` prints the statement and its parameters,
+/// drift's [DriftWrappedException] and [DriftRemoteException] print their cause, and
+/// [FormatException] prints a slice of the input it failed on. Any other error is returned as is.
+Object hideDataDetails(Object error) => switch (error) {
+  SqliteException() ||
+  DriftWrappedException() ||
+  DriftRemoteException() ||
+  FormatException() => HiddenDetailsError(error),
+  _ => error,
+};

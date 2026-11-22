@@ -16,7 +16,8 @@ import 'package:path/path.dart' as p;
 /// [defer] (the app's shutdown step). Sending starts with [enabled]; apps turn it on once the
 /// user's setting is read. [consentSince] is when the user turned crash reports on: nothing recorded
 /// before it is sent (`null`: no switch, everything may be sent). [projectPackages] are the
-/// packages of the project (fingerprint frames).
+/// packages of the project (fingerprint frames). [hideDetails] is `ErrorReporter.hideDetails`
+/// (`hideDataDetails` by default).
 Future<TelemetryRuntime?> startTelemetry({
   required Future<Directory> Function() supportDirectory,
   required ErrorHub hub,
@@ -27,6 +28,7 @@ Future<TelemetryRuntime?> startTelemetry({
   required Set<String> projectPackages,
   required void Function(String name, Future<void> Function() step) defer,
   Future<void> Function()? releaseGateway,
+  Object Function(Object error)? hideDetails,
   String? platform,
   bool enabled = false,
   DateTime? consentSince,
@@ -45,6 +47,7 @@ Future<TelemetryRuntime?> startTelemetry({
       appVersion: appVersion,
       isExpected: isExpected,
       projectPackages: projectPackages,
+      hideDetails: hideDetails,
       enabled: enabled,
       consentSince: consentSince,
       reporterConfigured: reporterConfigured,

@@ -187,7 +187,10 @@ pipeline. The rules for calling it are in "Reporting an error" in `docs/rules/co
 - **A new kind of secret** is added to `redact.dart` with a test: a positive case and a look-alike
   that must stay (`microphone`, `Device is offline`, `sk-learn`).
 - **An error with details that must not be shown** (SQLite, drift, `FormatException`) goes to the
-  queue as `HiddenDetailsError`: the type of the original, no message.
+  queue as `HiddenDetailsError`: the type of the original, no message. The module does it on its
+  own (`hideDataDetails`, the default `hideDetails` of `startTelemetry`), so do not wrap these
+  yourself; the log keeps their full, cleaned text. Another type whose text holds data goes into
+  `hideDataDetails` with a test, or the app passes its own `hideDetails`.
 - **Firebase Crashlytics** is a gateway behind the queue, like Sentry: the queue cleans, splits
   and counts, the gateway only sends (`recordError`) what it is given. Never assign
   `FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError` (or

@@ -28,4 +28,17 @@ void main() {
     expect(error.toString(), contains('extendedResultCode 2067'));
     expect(error.toString(), isNot(contains('users')));
   });
+
+  test('hideDataDetails hides only errors whose text holds data', () {
+    final state = StateError('kept');
+    final hidden = HiddenDetailsError(const FormatException('x'));
+
+    expect(hideDataDetails(state), same(state));
+    expect(hideDataDetails(hidden), same(hidden));
+    expect(hideDataDetails(const FormatException('input')), isA<HiddenDetailsError>());
+    expect(
+      hideDataDetails(SqliteException(extendedResultCode: 1, message: 'no such table: users')),
+      isA<HiddenDetailsError>(),
+    );
+  });
 }
