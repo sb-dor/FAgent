@@ -99,6 +99,7 @@ final class ErrorOutbox {
     DateTime? at,
   }) async {
     final fingerprint = errorFingerprint(error, stack, projectPackages: projectPackages);
+    final crumbs = _afterConsent(breadcrumbs);
     final now = (at ?? clock.now()).toUtc().millisecondsSinceEpoch;
     await _db.transaction(() async {
       final existing = await (_db.select(
@@ -120,7 +121,7 @@ final class ErrorOutbox {
               message: Value(cleanForLog(error.toString())),
               stack: Value(cleanForLog(stack.toString())),
               hint: Value(hint == null ? null : cleanForLog(hint)),
-              breadcrumbs: Value(jsonEncode([for (final b in breadcrumbs) cleanForLog(b)])),
+              breadcrumbs: Value(jsonEncode([for (final b in crumbs) cleanForLog(b)])),
               appVersion: Value(appVersion),
               platform: Value(platform),
             ),
@@ -144,7 +145,7 @@ final class ErrorOutbox {
               message: cleanForLog(error.toString()),
               stack: cleanForLog(stack.toString()),
               hint: Value(hint == null ? null : cleanForLog(hint)),
-              breadcrumbs: jsonEncode([for (final b in breadcrumbs) cleanForLog(b)]),
+              breadcrumbs: jsonEncode([for (final b in crumbs) cleanForLog(b)]),
               appVersion: appVersion,
               platform: platform,
             ),
@@ -159,6 +160,25 @@ final class ErrorOutbox {
       );
     });
     onChanged?.call();
+  }
+
+  /// The breadcrumb lines written at or after [consentSince]: a line starts with its ISO time
+  /// (`2026-11-12T10:15:03.120Z [E] …`); one whose time does not parse is dropped too. All lines
+  /// when there is no consent time.
+  List<String> _afterConsent(List<String> lines) {
+    final since = consentSince;
+    if (since == null) {
+      return lines;
+    }
+    return [
+      for (final line in lines)
+        if (_lineTime(line) case final time? when !time.isBefore(since)) line,
+    ];
+  }
+
+  static DateTime? _lineTime(String line) {
+    final end = line.indexOf(' ');
+    return DateTime.tryParse(end < 0 ? line : line.substring(0, end));
   }
 
   /// Up to [n] oldest entries, by time of the first occurrence.

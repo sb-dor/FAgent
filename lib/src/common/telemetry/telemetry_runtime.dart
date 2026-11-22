@@ -82,10 +82,14 @@ final class TelemetryRuntime {
   LogStorage? storage;
 
   /// Applies the user's switch: turning on runs an extra pass, turning off stops the sender and
-  /// closes the gateway. Repeating the same value does nothing.
+  /// closes the gateway. Repeating the same [enabled] does nothing to the sender.
   ///
-  /// [since] is the moment of consent: only errors first seen at or after it are sent. It is set
-  /// before the pass that turning on starts.
+  /// [since] is the moment of consent: only errors first seen at or after it are sent. A non-null
+  /// [since] is always applied, also when [enabled] does not change (it moves the consent), and
+  /// before the pass that turning on starts; a pass already running skips entries older than it.
+  /// `since: null` leaves the stored consent time as it is (turning off keeps it). A runtime built
+  /// without `consentSince` has no filter at all (a project without a switch) until a `since` is
+  /// given.
   Future<void> setEnabled(bool enabled, {DateTime? since}) {
     // Calls go in turn: a quick "off, on" will not close the gateway after the turn on.
     final next = _setting.then((_) => _apply(enabled, since));

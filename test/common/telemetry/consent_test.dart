@@ -10,11 +10,15 @@ import 'package:l/l.dart';
 final class _RecordingGateway implements ICrashReportGateway {
   final List<OutboxEntry> sent = [];
 
+  /// Called at the start of every send; lets a test act mid-pass.
+  Future<void> Function()? onSend;
+
   @override
   Future<bool> reachable() async => true;
 
   @override
   Future<bool> send(OutboxEntry entry) async {
+    await onSend?.call();
     sent.add(entry);
     return true;
   }
@@ -92,9 +96,9 @@ void main() {
   });
 
   _test('a recurrence after consent sends only the new occurrence', (runtime, gateway) async {
-    await _add(runtime, StateError('same'), t0, breadcrumbs: ['old']);
+    await _add(runtime, StateError('same'), t0, breadcrumbs: ['${t0.toIso8601String()} [I] old']);
     await runtime.setEnabled(true, since: t1);
-    await _add(runtime, StateError('same'), t2, breadcrumbs: ['new']);
+    await _add(runtime, StateError('same'), t2, breadcrumbs: ['${t2.toIso8601String()} [I] new']);
 
     await _pass(runtime);
 
@@ -103,7 +107,7 @@ void main() {
     expect(entry.count, 1);
     expect(entry.firstAt, t2);
     expect(entry.lastAt, t2);
-    expect(entry.breadcrumbs, ['new']);
+    expect(entry.breadcrumbs, ['${t2.toIso8601String()} [I] new']);
     expect(entry.attempts, 0);
   });
 
@@ -133,5 +137,58 @@ void main() {
     await _pass(runtime);
 
     expect(gateway.sent.where((e) => e.type == 'ArgumentError'), isEmpty);
+  });
+
+  _test('consent moved later mid-pass: older entries of the running pass are not sent', (
+    runtime,
+    gateway,
+  ) async {
+    await _add(runtime, StateError('first'), t1);
+    await _add(runtime, ArgumentError('second'), t2);
+    await _add(runtime, UnsupportedError('third'), t3);
+    var moved = false;
+    gateway.onSend = () async {
+      if (!moved) {
+        moved = true;
+        runtime.outbox.consentSince = t3.add(const Duration(minutes: 1));
+      }
+    };
+    runtime.outbox.consentSince = t0;
+
+    await runtime.sender.runPass();
+
+    expect(gateway.sent.map((e) => e.type), ['StateError']);
+  }, enabled: true);
+
+  _test('moving since with the same enabled value applies it', (runtime, gateway) async {
+    await runtime.setEnabled(true, since: t0);
+    await runtime.sender.stop();
+    await _add(runtime, StateError('x'), t1);
+    await runtime.setEnabled(true, since: t2);
+    await _pass(runtime);
+
+    expect(gateway.sent, isEmpty);
+  });
+
+  _test('breadcrumbs written before consent are dropped', (runtime, gateway) async {
+    await runtime.setEnabled(true, since: t1);
+    await runtime.outbox.add(
+      error: StateError('after'),
+      stack: StackTrace.fromString('#0 main (package:flutter_code_agent/main.dart:1:1)'),
+      level: 'error',
+      breadcrumbs: [
+        '${t0.toIso8601String()} [I] before consent',
+        '${t1.toIso8601String()} [I] at consent',
+        '${t2.toIso8601String()} [E] after consent',
+        'garbage without a time',
+      ],
+      at: t2,
+    );
+    await _pass(runtime);
+
+    expect(gateway.sent.single.breadcrumbs, [
+      '${t1.toIso8601String()} [I] at consent',
+      '${t2.toIso8601String()} [E] after consent',
+    ]);
   });
 }

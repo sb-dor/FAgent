@@ -140,6 +140,11 @@ final class TelemetrySender {
           completed = false;
           break;
         }
+        // Consent may have moved later while this pass runs: an entry from before it stays.
+        final since = outbox.consentSince;
+        if (since != null && entry.firstAt.isBefore(since)) {
+          continue;
+        }
         if (await _send(entry)) {
           acceptedCount++;
           for (final bad in rejected) {
