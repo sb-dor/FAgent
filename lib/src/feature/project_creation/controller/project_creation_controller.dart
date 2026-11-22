@@ -30,13 +30,15 @@ sealed class ProjectCreationState with _$ProjectCreationState {
 
   /// The project of [request] was created ([projectId] is its id in the app's database), or the
   /// member was added. [notes] are the scripts of an added member's project that list its members
-  /// and may need an edit; empty for a created project.
+  /// and may need an edit; empty for a created project. [creationNotes] are what the run left to
+  /// the user, such as `flutterfire configure`.
   const factory ProjectCreationState.completed({
     NewProjectRequest? request,
     NewMemberRequest? member,
     required List<CreationStep> steps,
     int? projectId,
     @Default(<String>[]) List<String> notes,
+    @Default(<CreationNote>[]) List<CreationNote> creationNotes,
   }) = ProjectCreation$CompletedState;
 
   /// Creating the project of [request] (or adding [member]) failed with [error]; [steps] are the
@@ -110,8 +112,12 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     stream: () => _repository.create(request),
     running: (steps, {required stopping}) =>
         ProjectCreationState.running(request: request, steps: steps, stopping: stopping),
-    completed: (steps, projectId, notes) =>
-        ProjectCreationState.completed(request: request, steps: steps, projectId: projectId),
+    completed: (steps, projectId, notes, creationNotes) => ProjectCreationState.completed(
+      request: request,
+      steps: steps,
+      projectId: projectId,
+      creationNotes: creationNotes,
+    ),
     failed: (steps, error, projectId) => ProjectCreationState.failed(
       request: request,
       steps: steps,
@@ -138,8 +144,12 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     stream: () => _repository.addMember(request),
     running: (steps, {required stopping}) =>
         ProjectCreationState.running(member: request, steps: steps, stopping: stopping),
-    completed: (steps, projectId, notes) =>
-        ProjectCreationState.completed(member: request, steps: steps, notes: notes),
+    completed: (steps, projectId, notes, creationNotes) => ProjectCreationState.completed(
+      member: request,
+      steps: steps,
+      notes: notes,
+      creationNotes: creationNotes,
+    ),
     failed: (steps, error, projectId) =>
         ProjectCreationState.failed(member: request, steps: steps, error: error),
     afterSuccess: () async {
@@ -157,7 +167,8 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
   ///
   /// [register] runs once the first step is done and the run was not interrupted, and returns the
   /// id of the registered project (only a created project registers). [afterSuccess] gives the
-  /// notes of a run that ended without error.
+  /// notes of a run that ended without error; `completed` also gets the notes of the last
+  /// snapshot.
   void _run({
     required List<CreationStepKind> stepKinds,
     required Stream<CreationRun> Function() stream,
@@ -167,6 +178,7 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
       List<CreationStep> steps,
       int? projectId,
       List<String> notes,
+      List<CreationNote> creationNotes,
     )
     completed,
     required ProjectCreationState Function(List<CreationStep> steps, Object error, int? projectId)
@@ -177,6 +189,7 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     if (state is! ProjectCreation$IdleState) return;
     handle(() async {
       var steps = <CreationStep>[for (final kind in stepKinds) CreationStep(kind: kind)];
+      var creationNotes = const <CreationNote>[];
       setState(running(steps, stopping: false));
       final finished = _finished = Completer<void>();
       int? projectId;
@@ -184,6 +197,7 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
       _subscription = stream().listen(
         (snapshot) {
           steps = snapshot.steps;
+          creationNotes = snapshot.notes;
           if (!isDisposed) {
             final current = state;
             setState(
@@ -227,7 +241,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
       final notes = error == null ? await afterSuccess() : const <String>[];
       if (isDisposed) return;
       setState(
-        error == null ? completed(steps, projectId, notes) : failed(steps, error, projectId),
+        error == null
+            ? completed(steps, projectId, notes, creationNotes)
+            : failed(steps, error, projectId),
       );
     }, error: (error, stackTrace) async => _failWith(error));
   }

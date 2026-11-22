@@ -162,7 +162,14 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
   @override
   Stream<CreationRun> create(NewProjectRequest request) {
     requests.add(request);
-    return _play(creationStepsFor(request), request.name);
+    return _play(
+      creationStepsFor(request),
+      request.name,
+      // As the real repository: the skeleton of a Crashlytics app leaves `flutterfire configure`.
+      notes: request.skeleton && request.crashReporter == CrashReporter.crashlytics
+          ? const <CreationNote>[CreationNote.flutterfireConfigure]
+          : const <CreationNote>[],
+    );
   }
 
   @override
@@ -171,8 +178,13 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
     return _play(memberStepsFor(request), request.packageName);
   }
 
-  /// The made-up run of [kinds], printing [name] where a step names the project.
-  Stream<CreationRun> _play(List<CreationStepKind> kinds, String name) {
+  /// The made-up run of [kinds], printing [name] where a step names the project; [notes] come
+  /// once the skeleton step is done.
+  Stream<CreationRun> _play(
+    List<CreationStepKind> kinds,
+    String name, {
+    List<CreationNote> notes = const <CreationNote>[],
+  }) {
     final controller = StreamController<CreationRun>();
     Timer? timer;
     controller
@@ -180,10 +192,15 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
         // All pending first, then each step starts, prints its lines
         // one by one and finishes.
         var steps = <CreationStep>[for (final kind in kinds) CreationStep(kind: kind)];
+        var told = const <CreationNote>[];
         final snapshots = <CreationRun>[];
         void change(int index, CreationStep Function(CreationStep) apply) {
           steps = List<CreationStep>.of(steps)..[index] = apply(steps[index]);
-          snapshots.add(CreationRun(steps: steps));
+          if (steps[index].kind == CreationStepKind.skeleton &&
+              steps[index].status == CreationStepStatus.done) {
+            told = notes;
+          }
+          snapshots.add(CreationRun(steps: steps, notes: told));
         }
 
         for (var i = 0; i < kinds.length; i++) {

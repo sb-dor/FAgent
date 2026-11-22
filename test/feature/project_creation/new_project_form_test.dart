@@ -583,6 +583,95 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
+  const reporterKey = ValueKey<String>('new-project-crash-reporter');
+  Finder reporterOption(String label) =>
+      find.descendant(of: find.byKey(reporterKey), matching: find.text(label));
+
+  testWidgets('crash reports: three options for My architecture, Sentry first', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+
+    expect(find.byKey(reporterKey), findsOneWidget);
+    expect(find.text('Crash reports'), findsOneWidget);
+    for (final label in const <String>['Sentry', 'Firebase Crashlytics', 'Log only']) {
+      expect(reporterOption(label), findsOneWidget, reason: label);
+    }
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.crashReporter, CrashReporter.sentry);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  for (final (label, reporter) in const <(String, CrashReporter)>[
+    ('Firebase Crashlytics', CrashReporter.crashlytics),
+    ('Log only', CrashReporter.logOnly),
+  ]) {
+    testWidgets('crash reports: the request carries $label', (tester) async {
+      await openDialog(tester);
+      await typeName(tester, 'avera_booking');
+
+      await tester.ensureVisible(reporterOption(label));
+      await tester.tap(reporterOption(label));
+      await tester.pumpAndSettle();
+      await tester.tap(createButton());
+      await tester.pumpAndSettle();
+
+      expect(memory.requests.single.crashReporter, reporter);
+      await disposeTestApp(tester, dependencies);
+    });
+  }
+
+  testWidgets('crash reports: also in a monorepo', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'shop');
+    await tester.tap(find.byKey(const ValueKey<String>('structure-monorepo')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(reporterOption('Log only'));
+    await tester.tap(reporterOption('Log only'));
+    await tester.pumpAndSettle();
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.crashReporter, CrashReporter.logOnly);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('crash reports: hidden for Empty and for another type', (tester) async {
+    await openDialog(tester);
+    await tester.tap(find.byKey(const ValueKey<String>('template-plain')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(reporterKey), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey<String>('template-architecture')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(reporterKey), findsOneWidget);
+
+    await tester.tap(find.text('Package'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(reporterKey), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('crash reports: hidden when My architecture is off on an old Flutter', (
+    tester,
+  ) async {
+    await openDialog(tester, flutterVersion: '3.47.2');
+    expect(find.byKey(reporterKey), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('crash reports: Russian', (tester) async {
+    await openDialog(tester, locale: const Locale('ru'));
+
+    expect(find.text('Отчёты о сбоях'), findsOneWidget);
+    for (final label in const <String>['Sentry', 'Firebase Crashlytics', 'Только журнал']) {
+      expect(reporterOption(label), findsOneWidget, reason: label);
+    }
+    await disposeTestApp(tester, dependencies);
+  });
+
   testWidgets('monorepo shows the first app fields', (tester) async {
     await openDialog(tester);
     await typeName(tester, 'shop');

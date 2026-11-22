@@ -22,6 +22,8 @@ import 'package:path/path.dart' as p;
 /// `lib/src/common/telemetry/` (the creation itself runs `flutter analyze`). Then
 /// creates a monorepo, adds a member of every kind to it and runs its scripts, `flutter analyze`
 /// and a macOS build in it: the gate for `assets/project_template/monorepo/` and "Add to project".
+/// Last, one app with Crashlytics (no `flutterfire configure`) and one with the log only: the
+/// gate for the other crash reporters.
 ///
 /// Opt-in, needs the network:
 /// `FLUTTER_RUN_TEST=1 flutter test --tags flutter test/integration/new_project_test.dart`.
@@ -132,6 +134,67 @@ void main() {
     skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
     timeout: const Timeout(Duration(minutes: 10)),
   );
+
+  for (final reporter in const <CrashReporter>[CrashReporter.crashlytics, CrashReporter.logOnly]) {
+    test(
+      'one app with ${reporter.name} passes analyze and test',
+      () async {
+        final (repository, flutter, environment) = await realRepository();
+        final root = io.Directory.systemTemp.createTempSync('new_project_${reporter.name}_test');
+        addTearDown(() => root.deleteSync(recursive: true));
+        final request = NewProjectRequest(
+          name: 'reporter_probe',
+          org: 'com.example',
+          parent: root.path,
+          platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+          gitInit: false,
+          crashReporter: reporter,
+        );
+
+        final last = (await repository.create(request).toList()).last;
+        // The analyze step passed: without `flutterfire configure` too.
+        expectFinished(last, what: reporter.name);
+        expect(
+          last.notes,
+          reporter == CrashReporter.crashlytics
+              ? <CreationNote>[CreationNote.flutterfireConfigure]
+              : isEmpty,
+        );
+
+        final project = p.join(root.path, 'reporter_probe');
+        final pubspec = io.File(p.join(project, 'pubspec.yaml')).readAsStringSync();
+        if (reporter == CrashReporter.crashlytics) {
+          expect(pubspec, allOf(contains('firebase_core:'), contains('firebase_crashlytics:')));
+          expect(pubspec, contains('sentry:'));
+        } else {
+          expect(pubspec, isNot(contains('sentry')));
+          expect(pubspec, isNot(contains('firebase')));
+        }
+
+        final tested = await io.Process.run(
+          flutter,
+          const <String>['test'],
+          workingDirectory: project,
+          environment: environment.variables,
+        );
+        expect(tested.exitCode, 0, reason: '${tested.stdout}\n${tested.stderr}');
+        expect(tested.stdout, contains('test/_core/telemetry/'));
+        if (reporter == CrashReporter.crashlytics) {
+          // The reporter's own test: no gateway and one log line while Firebase is not set up.
+          final own = await io.Process.run(
+            flutter,
+            const <String>['test', 'test/_core/telemetry/crash_reporter_test.dart'],
+            workingDirectory: project,
+            environment: environment.variables,
+          );
+          expect(own.exitCode, 0, reason: '${own.stdout}\n${own.stderr}');
+          expect(own.stdout, contains('+2: All tests passed!'));
+        }
+      },
+      skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
+      timeout: const Timeout(Duration(minutes: 10)),
+    );
+  }
 
   test(
     'monorepo with every kind of member',

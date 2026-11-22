@@ -78,8 +78,13 @@ class CreationProgress extends StatelessWidget {
       final name = request?.name ?? member?.packageName;
       if (name == null) return const SizedBox.shrink();
       final notes = switch (state) {
-        ProjectCreation$CompletedState(:final notes) when member != null => <String>[
-          for (final script in notes) localization.addMemberScriptsNote(script, member.relative),
+        ProjectCreation$CompletedState(:final notes, :final creationNotes) => <String>[
+          if (member != null)
+            for (final script in notes) localization.addMemberScriptsNote(script, member.relative),
+          for (final note in creationNotes)
+            switch (note) {
+              CreationNote.flutterfireConfigure => localization.newProjectFlutterfireNote,
+            },
         ],
         _ => const <String>[],
       };

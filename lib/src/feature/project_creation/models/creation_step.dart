@@ -68,11 +68,21 @@ abstract class CreationStep with _$CreationStep {
   }) = _CreationStep;
 }
 
-/// A snapshot of a creation: all its steps as of now.
+/// Something a finished creation tells the user to do next.
+enum CreationNote {
+  /// A Crashlytics project needs `flutterfire configure` to connect Firebase; until then its
+  /// errors stay in the log.
+  flutterfireConfigure,
+}
+
+/// A snapshot of a creation: all its steps as of now, and the [notes] for the user so far.
 @freezed
 abstract class CreationRun with _$CreationRun {
   /// Creates a snapshot.
-  const factory CreationRun({required List<CreationStep> steps}) = _CreationRun;
+  const factory CreationRun({
+    required List<CreationStep> steps,
+    @Default(<CreationNote>[]) List<CreationNote> notes,
+  }) = _CreationRun;
 }
 
 /// A creation whose steps ended with the step [kind] failed.

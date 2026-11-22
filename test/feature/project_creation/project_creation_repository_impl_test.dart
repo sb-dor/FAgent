@@ -145,6 +145,7 @@ void main() {
       FlutterPlatform.ios,
       FlutterPlatform.android,
     },
+    CrashReporter crashReporter = CrashReporter.sentry,
   }) => NewProjectRequest(
     name: 'avera_booking',
     org: 'com.example',
@@ -153,6 +154,7 @@ void main() {
     type: type,
     template: template,
     gitInit: gitInit,
+    crashReporter: crashReporter,
   );
 
   NewProjectRequest monorepo({
@@ -362,10 +364,105 @@ void main() {
         output.where((line) => line.startsWith('✎ ')),
         hasLength(
           projectTemplateFiles.length +
+              crashReporterTemplateFiles(CrashReporter.sentry).length +
               telemetryModuleFiles.length +
               telemetryModuleTestFiles.length,
         ),
       );
+    });
+
+    group('crash reporter', () {
+      /// The file at [relative] of the new project.
+      String read(String relative) =>
+          File(p.joinAll(<String>[path(), ...relative.split('/')])).readAsStringSync();
+
+      String template(String from) => fillProjectTemplate(
+        File('$projectTemplateRoot$from').readAsStringSync(),
+        package: 'avera_booking',
+        date: DateTime(2026, 11, 6),
+      );
+
+      List<List<String>> pubAdds() => <List<String>>[
+        for (final process in started)
+          if (process.arguments.take(2).join(' ') == 'pub add' &&
+              process.workingDirectory == path())
+            process.arguments,
+      ];
+
+      test('Sentry is the default: its reporter, no note', () async {
+        final runs = await build().create(request(gitInit: false)).toList();
+
+        expect(read(crashReporterTarget), template(crashReporterFile(CrashReporter.sentry)));
+        expect(
+          File(p.join(path(), 'lib', '_core', 'telemetry', 'crashlytics_gateway.dart'))
+              .existsSync(),
+          isFalse,
+        );
+        expect(pubAdds().single, containsAllInOrder(<String>['pub', 'add', 'sentry']));
+        expect(pubAdds().single, isNot(contains('firebase_core')));
+        expect(runs.last.notes, isEmpty);
+      });
+
+      test('Crashlytics: one pub add with Firebase, its files and the flutterfire note', () async {
+        final runs = await build()
+            .create(request(gitInit: false, crashReporter: CrashReporter.crashlytics))
+            .toList();
+
+        final add = pubAdds().single;
+        expect(add, <String>[
+          'pub',
+          'add',
+          ...skeletonPubAddArgumentsFor(
+            uiPath: 'packages/ui',
+            crashReporter: CrashReporter.crashlytics,
+          ),
+        ]);
+        expect(add, containsAll(<String>['sentry', 'firebase_core', 'firebase_crashlytics']));
+        for (final MapEntry(key: from, value: to) in crashReporterTemplateFiles(
+          CrashReporter.crashlytics,
+        ).entries) {
+          expect(read(to), template(from), reason: to);
+        }
+        final output = step(runs.last, CreationStepKind.skeleton).output;
+        expect(
+          output,
+          containsAll(<String>[
+            '✎ lib/_core/telemetry/crash_reporter.dart',
+            '✎ lib/_core/telemetry/crashlytics_gateway.dart',
+            '✎ test/_core/telemetry/crash_reporter_test.dart',
+          ]),
+        );
+        expect(runs.last.notes, <CreationNote>[CreationNote.flutterfireConfigure]);
+        expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      });
+
+      test('log only: no Sentry package and no Sentry file', () async {
+        final runs = await build()
+            .create(request(gitInit: false, crashReporter: CrashReporter.logOnly))
+            .toList();
+
+        final add = pubAdds().single;
+        expect(add, isNot(contains('sentry')));
+        expect(add, isNot(contains('firebase_core')));
+        expect(read(crashReporterTarget), template(crashReporterFile(CrashReporter.logOnly)));
+        for (final relative in <String>[
+          'lib/_core/telemetry/sentry_gateway.dart',
+          'test/_core/telemetry/sentry_gateway_test.dart',
+          'lib/_core/telemetry/crashlytics_gateway.dart',
+        ]) {
+          expect(File(p.join(path(), relative)).existsSync(), isFalse, reason: relative);
+        }
+        expect(read('lib/_core/telemetry/telemetry.dart'), isNot(contains('sentry')));
+        expect(
+          read('lib/_core/telemetry/telemetry.dart'),
+          copyTelemetryModule(
+            File('${telemetryModuleRoot}telemetry.dart').readAsStringSync(),
+            importPrefix: 'package:avera_booking/_core/telemetry/',
+            crashReporter: CrashReporter.logOnly,
+          ),
+        );
+        expect(runs.last.notes, isEmpty);
+      });
     });
 
     test(

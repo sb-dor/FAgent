@@ -60,6 +60,9 @@ abstract class NewMemberRequest with _$NewMemberRequest {
 
     /// Whether the project is a git repository, so the member is committed.
     required bool gitRepo,
+
+    /// Where an app with the skeleton reports its errors.
+    @Default(CrashReporter.sentry) CrashReporter crashReporter,
   }) = _NewMemberRequest;
 
   const NewMemberRequest._();

@@ -1,3 +1,5 @@
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
+
 /// Where the architecture skeleton of a new project lives in the app's assets.
 const String projectTemplateRoot = 'assets/project_template/architecture/';
 
@@ -12,10 +14,10 @@ const List<String> projectTemplateFiles = <String>[
   'lib/_core/api_client/expected_exception.dart',
   'lib/_core/api_client/middleware/logger_mw.dart',
   'lib/_core/api_client/middleware/authentication_interceptor.dart',
-  // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles).
+  // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles),
+  // the crash reporter is the one chosen (crashReporterTemplateFiles).
   'lib/_core/telemetry/app_zone.dart',
   'lib/_core/telemetry/controller_observer.dart',
-  'lib/_core/telemetry/crash_reporter.dart',
   'lib/_core/telemetry/error_util.dart',
   'lib/_core/telemetry/expected_failure.dart',
   'lib/_core/telemetry/telemetry_setup.dart',
@@ -85,6 +87,7 @@ const List<String> projectTemplateFiles = <String>[
   'packages/ui/lib/src/theme/theme.dart',
   'packages/ui/lib/src/theme/extensions/colors.dart',
   'packages/ui/pubspec.yaml',
+  'packages/ui/.gitignore',
   'lib/_core/localization/intl_ru.arb',
   'lib/initialization/models/dependencies.dart',
   'lib/initialization/widget/dependencies_scope.dart',
@@ -127,10 +130,10 @@ const List<String> projectTemplateAppFiles = <String>[
   'lib/_core/api_client/expected_exception.dart',
   'lib/_core/api_client/middleware/logger_mw.dart',
   'lib/_core/api_client/middleware/authentication_interceptor.dart',
-  // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles).
+  // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles),
+  // the crash reporter is the one chosen (crashReporterTemplateFiles).
   'lib/_core/telemetry/app_zone.dart',
   'lib/_core/telemetry/controller_observer.dart',
-  'lib/_core/telemetry/crash_reporter.dart',
   'lib/_core/telemetry/error_util.dart',
   'lib/_core/telemetry/expected_failure.dart',
   'lib/_core/telemetry/telemetry_setup.dart',
@@ -215,6 +218,7 @@ const List<String> projectTemplateUiFiles = <String>[
   'packages/ui/lib/src/theme/theme.dart',
   'packages/ui/lib/src/theme/extensions/colors.dart',
   'packages/ui/pubspec.yaml',
+  'packages/ui/.gitignore',
 ];
 
 /// Where the telemetry module lives in FAgent: its own folder, declared as assets. A new project
@@ -270,6 +274,27 @@ const List<String> telemetryModuleTestFiles = <String>[
   'telemetry_sender_test.dart',
 ];
 
+/// The module files a project with [reporter] gets: a log-only project has no Sentry, so no
+/// `sentry_gateway.dart`.
+List<String> telemetryModuleFilesFor(CrashReporter reporter) => reporter == CrashReporter.logOnly
+    ? <String>[
+        for (final file in telemetryModuleFiles)
+          if (file != _sentryGatewayFile) file,
+      ]
+    : telemetryModuleFiles;
+
+/// The module tests a project with [reporter] gets: no `sentry_gateway_test.dart` without Sentry.
+List<String> telemetryModuleTestFilesFor(CrashReporter reporter) =>
+    reporter == CrashReporter.logOnly
+    ? <String>[
+        for (final file in telemetryModuleTestFiles)
+          if (file != _sentryGatewayTest) file,
+      ]
+    : telemetryModuleTestFiles;
+
+const String _sentryGatewayFile = 'sentry_gateway.dart';
+const String _sentryGatewayTest = 'sentry_gateway_test.dart';
+
 /// Where a one-app project keeps the module, next to its glue: relative to the app.
 const String telemetryModuleTarget = 'lib/_core/telemetry/';
 
@@ -279,11 +304,57 @@ const String telemetryModuleTestTarget = 'test/_core/telemetry/';
 /// The prefix of every import between the files of the module in FAgent.
 const String _telemetryImportPrefix = 'package:flutter_code_agent/src/common/telemetry/';
 
-/// A file of the telemetry module (or of its tests) as a new project gets it: the module's imports
-/// of itself point at [importPrefix] (`package:<package>/_core/telemetry/` in one app). The module
-/// imports nothing else of FAgent, so nothing else changes.
-String copyTelemetryModule(String text, {required String importPrefix}) =>
-    text.replaceAll(_telemetryImportPrefix, importPrefix);
+/// A file of the telemetry module (or of its tests) as a new project with [crashReporter] gets it:
+/// the module's imports of itself point at [importPrefix] (`package:<package>/_core/telemetry/` in
+/// one app). The module imports nothing else of FAgent, so nothing else changes, except that a
+/// log-only project, which gets no `sentry_gateway.dart`, loses the lines that import or export it.
+String copyTelemetryModule(
+  String text, {
+  required String importPrefix,
+  CrashReporter crashReporter = CrashReporter.sentry,
+}) {
+  final copied = text.replaceAll(_telemetryImportPrefix, importPrefix);
+  if (telemetryModuleFilesFor(crashReporter).contains(_sentryGatewayFile)) return copied;
+  final sentryGateway = "'$importPrefix$_sentryGatewayFile';";
+  return copied
+      .split('\n')
+      .where(
+        (line) => !(line.startsWith(RegExp('(?:import|export) ')) && line.endsWith(sentryGateway)),
+      )
+      .join('\n');
+}
+
+/// Where the crash reporter of a new app goes: `telemetry_setup_io.dart` imports it.
+const String crashReporterTarget = 'lib/_core/telemetry/crash_reporter.dart';
+
+/// The template file, relative to [projectTemplateRoot], written as [crashReporterTarget] for
+/// [reporter]. Every one has `createCrashReportGateway`, `crashReporterConfigured` and
+/// `closeCrashReportGateway`.
+String crashReporterFile(CrashReporter reporter) => switch (reporter) {
+  CrashReporter.sentry => 'lib/_core/telemetry/crash_reporter_sentry.dart',
+  CrashReporter.crashlytics => 'lib/_core/telemetry/crash_reporter_crashlytics.dart',
+  CrashReporter.logOnly => 'lib/_core/telemetry/crash_reporter_log_only.dart',
+};
+
+/// The files of [reporter] a new app gets besides [projectTemplateFiles]: the template file
+/// (relative to [projectTemplateRoot]) and where it goes in the app. Crashlytics brings its gateway
+/// and the test of its reporter.
+Map<String, String> crashReporterTemplateFiles(CrashReporter reporter) => <String, String>{
+  crashReporterFile(reporter): crashReporterTarget,
+  if (reporter == CrashReporter.crashlytics) ...const <String, String>{
+    'lib/_core/telemetry/crashlytics_gateway.dart': 'lib/_core/telemetry/crashlytics_gateway.dart',
+    'test/_core/telemetry/crash_reporter_crashlytics_test.dart':
+        'test/_core/telemetry/crash_reporter_test.dart',
+  },
+};
+
+/// The packages [reporter] adds to the skeleton's `pub add`. Crashlytics keeps Sentry for the
+/// platforms `firebase_crashlytics` does not support (Windows, Linux).
+List<String> crashReporterPubAddArguments(CrashReporter reporter) => switch (reporter) {
+  CrashReporter.sentry => const <String>['sentry'],
+  CrashReporter.crashlytics => const <String>['sentry', 'firebase_core', 'firebase_crashlytics'],
+  CrashReporter.logOnly => const <String>[],
+};
 
 /// Where the scripts and the Makefile of a monorepo live in the app's assets.
 const String monorepoTemplateRoot = 'assets/project_template/monorepo/';
@@ -334,9 +405,12 @@ const String controlGitUrl = 'https://github.com/PlugFox/control.git';
 /// The commit of [controlGitUrl] the skeleton depends on.
 const String controlGitRef = '685a9bc6ef60c987b99b5526e125813adba54e2a';
 
-/// The arguments of the one `flutter pub add` that installs the packages of the skeleton.
-/// [uiPath] is where `packages/ui` is, relative to the package that depends on it.
-List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
+/// The arguments of the one `flutter pub add` that installs the packages of the skeleton with
+/// [crashReporter]. [uiPath] is where `packages/ui` is, relative to the package that depends on it.
+List<String> skeletonPubAddArgumentsFor({
+  required String uiPath,
+  CrashReporter crashReporter = CrashReporter.sentry,
+}) => <String>[
   // No versions: `pub add` takes the newest release that fits the SDK, at every creation.
   'l',
   'http',
@@ -356,12 +430,12 @@ List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
   'window_manager',
   'drift',
   'drift_flutter',
-  // The telemetry module (lib/_core/telemetry/): Sentry on plain Dart, the clock of its timers,
-  // the log archive, and the SQLite errors it tells apart.
-  'sentry',
+  // The telemetry module (lib/_core/telemetry/): the clock of its timers, the log archive, and
+  // the SQLite errors it tells apart; then the crash reporter's own packages.
   'clock',
   'archive',
   'sqlite3',
+  ...crashReporterPubAddArguments(crashReporter),
   'web',
   'flutter_localizations@{sdk: flutter}',
   // Flutter 3.47 deprecated the SDK's Material and Cupertino: the template imports these.
@@ -380,5 +454,6 @@ List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
   'dev:integration_test@{sdk: flutter}',
 ];
 
-/// [skeletonPubAddArgumentsFor] for a one-app project, where `packages/ui` is inside it.
+/// [skeletonPubAddArgumentsFor] for a one-app project with Sentry, where `packages/ui` is inside
+/// it.
 final List<String> skeletonPubAddArguments = skeletonPubAddArgumentsFor(uiPath: 'packages/ui');

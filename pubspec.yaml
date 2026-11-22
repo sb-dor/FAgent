@@ -110,6 +110,7 @@ flutter:
     - assets/project_template/architecture/lib/initialization/data/
     - assets/project_template/architecture/lib/home/widgets/
     - assets/project_template/architecture/test/
+    - assets/project_template/architecture/test/_core/telemetry/
     - assets/project_template/architecture/tool/dart/
     - assets/project_template/architecture/scripts/
     - assets/project_template/architecture/lib/_core/constant/

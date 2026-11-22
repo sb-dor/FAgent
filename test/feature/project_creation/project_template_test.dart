@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -79,6 +80,15 @@ void main() {
       expect(text, isNot(contains('{{package}}/src/')), reason: path);
       expect(text, isNot(contains('lib/src/')), reason: path);
     }
+  });
+
+  test('build output under packages/ui is neither analyzed nor committed', () async {
+    // `pub get` stages some plugins (firebase_core) in packages/ui/build/<platform>/SourcePackages.
+    final options = await rootBundle.loadString('${projectTemplateRoot}analysis_options.yaml');
+    expect(options, contains('- "**/build/**"'));
+    final ignore = await rootBundle.loadString('${projectTemplateRoot}packages/ui/.gitignore');
+    expect(ignore.split('\n'), contains('/build/'));
+    expect(projectTemplateUiFiles, contains('packages/ui/.gitignore'));
   });
 
   test('the Makefile is indented with tabs', () async {
@@ -193,20 +203,23 @@ void main() {
     expect(skeletonPubAddArguments, contains('ui@{path: packages/ui}'));
   });
 
-  /// The telemetry module and its tests as a new project `my_app` gets them, keyed by their path in
-  /// the project.
-  Future<Map<String, String>> copiedModule() async => <String, String>{
-    for (final file in telemetryModuleFiles)
-      '$telemetryModuleTarget$file': copyTelemetryModule(
-        await rootBundle.loadString('$telemetryModuleRoot$file'),
-        importPrefix: 'package:my_app/_core/telemetry/',
-      ),
-    for (final file in telemetryModuleTestFiles)
-      '$telemetryModuleTestTarget$file': copyTelemetryModule(
-        await rootBundle.loadString('$telemetryModuleTestRoot$file'),
-        importPrefix: 'package:my_app/_core/telemetry/',
-      ),
-  };
+  /// The telemetry module and its tests as a new project `my_app` with [reporter] gets them, keyed
+  /// by their path in the project.
+  Future<Map<String, String>> copiedModule([CrashReporter reporter = CrashReporter.sentry]) async =>
+      <String, String>{
+        for (final file in telemetryModuleFilesFor(reporter))
+          '$telemetryModuleTarget$file': copyTelemetryModule(
+            await rootBundle.loadString('$telemetryModuleRoot$file'),
+            importPrefix: 'package:my_app/_core/telemetry/',
+            crashReporter: reporter,
+          ),
+        for (final file in telemetryModuleTestFilesFor(reporter))
+          '$telemetryModuleTestTarget$file': copyTelemetryModule(
+            await rootBundle.loadString('$telemetryModuleTestRoot$file'),
+            importPrefix: 'package:my_app/_core/telemetry/',
+            crashReporter: reporter,
+          ),
+      };
 
   /// The template's Dart file at [path], filled for `my_app`.
   Future<String> filled(String path) async => fillProjectTemplate(
@@ -214,6 +227,28 @@ void main() {
     package: 'my_app',
     date: DateTime(2026, 11, 6),
   );
+
+  /// The files of the crash reporter [reporter] as `my_app` gets them, keyed by their path in the
+  /// project.
+  Future<Map<String, String>> reporterFiles(CrashReporter reporter) async => <String, String>{
+    for (final MapEntry(key: from, value: to) in crashReporterTemplateFiles(reporter).entries)
+      to: await filled(from),
+  };
+
+  /// Every Dart file a one-app project `my_app` with [reporter] gets from FAgent, keyed by its path
+  /// in the project.
+  Future<Map<String, String>> projectDartFiles(CrashReporter reporter) async => <String, String>{
+    for (final path in projectTemplateFiles.where((path) => path.endsWith('.dart')))
+      path: await filled(path),
+    ...await reporterFiles(reporter),
+    ...await copiedModule(reporter),
+  };
+
+  /// The package names of `pub add` [arguments].
+  List<String> packagesOf(List<String> arguments) => <String>[
+    for (final argument in arguments)
+      RegExp('^(?:dev:)?([a-z_0-9]+)').firstMatch(argument)!.group(1)!,
+  ];
 
   /// The names of the non-generated Dart files directly in [folder].
   Set<String> dartFilesIn(String folder) => <String>{
@@ -300,7 +335,6 @@ void main() {
             'lib/_core/telemetry/telemetry_setup.dart',
             'lib/_core/telemetry/telemetry_setup_io.dart',
             'lib/_core/telemetry/telemetry_setup_web.dart',
-            'lib/_core/telemetry/crash_reporter.dart',
             'lib/_core/api_client/api_client.dart',
             'lib/_core/api_client/expected_exception.dart',
             'lib/_core/api_client/middleware/logger_mw.dart',
@@ -356,10 +390,7 @@ void main() {
     });
 
     test('the Sentry reporter reads its DSN and sends without a switch', () async {
-      final reporter = await filled('lib/_core/telemetry/crash_reporter.dart');
-      expect(reporter, contains('Future<ICrashReportGateway?> createCrashReportGateway({'));
-      expect(reporter, contains('required Set<String> projectPackages'));
-      expect(reporter, contains('bool get crashReporterConfigured'));
+      final reporter = (await reporterFiles(CrashReporter.sentry))[crashReporterTarget]!;
       expect(reporter, contains('SentryGateway('));
       final config = await filled('lib/_core/constant/config.dart');
       expect(config, contains("String.fromEnvironment('SENTRY_DSN')"));
@@ -384,32 +415,171 @@ void main() {
         r'''^\s*(?:import|export)\s+'([^']+)'(\s+if[^;]*)?''',
         multiLine: true,
       );
-      // What the web build compiles: the code of the app and of packages/ui (tools and tests run
-      // on the VM).
-      final compiled = projectTemplateFiles.where(
-        (path) =>
-            path.endsWith('.dart') && (path.startsWith('lib/') || path.startsWith('packages/')),
-      );
-      for (final path in compiled) {
-        final text = await filled(path);
-        final vmOnly =
-            path.endsWith('_io.dart') ||
-            path.endsWith('_vm.dart') ||
-            path.endsWith('_windows.dart') ||
-            path == 'lib/_core/telemetry/crash_reporter.dart';
-        for (final match in directive.allMatches(text)) {
-          final uri = match.group(1)!;
-          if (vmOnly) continue;
-          expect(uri, isNot('dart:io'), reason: path);
-          expect(uri, isNot('dart:ffi'), reason: path);
-          if (uri == io) {
-            expect(match.group(2), contains("'$web'"), reason: '$path imports the VM half alone');
-          }
-          expect(uri, isNot(endsWith('/_core/telemetry/crash_reporter.dart')), reason: path);
-          for (final file in telemetryModuleFiles.where((file) => !webSafe.contains(file))) {
-            expect(uri, isNot('package:my_app/_core/telemetry/$file'), reason: path);
+      // The reporter and its own gateway run on the VM only: telemetry_setup_io.dart imports them.
+      const vmReporter = <String>{
+        'lib/_core/telemetry/crash_reporter.dart',
+        'lib/_core/telemetry/crashlytics_gateway.dart',
+      };
+      for (final reporter in CrashReporter.values) {
+        // What the web build compiles: the code of the app and of packages/ui (tools and tests
+        // run on the VM; the module is checked through what imports it).
+        final compiled = (await projectDartFiles(reporter)).entries.where(
+          (file) =>
+              (file.key.startsWith('lib/') || file.key.startsWith('packages/')) &&
+              !telemetryModuleFiles.any((module) => file.key == '$telemetryModuleTarget$module'),
+        );
+        for (final MapEntry(key: path, value: text) in compiled) {
+          final vmOnly =
+              path.endsWith('_io.dart') ||
+              path.endsWith('_vm.dart') ||
+              path.endsWith('_windows.dart') ||
+              vmReporter.contains(path);
+          final reason = '${reporter.name}: $path';
+          for (final match in directive.allMatches(text)) {
+            final uri = match.group(1)!;
+            if (vmOnly) continue;
+            expect(uri, isNot('dart:io'), reason: reason);
+            expect(uri, isNot('dart:ffi'), reason: reason);
+            if (uri == io) {
+              expect(match.group(2), contains("'$web'"), reason: '$reason imports the VM half');
+            }
+            for (final file in vmReporter) {
+              expect(uri, isNot('package:my_app/${file.substring('lib/'.length)}'), reason: reason);
+            }
+            for (final file in telemetryModuleFiles.where((file) => !webSafe.contains(file))) {
+              expect(uri, isNot('package:my_app/_core/telemetry/$file'), reason: reason);
+            }
+            expect(uri, isNot(startsWith('package:firebase_')), reason: reason);
           }
         }
+      }
+    });
+  });
+
+  group('crash reporter', () {
+    test('pub add of each reporter', () {
+      expect(crashReporterPubAddArguments(CrashReporter.sentry), <String>['sentry']);
+      expect(crashReporterPubAddArguments(CrashReporter.crashlytics), <String>[
+        'sentry',
+        'firebase_core',
+        'firebase_crashlytics',
+      ]);
+      expect(crashReporterPubAddArguments(CrashReporter.logOnly), isEmpty);
+      for (final reporter in CrashReporter.values) {
+        final arguments = skeletonPubAddArgumentsFor(
+          uiPath: 'packages/ui',
+          crashReporter: reporter,
+        );
+        final names = packagesOf(arguments);
+        expect(names, hasLength(names.toSet().length), reason: reporter.name);
+        expect(
+          names.where(const <String>{'sentry', 'firebase_core', 'firebase_crashlytics'}.contains),
+          crashReporterPubAddArguments(reporter),
+          reason: reporter.name,
+        );
+      }
+      expect(skeletonPubAddArguments, contains('sentry'));
+      expect(skeletonPubAddArguments, isNot(contains('firebase_core')));
+    });
+
+    test('each reporter is one asset written as crash_reporter.dart', () async {
+      expect(crashReporterTarget, 'lib/_core/telemetry/crash_reporter.dart');
+      expect(
+        <String>{for (final reporter in CrashReporter.values) crashReporterFile(reporter)},
+        <String>{
+          'lib/_core/telemetry/crash_reporter_sentry.dart',
+          'lib/_core/telemetry/crash_reporter_crashlytics.dart',
+          'lib/_core/telemetry/crash_reporter_log_only.dart',
+        },
+      );
+      for (final reporter in CrashReporter.values) {
+        final files = crashReporterTemplateFiles(reporter);
+        expect(files[crashReporterFile(reporter)], crashReporterTarget, reason: reporter.name);
+        for (final from in files.keys) {
+          expect(
+            await rootBundle.loadString('$projectTemplateRoot$from'),
+            isNotEmpty,
+            reason: from,
+          );
+          expect(projectTemplateFiles, isNot(contains(from)), reason: from);
+        }
+        final text = (await reporterFiles(reporter))[crashReporterTarget]!;
+        // telemetry_setup_io.dart calls all three.
+        expect(text, contains('Future<ICrashReportGateway?> createCrashReportGateway({'));
+        expect(text, contains('required Set<String> projectPackages'));
+        expect(text, contains('bool get crashReporterConfigured'));
+        expect(text, contains('Future<void> closeCrashReportGateway(ICrashReportGateway gateway)'));
+        expect(text, isNot(contains('{{')));
+      }
+      // Only the chosen reporter's files: Sentry and log only bring nothing else.
+      expect(crashReporterTemplateFiles(CrashReporter.sentry), hasLength(1));
+      expect(crashReporterTemplateFiles(CrashReporter.logOnly), hasLength(1));
+      expect(crashReporterTemplateFiles(CrashReporter.crashlytics).values, <String>[
+        crashReporterTarget,
+        'lib/_core/telemetry/crashlytics_gateway.dart',
+        'test/_core/telemetry/crash_reporter_test.dart',
+      ]);
+    });
+
+    final reporterImport = RegExp(
+      r'''^\s*(?:import|export)\s+'package:(sentry|firebase_[a-z_]+)/''',
+      multiLine: true,
+    );
+
+    test('a log-only project has no Sentry and no Firebase', () async {
+      expect(
+        telemetryModuleFilesFor(CrashReporter.logOnly),
+        isNot(contains('sentry_gateway.dart')),
+      );
+      expect(
+        telemetryModuleTestFilesFor(CrashReporter.logOnly),
+        isNot(contains('sentry_gateway_test.dart')),
+      );
+      final files = await projectDartFiles(CrashReporter.logOnly);
+      for (final MapEntry(key: path, value: text) in files.entries) {
+        expect(reporterImport.hasMatch(text), isFalse, reason: path);
+        expect(text, isNot(contains('sentry_gateway.dart')), reason: path);
+      }
+      expect(files['lib/_core/telemetry/telemetry.dart'], contains('telemetry_sender.dart'));
+      // Sentry and Crashlytics keep the whole module.
+      for (final reporter in <CrashReporter>[CrashReporter.sentry, CrashReporter.crashlytics]) {
+        expect(telemetryModuleFilesFor(reporter), telemetryModuleFiles);
+        expect(telemetryModuleTestFilesFor(reporter), telemetryModuleTestFiles);
+        expect(
+          (await copiedModule(reporter))['lib/_core/telemetry/telemetry.dart'],
+          contains('sentry_gateway.dart'),
+        );
+      }
+    });
+
+    test('Crashlytics sits behind the queue and only its gateway imports it', () async {
+      final files = await projectDartFiles(CrashReporter.crashlytics);
+      // The app's own handler (initialization.dart) sends Flutter errors to ErrorUtil; the
+      // reporter never takes it over.
+      for (final path in crashReporterTemplateFiles(CrashReporter.crashlytics).values) {
+        expect(files[path], isNot(contains('FlutterError.onError')), reason: path);
+        expect(files[path], isNot(contains('recordFlutter')), reason: path);
+      }
+      for (final MapEntry(key: path, value: text) in files.entries) {
+        final crashlytics = text.contains("import 'package:firebase_crashlytics/");
+        expect(crashlytics, path == 'lib/_core/telemetry/crashlytics_gateway.dart', reason: path);
+      }
+      final gateway = files['lib/_core/telemetry/crashlytics_gateway.dart']!;
+      expect(gateway, contains('implements ICrashReportGateway'));
+      expect(gateway, contains('recordError('));
+      expect(gateway, contains('setCrashlyticsCollectionEnabled(true)'));
+      final reporter = files[crashReporterTarget]!;
+      expect(reporter, contains('Firebase.initializeApp'));
+      expect(reporter, contains("hint: 'Firebase is not configured'"));
+      expect(reporter, contains('SentryGateway('));
+      expect(files, contains('test/_core/telemetry/crash_reporter_test.dart'));
+    });
+
+    test('Sentry imports no Firebase', () async {
+      for (final MapEntry(key: path, value: text) in (await projectDartFiles(
+        CrashReporter.sentry,
+      )).entries) {
+        expect(text, isNot(contains('package:firebase_')), reason: path);
       }
     });
   });
@@ -446,6 +616,8 @@ void main() {
           package: 'my_app',
           date: DateTime(2026, 11, 6),
         ),
+      for (final reporter in CrashReporter.values)
+        for (final from in crashReporterTemplateFiles(reporter).keys) from: await filled(from),
     };
 
     test(
@@ -512,23 +684,27 @@ void main() {
 
     test('the template imports only packages its pub add installs', () async {
       final packageImport = RegExp("(?:import|export) 'package:([a-z_0-9]+)/");
-      final app = <String>[
-        'my_app',
-        'flutter',
-        'flutter_test',
-        for (final argument in skeletonPubAddArguments)
-          RegExp('^(?:dev:)?([a-z_0-9]+)').firstMatch(argument)!.group(1)!,
-      ];
       // packages/ui: its template pubspec, then what FAgent adds to it.
       final ui = <String>['ui', 'flutter', 'intl', 'collection', ...uiPubAddArguments];
       final usedByUi = <String>{};
-      final files = <String, String>{...await dartFiles(), ...await copiedModule()};
-      for (final MapEntry(key: path, value: text) in files.entries) {
-        final inUi = path.startsWith('packages/ui/');
-        for (final match in packageImport.allMatches(text)) {
-          final name = match.group(1)!;
-          expect(inUi ? ui : app, contains(name), reason: '$path: ${match.group(0)}');
-          if (inUi) usedByUi.add(name);
+      for (final reporter in CrashReporter.values) {
+        final app = <String>[
+          'my_app',
+          'flutter',
+          'flutter_test',
+          ...packagesOf(skeletonPubAddArgumentsFor(uiPath: 'packages/ui', crashReporter: reporter)),
+        ];
+        for (final MapEntry(key: path, value: text) in (await projectDartFiles(reporter)).entries) {
+          final inUi = path.startsWith('packages/ui/');
+          for (final match in packageImport.allMatches(text)) {
+            final name = match.group(1)!;
+            expect(
+              inUi ? ui : app,
+              contains(name),
+              reason: '${reporter.name}: $path: ${match.group(0)}',
+            );
+            if (inUi) usedByUi.add(name);
+          }
         }
       }
       // packages/ui gets exactly the ones its files import.

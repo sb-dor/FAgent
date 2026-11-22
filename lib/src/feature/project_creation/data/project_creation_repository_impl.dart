@@ -458,6 +458,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
             appPath: member.path,
             package: member.packageName,
             monorepo: true,
+            crashReporter: member.crashReporter,
           );
           // A root without `build_runner` cannot build the workspace; the member has it.
           final atRoot = _dependsOn(_rootPubspec(root), 'build_runner');
@@ -469,7 +470,9 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
             workspace: atRoot,
             // Only the member's files: the rest of the repository is the user's.
             fixIn: member.path,
+            crashReporter: member.crashReporter,
           );
+          run.noteReporter(member.crashReporter);
           return;
         }
         final request = run.request;
@@ -481,6 +484,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           appPath: request.appPath,
           package: monorepo ? request.appPackageName : request.name,
           monorepo: monorepo,
+          crashReporter: request.crashReporter,
         );
         await _installSkeleton(
           run,
@@ -492,7 +496,9 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           workspace: monorepo,
           fixIn: root,
           uiPath: p.join(root, 'packages', 'ui'),
+          crashReporter: request.crashReporter,
         );
+        run.noteReporter(request.crashReporter);
       case CreationStepKind.analyze:
         // An added member is checked alone; a new project as a whole.
         await _command(run, index, await _flutter(run), const <String>[
@@ -516,7 +522,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   /// The packages of the skeleton and their generated code: `pub add` in [appPath] (and in the
   /// `packages/ui` at [uiPath] the run wrote), `pub get` at the root, `build_runner` in [buildIn]
   /// (over the whole [workspace] or that package alone), and the imports sorted in [fixIn]. With
-  /// [addRootBuildRunner] the root gets `build_runner` first.
+  /// [addRootBuildRunner] the root gets `build_runner` first. The app's `pub add` has the packages
+  /// of its [crashReporter].
   Future<void> _installSkeleton(
     _Run run,
     int index, {
@@ -524,6 +531,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required String buildIn,
     required bool workspace,
     required String fixIn,
+    required CrashReporter crashReporter,
     String? uiPath,
     bool addRootBuildRunner = false,
   }) async {
@@ -534,6 +542,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       'add',
       ...skeletonPubAddArgumentsFor(
         uiPath: appPath == root ? 'packages/ui' : p.join('..', '..', 'packages', 'ui'),
+        crashReporter: crashReporter,
       ),
     ], workingDirectory: appPath);
     // packages/ui declares its own dependencies; an add leaves the user's one alone.
@@ -667,7 +676,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   }
 
   /// Copies [files] of the assets at [assetRoot] into [to], with the package name filled in. Each
-  /// copy is a line of the step's output: its path relative to [to], behind [label].
+  /// copy is a line of the step's output: its path relative to [to], behind [label]. A file of
+  /// [renamed] (asset path → path in [to]) goes to its new path.
   Future<void> _copyTemplate(
     _Run run,
     int index, {
@@ -676,9 +686,11 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required String to,
     required String package,
     String label = '',
+    Map<String, String> renamed = const <String, String>{},
   }) async {
-    for (final relative in files) {
-      final text = await _loadAsset('$assetRoot$relative');
+    for (final asset in files) {
+      final relative = renamed[asset] ?? asset;
+      final text = await _loadAsset('$assetRoot$asset');
       final file = File(p.joinAll(<String>[to, ...relative.split('/')]));
       await file.parent.create(recursive: true);
       await file.writeAsString(fillProjectTemplate(text, package: package, date: _now()));
@@ -814,38 +826,52 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     return was;
   }
 
-  /// Copies the template with the package name filled in, and the telemetry module with its tests
-  /// next to its glue, then keeps the Sentry DSN out of git and edits `pubspec.yaml`: gen-l10n on
-  /// and, in a one-app project, `packages/ui` as a workspace member and the shader of its shimmer.
-  /// In a [monorepo] only the app's files go to [appPath]; `packages/ui` is written apart and
-  /// declares its shader itself.
+  /// Copies the template with the package name filled in, the files of [crashReporter], and the
+  /// telemetry module with its tests next to its glue, then keeps the Sentry DSN out of git and
+  /// edits `pubspec.yaml`: gen-l10n on and, in a one-app project, `packages/ui` as a workspace
+  /// member and the shader of its shimmer. In a [monorepo] only the app's files go to [appPath];
+  /// `packages/ui` is written apart and declares its shader itself.
   Future<void> _writeAppSkeleton(
     _Run run,
     int index, {
     required String appPath,
     required String package,
     required bool monorepo,
+    required CrashReporter crashReporter,
   }) async {
     final label = monorepo ? '${p.split(p.relative(appPath, from: run.root)).join('/')}/' : '';
+    final reporterFiles = crashReporterTemplateFiles(crashReporter);
     await _copyTemplate(
       run,
       index,
       assetRoot: projectTemplateRoot,
-      files: monorepo ? projectTemplateAppFiles : projectTemplateFiles,
+      files: <String>[
+        ...(monorepo ? projectTemplateAppFiles : projectTemplateFiles),
+        ...reporterFiles.keys,
+      ],
       to: appPath,
       package: package,
       label: label,
+      renamed: reporterFiles,
     );
-    for (final (from, to, files) in const <(String, String, List<String>)>[
-      (telemetryModuleRoot, telemetryModuleTarget, telemetryModuleFiles),
-      (telemetryModuleTestRoot, telemetryModuleTestTarget, telemetryModuleTestFiles),
+    for (final (from, to, files) in <(String, String, List<String>)>[
+      (telemetryModuleRoot, telemetryModuleTarget, telemetryModuleFilesFor(crashReporter)),
+      (
+        telemetryModuleTestRoot,
+        telemetryModuleTestTarget,
+        telemetryModuleTestFilesFor(crashReporter),
+      ),
     ]) {
       for (final name in files) {
         final text = await _loadAsset('$from$name');
         final file = File(p.joinAll(<String>[appPath, ...'$to$name'.split('/')]));
         await file.parent.create(recursive: true);
         await file.writeAsString(
-          copyTelemetryModule(text, importPrefix: 'package:$package/_core/telemetry/'),
+          copyTelemetryModule(
+            text,
+            importPrefix: 'package:$package/_core/telemetry/',
+            crashReporter: crashReporter,
+          ),
         );
         run
           ..addLine(index, '✎ $label$to$name')
@@ -1028,6 +1054,9 @@ final class _Run {
   /// The subscription was cancelled or the repository disposed: nothing more is emitted.
   bool cancelled = false;
 
+  /// What the user is told to do next, so far.
+  List<CreationNote> notes = const <CreationNote>[];
+
   /// The new project; only the steps of a new project ask for it.
   NewProjectRequest get request => project ?? (throw StateError('Not a new project'));
 
@@ -1048,7 +1077,15 @@ final class _Run {
 
   void emit() {
     if (cancelled || controller.isClosed) return;
-    controller.add(CreationRun(steps: steps));
+    controller.add(CreationRun(steps: steps, notes: notes));
+  }
+
+  /// Notes what the skeleton with [reporter] leaves to the user: Crashlytics needs
+  /// `flutterfire configure`. The step's done snapshot carries it.
+  void noteReporter(CrashReporter reporter) {
+    if (reporter == CrashReporter.crashlytics) {
+      notes = const <CreationNote>[CreationNote.flutterfireConfigure];
+    }
   }
 
   void update(int index, CreationStep Function(CreationStep step) change) {

@@ -357,6 +357,42 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
+  for (final ru in const <bool>[false, true]) {
+    testWidgets('a Crashlytics project ends with the flutterfire note${ru ? ' in Russian' : ''}', (
+      tester,
+    ) async {
+      const en =
+          'Run `flutterfire configure` in the project to connect Firebase; until then errors stay '
+          'in the log.';
+      const russian =
+          'Запустите в проекте `flutterfire configure`, чтобы подключить Firebase; до этого '
+          'ошибки остаются в журнале.';
+      await pumpWindow(tester, locale: Locale(ru ? 'ru' : 'en'));
+      await openFromMenu(tester, ru: ru);
+      await tester.enterText(find.byKey(_nameField), 'avera_booking');
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Firebase Crashlytics'));
+      await tester.tap(find.text('Firebase Crashlytics'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey<String>('new-project-create')));
+      await tester.pump();
+      await _elapse(tester, const Duration(seconds: 3));
+
+      expect(inProgress(find.text(ru ? russian : en)), findsOneWidget);
+      expect(inProgress(find.text(ru ? en : russian)), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+  }
+
+  testWidgets('a Sentry project ends without a note', (tester) async {
+    await pumpWindow(tester);
+    await startCreation(tester);
+    await _elapse(tester, const Duration(seconds: 3));
+
+    expect(inProgress(find.textContaining('flutterfire')), findsNothing);
+    await disposeTestApp(tester, dependencies);
+  });
+
   testWidgets('completed offers open project and close', (tester) async {
     await pumpWindow(tester);
     await startCreation(tester);

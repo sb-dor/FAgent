@@ -7,6 +7,8 @@ analyzer:
   exclude:
     # Build
     - "build/**"
+    # The Flutter tool writes a build/ into packages/ui too (plugins it stages on pub get).
+    - "**/build/**"
     # Tests
     - "test/**.mocks.dart"
     - ".test_coverage.dart"

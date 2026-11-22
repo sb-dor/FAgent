@@ -83,6 +83,22 @@ void main() {
     expect(state.steps.every((s) => s.status == CreationStepStatus.done), isTrue);
   });
 
+  test('completed carries the notes of the run', () async {
+    controller.start(_request.copyWith(crashReporter: CrashReporter.crashlytics));
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    final state = controller.state as ProjectCreation$CompletedState;
+    expect(state.creationNotes, <CreationNote>[CreationNote.flutterfireConfigure]);
+    expect(state.notes, isEmpty);
+  });
+
+  test('a Sentry project completes without notes', () async {
+    controller.start(_request);
+    await _until(controller, () => controller.state is ProjectCreation$CompletedState);
+
+    expect((controller.state as ProjectCreation$CompletedState).creationNotes, isEmpty);
+  });
+
   test('ignores a start while one is running or finished', () async {
     controller
       ..start(_request)

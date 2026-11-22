@@ -60,6 +60,20 @@ enum ProjectStructure {
   monorepo,
 }
 
+/// Where an app with the architecture skeleton sends its unexpected errors. The log
+/// (`logs.sqlite`) and the queue are there with every choice; only the gateway differs.
+enum CrashReporter {
+  /// Sentry on every platform, its DSN from `config/sentry.local.json`.
+  sentry,
+
+  /// Firebase Crashlytics on Android, iOS and macOS (Sentry elsewhere, when a DSN is set);
+  /// `flutterfire configure` connects the project.
+  crashlytics,
+
+  /// No service: the errors stay in the log on the machine.
+  logOnly,
+}
+
 /// What the New project wizard asks for.
 @freezed
 abstract class NewProjectRequest with _$NewProjectRequest {
@@ -98,6 +112,9 @@ abstract class NewProjectRequest with _$NewProjectRequest {
 
     /// The package name of the first app in a monorepo; `null` means `<name>_<appFolder>`.
     String? appPackage,
+
+    /// Where the skeleton's app reports its errors; only the architecture skeleton has one.
+    @Default(CrashReporter.sentry) CrashReporter crashReporter,
   }) = _NewProjectRequest;
 
   const NewProjectRequest._();

@@ -22,11 +22,11 @@ import 'package:l/l.dart';
 
 /// {@template new_project_form}
 /// What the New project dialog asks: the project type, the package name, the organization, the
-/// folder, the platforms, the template and two switches, and below them the Flutter version with
-/// Cancel and Create.
+/// folder, the platforms, the template, the crash reporter and two switches, and below them the
+/// Flutter version with Cancel and Create.
 ///
 /// The type comes first, as in `flutter create --template`: the platforms show only for an app and
-/// a plugin, and the template only for an app.
+/// a plugin, the template only for an app, and the crash reporter only for "My architecture".
 ///
 /// The name is checked as `flutter create` does; "Create" is on only when everything is fine: the
 /// name, the organization, the folder (checked against the disk, the latest answer wins), the
@@ -64,6 +64,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
   FlutterProjectType _type = FlutterProjectType.app;
   ProjectStructure _structure = ProjectStructure.single;
   late NewProjectTemplate _template;
+  CrashReporter _crashReporter = CrashReporter.sentry;
   bool _gitInit = true;
   bool _openChat = true;
 
@@ -254,6 +255,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         structure: _monorepo ? ProjectStructure.monorepo : ProjectStructure.single,
         appFolder: _appFolder.text,
         appPackage: _monorepo ? _appPackage.text : null,
+        crashReporter: _crashReporter,
       ),
     );
   }
@@ -377,6 +379,10 @@ class _NewProjectFormState extends State<NewProjectForm> {
               ],
             ),
           ),
+          if (_templateUsed == NewProjectTemplate.architecture) ...<Widget>[
+            gap,
+            _crashReporterField(context),
+          ],
         ],
         gap,
         Wrap(
@@ -475,6 +481,32 @@ class _NewProjectFormState extends State<NewProjectForm> {
             enabled: _monorepoSupported,
             onTap: () => setState(() => _structure = ProjectStructure.monorepo),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _crashReporterField(BuildContext context) {
+    final localization = Localization.of(context);
+    return CreationField(
+      label: localization.newProjectCrashReporter,
+      child: Wrap(
+        key: const ValueKey<String>('new-project-crash-reporter'),
+        spacing: 6,
+        runSpacing: 6,
+        children: <Widget>[
+          for (final (reporter, label) in <(CrashReporter, String)>[
+            (CrashReporter.sentry, localization.newProjectCrashReporterSentry),
+            (CrashReporter.crashlytics, localization.newProjectCrashReporterCrashlytics),
+            (CrashReporter.logOnly, localization.newProjectCrashReporterLogOnly),
+          ])
+            OptionChip(
+              key: ValueKey<String>('crash-reporter-${reporter.name}'),
+              label: label,
+              selected: reporter == _crashReporter,
+              exclusive: true,
+              onTap: () => setState(() => _crashReporter = reporter),
+            ),
         ],
       ),
     );
