@@ -1,4 +1,5 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/foundation.dart';
 import 'package:{{package}}/_core/constant/config.dart';
 import 'package:{{package}}/_core/telemetry/crash_report_gateway.dart';
@@ -33,10 +34,13 @@ bool get crashReporterConfigured => _crashlyticsPlatform || Config.sentryDsn.tri
 ///
 /// Firebase starts here, once. Until `flutterfire configure` has connected the project it fails:
 /// the failure goes to the log ([logError], `ErrorUtil.logError` unless a test gives one) and the
-/// app runs with the log only. [initializeFirebase] replaces `Firebase.initializeApp` in tests.
+/// app runs with the log only. Once it starts, Crashlytics collection is turned off: the gateway
+/// turns it on at its first send, when sending is on. [initializeFirebase] replaces
+/// `Firebase.initializeApp` and [crashlytics] the default instance in tests.
 Future<ICrashReportGateway?> createCrashReportGateway({
   required Set<String> projectPackages,
   @visibleForTesting Future<Object?> Function() initializeFirebase = Firebase.initializeApp,
+  @visibleForTesting FirebaseCrashlytics? crashlytics,
   @visibleForTesting ReportError logError = ErrorUtil.logError,
 }) async {
   if (!_crashlyticsPlatform) {
@@ -56,11 +60,21 @@ Future<ICrashReportGateway?> createCrashReportGateway({
     await logError(error, stackTrace, hint: 'Firebase is not configured');
     return null;
   }
-  return CrashlyticsGateway();
+  final gateway = CrashlyticsGateway(crashlytics: crashlytics);
+  try {
+    // Native Crashlytics collects unless told not to, and the last switch persists.
+    await gateway.stopCollecting();
+  } on Exception catch (error, stackTrace) {
+    // Collection may be on: no gateway, so this app sends nothing to Crashlytics.
+    await logError(error, stackTrace, hint: 'Crashlytics collection could not be turned off');
+    return null;
+  }
+  return gateway;
 }
 
 /// Closes [gateway] (on exit, or when a user's switch turns sending off): Sentry flushes and stops;
-/// Crashlytics has nothing to close.
+/// Crashlytics stops collecting until the next send.
 Future<void> closeCrashReportGateway(ICrashReportGateway gateway) async {
   if (gateway is SentryGateway) await gateway.close();
+  if (gateway is CrashlyticsGateway) await gateway.stopCollecting();
 }

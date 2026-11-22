@@ -7,7 +7,9 @@ import 'package:{{package}}/_core/telemetry/error_outbox.dart';
 /// and zone errors never go to Crashlytics directly; they go through `ErrorUtil` like every other
 /// error (see "Crash reports" in docs/rules/security.md).
 ///
-/// Collection is turned on at the first send: the sender sends only when telemetry is enabled.
+/// Collection is off until the first send (`createCrashReportGateway` turns it off once Firebase
+/// starts, and the new project's `Info.plist` and `AndroidManifest.xml` keep it off before that):
+/// the sender sends only when telemetry is enabled. [stopCollecting] turns it off again.
 /// `Firebase.initializeApp` must have succeeded before the gateway is made (`crash_reporter.dart`).
 final class CrashlyticsGateway implements ICrashReportGateway {
   /// Creates the gateway on `crashlytics`, the default instance unless a test gives one.
@@ -24,7 +26,7 @@ final class CrashlyticsGateway implements ICrashReportGateway {
 
   @override
   Future<bool> send(OutboxEntry entry) async {
-    await (_collecting ??= _instance.setCrashlyticsCollectionEnabled(true));
+    await _collect();
     for (final line in entry.breadcrumbs) {
       await _instance.log(line);
     }
@@ -37,5 +39,23 @@ final class CrashlyticsGateway implements ICrashReportGateway {
       printDetails: false,
     );
     return true;
+  }
+
+  /// Turns collection off: when sending is turned off, on exit, and once Firebase starts. The next
+  /// [send] turns it on again. The setting persists across launches.
+  Future<void> stopCollecting() async {
+    _collecting = null;
+    await _instance.setCrashlyticsCollectionEnabled(false);
+  }
+
+  /// Turns collection on once; a failed attempt is not kept, the next send tries again.
+  Future<void> _collect() async {
+    final collecting = _collecting ??= _instance.setCrashlyticsCollectionEnabled(true);
+    try {
+      await collecting;
+    } on Object {
+      if (identical(_collecting, collecting)) _collecting = null;
+      rethrow;
+    }
   }
 }
