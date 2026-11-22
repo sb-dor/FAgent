@@ -88,6 +88,11 @@ static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
   report to separate Sentry projects. Do not add a second key for a variant of the same app.
 - The `environment` of an event is the flavor (`dev`, `prod`) and the `release` is the app
   version.
+- On macOS the app is sandboxed and may open no outgoing connection unless its entitlements say
+  so: a new project gets `<key>com.apple.security.network.client</key><true/>` in
+  `macos/Runner/DebugProfile.entitlements` and `Release.entitlements`. Without it nothing reaches
+  Sentry or Crashlytics (the check of the connection always fails). Keep it there, and add it to a
+  macOS app made before.
 - The project's `.gitignore` lists `config/sentry.local.json`; a committed `config/*.json` holds
   only empty values.
 

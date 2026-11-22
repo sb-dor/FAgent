@@ -993,6 +993,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       );
     }
     await _ignoreSentryConfig(File(p.join(appPath, '.gitignore')));
+    await _editPlatformFiles(run, index, appPath: appPath, crashReporter: crashReporter);
     final pubspec = File(p.join(appPath, 'pubspec.yaml'));
     final lines = (await pubspec.readAsString()).split('\n');
     final flutter = lines.indexOf('flutter:');
@@ -1018,6 +1019,38 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       '',
     ]);
     await pubspec.writeAsString(lines.join('\n'));
+  }
+
+  /// Lets the macOS app at [appPath] open outgoing connections (its reports go out over the
+  /// network) and, with Crashlytics, keeps Crashlytics from collecting on iOS, macOS and Android
+  /// until the app turns it on. A platform `flutter create` did not write is skipped.
+  Future<void> _editPlatformFiles(
+    _Run run,
+    int index, {
+    required String appPath,
+    required CrashReporter crashReporter,
+  }) async {
+    final label = appPath == run.root
+        ? ''
+        : '${p.split(p.relative(appPath, from: run.root)).join('/')}/';
+    Future<void> edit(String relative, String? Function(String text) change) async {
+      final file = File(p.joinAll(<String>[appPath, ...relative.split('/')]));
+      if (!file.existsSync()) return;
+      final text = await file.readAsString();
+      final changed = change(text) ?? (throw _StepFailure('$label$relative has an unknown layout'));
+      if (changed == text) return;
+      await file.writeAsString(changed);
+      run.addLine(index, '✎ $label$relative');
+    }
+
+    for (final relative in macosEntitlementFiles) {
+      await edit(relative, allowOutgoingConnections);
+    }
+    if (crashReporter != CrashReporter.crashlytics) return;
+    for (final relative in crashlyticsPlistFiles) {
+      await edit(relative, crashlyticsOffInPlist);
+    }
+    await edit(androidManifestFile, crashlyticsOffInManifest);
   }
 
   /// Adds `config/sentry.local.json` (the Sentry DSN, see `docs/rules/configuration.md`) to

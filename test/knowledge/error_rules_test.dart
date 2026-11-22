@@ -82,7 +82,12 @@ void main() {
   test('configuration.md has the DSN', () {
     final configuration = _rule('configuration');
     expect(configuration, contains('### The Sentry DSN'));
-    for (final word in ['config/sentry.local.json', '--dart-define-from-file', 'SENTRY_DSN']) {
+    for (final word in [
+      'config/sentry.local.json',
+      '--dart-define-from-file',
+      'SENTRY_DSN',
+      'com.apple.security.network.client',
+    ]) {
       expect(configuration, contains(word));
     }
   });

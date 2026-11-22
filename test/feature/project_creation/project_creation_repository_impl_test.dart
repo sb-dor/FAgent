@@ -38,6 +38,85 @@ flutter:
   uses-material-design: true
 ''';
 
+/// The macOS entitlements as `flutter create` writes them: [_debugEntitlements] for Debug and
+/// Profile, [_releaseEntitlements] for Release. Sandboxed, with no outgoing connections.
+const String _debugEntitlements = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>
+''';
+
+const String _releaseEntitlements = '''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+</dict>
+</plist>
+''';
+
+/// An `Info.plist` of iOS or macOS, cut down.
+const String _infoPlist = r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+</dict>
+</plist>
+''';
+
+/// The `AndroidManifest.xml` of the app, cut down.
+const String _androidManifest = r'''
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="app"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity android:name=".MainActivity" android:exported="true">
+        </activity>
+    </application>
+</manifest>
+''';
+
+/// The platform files `flutter create` writes into [app] for [platforms]: the macOS entitlements
+/// and `Info.plist`, the iOS `Info.plist`, the Android manifest.
+void _writePlatformFiles(String app, Iterable<String> platforms) {
+  void write(String relative, String text) {
+    final file = File(p.joinAll(<String>[app, ...relative.split('/')]));
+    file.parent.createSync(recursive: true);
+    file.writeAsStringSync(text);
+  }
+
+  if (platforms.contains('macos')) {
+    write('macos/Runner/DebugProfile.entitlements', _debugEntitlements);
+    write('macos/Runner/Release.entitlements', _releaseEntitlements);
+    write('macos/Runner/Info.plist', _infoPlist);
+  }
+  if (platforms.contains('ios')) write('ios/Runner/Info.plist', _infoPlist);
+  if (platforms.contains('android')) {
+    write('android/app/src/main/AndroidManifest.xml', _androidManifest);
+  }
+}
+
+/// The macOS entitlement that lets the app open outgoing connections (Sentry, Crashlytics).
+const String _networkClient = '<key>com.apple.security.network.client</key>\n\t<true/>';
+
+/// The `Info.plist` key that keeps Crashlytics from collecting before the app turns it on.
+const String _crashlyticsPlistOff = '<key>FirebaseCrashlyticsCollectionEnabled</key>\n\t<false/>';
+
 void main() {
   late Directory root;
   late Directory parent;
@@ -69,6 +148,17 @@ void main() {
 
   bool isCreate(ScriptedDaemonProcess process) =>
       process.executable == _flutter && process.arguments.first == 'create';
+
+  /// [next], with `flutter create` also writing the platform files of its `--platforms`.
+  void Function(ScriptedDaemonProcess process) withPlatformFiles(
+    void Function(ScriptedDaemonProcess process) next,
+  ) => (process) {
+    next(process);
+    if (!isCreate(process)) return;
+    final platforms = process.arguments.indexOf('--platforms');
+    if (platforms < 0) return;
+    _writePlatformFiles(process.arguments.last, process.arguments[platforms + 1].split(','));
+  };
 
   /// Plays `flutter create` writing its `pubspec.yaml`, then prints a line and exits with 0.
   void finish(ScriptedDaemonProcess process) {
@@ -369,6 +459,63 @@ void main() {
               telemetryModuleTestFiles.length,
         ),
       );
+    });
+
+    group('platform files', () {
+      String read(String relative) =>
+          File(p.joinAll(<String>[path(), ...relative.split('/')])).readAsStringSync();
+
+      setUp(() => script = withPlatformFiles(finish));
+
+      test('a macOS app may open outgoing connections, so its reports can leave', () async {
+        await build().create(request(gitInit: false)).toList();
+
+        for (final name in <String>['DebugProfile', 'Release']) {
+          final entitlements = read('macos/Runner/$name.entitlements');
+          expect(entitlements, contains(_networkClient), reason: name);
+          expect(_networkClient.allMatches(entitlements), hasLength(1), reason: name);
+          expect(entitlements, endsWith('\t<true/>\n</dict>\n</plist>\n'), reason: name);
+        }
+        expect(read('macos/Runner/DebugProfile.entitlements'), contains('network.server'));
+        // Sentry needs no switch in Info.plist.
+        expect(read('ios/Runner/Info.plist'), _infoPlist);
+        expect(read('android/app/src/main/AndroidManifest.xml'), _androidManifest);
+      });
+
+      test('without macOS there are no entitlements to touch', () async {
+        final runs = await build()
+            .create(
+              request(gitInit: false, platforms: const <FlutterPlatform>{FlutterPlatform.android}),
+            )
+            .toList();
+
+        expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+        expect(Directory(p.join(path(), 'macos')).existsSync(), isFalse);
+      });
+
+      test('Crashlytics starts with collection off on every platform', () async {
+        final runs = await build()
+            .create(request(gitInit: false, crashReporter: CrashReporter.crashlytics))
+            .toList();
+
+        expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+        for (final plist in <String>['ios/Runner/Info.plist', 'macos/Runner/Info.plist']) {
+          expect(read(plist), contains(_crashlyticsPlistOff), reason: plist);
+          expect(read(plist), contains('<key>CFBundleName</key>'), reason: plist);
+        }
+        final manifest = read('android/app/src/main/AndroidManifest.xml');
+        expect(
+          manifest,
+          contains(
+            '        android:icon="@mipmap/ic_launcher">\n'
+            '        <meta-data\n'
+            '            android:name="firebase_crashlytics_collection_enabled"\n'
+            '            android:value="false" />\n'
+            '        <activity',
+          ),
+        );
+        expect(read('macos/Runner/Release.entitlements'), contains(_networkClient));
+      });
     });
 
     group('crash reporter', () {
@@ -928,6 +1075,19 @@ void main() {
       expect(pubspec, isNot(contains('^3.10.4')));
     });
 
+    test('the monorepo app may open outgoing connections on macOS', () async {
+      script = withPlatformFiles(finish);
+      await build().create(monorepo()).toList();
+
+      for (final name in <String>['DebugProfile', 'Release']) {
+        expect(
+          read('apps/app/macos/Runner/$name.entitlements'),
+          contains(_networkClient),
+          reason: name,
+        );
+      }
+    });
+
     test('monorepo skeleton', () async {
       final runs = await build().create(monorepo()).toList();
 
@@ -1401,6 +1561,20 @@ void main() {
       expect(pubspec, contains('\nflutter:\n  generate: true\n\n'));
       expect(read('apps/admin/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
       expect(read('pubspec.lock'), 'lock after\n');
+    });
+
+    test('an added app may open outgoing connections on macOS', () async {
+      script = withPlatformFiles(resolving);
+      final runs = await build().addMember(member(gitRepo: false)).toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      for (final name in <String>['DebugProfile', 'Release']) {
+        expect(
+          read('apps/admin/macos/Runner/$name.entitlements'),
+          contains(_networkClient),
+          reason: name,
+        );
+      }
     });
 
     test('an added app gets the crash reporter of crash_reporter.yaml', () async {

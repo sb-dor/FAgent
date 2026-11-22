@@ -352,6 +352,57 @@ List<String> crashReporterPubAddArguments(CrashReporter reporter) => switch (rep
   CrashReporter.logOnly => const <String>[],
 };
 
+/// The macOS entitlement files `flutter create` writes, relative to the app: Debug and Profile,
+/// and Release.
+const List<String> macosEntitlementFiles = <String>[
+  'macos/Runner/DebugProfile.entitlements',
+  'macos/Runner/Release.entitlements',
+];
+
+/// The `Info.plist` files whose Crashlytics switch a Crashlytics app sets, relative to the app.
+const List<String> crashlyticsPlistFiles = <String>[
+  'ios/Runner/Info.plist',
+  'macos/Runner/Info.plist',
+];
+
+/// The Android manifest of the app, relative to the app.
+const String androidManifestFile = 'android/app/src/main/AndroidManifest.xml';
+
+/// [plist] with `<key>[key]</key>` set to [value] (`true` or `false`) at the end of its top
+/// `<dict>`; unchanged when the key is already there. `null` when [plist] has no `</dict>`.
+String? _withPlistKey(String plist, String key, String value) {
+  if (plist.contains('<key>$key</key>')) return plist;
+  final end = plist.lastIndexOf('</dict>');
+  if (end < 0) return null;
+  return '${plist.substring(0, end)}\t<key>$key</key>\n\t<$value/>\n${plist.substring(end)}';
+}
+
+/// macOS [entitlements] that allow outgoing connections: Flutter's sandboxed app has none, so
+/// neither Sentry nor Crashlytics could send. `null` when the file is not a plist with a `<dict>`.
+String? allowOutgoingConnections(String entitlements) =>
+    _withPlistKey(entitlements, 'com.apple.security.network.client', 'true');
+
+/// An iOS or macOS [plist] where Crashlytics does not collect until the app turns it on
+/// (`CrashlyticsGateway`): the native SDK starts before Dart and would collect from the first
+/// launch. `null` when the file is not a plist with a `<dict>`.
+String? crashlyticsOffInPlist(String plist) =>
+    _withPlistKey(plist, 'FirebaseCrashlyticsCollectionEnabled', 'false');
+
+/// The Android [manifest] where Crashlytics does not collect until the app turns it on, as
+/// [crashlyticsOffInPlist] for Android. `null` when the manifest has no `<application>`.
+String? crashlyticsOffInManifest(String manifest) {
+  const name = 'firebase_crashlytics_collection_enabled';
+  if (manifest.contains(name)) return manifest;
+  final application = manifest.indexOf('<application');
+  final open = application < 0 ? -1 : manifest.indexOf('>', application);
+  if (open < 0) return null;
+  return '${manifest.substring(0, open + 1)}\n'
+      '        <meta-data\n'
+      '            android:name="$name"\n'
+      '            android:value="false" />'
+      '${manifest.substring(open + 1)}';
+}
+
 /// Where the scripts and the Makefile of a monorepo live in the app's assets.
 const String monorepoTemplateRoot = 'assets/project_template/monorepo/';
 
