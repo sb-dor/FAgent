@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:clock/clock.dart';
 import 'package:control/control.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
@@ -124,6 +125,14 @@ final class AppSettingsController extends StateController<AppSettingsState>
       done: () async => _pendingWrites--,
     );
   }
+
+  /// Turns crash reports on or off. Turning on stores the moment of consent: only errors first
+  /// seen after it may be sent. Turning off keeps the stored moment.
+  void setCrashReports(bool enabled) => update(
+    (current) => enabled
+        ? current.copyWith(crashReports: true, crashReportsSince: clock.now().toUtc())
+        : current.copyWith(crashReports: false),
+  );
 
   @override
   void dispose() {

@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/feature/app_close/widgets/app_close_guard.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/app_settings_config_widget.dart';
+import 'package:flutter_code_agent/src/feature/crash_reports/widgets/crash_reports_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/hub_notices/widgets/hub_notices_listener.dart';
 import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -53,7 +54,9 @@ class _AppState extends State<App> {
     darkTheme: AppTheme.dark(),
     themeMode: _settings.settings.themeMode,
 
-    home: const AppCloseGuard(child: HubNoticesListener(child: WorkspaceConfigWidget())),
+    home: const CrashReportsConfigWidget(
+      child: AppCloseGuard(child: HubNoticesListener(child: WorkspaceConfigWidget())),
+    ),
     // The system text size, kept within the range the layout was checked at.
     builder: (context, child) => MediaQuery.withClampedTextScaling(
       minScaleFactor: 1,

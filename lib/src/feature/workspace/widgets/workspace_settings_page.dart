@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/feature/agents/widgets/agents_config_widg
 import 'package:flutter_code_agent/src/feature/agents/widgets/agents_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/appearance_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/widgets/general_settings_section.dart';
+import 'package:flutter_code_agent/src/feature/crash_reports/widgets/crash_reports_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/widgets/flutter_sdk_config_widget.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/widgets/flutter_settings_section.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/widgets/mcp_servers_config_widget.dart';
@@ -34,6 +35,7 @@ class WorkspaceSettingsPage extends StatelessWidget {
       ('flutter', Icons.flutter_dash, localization.settingsFlutter),
       ('appearance', Icons.palette_outlined, localization.settingsAppearance),
       ('shortcuts', Icons.keyboard_outlined, localization.settingsShortcuts),
+      ('crashReports', Icons.bug_report_outlined, localization.settingsCrashReports),
     ];
     return ListenableBuilder(
       listenable: data,
@@ -59,6 +61,7 @@ class WorkspaceSettingsPage extends StatelessWidget {
             'permissions' => const PermissionRulesConfigWidget(child: PermissionsSettingsSection()),
             'appearance' => const AppearanceSettingsSection(),
             'shortcuts' => const ShortcutsSettingsSection(),
+            'crashReports' => const CrashReportsSettingsSection(),
             'flutter' => const FlutterSdkConfigWidget(child: FlutterSettingsSection()),
             _ => const AgentsConfigWidget(child: GeneralSettingsSection()),
           },

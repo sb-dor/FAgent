@@ -10,6 +10,7 @@ import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone_event.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/sentry_gateway.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
@@ -131,6 +132,8 @@ Dependencies testDependencies({
   final codeState = codeViewStateRepository ?? MemoryCodeViewStateRepository();
   final dependencies = Dependencies()
     ..database = database
+    // No DSN and no log database: Settings shows "no crash reporting" and nothing is sent.
+    ..sentryGateway = SentryGateway(dsn: '', projectPackages: const <String>{})
     ..dropZone = dropZone ?? DropZone.fromStream(const Stream<DropZoneEvent>.empty())
     ..shellEnvironment = environment
     // A test never opens the browser: a link it taps goes to the test's own [openUrl].

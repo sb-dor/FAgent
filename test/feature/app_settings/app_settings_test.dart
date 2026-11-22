@@ -306,4 +306,29 @@ void main() {
     );
     expect(off, isNot(const AppSettings()));
   });
+
+  test('crashReports defaults to false and crashReportsSince round-trips in UTC', () {
+    expect(const AppSettings().crashReports, isFalse);
+    expect(const AppSettings().crashReportsSince, isNull);
+    final since = DateTime.utc(2026, 11, 22, 10, 30);
+    final on = const AppSettings().copyWith(crashReports: true, crashReportsSince: since);
+    final restored = AppSettings.fromJson(on.toJson());
+    expect(restored.crashReports, isTrue);
+    expect(restored.crashReportsSince, since);
+    expect(on.toJson()['crashReportsSince'], '2026-11-22T10:30:00.000Z');
+    expect(on, isNot(const AppSettings()));
+  });
+
+  test('an unreadable crashReportsSince becomes null and a non-bool switch is off', () {
+    for (final value in const <Object?>['yesterday', 42, true]) {
+      expect(
+        AppSettings.fromJson(<String, Object?>{'crashReportsSince': value}).crashReportsSince,
+        isNull,
+      );
+    }
+    expect(
+      AppSettings.fromJson(const <String, Object?>{'crashReports': 'yes'}).crashReports,
+      isFalse,
+    );
+  });
 }

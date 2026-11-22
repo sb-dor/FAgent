@@ -51,6 +51,8 @@ final class AppSettings {
     this.projectTemplate = NewProjectTemplate.architecture,
     this.devToolsTarget = DevToolsTarget.browser,
     this.formatOnSave = true,
+    this.crashReports = false,
+    this.crashReportsSince,
   });
 
   /// Reads settings from stored JSON. Never throws: anything unreadable becomes the default.
@@ -66,6 +68,8 @@ final class AppSettings {
     final askBeforeQuit = json['askBeforeQuit'];
     final projectOrg = json['projectOrg'];
     final formatOnSave = json['formatOnSave'];
+    final crashReports = json['crashReports'];
+    final crashReportsSince = json['crashReportsSince'];
     return AppSettings(
       themeMode: ThemeMode.values.firstWhere(
         (mode) => mode.name == themeName,
@@ -101,6 +105,10 @@ final class AppSettings {
         orElse: () => DevToolsTarget.browser,
       ),
       formatOnSave: formatOnSave is! bool || formatOnSave,
+      crashReports: crashReports is bool && crashReports,
+      crashReportsSince: crashReportsSince is String
+          ? DateTime.tryParse(crashReportsSince)?.toUtc()
+          : null,
     );
   }
 
@@ -186,6 +194,13 @@ final class AppSettings {
   /// Whether saving a Dart file in the Code view formats it first.
   final bool formatOnSave;
 
+  /// Whether unexpected errors may be sent to the crash reporter. Off until the user turns it on.
+  final bool crashReports;
+
+  /// When the user last turned [crashReports] on (UTC): only errors first seen at or after it may
+  /// be sent. Kept when the switch is turned off; `null` before the first time.
+  final DateTime? crashReportsSince;
+
   /// The JSON stored in `app_settings`.
   Map<String, Object?> toJson() => <String, Object?>{
     'themeMode': themeMode.name,
@@ -202,6 +217,8 @@ final class AppSettings {
     'projectTemplate': projectTemplate.name,
     'devToolsTarget': devToolsTarget.name,
     'formatOnSave': formatOnSave,
+    'crashReports': crashReports,
+    'crashReportsSince': crashReportsSince?.toUtc().toIso8601String(),
   };
 
   /// A copy with the given fields replaced.
@@ -224,6 +241,8 @@ final class AppSettings {
     NewProjectTemplate? projectTemplate,
     DevToolsTarget? devToolsTarget,
     bool? formatOnSave,
+    bool? crashReports,
+    DateTime? crashReportsSince,
   }) => AppSettings(
     themeMode: themeMode ?? this.themeMode,
     locale: resetLocale ? null : locale ?? this.locale,
@@ -243,6 +262,8 @@ final class AppSettings {
     projectTemplate: projectTemplate ?? this.projectTemplate,
     devToolsTarget: devToolsTarget ?? this.devToolsTarget,
     formatOnSave: formatOnSave ?? this.formatOnSave,
+    crashReports: crashReports ?? this.crashReports,
+    crashReportsSince: crashReportsSince ?? this.crashReportsSince,
   );
 
   @override
@@ -262,6 +283,8 @@ final class AppSettings {
           other.projectTemplate == projectTemplate &&
           other.devToolsTarget == devToolsTarget &&
           other.formatOnSave == formatOnSave &&
+          other.crashReports == crashReports &&
+          other.crashReportsSince == crashReportsSince &&
           const DeepCollectionEquality().equals(other.sessionDefaults, sessionDefaults);
 
   @override
@@ -280,6 +303,8 @@ final class AppSettings {
     projectTemplate,
     devToolsTarget,
     formatOnSave,
+    crashReports,
+    crashReportsSince,
   );
 
   @override
