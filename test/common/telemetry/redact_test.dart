@@ -116,6 +116,13 @@ void main() {
         'ghp',
         'xox',
         'ghp_short',
+        'gho_abc',
+        'sk-ant-short',
+        'sk-proj-short',
+        'sk-short',
+        'AIzaShort',
+        'github_pat_short',
+        'xoxb-123',
         'disk-usage-report-for-the-whole-machine',
       ]) {
         expect(r(text), text, reason: text);

@@ -16,6 +16,20 @@ LogMessage _m(int i, {StackTrace? stack, String? text}) =>
 
 TelemetryDatabase _db() => TelemetryDatabase.forTesting(NativeDatabase.memory());
 
+/// A `stderr` that remembers what is written to it.
+class _CapturedStderr implements Stdout {
+  final List<String> lines = [];
+
+  @override
+  void writeln([Object? object = '']) => lines.add('$object');
+
+  @override
+  Future<dynamic> close() async {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
 void main() {
   driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
 
@@ -96,28 +110,34 @@ void main() {
 
   test('attachLogStorage: a database failure is not thrown, the buffer keeps working', () {
     final errors = <Object>[];
-    runZonedGuarded(() {
-      fakeAsync((async) {
-        final db = TelemetryDatabase.forTesting(
-          LazyDatabase(() async => throw StateError('disk full')),
-        );
-        final buffer = LogBuffer();
-        final controller = StreamController<LogMessage>.broadcast(sync: true);
-        attachLogStorage(logs: controller.stream, db: db, buffer: buffer);
+    final captured = _CapturedStderr();
+    addTearDown(captured.close);
+    IOOverrides.runZoned(() {
+      runZonedGuarded(() {
+        fakeAsync((async) {
+          final db = TelemetryDatabase.forTesting(
+            LazyDatabase(() async => throw StateError('disk full')),
+          );
+          final buffer = LogBuffer();
+          final controller = StreamController<LogMessage>.broadcast(sync: true);
+          attachLogStorage(logs: controller.stream, db: db, buffer: buffer);
 
-        controller.add(_m(1));
-        async
-          ..elapse(const Duration(seconds: 6))
-          ..flushMicrotasks();
-        controller.add(_m(2));
-        expect(buffer.logs, hasLength(2));
-        async
-          ..elapse(const Duration(seconds: 6))
-          ..flushMicrotasks();
-        controller.close();
-      });
-    }, (e, _) => errors.add(e));
+          controller.add(_m(1));
+          async
+            ..elapse(const Duration(seconds: 6))
+            ..flushMicrotasks();
+          controller.add(_m(2));
+          expect(buffer.logs, hasLength(2));
+          async
+            ..elapse(const Duration(seconds: 6))
+            ..flushMicrotasks();
+          controller.close();
+        });
+      }, (e, _) => errors.add(e));
+    }, stderr: () => captured);
     expect(errors, isEmpty);
+    expect(captured.lines, isNotEmpty);
+    expect(captured.lines, everyElement(contains('could not write')));
   });
 
   test('flushAndClose writes the batch at once and cancels the timer', () async {
@@ -136,21 +156,26 @@ void main() {
 
   test('a log stream error does not reach the zone and does not break the subscription', () async {
     final errors = <Object>[];
-    await runZonedGuarded(() async {
-      final db = _db();
-      addTearDown(db.close);
-      final controller = StreamController<LogMessage>.broadcast(sync: true);
-      final buffer = LogBuffer();
-      final storage = attachLogStorage(logs: controller.stream, db: db, buffer: buffer);
-      controller
-        ..addError(StateError('stream failure'))
-        ..add(_m(1));
-      await Future<void>.delayed(Duration.zero);
-      expect(buffer.logs, hasLength(1));
-      await storage.flushAndClose();
-      await controller.close();
-    }, (e, _) => errors.add(e));
+    final captured = _CapturedStderr();
+    addTearDown(captured.close);
+    await IOOverrides.runZoned(() async {
+      await runZonedGuarded(() async {
+        final db = _db();
+        addTearDown(db.close);
+        final controller = StreamController<LogMessage>.broadcast(sync: true);
+        final buffer = LogBuffer();
+        final storage = attachLogStorage(logs: controller.stream, db: db, buffer: buffer);
+        controller
+          ..addError(StateError('stream failure'))
+          ..add(_m(1));
+        await Future<void>.delayed(Duration.zero);
+        expect(buffer.logs, hasLength(1));
+        await storage.flushAndClose();
+        await controller.close();
+      }, (e, _) => errors.add(e));
+    }, stderr: () => captured);
     expect(errors, isEmpty);
+    expect(captured.lines, [contains('stream error')]);
   });
 
   test('a huge message and stack are limited in the database', () async {
