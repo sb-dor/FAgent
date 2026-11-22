@@ -314,27 +314,27 @@ A wrong password, a taken email or a weak password is the server's answer, not a
 app. The data layer reads the server's error code from the `APIClientException`'s `data` and maps
 it to the app's exception (`RejectedException(code: 'invalid_credentials')`, see "Errors" in
 `docs/rules/repositories.md`), the screen shows it through `errorText`
-(`docs/rules/localization.md`), and it is not reported. In the controller, catch it before the
-general case and do not rethrow it, since the rethrown error goes to the observer and the crash
-reporter (see "Where the rethrown error goes" in `docs/rules/controllers.md`):
+(`docs/rules/localization.md`), and it is not reported. In the controller there is nothing to catch: the observer sees every error, and
+`isExpectedFailure` keeps the expected ones (a `RejectedException` with a known code) out of the
+crash reporter, while `error:` sets the `error` state for all of them (see "Where the error goes" in
+`docs/rules/controllers.md`):
 
 ```dart
-void signIn(String email, String password) => handle(() async {
-  setState(AuthState.processing(user: state.user));
-  try {
+void signIn(String email, String password) => handle(
+  () async {
+    setState(AuthState.processing(user: state.user));
     await _repository.signIn(email, password); // the user arrives on the stream
-  } on RejectedException catch (error) when _answers.contains(error.code) {
-    setState(AuthState.error(user: state.user, error: error)); // an answer: not reported
-  } on Object catch (error) {
-    setState(AuthState.error(user: state.user, error: error));
-    rethrow; // unknown codes, the network, bugs: reported
-  } finally {
-    setState(AuthState.idle(user: state.user));
-  }
-});
+  },
+  error: (error, stackTrace) async => setState(AuthState.error(user: state.user, error: error)),
+  done: () async => setState(AuthState.idle(user: state.user)),
+);
 
-/// The server's codes that are answers to the user, not failures.
-static const Set<String> _answers = {'invalid_credentials', 'email_taken', 'weak_password'};
+/// The app's one decision, used by the reporter behind the observer: the server's codes that are
+/// answers to the user, not failures.
+bool isExpectedFailure(Object error) =>
+    error is RejectedException && _answers.contains(error.code);
+
+const Set<String> _answers = {'invalid_credentials', 'email_taken', 'weak_password'};
 ```
 
 The codes are listed, not "every rejection": an unknown code is reported with the code and the

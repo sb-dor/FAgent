@@ -708,8 +708,8 @@ test('a failed signIn keeps the old user and goes back to idle', () async {
   call, with the same error object. To check the crash reporter, set
   `Controller.observer = const ControllerObserver()` with a configured `ErrorUtil`: the expected
   one reaches the log and not the queue, the unexpected one the queue.
-- A sample controller in the test (`controller_errors_test.dart`) shows that an error thrown
-  inside `error:` or `done:` reaches the observer and does not crash the app.
+- A test with a sample controller checks that an error thrown inside `error:` or `done:` reaches
+  the observer and does not crash the app.
 - With `bloc`, `bloc.stream` is a broadcast stream that does not buffer: states emitted before the
   test listens are lost. Start the expectation first, act, then await it:
   `final expectation = expectLater(cubit.stream, emitsInOrder([...])); cubit.save(...); await

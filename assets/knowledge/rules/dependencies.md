@@ -298,7 +298,7 @@ catch to the log and the crash reporter:
   job; `WidgetsFlutterBinding.ensureInitialized()` must then run inside that zone.)
 - Controllers report their own errors through their observer (`Controller.observer`, `BlocObserver`
   in `bloc`): an awaited error inside `handle` reaches neither handler above. See "Where the
-  rethrown error goes" in `docs/rules/controllers.md`.
+  error goes" in `docs/rules/controllers.md`.
 
 ### Callbacks instead of references
 
