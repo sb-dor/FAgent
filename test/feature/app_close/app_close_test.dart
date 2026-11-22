@@ -26,6 +26,9 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
   final List<String> calls = <String>[];
   Completer<void>? shutdownGate;
 
+  /// What shutting down throws, if anything.
+  Error? shutdownError;
+
   void close() => requests.add(null);
 
   @override
@@ -52,6 +55,7 @@ final class _FakeAppCloseRepository implements IAppCloseRepository {
   Future<void> shutdown() async {
     calls.add('shutdown');
     await shutdownGate?.future;
+    if (shutdownError case final error?) throw error;
   }
 
   @override
@@ -186,6 +190,18 @@ void main() {
     await tester.pump();
 
     expect(find.byType(AlertDialog), findsNothing);
+    expect(repository.calls, <String>['shutdown', 'quit']);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a bug while shutting down still quits', (tester) async {
+    final repository = await pumpGuard(tester);
+    repository.shutdownError = StateError('database closed twice');
+
+    repository.close();
+    await tester.pump();
+    await tester.pump();
+
     expect(repository.calls, <String>['shutdown', 'quit']);
     await disposeTestApp(tester, dependencies);
   });

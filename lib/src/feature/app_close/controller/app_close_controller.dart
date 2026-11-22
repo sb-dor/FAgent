@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
-import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -41,6 +40,9 @@ final class AppCloseController extends StateController<AppCloseState>
   static const Duration shutdownTimeout = Duration(seconds: 30);
   StreamSubscription<void>? _requests;
 
+  /// Whether the barrier is up and the window has not been closed yet.
+  bool _quitPending = false;
+
   /// Starts intercepting window close requests.
   void watch() => handle(() async {
     await _requests?.cancel();
@@ -57,7 +59,7 @@ final class AppCloseController extends StateController<AppCloseState>
       return;
     }
     await _checkAgents();
-  });
+  }, done: _quitIfShuttingDown);
 
   /// Saves the unsaved files, then goes on quitting; a save that leaves some unsaved asks again.
   void saveAndQuit() {
@@ -73,6 +75,7 @@ final class AppCloseController extends StateController<AppCloseState>
         }
         await _checkAgents();
       },
+      done: _quitIfShuttingDown,
       // Not a refusal the files know about; the dialog must come back, or no quit would work.
       error: (error, stackTrace) async {
         if (saving) {
@@ -85,7 +88,7 @@ final class AppCloseController extends StateController<AppCloseState>
   /// Goes on quitting without saving the unsaved files.
   void quitWithoutSaving() => handle(() async {
     if (state is AppClose$UnsavedState) await _checkAgents();
-  });
+  }, done: _quitIfShuttingDown);
 
   Future<void> _checkAgents() async {
     final busyChats = await _repository.busyChats();
@@ -99,7 +102,7 @@ final class AppCloseController extends StateController<AppCloseState>
   /// Quits although agents work.
   void confirm() => handle(() async {
     if (state is AppClose$ConfirmingState) await _quit();
-  });
+  }, done: _quitIfShuttingDown);
 
   /// Keeps the app open.
   void cancel() => handle(() async {
@@ -108,14 +111,19 @@ final class AppCloseController extends StateController<AppCloseState>
     await _repository.cancelQuit();
   });
 
+  /// Stops the agents behind the barrier; the window closes in [_quitIfShuttingDown].
   Future<void> _quit() async {
+    _quitPending = true;
     setState(const AppCloseState.inProgress());
-    try {
-      await _repository.shutdown().timeout(shutdownTimeout);
-    } on Exception catch (error, stackTrace) {
-      // Quit anyway rather than hang behind the barrier.
-      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'shutdown before quit failed'));
-    }
+    await _repository.shutdown().timeout(shutdownTimeout);
+  }
+
+  /// Closes the window once the barrier is up, whether stopping the agents succeeded, timed out or
+  /// hit a bug (that one reached the observer first): quitting must not hang behind the barrier.
+  Future<void> _quitIfShuttingDown() async {
+    // Once: a close request queued behind the quitting one ends here too.
+    if (!_quitPending) return;
+    _quitPending = false;
     await _repository.quit();
   }
 

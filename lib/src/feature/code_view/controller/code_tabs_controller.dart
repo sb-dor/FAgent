@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
@@ -178,7 +177,8 @@ final class CodeTabsController extends ChangeNotifier {
     _changed();
   }
 
-  /// Runs before every [save] (formatting); a failure there does not stop the save.
+  /// Runs before every [save] (formatting); it must not throw (the workspace's one reports a failed
+  /// format and lets the file be saved as it is).
   Future<void> Function(CodeDocument document)? beforeSave;
 
   /// Saves [document] after [beforeSave].
@@ -186,12 +186,7 @@ final class CodeTabsController extends ChangeNotifier {
   /// Throws [FileChangedOnDiskException] as [CodeDocument.save] does.
   Future<void> save(CodeDocument document, {bool overwrite = false}) async {
     if (document.kind != CodeDocumentKind.text || document.readOnly) return;
-    try {
-      await beforeSave?.call(document);
-    } on Exception catch (error, stackTrace) {
-      // Saving matters more than formatting: the file is saved as it is, unformatted.
-      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'formatting before save failed'));
-    }
+    await beforeSave?.call(document);
     await document.save(overwrite: overwrite);
   }
 

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/unsaved_files/unsaved_files.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_navigation_history.dart';
@@ -72,7 +73,13 @@ final class CodeWorkspace {
   Future<void> _formatBeforeSave(CodeDocument document) async {
     final analysis = this.analysis;
     if (analysis == null || !_formatOnSave()) return;
-    await analysis.format(document);
+    try {
+      await analysis.format(document);
+    } on Object catch (error, stackTrace) {
+      // The file is worth more than its formatting: it is saved as it is, and the failure (a bug
+      // in the formatter or its edits) is reported.
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'format before save failed'));
+    }
   }
 
   /// Short names of files outside the project, from its `.dart_tool/package_config.json`; read

@@ -130,6 +130,17 @@ void main() {
     expect(files.files[main], startsWith(unformatted));
   });
 
+  testCode('a bug in the formatter still saves the file as it is', (tester) async {
+    analysis.onFormat = (path, text) => throw StateError('bad edit range');
+    final document = await pump(tester);
+    dirty(document);
+
+    await save(tester);
+
+    expect(files.files[main], startsWith(unformatted));
+    expect(document.dirty, isFalse);
+  });
+
   testCode('a null format answer (syntax error) saves as is', (tester) async {
     analysis.onFormat = (path, text) => null;
     final document = await pump(tester);
@@ -184,5 +195,17 @@ void main() {
     await settle(tester);
 
     expect(files.files[main], startsWith(formatted));
+  });
+
+  testCode('a bug in the formatter does not stop save all', (tester) async {
+    analysis.onFormat = (path, text) => throw StateError('bad edit range');
+    final document = await pump(tester);
+    dirty(document);
+
+    final saved = await tester.runAsync(workspace.tabs.saveAll);
+    await settle(tester);
+
+    expect(saved, isTrue);
+    expect(document.dirty, isFalse);
   });
 }
