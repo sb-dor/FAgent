@@ -31,6 +31,7 @@ import 'package:flutter_code_agent/src/feature/code_view/data/code_files_reposit
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
+import 'package:flutter_code_agent/src/feature/initialization/data/error_log_step.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/platform_initialization.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/initialization_exception.dart';
@@ -130,6 +131,8 @@ Future<Dependencies> $initializeDependencies({
 }
 
 final Map<String, InitializationStep> _initializationSteps = <String, InitializationStep>{
+  // First, so every later step and its failure is in the log.
+  'Error log': startErrorLog,
   'Platform pre-initialization': (_) => $platformInitialization(),
   'Observer state management': (_) => Controller.observer = const ControllerObserver(),
   'Connect to database': (dependencies) =>
@@ -342,6 +345,7 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
 
 /// What the steps above open, keyed by the exact step name. Steps that open nothing have none.
 final Map<String, InitializationCloser> _initializationClosers = <String, InitializationCloser>{
+  'Error log': (dependencies) => dependencies.closeErrorLog(),
   'Connect to database': (dependencies) => dependencies.database.close(),
   'Create app run repositories': (dependencies) async {
     await dependencies.widgetPickerRepository.dispose();

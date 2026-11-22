@@ -34,6 +34,7 @@ dart run build_runner build                                 # freezed, drift
 flutter analyze
 flutter test
 flutter run -d macos
+flutter run -d macos --dart-define-from-file=config/sentry.local.json   # with crash reports
 ```
 
 Generated files (`*.g.dart`, `*.freezed.dart`, `lib/src/common/localization/generated/`) are

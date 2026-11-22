@@ -68,6 +68,7 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     this._stopAgentList,
     this._stopCodeViews,
     this._stopMcpServers,
+    this._closeErrorLog,
   });
 
   final AgentHub _hub;
@@ -93,6 +94,9 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
 
   /// Closes the change stream of the MCP servers repository; called before the probes stop.
   final Future<void> Function()? _stopMcpServers;
+
+  /// Closes the error log (`logs.sqlite`, the sender, the Sentry gateway); the last thing to close.
+  final Future<void> Function()? _closeErrorLog;
 
   /// macOS: `AppDelegate` waits for the answer to a quit request.
   static const MethodChannel _channel = MethodChannel('flutter_code_agent/app_close');
@@ -165,6 +169,8 @@ final class AppCloseRepositoryImpl implements IAppCloseRepository {
     // The agent checks of Settings run `npx` in their own process groups too.
     await _stopQuietly('agent probes', _agentProbe.dispose);
     await _database.close();
+    // Last, so what the stops above report still reaches the log.
+    if (_closeErrorLog case final close?) await _stopQuietly('error log', close);
   }
 
   Future<void> _stopQuietly(String what, Future<void> Function() dispose) async {

@@ -51,6 +51,7 @@ class _AppCloseGuardState extends State<AppCloseGuard> {
             stopCodeViews: dependencies.codeViews.close,
             stopAgentList: dependencies.stopFollowingCustomAgents,
             stopMcpServers: dependencies.mcpServersRepository.dispose,
+            closeErrorLog: dependencies.closeErrorLog,
           ),
     )..watch();
   }

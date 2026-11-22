@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/initialize_dependencies.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:l/l.dart';
 
 /// Ephemerally initializes the app and prepares it for use.
 Future<Dependencies>? _$initializeApp;
@@ -29,7 +30,7 @@ Future<Dependencies> $initializeApp({
     return dependencies;
   } on Object catch (error, stackTrace) {
     onError?.call(error, stackTrace);
-    ErrorUtil.logError(error, stackTrace, hint: 'Failed to initialize app').ignore();
+    ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true).ignore();
     rethrow;
   } finally {
     binding.addPostFrameCallback((_) {
@@ -47,6 +48,8 @@ Future<void> $disposeApp(Dependencies dependencies) async {
   await dependencies.devicesRepository.dispose();
   await dependencies.agentHub.dispose();
   await dependencies.database.close();
+  // Last: the closing above may still report.
+  await dependencies.closeErrorLog();
 }
 
 bool _handlersInstalled = false;
@@ -61,21 +64,22 @@ Future<void> _catchExceptions() async {
   handlerInstalls++;
   try {
     PlatformDispatcher.instance.onError = (error, stackTrace) {
-      ErrorUtil.logError(
-        error,
-        stackTrace,
-        hint: 'ROOT ERROR\r\n${Error.safeToString(error)}',
-      ).ignore();
+      ErrorUtil.logError(error, stackTrace, hint: 'ROOT ERROR').ignore();
       return true;
     };
 
     final sourceFlutterError = FlutterError.onError;
     FlutterError.onError = (details) {
-      ErrorUtil.logError(
-        details.exception,
-        details.stack ?? StackTrace.current,
-        hint: 'FLUTTER ERROR\r\n$details',
-      ).ignore();
+      if (details.silent) {
+        // The framework marks these as not worth a report (a failed image, a layout notice).
+        l.w('FLUTTER ERROR (silent) | ${details.exceptionAsString()}', details.stack);
+      } else {
+        ErrorUtil.logError(
+          details.exception,
+          details.stack ?? StackTrace.current,
+          hint: 'FLUTTER ERROR',
+        ).ignore();
+      }
       sourceFlutterError?.call(details);
     };
   } on Object catch (error, stackTrace) {

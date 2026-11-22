@@ -67,3 +67,6 @@ AuthKey_*.p8
 .env.*
 !.env.example
 env.g.dart
+
+# Sentry DSN for crash reports (flutter run --dart-define-from-file=config/sentry.local.json)
+config/sentry.local.json

@@ -1,17 +1,16 @@
+import 'dart:async';
+
 import 'package:control/control.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
-import 'package:flutter_code_agent/src/common/utils/expected_exception.dart';
 import 'package:l/l.dart';
 
 /// Observer for [Controller], react to changes in any controller.
+///
+/// Every error a controller did not catch goes to [ErrorUtil], expected or not: it decides that an
+/// expected failure stays in the log and only a bug is queued for crash reports.
 final class ControllerObserver implements IControllerObserver {
-  /// Creates the observer; [report] is where a bug goes, [ErrorUtil.logError] unless a test
-  /// replaces it.
-  const ControllerObserver({@visibleForTesting this.report});
-
-  /// Receives every error that is not an [ExpectedException].
-  final void Function(Object error, StackTrace stackTrace)? report;
+  /// Creates the observer.
+  const ControllerObserver();
 
   @override
   void onCreate(Controller controller) {
@@ -38,37 +37,12 @@ final class ControllerObserver implements IControllerObserver {
   }
 
   @override
-  void onStateChanged<S extends Object>(StateController<S> controller, S prevState, S nextState) {
-    final context = Controller.context;
-    if (context == null) {
-      // State change occurred outside of the handler
-      l.d('StateController | ${controller.name} | $prevState -> $nextState');
-    } else {
-      // State change occurred inside the handler
-      l.d(
-        'StateController | ${controller.name}.${context.name} | $prevState -> $nextState',
-        context.meta,
-      );
-    }
-  }
+  void onStateChanged<S extends Object>(StateController<S> controller, S prevState, S nextState) =>
+      // Types only: a state may hold paths, messages and tokens.
+      l.v('${controller.name}: ${prevState.runtimeType} -> ${nextState.runtimeType}');
 
-  /// error should not be propagated from this [observer] to the outside
-  /// So the [ErrorUtil] logs the error directly from this [observer]
+  /// The error must not propagate out of the observer, so [ErrorUtil] logs it right here.
   @override
-  void onError(Controller controller, Object error, StackTrace stackTrace) {
-    final context = Controller.context;
-    if (error is ExpectedException) {
-      // The user or the outside world caused it and the UI shows it: not a crash.
-      l.i('Controller | ${controller.name}${context == null ? '' : '.${context.name}'} | $error');
-      return;
-    }
-    if (context == null) {
-      // Error occurred outside of the handler
-      l.w('Controller | ${controller.name} | $error', stackTrace);
-    } else {
-      // Error occurred inside the handler
-      l.w('Controller | ${controller.name}.${context.name} | $error', stackTrace, context.meta);
-    }
-    (report ?? ErrorUtil.logError)(error, stackTrace);
-  }
+  void onError(Controller controller, Object error, StackTrace stackTrace) =>
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: '${controller.name} failed'));
 }

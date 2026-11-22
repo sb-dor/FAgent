@@ -1,17 +1,22 @@
 import 'dart:async';
 
+import 'package:flutter_code_agent/src/common/telemetry/log_zone.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:l/l.dart';
 
-/// Catch all application errors and logs.
-// ignore: experimental_member_use
-void appZone(Future<void> Function() fn) => l.capture<void>(
-  () => runZonedGuarded<void>(() => fn(), ErrorUtil.logError),
-  const LogOptions(
-    messageFormatting: _messageFormatting,
-    handlePrint: true,
-    outputInRelease: false,
-  ),
+/// Runs [fn] in the log zone: `print` goes to the log and an unhandled error goes to [ErrorUtil]
+/// instead of vanishing. [logOptions] are replaced only by tests.
+void appZone(Future<void> Function() fn, {LogOptions? logOptions}) => logZone(
+  fn,
+  onError: (error, stackTrace) =>
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'ROOT ERROR')),
+  options:
+      logOptions ??
+      const LogOptions(
+        messageFormatting: _messageFormatting,
+        handlePrint: true,
+        outputInRelease: false,
+      ),
 );
 
 /// Formats the log message.

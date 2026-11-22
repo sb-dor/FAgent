@@ -5,6 +5,8 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/telemetry.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
@@ -45,6 +47,33 @@ class Dependencies {
   /// Injest dependencies to the widgets tree.
   Widget inject({required Widget child, Key? key}) =>
       DependenciesScope(dependencies: this, key: key, child: child);
+
+  /// The error log, the queue and the sender; `null` when `logs.sqlite` could not be opened (the
+  /// app then works without the log on disk).
+  TelemetryRuntime? telemetryRuntime;
+
+  /// The link to Sentry; sends nothing without a DSN or while the user's switch is off.
+  late final SentryGateway sentryGateway;
+
+  /// What closes the error log, in order (the sender and `logs.sqlite`, then the Sentry gateway);
+  /// filled by the "Error log" step.
+  final List<Future<void> Function()> errorLogClosers = <Future<void> Function()>[];
+
+  Future<void>? _errorLogClosed;
+
+  /// Stops the sender, waits for the started records, disconnects and flushes the log, closes
+  /// `logs.sqlite` and the Sentry gateway. Called from the disposal and from the quit path; the
+  /// second call waits for the first and does nothing more.
+  Future<void> closeErrorLog() => _errorLogClosed ??= () async {
+    for (final close in errorLogClosers) {
+      try {
+        await close();
+      } on Object catch (error) {
+        // ErrorUtil is being disconnected: the console is all that is left.
+        ErrorUtil.hub.console('Closing the error log failed: $error');
+      }
+    }
+  }();
 
   /// Database
   late final AppDatabase database;

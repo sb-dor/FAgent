@@ -310,6 +310,28 @@ void main() {
       expect(events.indexOf('mcp-servers:stop'), lessThan(events.indexOf('probe:dispose')));
     });
 
+    test('closes the error log last, after the database', () async {
+      repository = AppCloseRepositoryImpl(
+        hub: hub,
+        database: database,
+        settings: AppSettingsRepositoryImpl(database: database),
+        appRun: run,
+        devices: devices,
+        widgetPicker: picker,
+        appMcpServer: _RecordingAppMcpServer(events, database),
+        mcpProbe: _RecordingProbe(events, database),
+        agentProbe: _RecordingAgentProbe(events, database),
+        projectCreation: _RecordingCreation(creationEvents),
+        closeErrorLog: () async => events.add('error-log:close'),
+        queuedChats: queued,
+      );
+
+      await repository.shutdown();
+
+      expect(events.last, 'error-log:close');
+      expect(events.indexOf('agent-probe:dispose'), lessThan(events.indexOf('error-log:close')));
+    });
+
     test('stops following the agent list before the agents stop', () async {
       hub.notices.listen(null, onDone: () => events.add('hub:disposed'));
       repository = AppCloseRepositoryImpl(

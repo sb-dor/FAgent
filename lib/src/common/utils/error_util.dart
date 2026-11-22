@@ -2,43 +2,56 @@
 
 import 'dart:async';
 
-import 'package:l/l.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/telemetry/telemetry.dart';
 
-/// Error utils.
+/// The one place app code reports an error.
+///
+/// A thin facade over [ErrorHub]: [logError] writes the error to the log and, unless it is
+/// expected, queues it for crash reports. A failure of `ErrorUtil` itself is never thrown and does
+/// not call `ErrorUtil` again, it goes to the console. Before [configure] errors go to the console
+/// and pile up in memory.
 abstract final class ErrorUtil {
-  /// Log the error to the console.
-  ///
-  /// Crash reporting (Sentry or similar) plugs in here once the app is released.
+  /// The app-wide hub; `startTelemetry` connects the log to it.
+  static final ErrorHub hub = ErrorHub();
+
+  /// Where failures of `ErrorUtil` itself and errors before [configure] are written.
+  @visibleForTesting
+  static void Function(String text) get console => hub.console;
+
+  /// Replaces [console] (tests).
+  @visibleForTesting
+  static set console(void Function(String text) value) => hub.console = value;
+
+  /// Connects the log and the queue.
+  static void configure(TelemetryRuntime runtime) => hub.configure(runtime);
+
+  /// Disconnects the log of [runtime] before its database closes: later errors pile up in memory
+  /// until the next [configure].
+  static void disconnect(TelemetryRuntime runtime) => hub.disconnect(runtime);
+
+  /// Waits until every started call is written: before the log database closes.
+  static Future<void> settled() => hub.settled();
+
+  /// Disconnects the log and the queue (tests).
+  @visibleForTesting
+  static void reset() => hub.reset();
+
+  /// Reports [error]. [hint] says briefly where it happened.
   static Future<void> logError(
-    Object exception,
+    Object error,
     StackTrace stackTrace, {
     String? hint,
     bool fatal = false,
-  }) async {
-    try {
-      if (exception is String) {
-        return await logMessage(exception, stackTrace: stackTrace, hint: hint, warning: true);
-      }
-      l.e(hint == null ? exception : '$hint\n$exception', stackTrace);
-    } on Object catch (error, stackTrace) {
-      l.e('Error while logging error "$error" inside ErrorUtil.logError', stackTrace);
-    }
-  }
+  }) => hub.logError(error, stackTrace, hint: hint, fatal: fatal);
 
-  /// Logs a message to the console.
+  /// Reports an event without an exception: a failure that was not thrown.
   static Future<void> logMessage(
     String message, {
     StackTrace? stackTrace,
     String? hint,
     bool warning = false,
-  }) async {
-    try {
-      final text = hint == null ? message : '$hint\n$message';
-      warning ? l.w(text, stackTrace) : l.i(text);
-    } on Object catch (error, stackTrace) {
-      l.e('Error while logging error "$error" inside ErrorUtil.logMessage', stackTrace);
-    }
-  }
+  }) => hub.logMessage(message, stackTrace: stackTrace, hint: hint, warning: warning);
 
   /// Rethrows the error with the stack trace.
   static Never throwWithStackTrace(Object error, StackTrace stackTrace) =>
