@@ -25,9 +25,11 @@ import 'package:l/l.dart';
 ///
 /// The package follows `<project>_<folder>` until it is typed. The folder and the package are
 /// checked as package names, and then against the project (the folder must be free and the package
-/// name not taken; the latest answer wins). A project without `packages/ui`, or with one still on
-/// the SDK's Material, offers only the empty template, as the skeleton needs that package on
-/// `material_ui`; so does a Flutter older than [kArchitectureMinFlutter] (or an unknown one).
+/// name not taken; the latest answer wins). A project without `packages/ui`, with one still on
+/// the SDK's Material, or without the shared packages (`telemetry`, `database`, `api_client`)
+/// offers only the empty template, as the skeleton needs `packages/ui` on `material_ui` and
+/// depends on the shared packages; so does a Flutter older than [kArchitectureMinFlutter] (or an
+/// unknown one).
 /// "Create" is on only when everything is fine, for a Flutter app once the Flutter version is
 /// known.
 /// {@endtemplate}
@@ -65,6 +67,9 @@ class _AddMemberFormState extends State<AddMemberForm> {
 
   /// Whether the project's `packages/ui` is still on the SDK's Material; `null` until known.
   bool? _uiOnSdkMaterial;
+
+  /// Whether the project has the shared packages; `null` until known.
+  bool? _hasShared;
 
   /// Whether the project is a git repository; `null` until known.
   bool? _gitRepo;
@@ -133,8 +138,9 @@ class _AddMemberFormState extends State<AddMemberForm> {
   /// Until then the card shows the chosen template as it is.
   bool get _architectureOff => _sdkLoaded && !supportsArchitecture(_sdkInfo?.version);
 
-  /// Whether the project can take the skeleton: it has a `packages/ui` on `material_ui`.
-  bool get _skeletonOffered => _hasUi == true && _uiOnSdkMaterial == false;
+  /// Whether the project can take the skeleton: it has a `packages/ui` on `material_ui` and the
+  /// shared packages.
+  bool get _skeletonOffered => _hasUi == true && _uiOnSdkMaterial == false && _hasShared == true;
 
   /// The template the app is made from: the skeleton falls back to the empty one when the project
   /// cannot take it or the SDK cannot make it.
@@ -147,13 +153,15 @@ class _AddMemberFormState extends State<AddMemberForm> {
     try {
       final hasUi = await _scope.projectCreation.hasUiPackage(_path);
       final uiOnSdkMaterial = hasUi && await _scope.projectCreation.uiUsesSdkMaterial(_path);
+      final hasShared = await _scope.projectCreation.hasSharedPackages(_path);
       final gitRepo = await _scope.projectCreation.isGitRepo(_path);
       if (!mounted) return;
       setState(() {
         _hasUi = hasUi;
         _uiOnSdkMaterial = uiOnSdkMaterial;
+        _hasShared = hasShared;
         _gitRepo = gitRepo;
-        // The skeleton needs packages/ui on material_ui.
+        // The skeleton needs packages/ui on material_ui and the shared packages.
         if (!_skeletonOffered) _template = NewProjectTemplate.plain;
       });
     } on Object catch (error, stackTrace) {
@@ -454,6 +462,9 @@ class _AddMemberFormState extends State<AddMemberForm> {
         if (_hasUi == false) CreationMessage.hint(localization.addMemberNoUiPackage),
         if (_hasUi == true && _uiOnSdkMaterial == true)
           CreationMessage.hint(localization.addMemberUiOnSdkMaterial),
+        // One reason at a time: a project without a usable packages/ui says that first.
+        if (_hasUi == true && _uiOnSdkMaterial == false && _hasShared == false)
+          CreationMessage.hint(localization.addMemberNoSharedPackages),
         if (skeleton && _architectureOff)
           CreationMessage.hint(
             localization.newProjectTemplateArchitectureNeedsFlutter(kArchitectureMinFlutter),

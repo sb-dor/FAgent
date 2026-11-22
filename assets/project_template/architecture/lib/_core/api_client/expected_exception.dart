@@ -1,6 +1,6 @@
 /// A failure the feature expects as an answer, not a bug: the user can read it and act. The data
 /// layer throws a subtype at the boundary; a controller sets its `error` state, and `ErrorUtil`
-/// writes it to the log but keeps it out of the crash reporter (`isExpectedFailure` in
+/// writes it to the log but keeps it out of the crash reporter (`isExpectedFailure` in the app's
 /// `lib/_core/telemetry/expected_failure.dart`).
 abstract base class ExpectedException implements Exception {
   /// Creates the exception.

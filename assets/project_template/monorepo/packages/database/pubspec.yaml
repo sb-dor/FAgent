@@ -1,0 +1,14 @@
+name: database
+description: The drift database of the apps of this repository.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.10.0
+
+# https://dart.dev/tools/pub/workspaces
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter

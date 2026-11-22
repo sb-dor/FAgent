@@ -64,6 +64,11 @@ abstract interface class IProjectCreationRepository {
   /// depends on.
   Future<bool> hasUiPackage(String projectPath);
 
+  /// Whether the monorepo at [projectPath] has the shared packages the architecture skeleton of an
+  /// app depends on: `packages/telemetry`, `packages/database` and `packages/api_client`. A
+  /// monorepo made before them has none.
+  Future<bool> hasSharedPackages(String projectPath);
+
   /// Whether a Dart file under `packages/ui/lib` of the monorepo at [projectPath] imports or
   /// exports `package:flutter/material.dart` or `package:flutter/cupertino.dart`: a `packages/ui`
   /// from before `material_ui`, whose widgets would not see the theme of a skeleton on

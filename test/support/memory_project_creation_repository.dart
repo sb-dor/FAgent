@@ -58,6 +58,9 @@ mixin CreateOnlyProjectCreation implements IProjectCreationRepository {
   Future<bool> hasUiPackage(String projectPath) async => true;
 
   @override
+  Future<bool> hasSharedPackages(String projectPath) async => true;
+
+  @override
   Future<bool> uiUsesSdkMaterial(String projectPath) async => false;
 
   @override
@@ -111,6 +114,9 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
   /// What [uiUsesSdkMaterial] returns.
   bool uiOnSdkMaterial = false;
 
+  /// What [hasSharedPackages] returns.
+  bool sharedPackages = true;
+
   /// What [isGitRepo] returns.
   bool gitRepo = true;
 
@@ -146,6 +152,9 @@ final class MemoryProjectCreationRepository implements IProjectCreationRepositor
 
   @override
   Future<bool> uiUsesSdkMaterial(String projectPath) async => uiOnSdkMaterial;
+
+  @override
+  Future<bool> hasSharedPackages(String projectPath) async => sharedPackages;
 
   @override
   Future<bool> isGitRepo(String projectPath) async => gitRepo;

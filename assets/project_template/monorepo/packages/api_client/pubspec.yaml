@@ -1,0 +1,14 @@
+name: api_client
+description: The HTTP client of the apps of this repository, its middlewares and the expected failures.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.10.0
+
+# https://dart.dev/tools/pub/workspaces
+resolution: workspace
+
+dependencies:
+  flutter:
+    sdk: flutter

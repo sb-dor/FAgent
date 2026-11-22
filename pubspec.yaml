@@ -131,6 +131,12 @@ flutter:
     - assets/project_template/architecture/packages/ui/shaders/
     - assets/project_template/monorepo/
     - assets/project_template/monorepo/scripts/
+    - assets/project_template/monorepo/packages/telemetry/
+    - assets/project_template/monorepo/packages/telemetry/lib/
+    - assets/project_template/monorepo/packages/database/
+    - assets/project_template/monorepo/packages/database/lib/
+    - assets/project_template/monorepo/packages/api_client/
+    - assets/project_template/monorepo/packages/api_client/lib/
     # The telemetry module and its tests: a new project gets them as lib/_core/telemetry/.
     - lib/src/common/telemetry/
     - test/common/telemetry/

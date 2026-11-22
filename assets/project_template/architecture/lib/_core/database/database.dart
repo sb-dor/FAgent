@@ -5,7 +5,7 @@ part 'database.g.dart';
 
 /// {@template database}
 /// The drift-managed database of the app: add its tables to `tables:`. The error log is not here,
-/// it has its own `logs.sqlite` (`lib/_core/telemetry/`).
+/// it has its own `logs.sqlite` (the telemetry module).
 /// {@endtemplate}
 @DriftDatabase(tables: [])
 class AppDatabase extends _$AppDatabase {

@@ -652,6 +652,7 @@
   "addMemberPackageTaken": "Такой пакет уже есть в проекте",
   "addMemberNoUiPackage": "Нет packages/ui: доступен только пустой шаблон",
   "addMemberUiOnSdkMaterial": "packages/ui использует package:flutter/material.dart: доступен только пустой шаблон",
+  "addMemberNoSharedPackages": "Проект создан до общих пакетов: добавьте приложение пустым.",
   "addMemberScriptsNote": "{script} перечисляет участников по именам: добавьте в него {folder}",
   "@addMemberScriptsNote": {"placeholders": {"script": {"type": "String"}, "folder": {"type": "String"}}},
   "projectRulesTitle": "Добавить правила в проект?",

@@ -143,19 +143,27 @@ void main() {
     expect(names, hasLength(names.toSet().length));
   });
 
-  test('repo, app and ui files make up the one-app list', () {
+  test('repo, app, ui and shared files make up the one-app list', () {
     final repo = projectTemplateRepoFiles.toSet();
     final app = projectTemplateAppFiles.toSet();
     final ui = projectTemplateUiFiles.toSet();
-    expect(<String>{...repo, ...app, ...ui}, projectTemplateFiles.toSet());
+    final shared = sharedPackageSources.keys.toSet();
+    expect(<String>{...repo, ...app, ...ui, ...shared}, projectTemplateFiles.toSet());
     expect(
-      repo.length + app.length + ui.length,
+      repo.length + app.length + ui.length + shared.length,
       projectTemplateFiles.length,
-      reason: 'the three lists overlap or repeat a file',
+      reason: 'the four lists overlap or repeat a file',
     );
-    expect(repo.intersection(app), isEmpty);
-    expect(repo.intersection(ui), isEmpty);
-    expect(app.intersection(ui), isEmpty);
+    for (final (a, b) in <(Set<String>, Set<String>)>[
+      (repo, app),
+      (repo, ui),
+      (repo, shared),
+      (app, ui),
+      (app, shared),
+      (ui, shared),
+    ]) {
+      expect(a.intersection(b), isEmpty);
+    }
   });
 
   test('every monorepo template file is an asset', () async {
@@ -308,7 +316,10 @@ void main() {
     });
 
     test('no old log or error stubs', () {
-      for (final list in <List<String>>[projectTemplateFiles, projectTemplateAppFiles]) {
+      for (final list in <List<String>>[
+        projectTemplateFiles,
+        <String>[...projectTemplateAppFiles, ...sharedPackageSources.keys],
+      ]) {
         expect(
           list,
           isNot(
@@ -714,4 +725,390 @@ void main() {
       );
     });
   });
+
+  group('monorepo shared packages', () {
+    final directive = RegExp(r"""^\s*(?:import|export)\s+'([^']+)'([^;]*);""", multiLine: true);
+
+    /// The URIs [text] imports or exports.
+    List<String> directivesOf(String text) => <String>[
+      for (final match in directive.allMatches(text)) match.group(1)!,
+    ];
+
+    /// The files of the three shared packages as a monorepo with [reporter] gets them, keyed by
+    /// their path in the monorepo.
+    Future<Map<String, String>> sharedFiles([
+      CrashReporter reporter = CrashReporter.sentry,
+    ]) async => <String, String>{
+      for (final path in sharedPackageTemplateFiles)
+        path: fillProjectTemplate(
+          await rootBundle.loadString('$monorepoTemplateRoot$path'),
+          package: 'shop',
+          date: DateTime(2026, 11, 6),
+        ),
+      for (final MapEntry(key: from, value: to) in sharedPackageSources.entries)
+        to: sharedPackageSource(await filled(from), package: 'my_app'),
+      for (final file in telemetryModuleFilesFor(reporter))
+        '$sharedTelemetryModuleTarget$file': copyTelemetryModule(
+          await rootBundle.loadString('$telemetryModuleRoot$file'),
+          importPrefix: sharedTelemetryImportPrefix,
+          crashReporter: reporter,
+        ),
+      for (final file in telemetryModuleTestFilesFor(reporter))
+        '$sharedTelemetryModuleTestTarget$file': copyTelemetryModule(
+          await rootBundle.loadString('$telemetryModuleTestRoot$file'),
+          importPrefix: sharedTelemetryImportPrefix,
+          crashReporter: reporter,
+        ),
+    };
+
+    /// The Dart files of a monorepo app `my_app` with [reporter], keyed by their path in the app.
+    Future<Map<String, String>> appFiles(CrashReporter reporter) async => <String, String>{
+      for (final path in projectTemplateAppFiles.where((path) => path.endsWith('.dart')))
+        path: monorepoAppFile(await filled(path), package: 'my_app'),
+      for (final MapEntry(key: path, value: text) in (await reporterFiles(reporter)).entries)
+        path: monorepoAppFile(text, package: 'my_app'),
+    };
+
+    /// The files of [package] that `lib/<package>.dart` reaches through `export`s, as paths in
+    /// the monorepo.
+    Set<String> exportedBy(Map<String, String> files, String package) {
+      final reached = <String>{};
+      void visit(String path) {
+        if (!reached.add(path)) return;
+        final text = files[path];
+        expect(text, isNotNull, reason: 'exported but not written: $path');
+        for (final match in RegExp(
+          "^export 'package:$package/([^']+)'",
+          multiLine: true,
+        ).allMatches(text!)) {
+          visit('packages/$package/lib/${match.group(1)}');
+        }
+      }
+
+      visit('packages/$package/lib/$package.dart');
+      return reached..remove('packages/$package/lib/$package.dart');
+    }
+
+    test('three packages next to packages/ui, no core', () {
+      expect(monorepoSharedPackages, <String>['telemetry', 'database', 'api_client']);
+      for (final name in monorepoSharedPackages) {
+        expect(
+          sharedPackageTemplateFiles,
+          containsAll(<String>['packages/$name/pubspec.yaml', 'packages/$name/lib/$name.dart']),
+        );
+      }
+      for (final path in <String>[...sharedPackageTemplateFiles, ...sharedPackageSources.values]) {
+        expect(
+          monorepoSharedPackages.any((name) => path.startsWith('packages/$name/')),
+          isTrue,
+          reason: path,
+        );
+      }
+    });
+
+    test('every file of the three packages is an asset', () async {
+      expect(sharedPackageTemplateFiles, hasLength(sharedPackageTemplateFiles.toSet().length));
+      for (final path in sharedPackageTemplateFiles) {
+        final text = await rootBundle.loadString('$monorepoTemplateRoot$path');
+        expect(text, isNotEmpty, reason: path);
+      }
+      // The code of database and api_client is the one app's lib/_core/: one source.
+      expect(
+        sharedPackageSources.keys.toSet(),
+        projectTemplateFiles
+            .where(
+              (path) =>
+                  path.startsWith('lib/_core/database/') ||
+                  path.startsWith('lib/_core/api_client/'),
+            )
+            .toSet(),
+      );
+      for (final MapEntry(key: from, value: to) in sharedPackageSources.entries) {
+        final folder = from.startsWith('lib/_core/database/') ? 'database' : 'api_client';
+        expect(
+          to,
+          'packages/$folder/lib/src/${from.substring('lib/_core/$folder/'.length)}',
+          reason: from,
+        );
+      }
+    });
+
+    test(
+      'the module lands in packages/telemetry/lib/src/ and telemetry.dart exports it all',
+      () async {
+        expect(sharedTelemetryModuleTarget, 'packages/telemetry/lib/src/');
+        expect(sharedTelemetryModuleTestTarget, 'packages/telemetry/test/');
+        expect(sharedTelemetryImportPrefix, 'package:telemetry/src/');
+        for (final reporter in CrashReporter.values) {
+          final files = await sharedFiles(reporter);
+          expect(exportedBy(files, 'telemetry'), <String>{
+            for (final file in telemetryModuleFilesFor(reporter))
+              '$sharedTelemetryModuleTarget$file',
+          }, reason: reporter.name);
+          for (final file in telemetryModuleTestFilesFor(reporter)) {
+            expect(
+              files['$sharedTelemetryModuleTestTarget$file'],
+              contains("'package:telemetry/src/"),
+              reason: file,
+            );
+          }
+        }
+      },
+    );
+
+    test('portable.dart exports the part of the module that compiles for the web', () async {
+      final files = await sharedFiles();
+      expect(directivesOf(files['packages/telemetry/lib/portable.dart']!).toSet(), <String>{
+        for (final file in portableTelemetryFiles) '$sharedTelemetryImportPrefix$file',
+      });
+      for (final file in portableTelemetryFiles) {
+        for (final uri in directivesOf(files['$sharedTelemetryModuleTarget$file']!)) {
+          expect(
+            uri == 'dart:async' ||
+                uri.startsWith('package:l/') ||
+                portableTelemetryFiles.any((other) => uri == '$sharedTelemetryImportPrefix$other'),
+            isTrue,
+            reason: '$file: $uri',
+          );
+        }
+      }
+    });
+
+    test('api_client.dart exports ExpectedException and RejectedException', () async {
+      final files = await sharedFiles();
+      final exported = exportedBy(files, 'api_client');
+      expect(exported, <String>{
+        for (final path in sharedPackageSources.values)
+          if (path.startsWith('packages/api_client/')) path,
+      });
+      final declarations = exported.map((path) => files[path]!).join('\n');
+      expect(declarations, contains('abstract base class ExpectedException '));
+      expect(declarations, contains('final class RejectedException extends ExpectedException '));
+      expect(exportedBy(files, 'database'), <String>{'packages/database/lib/src/database.dart'});
+    });
+
+    test('no package file imports package:{{package}} or an app', () async {
+      for (final reporter in CrashReporter.values) {
+        for (final MapEntry(key: path, value: text) in (await sharedFiles(reporter)).entries) {
+          expect(text, isNot(contains('{{')), reason: path);
+          expect(text, isNot(contains('flutter_code_agent')), reason: path);
+          for (final uri in directivesOf(text)) {
+            expect(uri, isNot(startsWith('package:my_app/')), reason: path);
+            expect(uri, isNot(startsWith('package:shop')), reason: path);
+            expect(uri, isNot('package:flutter/material.dart'), reason: path);
+          }
+        }
+      }
+    });
+
+    test('each package pubspec joins the workspace', () async {
+      final files = await sharedFiles();
+      for (final name in monorepoSharedPackages) {
+        final pubspec = files['packages/$name/pubspec.yaml']!;
+        expect(pubspec, startsWith('name: $name\n'), reason: name);
+        expect(pubspec, contains('\nresolution: workspace\n'), reason: name);
+        expect(pubspec, contains('\nenvironment:\n  sdk: '), reason: name);
+        expect(pubspec, contains("publish_to: 'none'"), reason: name);
+        // The Flutter tool stages plugins in build/, and scripts/test.bash writes its reports.
+        expect(files['packages/$name/.gitignore']!.split('\n'), contains('/build/'), reason: name);
+      }
+    });
+
+    test('each package imports only what its pubspec and pub add give it, and uses all', () async {
+      final packageImport = RegExp("(?:import|export) 'package:([a-z_0-9]+)/");
+      for (final reporter in CrashReporter.values) {
+        final files = await sharedFiles(reporter);
+        for (final name in monorepoSharedPackages) {
+          final pubspec = files['packages/$name/pubspec.yaml']!;
+          final own = <String>[
+            name,
+            for (final match in RegExp('^  ([a-z_0-9]+):', multiLine: true).allMatches(pubspec))
+              match.group(1)!,
+            ...packagesOf(sharedPackagePubAddArguments(name, crashReporter: reporter)),
+          ];
+          final used = <String>{};
+          for (final MapEntry(key: path, value: text) in files.entries) {
+            if (!path.startsWith('packages/$name/') || !path.endsWith('.dart')) continue;
+            for (final match in packageImport.allMatches(text)) {
+              expect(own, contains(match.group(1)), reason: '${reporter.name}: $path');
+              used.add(match.group(1)!);
+            }
+          }
+          for (final argument in sharedPackagePubAddArguments(name, crashReporter: reporter)) {
+            if (argument.startsWith('dev:')) continue;
+            expect(
+              used,
+              contains(packagesOf(<String>[argument]).single),
+              reason: '$name $argument',
+            );
+          }
+        }
+      }
+      expect(
+        sharedPackagePubAddArguments('telemetry', crashReporter: CrashReporter.logOnly),
+        isNot(contains('sentry')),
+      );
+      for (final reporter in <CrashReporter>[CrashReporter.sentry, CrashReporter.crashlytics]) {
+        expect(
+          sharedPackagePubAddArguments('telemetry', crashReporter: reporter),
+          contains('sentry'),
+        );
+      }
+      // The drift databases are generated by the workspace's build_runner.
+      for (final name in const <String>['telemetry', 'database']) {
+        expect(
+          sharedPackagePubAddArguments(name),
+          containsAll(<String>['dev:build_runner', 'dev:drift_dev']),
+        );
+      }
+    });
+
+    test('the app glue imports the packages, not copies in lib/_core', () async {
+      for (final reporter in CrashReporter.values) {
+        final files = await appFiles(reporter);
+        for (final MapEntry(key: path, value: text) in files.entries) {
+          final uris = directivesOf(text);
+          final reason = '${reporter.name}: $path';
+          expect(uris, hasLength(uris.toSet().length + _exportsOfImported(text)), reason: reason);
+          for (final uri in uris) {
+            expect(uri, isNot(startsWith('package:my_app/_core/database/')), reason: reason);
+            expect(uri, isNot(startsWith('package:my_app/_core/api_client/')), reason: reason);
+            for (final file in telemetryModuleFiles) {
+              expect(uri, isNot('package:my_app/_core/telemetry/$file'), reason: reason);
+            }
+          }
+        }
+        expect(
+          files['lib/_core/telemetry/telemetry_setup_io.dart'],
+          contains("import 'package:telemetry/telemetry.dart';"),
+        );
+        final expected = files['lib/_core/telemetry/expected_failure.dart']!;
+        expect(expected, contains("import 'package:api_client/api_client.dart';"));
+        expect(
+          expected,
+          contains("<String>{'my_app', 'ui', 'telemetry', 'database', 'api_client'}"),
+        );
+      }
+      // One app keeps its own copies.
+      expect(
+        monorepoAppFile(await filled('lib/_core/telemetry/error_util.dart'), package: 'my_app'),
+        await filled('lib/_core/telemetry/error_util.dart'),
+      );
+    });
+
+    test('the web build of a monorepo app reaches only the portable part', () async {
+      const vmOnly = <String>{
+        'lib/_core/telemetry/crash_reporter.dart',
+        'lib/_core/telemetry/crashlytics_gateway.dart',
+      };
+      for (final reporter in CrashReporter.values) {
+        final files = await appFiles(reporter);
+        for (final MapEntry(key: path, value: text) in files.entries) {
+          if (!path.startsWith('lib/') ||
+              path.endsWith('_io.dart') ||
+              path.endsWith('_vm.dart') ||
+              path.endsWith('_windows.dart') ||
+              vmOnly.contains(path)) {
+            continue;
+          }
+          for (final uri in directivesOf(text)) {
+            expect(uri, isNot('package:telemetry/telemetry.dart'), reason: '$path: $uri');
+            expect(uri, isNot(startsWith('package:telemetry/src/')), reason: '$path: $uri');
+            expect(uri, isNot(startsWith('package:database/')), reason: '$path: $uri');
+          }
+        }
+        expect(
+          files['lib/_core/telemetry/app_zone.dart'],
+          contains("import 'package:telemetry/portable.dart';"),
+        );
+        expect(
+          files['lib/_core/telemetry/telemetry_setup_web.dart'],
+          contains("import 'package:telemetry/portable.dart';"),
+        );
+      }
+    });
+
+    test('pub add of a monorepo app adds the three packages by path', () async {
+      final arguments = skeletonPubAddArgumentsFor(
+        uiPath: '../../packages/ui',
+        sharedPackagesPath: '../../packages',
+      );
+      expect(
+        arguments,
+        containsAll(<String>[
+          'ui@{path: ../../packages/ui}',
+          'telemetry@{path: ../../packages/telemetry}',
+          'database@{path: ../../packages/database}',
+          'api_client@{path: ../../packages/api_client}',
+        ]),
+      );
+      for (final one in <List<String>>[
+        skeletonPubAddArguments,
+        skeletonPubAddArgumentsFor(uiPath: '../../packages/ui'),
+      ]) {
+        for (final name in monorepoSharedPackages) {
+          expect(packagesOf(one), isNot(contains(name)));
+        }
+      }
+      // What only the packages import stays with them.
+      for (final name in const <String>['http', 'drift', 'drift_flutter', 'sentry', 'clock']) {
+        expect(packagesOf(arguments), isNot(contains(name)), reason: name);
+      }
+      final packageImport = RegExp("(?:import|export) 'package:([a-z_0-9]+)/");
+      for (final reporter in CrashReporter.values) {
+        final installed = <String>[
+          'my_app',
+          'flutter',
+          'flutter_test',
+          ...packagesOf(
+            skeletonPubAddArgumentsFor(
+              uiPath: '../../packages/ui',
+              sharedPackagesPath: '../../packages',
+              crashReporter: reporter,
+            ),
+          ),
+        ];
+        for (final MapEntry(key: path, value: text) in (await appFiles(reporter)).entries) {
+          for (final match in packageImport.allMatches(text)) {
+            expect(installed, contains(match.group(1)), reason: '${reporter.name}: $path');
+          }
+        }
+      }
+    });
+
+    test('the crash reporter of a monorepo is kept in packages/telemetry', () {
+      expect(crashReporterConfigPath, 'packages/telemetry/crash_reporter.yaml');
+      for (final reporter in CrashReporter.values) {
+        final config = crashReporterConfig(reporter);
+        expect(config, contains('\nreporter: ${reporter.name}\n'));
+        expect(readCrashReporterConfig(config), reporter);
+      }
+      expect(readCrashReporterConfig('reporter: firebase\n'), isNull);
+      expect(readCrashReporterConfig(''), isNull);
+    });
+
+    test('the monorepo Makefile runs with the root config/sentry.local.json', () async {
+      final makefile = await rootBundle.loadString('${monorepoTemplateRoot}Makefile');
+      expect(makefile, contains(r'$(wildcard config/sentry.local.json)'));
+      expect(makefile, contains('--dart-define-from-file=../../config/sentry.local.json'));
+      final run = RegExp(
+        r'^run:.*\n\t@cd apps/\$\(APP\) && flutter run ([^\n]*)',
+        multiLine: true,
+      ).firstMatch(makefile);
+      expect(run?.group(1), contains(r'$(SENTRY)'));
+    });
+  });
+}
+
+/// How many `export`s of [text] repeat the URI of one of its `import`s (`export … show X` next to
+/// the `import` of the same library).
+int _exportsOfImported(String text) {
+  final imports = <String>{
+    for (final match in RegExp("^import '([^']+)'", multiLine: true).allMatches(text))
+      match.group(1)!,
+  };
+  return RegExp(
+    "^export '([^']+)'",
+    multiLine: true,
+  ).allMatches(text).where((match) => imports.contains(match.group(1))).length;
 }

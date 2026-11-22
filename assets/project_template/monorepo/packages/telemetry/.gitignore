@@ -1,0 +1,5 @@
+# The Flutter tool writes here too: it stages some plugins in build/<platform>/SourcePackages.
+/build/
+# scripts/test.bash: coverage and the JSON report.
+/coverage/
+/reports/

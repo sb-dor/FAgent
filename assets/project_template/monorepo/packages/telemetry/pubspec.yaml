@@ -1,0 +1,15 @@
+name: telemetry
+description: The error log, the error queue and secret cleaning of the apps of this repository.
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ^3.10.0
+
+# https://dart.dev/tools/pub/workspaces
+resolution: workspace
+
+# Pure Dart: the module imports no package:flutter. Its tests run with `flutter test`.
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

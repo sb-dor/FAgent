@@ -144,6 +144,11 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       File(p.join(projectPath, 'packages', 'ui', 'pubspec.yaml')).existsSync();
 
   @override
+  Future<bool> hasSharedPackages(String projectPath) async => monorepoSharedPackages.every(
+    (name) => File(p.join(projectPath, 'packages', name, 'pubspec.yaml')).existsSync(),
+  );
+
+  @override
   Future<bool> uiUsesSdkMaterial(String projectPath) async {
     final lib = Directory(p.join(projectPath, 'packages', 'ui', 'lib'));
     if (!lib.existsSync()) return false;
@@ -361,6 +366,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           'Flutter $kArchitectureMinFlutter or newer is needed for My architecture',
         );
       }
+      // An added app shares the monorepo's packages and gets the reporter they were made with.
+      if (member != null) run.memberReporter = await _sharedCrashReporter(root);
     }
     switch (run.steps[index].kind) {
       case CreationStepKind.workspace:
@@ -452,13 +459,14 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         await _command(run, index, _git(), const <String>['init'], workingDirectory: root);
       case CreationStepKind.skeleton:
         if (member != null) {
+          final reporter = run.memberReporter!;
           await _writeAppSkeleton(
             run,
             index,
             appPath: member.path,
             package: member.packageName,
             monorepo: true,
-            crashReporter: member.crashReporter,
+            crashReporter: reporter,
           );
           // A root without `build_runner` cannot build the workspace; the member has it.
           final atRoot = _dependsOn(_rootPubspec(root), 'build_runner');
@@ -470,14 +478,17 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
             workspace: atRoot,
             // Only the member's files: the rest of the repository is the user's.
             fixIn: member.path,
-            crashReporter: member.crashReporter,
+            crashReporter: reporter,
           );
-          run.noteReporter(member.crashReporter);
+          run.noteReporter(reporter);
           return;
         }
         final request = run.request;
         final monorepo = request.monorepo;
-        if (monorepo) await _writeUiPackage(run, index, root);
+        if (monorepo) {
+          await _writeUiPackage(run, index, root);
+          await _writeSharedPackages(run, index, root, request.crashReporter);
+        }
         await _writeAppSkeleton(
           run,
           index,
@@ -495,7 +506,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           buildIn: root,
           workspace: monorepo,
           fixIn: root,
-          uiPath: p.join(root, 'packages', 'ui'),
+          packagesWritten: true,
           crashReporter: request.crashReporter,
         );
         run.noteReporter(request.crashReporter);
@@ -519,11 +530,12 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     }
   }
 
-  /// The packages of the skeleton and their generated code: `pub add` in [appPath] (and in the
-  /// `packages/ui` at [uiPath] the run wrote), `pub get` at the root, `build_runner` in [buildIn]
-  /// (over the whole [workspace] or that package alone), and the imports sorted in [fixIn]. With
-  /// [addRootBuildRunner] the root gets `build_runner` first. The app's `pub add` has the packages
-  /// of its [crashReporter].
+  /// The packages of the skeleton and their generated code: `pub add` in [appPath] (and, when the
+  /// run wrote the [packagesWritten], in `packages/ui` and, in a monorepo, in the shared packages),
+  /// `pub get` at the root, `build_runner` in [buildIn] (over the whole [workspace] or that package
+  /// alone), and the imports sorted in [fixIn]. With [addRootBuildRunner] the root gets
+  /// `build_runner` first. The `pub add`s have the packages of [crashReporter]; an app in `apps/`
+  /// depends on the shared packages by path.
   Future<void> _installSkeleton(
     _Run run,
     int index, {
@@ -532,26 +544,37 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required bool workspace,
     required String fixIn,
     required CrashReporter crashReporter,
-    String? uiPath,
+    bool packagesWritten = false,
     bool addRootBuildRunner = false,
   }) async {
     final root = run.root;
     final flutter = await _flutter(run);
+    final oneApp = appPath == root;
     await _command(run, index, flutter, <String>[
       'pub',
       'add',
       ...skeletonPubAddArgumentsFor(
-        uiPath: appPath == root ? 'packages/ui' : p.join('..', '..', 'packages', 'ui'),
+        uiPath: oneApp ? 'packages/ui' : p.join('..', '..', 'packages', 'ui'),
+        sharedPackagesPath: oneApp ? null : p.join('..', '..', 'packages'),
         crashReporter: crashReporter,
       ),
     ], workingDirectory: appPath);
-    // packages/ui declares its own dependencies; an add leaves the user's one alone.
-    if (uiPath != null) {
+    // The packages declare their own dependencies; an add leaves the user's ones alone.
+    if (packagesWritten) {
       await _command(run, index, flutter, const <String>[
         'pub',
         'add',
         ...uiPubAddArguments,
-      ], workingDirectory: uiPath);
+      ], workingDirectory: p.join(root, 'packages', 'ui'));
+      if (!oneApp) {
+        for (final name in monorepoSharedPackages) {
+          await _command(run, index, flutter, <String>[
+            'pub',
+            'add',
+            ...sharedPackagePubAddArguments(name, crashReporter: crashReporter),
+          ], workingDirectory: p.join(root, 'packages', name));
+        }
+      }
     }
     if (addRootBuildRunner) {
       await _command(run, index, flutter, const <String>[
@@ -561,7 +584,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       ], workingDirectory: root);
     }
     await _command(run, index, flutter, const <String>['pub', 'get'], workingDirectory: root);
-    // The drift database (`lib/_core/database/`) needs its generated part to compile.
+    // The drift databases (`lib/_core/database/` or `packages/database`, and the log's) need
+    // their generated parts to compile.
     await _command(run, index, _dart(flutter), <String>[
       'run',
       'build_runner',
@@ -675,9 +699,9 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     );
   }
 
-  /// Copies [files] of the assets at [assetRoot] into [to], with the package name filled in. Each
-  /// copy is a line of the step's output: its path relative to [to], behind [label]. A file of
-  /// [renamed] (asset path → path in [to]) goes to its new path.
+  /// Copies [files] of the assets at [assetRoot] into [to], with the package name filled in and
+  /// then [transform]ed. Each copy is a line of the step's output: its path relative to [to],
+  /// behind [label]. A file of [renamed] (asset path → path in [to]) goes to its new path.
   Future<void> _copyTemplate(
     _Run run,
     int index, {
@@ -687,13 +711,15 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required String package,
     String label = '',
     Map<String, String> renamed = const <String, String>{},
+    String Function(String text)? transform,
   }) async {
     for (final asset in files) {
       final relative = renamed[asset] ?? asset;
       final text = await _loadAsset('$assetRoot$asset');
       final file = File(p.joinAll(<String>[to, ...relative.split('/')]));
       await file.parent.create(recursive: true);
-      await file.writeAsString(fillProjectTemplate(text, package: package, date: _now()));
+      final filled = fillProjectTemplate(text, package: package, date: _now());
+      await file.writeAsString(transform == null ? filled : transform(filled));
       run
         ..addLine(index, '✎ $label$relative')
         ..checkLive();
@@ -711,6 +737,105 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     to: root,
     package: run.request.name,
   );
+
+  /// Writes the shared packages of a monorepo at [root] ([monorepoSharedPackages]): their pubspecs
+  /// (on the root's SDK constraint) and public libraries, the one app's database and HTTP client in
+  /// their `lib/src/`, the telemetry module of [crashReporter] with its tests, and the reporter in
+  /// [crashReporterConfigPath], for an add to read.
+  Future<void> _writeSharedPackages(
+    _Run run,
+    int index,
+    String root,
+    CrashReporter crashReporter,
+  ) async {
+    final package = run.request.name;
+    await _copyTemplate(
+      run,
+      index,
+      assetRoot: monorepoTemplateRoot,
+      files: sharedPackageTemplateFiles,
+      to: root,
+      package: package,
+    );
+    for (final name in monorepoSharedPackages) {
+      await _joinWorkspace(
+        File(p.join(root, 'packages', name, 'pubspec.yaml')),
+        _sdkConstraint(run),
+      );
+    }
+    await _copyTemplate(
+      run,
+      index,
+      assetRoot: projectTemplateRoot,
+      files: sharedPackageSources.keys.toList(),
+      to: root,
+      package: package,
+      renamed: sharedPackageSources,
+      transform: (text) => sharedPackageSource(text, package: package),
+    );
+    await _copyModule(
+      run,
+      index,
+      to: root,
+      moduleTarget: sharedTelemetryModuleTarget,
+      testTarget: sharedTelemetryModuleTestTarget,
+      importPrefix: sharedTelemetryImportPrefix,
+      crashReporter: crashReporter,
+    );
+    await File(p.join(root, crashReporterConfigPath))
+        .writeAsString(crashReporterConfig(crashReporter));
+    run.addLine(index, '✎ $crashReporterConfigPath');
+  }
+
+  /// The crash reporter [crashReporterConfigPath] of the monorepo at [root] names. Fails the step
+  /// when the monorepo lacks its shared packages (made before them) or the file names none.
+  Future<CrashReporter> _sharedCrashReporter(String root) async {
+    if (!await hasSharedPackages(root)) {
+      throw const _StepFailure(
+        'The project has no packages/telemetry, packages/database and packages/api_client',
+      );
+    }
+    final file = File(p.join(root, crashReporterConfigPath));
+    var text = '';
+    try {
+      if (file.existsSync()) text = await file.readAsString();
+    } on FileSystemException catch (error, stackTrace) {
+      l.w('Project creation | reading $crashReporterConfigPath failed: $error', stackTrace);
+    }
+    return readCrashReporterConfig(text) ??
+        (throw const _StepFailure('$crashReporterConfigPath names no crash reporter'));
+  }
+
+  /// Copies the telemetry module of [crashReporter] into [moduleTarget] of [to] and its tests into
+  /// [testTarget], their imports of each other on [importPrefix]. Each copy is a line of the
+  /// step's output, behind [label].
+  Future<void> _copyModule(
+    _Run run,
+    int index, {
+    required String to,
+    required String moduleTarget,
+    required String testTarget,
+    required String importPrefix,
+    required CrashReporter crashReporter,
+    String label = '',
+  }) async {
+    for (final (from, target, files) in <(String, String, List<String>)>[
+      (telemetryModuleRoot, moduleTarget, telemetryModuleFilesFor(crashReporter)),
+      (telemetryModuleTestRoot, testTarget, telemetryModuleTestFilesFor(crashReporter)),
+    ]) {
+      for (final name in files) {
+        final text = await _loadAsset('$from$name');
+        final file = File(p.joinAll(<String>[to, ...'$target$name'.split('/')]));
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          copyTelemetryModule(text, importPrefix: importPrefix, crashReporter: crashReporter),
+        );
+        run
+          ..addLine(index, '✎ $label$target$name')
+          ..checkLive();
+      }
+    }
+  }
 
   /// Creates a member of a monorepo at [path] (`<root>/<apps|packages>/<folder>`) and joins it
   /// to the workspace: `resolution: workspace` and the root's [sdkConstraint]. No `pub get` runs:
@@ -829,8 +954,9 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   /// Copies the template with the package name filled in, the files of [crashReporter], and the
   /// telemetry module with its tests next to its glue, then keeps the Sentry DSN out of git and
   /// edits `pubspec.yaml`: gen-l10n on and, in a one-app project, `packages/ui` as a workspace
-  /// member and the shader of its shimmer. In a [monorepo] only the app's files go to [appPath];
-  /// `packages/ui` is written apart and declares its shader itself.
+  /// member and the shader of its shimmer. In a [monorepo] only the app's files go to [appPath],
+  /// importing the shared packages ([monorepoAppFile]) instead of the module, the database and the
+  /// HTTP client; those and `packages/ui` are written apart, and `packages/ui` declares its shader.
   Future<void> _writeAppSkeleton(
     _Run run,
     int index, {
@@ -853,30 +979,18 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       package: package,
       label: label,
       renamed: reporterFiles,
+      transform: monorepo ? (text) => monorepoAppFile(text, package: package) : null,
     );
-    for (final (from, to, files) in <(String, String, List<String>)>[
-      (telemetryModuleRoot, telemetryModuleTarget, telemetryModuleFilesFor(crashReporter)),
-      (
-        telemetryModuleTestRoot,
-        telemetryModuleTestTarget,
-        telemetryModuleTestFilesFor(crashReporter),
-      ),
-    ]) {
-      for (final name in files) {
-        final text = await _loadAsset('$from$name');
-        final file = File(p.joinAll(<String>[appPath, ...'$to$name'.split('/')]));
-        await file.parent.create(recursive: true);
-        await file.writeAsString(
-          copyTelemetryModule(
-            text,
-            importPrefix: 'package:$package/_core/telemetry/',
-            crashReporter: crashReporter,
-          ),
-        );
-        run
-          ..addLine(index, '✎ $label$to$name')
-          ..checkLive();
-      }
+    if (!monorepo) {
+      await _copyModule(
+        run,
+        index,
+        to: appPath,
+        moduleTarget: telemetryModuleTarget,
+        testTarget: telemetryModuleTestTarget,
+        importPrefix: 'package:$package/_core/telemetry/',
+        crashReporter: crashReporter,
+      );
     }
     await _ignoreSentryConfig(File(p.join(appPath, '.gitignore')));
     final pubspec = File(p.join(appPath, 'pubspec.yaml'));
@@ -978,14 +1092,16 @@ const String _sentryGitignore = '''
 config/sentry.local.json
 ''';
 
-/// The `.gitignore` of a monorepo's root; each app and package has its own from `flutter create`.
+/// The `.gitignore` of a monorepo's root, the Sentry DSN of `make run` included; each app and
+/// package has its own.
 const String _workspaceGitignore = '''
 .dart_tool/
 build/
 .idea/
 *.iml
 .DS_Store
-''';
+
+$_sentryGitignore''';
 
 /// The constraint `^<major>.<minor>.0` for [dartVersion] (`3.15.2`); `null` when it is not one.
 String? _constraintOf(String? dartVersion) {
@@ -1035,6 +1151,9 @@ final class _Run {
 
   /// The SDK constraint of a monorepo, once the workspace step worked it out.
   String? sdkConstraint;
+
+  /// The crash reporter of an add with the skeleton, read from the monorepo before its first step.
+  CrashReporter? memberReporter;
 
   /// The root's `pubspec.lock` before an add; `null` when there was none.
   Uint8List? savedLock;

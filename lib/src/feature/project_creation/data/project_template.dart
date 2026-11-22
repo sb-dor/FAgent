@@ -123,13 +123,10 @@ const List<String> projectTemplateRepoFiles = <String>[
 ];
 
 /// The files of [projectTemplateFiles] that belong to one app: in a monorepo they go to
-/// `apps/<folder>`.
+/// `apps/<folder>`, through [monorepoAppFile]. The database and the HTTP client are not among them:
+/// a monorepo shares them as packages ([sharedPackageSources]).
 const List<String> projectTemplateAppFiles = <String>[
   'lib/main.dart',
-  'lib/_core/api_client/api_client.dart',
-  'lib/_core/api_client/expected_exception.dart',
-  'lib/_core/api_client/middleware/logger_mw.dart',
-  'lib/_core/api_client/middleware/authentication_interceptor.dart',
   // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles),
   // the crash reporter is the one chosen (crashReporterTemplateFiles).
   'lib/_core/telemetry/app_zone.dart',
@@ -160,7 +157,6 @@ const List<String> projectTemplateAppFiles = <String>[
   'lib/_core/localization/localization.dart',
   'lib/_core/localization/intl_en.arb',
   'lib/_core/constant/config.dart',
-  'lib/_core/database/database.dart',
   'lib/_core/model/app_metadata.dart',
   'lib/_core/utils/extensions.dart',
   'lib/_core/utils/local_pagination.dart',
@@ -389,6 +385,158 @@ workspace:
 /// files import `material_ui`, none `cupertino_ui`.
 const List<String> uiPubAddArguments = <String>['material_ui'];
 
+/// The packages a monorepo shares between its apps, next to `packages/ui`: the telemetry module,
+/// the database and the HTTP client. A one-app project keeps them in `lib/_core/` instead. There is
+/// no catch-all `core` package: `ExpectedException` and `RejectedException` live in `api_client`.
+const List<String> monorepoSharedPackages = <String>['telemetry', 'database', 'api_client'];
+
+/// The files of the shared packages that only a monorepo has, relative to [monorepoTemplateRoot]
+/// and to the monorepo: their pubspecs and public libraries. The code behind the libraries is the
+/// one app's ([sharedPackageSources]) and, in `telemetry`, FAgent's module.
+const List<String> sharedPackageTemplateFiles = <String>[
+  'packages/telemetry/pubspec.yaml',
+  'packages/telemetry/.gitignore',
+  'packages/telemetry/lib/telemetry.dart',
+  'packages/telemetry/lib/portable.dart',
+  'packages/database/pubspec.yaml',
+  'packages/database/.gitignore',
+  'packages/database/lib/database.dart',
+  'packages/api_client/pubspec.yaml',
+  'packages/api_client/.gitignore',
+  'packages/api_client/lib/api_client.dart',
+];
+
+/// The files of a one-app project's `lib/_core/database/` and `lib/_core/api_client/`, relative to
+/// [projectTemplateRoot], and where a monorepo keeps them: in `lib/src/` of its shared packages,
+/// through [sharedPackageSource].
+const Map<String, String> sharedPackageSources = <String, String>{
+  'lib/_core/database/database.dart': 'packages/database/lib/src/database.dart',
+  'lib/_core/api_client/api_client.dart': 'packages/api_client/lib/src/api_client.dart',
+  'lib/_core/api_client/expected_exception.dart':
+      'packages/api_client/lib/src/expected_exception.dart',
+  'lib/_core/api_client/middleware/logger_mw.dart':
+      'packages/api_client/lib/src/middleware/logger_mw.dart',
+  'lib/_core/api_client/middleware/authentication_interceptor.dart':
+      'packages/api_client/lib/src/middleware/authentication_interceptor.dart',
+};
+
+/// Where a monorepo keeps the telemetry module: relative to the monorepo.
+const String sharedTelemetryModuleTarget = 'packages/telemetry/lib/src/';
+
+/// Where a monorepo keeps the tests of the module: relative to the monorepo.
+const String sharedTelemetryModuleTestTarget = 'packages/telemetry/test/';
+
+/// The import prefix of the module in `packages/telemetry`, for [copyTelemetryModule].
+const String sharedTelemetryImportPrefix = 'package:telemetry/src/';
+
+/// The module files that compile on the web too (no `dart:io`, drift or Sentry):
+/// `package:telemetry/portable.dart` exports them, for the app code the web build reaches.
+const List<String> portableTelemetryFiles = <String>['clip.dart', 'log_zone.dart', 'redact.dart'];
+
+/// A file of a one-app project's `lib/_core/database/` or `lib/_core/api_client/`, already filled
+/// for [package], as its shared package gets it: imports of its own folder point at the package's
+/// `lib/src/`.
+String sharedPackageSource(String text, {required String package}) => text
+    .replaceAll('package:$package/_core/database/', 'package:database/src/')
+    .replaceAll('package:$package/_core/api_client/', 'package:api_client/src/');
+
+/// A file of [projectTemplateAppFiles] (or of the crash reporter), already filled for [package], as
+/// a monorepo app gets it: its imports of the telemetry module, the database and the HTTP client go
+/// to the shared packages' public libraries, once each, and `projectPackages` lists the packages.
+/// The glue in `lib/_core/telemetry/` stays the app's own. A file that reaches only the web-safe
+/// part of the module ([portableTelemetryFiles]) imports `package:telemetry/portable.dart`.
+String monorepoAppFile(String text, {required String package}) {
+  final directive = RegExp(
+    "^((?:import|export) )'package:${RegExp.escape(package)}/_core/"
+    "(telemetry|database|api_client)/([^']+)'",
+  );
+  bool isModule(RegExpMatch match) =>
+      match.group(2) == 'telemetry' && telemetryModuleFiles.contains(match.group(3));
+  final lines = text.split('\n');
+  final vmModule = lines
+      .map(directive.firstMatch)
+      .any(
+        (match) =>
+            match != null && isModule(match) && !portableTelemetryFiles.contains(match.group(3)),
+      );
+  final written = <String>{};
+  final out = <String>[];
+  for (final line in lines) {
+    final match = directive.firstMatch(line);
+    final library = match == null
+        ? null
+        : switch (match.group(2)) {
+            'telemetry' when !isModule(match) => null,
+            'telemetry' => vmModule ? 'telemetry/telemetry.dart' : 'telemetry/portable.dart',
+            'database' => 'database/database.dart',
+            _ => 'api_client/api_client.dart',
+          };
+    if (match == null || library == null) {
+      out.add(line);
+      continue;
+    }
+    final rewritten = line.replaceRange(
+      match.start,
+      match.end,
+      "${match.group(1)}'package:$library'",
+    );
+    // Two files of one package become the same import: it is written once.
+    if (written.add(rewritten)) out.add(rewritten);
+  }
+  final shared = monorepoSharedPackages.map((name) => "'$name'").join(', ');
+  return out
+      .join('\n')
+      .replaceAll("<String>{'$package', 'ui'}", "<String>{'$package', 'ui', $shared}");
+}
+
+/// The packages a package of [monorepoSharedPackages] gets besides those of its template pubspec,
+/// newest versions: what its files import, and the generators of its drift database. The
+/// telemetry module of a project with [crashReporter] `logOnly` has no Sentry.
+List<String> sharedPackagePubAddArguments(
+  String package, {
+  CrashReporter crashReporter = CrashReporter.sentry,
+}) => switch (package) {
+  'telemetry' => <String>[
+    'l',
+    'path',
+    'clock',
+    'archive',
+    'drift',
+    'sqlite3',
+    // `sentry_gateway.dart`, which a log-only project does not get.
+    if (crashReporter != CrashReporter.logOnly) ...<String>['sentry', 'meta'],
+    'dev:build_runner',
+    'dev:drift_dev',
+    // The timers of the module's tests.
+    'dev:fake_async',
+  ],
+  'database' => const <String>['drift', 'drift_flutter', 'dev:build_runner', 'dev:drift_dev'],
+  'api_client' => const <String>['http', 'l', 'meta', 'shared_preferences'],
+  _ => throw ArgumentError.value(package, 'package', 'not a shared package'),
+};
+
+/// Where a monorepo keeps the crash reporter its apps are made with, relative to the monorepo:
+/// "Add to project" gives a new app with the skeleton the same one.
+const String crashReporterConfigPath = 'packages/telemetry/crash_reporter.yaml';
+
+/// The text of [crashReporterConfigPath] for [reporter].
+String crashReporterConfig(CrashReporter reporter) =>
+    '''
+# The crash reporter of this monorepo's apps (their lib/_core/telemetry/crash_reporter.dart).
+# FAgent's "Add to project" gives a new app the same one. One of: ${CrashReporter.values.map((value) => value.name).join(', ')}.
+reporter: ${reporter.name}
+''';
+
+/// The crash reporter that [text], the contents of [crashReporterConfigPath], names; `null` when
+/// it names none.
+CrashReporter? readCrashReporterConfig(String text) {
+  final name = RegExp(r'^reporter:\s*(\S+)\s*$', multiLine: true).firstMatch(text)?.group(1);
+  for (final reporter in CrashReporter.values) {
+    if (reporter.name == name) return reporter;
+  }
+  return null;
+}
+
 /// Replaces every `{{package}}` in a template file with the package name of the new project, and
 /// every `{{date}}` with [date] as `YYYY-MM-DD` (the first entry of `CHANGELOG.md`).
 String fillProjectTemplate(String text, {required String package, required DateTime date}) =>
@@ -407,52 +555,68 @@ const String controlGitRef = '685a9bc6ef60c987b99b5526e125813adba54e2a';
 
 /// The arguments of the one `flutter pub add` that installs the packages of the skeleton with
 /// [crashReporter]. [uiPath] is where `packages/ui` is, relative to the package that depends on it.
+///
+/// With [sharedPackagesPath] (where a monorepo's `packages/` is, relative to the app) the app gets
+/// [monorepoSharedPackages] by path instead of its own `lib/_core/` copies, and leaves the packages
+/// only they import (the HTTP client, drift, the telemetry module's, Sentry) to them.
 List<String> skeletonPubAddArgumentsFor({
   required String uiPath,
+  String? sharedPackagesPath,
   CrashReporter crashReporter = CrashReporter.sentry,
-}) => <String>[
-  // No versions: `pub add` takes the newest release that fits the SDK, at every creation.
-  'l',
-  'http',
-  'meta',
-  'win32',
-  'shared_preferences',
-  'freezed_annotation',
-  'intl',
-  'collection',
-  'async',
-  'path',
-  'convert',
-  'path_provider',
-  'platform_info',
-  'rxdart',
-  'url_launcher',
-  'window_manager',
-  'drift',
-  'drift_flutter',
-  // The telemetry module (lib/_core/telemetry/): the clock of its timers, the log archive, and
-  // the SQLite errors it tells apart; then the crash reporter's own packages.
-  'clock',
-  'archive',
-  'sqlite3',
-  ...crashReporterPubAddArguments(crashReporter),
-  'web',
-  'flutter_localizations@{sdk: flutter}',
-  // Flutter 3.47 deprecated the SDK's Material and Cupertino: the template imports these.
-  'material_ui',
-  'cupertino_ui',
-  'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',
-  // The workspace member with the shared UI (`packages/ui`, listed under `workspace:`).
-  'ui@{path: $uiPath}',
-  'dev:freezed',
-  'dev:build_runner',
-  'dev:drift_dev',
-  // The timers of the telemetry module's tests.
-  'dev:fake_async',
-  'dev:flutter_launcher_icons',
-  'dev:flutter_native_splash',
-  'dev:integration_test@{sdk: flutter}',
-];
+}) {
+  final shared = sharedPackagesPath != null;
+  return <String>[
+    // No versions: `pub add` takes the newest release that fits the SDK, at every creation.
+    'l',
+    if (!shared) 'http',
+    'meta',
+    'win32',
+    'shared_preferences',
+    'freezed_annotation',
+    'intl',
+    'collection',
+    'async',
+    if (!shared) 'path',
+    'convert',
+    'path_provider',
+    'platform_info',
+    'rxdart',
+    'url_launcher',
+    'window_manager',
+    if (!shared) ...<String>[
+      'drift',
+      'drift_flutter',
+      // The telemetry module (lib/_core/telemetry/): the clock of its timers, the log archive, and
+      // the SQLite errors it tells apart.
+      'clock',
+      'archive',
+      'sqlite3',
+    ],
+    // The crash reporter's own packages; in a monorepo Sentry is the telemetry package's.
+    for (final package in crashReporterPubAddArguments(crashReporter))
+      if (!shared || package != 'sentry') package,
+    'web',
+    'flutter_localizations@{sdk: flutter}',
+    // Flutter 3.47 deprecated the SDK's Material and Cupertino: the template imports these.
+    'material_ui',
+    'cupertino_ui',
+    'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',
+    // The workspace member with the shared UI (`packages/ui`, listed under `workspace:`).
+    'ui@{path: $uiPath}',
+    if (shared)
+      for (final package in monorepoSharedPackages) '$package@{path: $sharedPackagesPath/$package}',
+    'dev:freezed',
+    'dev:build_runner',
+    if (!shared) ...<String>[
+      'dev:drift_dev',
+      // The timers of the telemetry module's tests.
+      'dev:fake_async',
+    ],
+    'dev:flutter_launcher_icons',
+    'dev:flutter_native_splash',
+    'dev:integration_test@{sdk: flutter}',
+  ];
+}
 
 /// [skeletonPubAddArgumentsFor] for a one-app project with Sentry, where `packages/ui` is inside
 /// it.

@@ -378,6 +378,7 @@ void main() {
       ..takenPackages = <String>{'taken'}
       ..uiPackage = false
       ..uiOnSdkMaterial = true
+      ..sharedPackages = false
       ..gitRepo = false;
     const path = '/Users/test/StudioProjects/shop';
 
@@ -388,6 +389,7 @@ void main() {
     expect(await controller.suggestedPackageName(path, 'admin'), 'shop_admin');
     expect(await controller.hasUiPackage(path), isFalse);
     expect(await controller.uiUsesSdkMaterial(path), isTrue);
+    expect(await controller.hasSharedPackages(path), isFalse);
     expect(await controller.isGitRepo(path), isFalse);
   });
 

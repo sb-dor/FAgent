@@ -706,6 +706,7 @@
   "addMemberPackageTaken": "The project already has this package",
   "addMemberNoUiPackage": "No packages/ui: only the empty template is available",
   "addMemberUiOnSdkMaterial": "packages/ui is on package:flutter/material.dart: only the empty template is available",
+  "addMemberNoSharedPackages": "This project was made before the shared packages; add the app empty.",
   "addMemberScriptsNote": "{script} lists members by name: add {folder} to it",
   "@addMemberScriptsNote": {"placeholders": {"script": {"type": "String"}, "folder": {"type": "String"}}},
   "projectRulesTitle": "Add the project rules?",

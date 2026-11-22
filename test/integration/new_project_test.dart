@@ -20,8 +20,10 @@ import 'package:path/path.dart' as p;
 /// temp folder, then runs `flutter test` in it (the copied tests of the telemetry module included):
 /// the gate for the skeleton in `assets/project_template/architecture/` and the module in
 /// `lib/src/common/telemetry/` (the creation itself runs `flutter analyze`). Then
-/// creates a monorepo, adds a member of every kind to it and runs its scripts, `flutter analyze`
-/// and a macOS build in it: the gate for `assets/project_template/monorepo/` and "Add to project".
+/// creates a monorepo (`packages/ui` and the shared `telemetry`, `database` and `api_client`), adds
+/// a member of every kind to it and runs `make analyze`, `make test` (the module's tests in
+/// `packages/telemetry/test/` included) and a macOS build in it: the gate for
+/// `assets/project_template/monorepo/` and "Add to project".
 /// Last, one app with Crashlytics (no `flutterfire configure`) and one with the log only: the
 /// gate for the other crash reporters.
 ///
@@ -213,6 +215,24 @@ void main() {
 
       final created = (await repository.create(request).toList()).last;
       expectFinished(created);
+      // The app keeps its glue; the module, the database and the HTTP client are packages.
+      for (final name in <String>['ui', ...monorepoSharedPackages]) {
+        expect(
+          io.File(p.join(request.path, 'packages', name, 'pubspec.yaml')).existsSync(),
+          isTrue,
+          reason: name,
+        );
+      }
+      expect(
+        io.Directory(p.join(request.path, 'apps', 'app', 'lib', '_core', 'api_client'))
+            .existsSync(),
+        isFalse,
+      );
+      final moduleTests = io.Directory(p.join(request.path, 'packages', 'telemetry', 'test'));
+      expect(
+        moduleTests.listSync().whereType<io.File>(),
+        hasLength(telemetryModuleTestFiles.length),
+      );
 
       for (final (kind, folder) in const <(MemberKind, String)>[
         (MemberKind.flutterApp, 'admin'),
@@ -240,7 +260,7 @@ void main() {
         expectFinished(added, what: '${kind.name} $folder');
       }
 
-      Future<void> run(String executable, List<String> arguments, {String? inFolder}) async {
+      Future<String> run(String executable, List<String> arguments, {String? inFolder}) async {
         final result = await io.Process.run(
           executable,
           arguments,
@@ -252,10 +272,21 @@ void main() {
           0,
           reason: '$executable ${arguments.join(' ')}\n${result.stdout}\n${result.stderr}',
         );
+        return '${result.stdout}';
       }
 
-      await run('bash', const <String>['scripts/test.bash']);
-      await run(flutter, const <String>['analyze']);
+      // The workspace's own scripts find the three packages.
+      await run('make', const <String>['analyze']);
+      final tested = await run('make', const <String>['test']);
+      expect(tested, contains('==> packages/telemetry/'));
+      expect(tested, contains('==> apps/admin/'));
+      expect(tested, isNot(contains('Some tests failed')));
+      // The module's tests ran in their package: the JSON report of scripts/test.bash names each.
+      final report = io.File(p.join(request.path, 'packages', 'telemetry', 'reports', 'tests.json'))
+          .readAsStringSync();
+      for (final file in telemetryModuleTestFiles) {
+        expect(report, contains('packages/telemetry/test/$file'), reason: file);
+      }
       // The macOS build compiles the shimmer shader the app takes from packages/ui.
       await run(flutter, const <String>[
         'build',

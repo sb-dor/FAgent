@@ -933,10 +933,61 @@ void main() {
 
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
       expect(exists('apps/app/lib/main.dart'), isTrue);
-      expect(exists('apps/app/lib/_core/api_client/api_client.dart'), isTrue);
-      expect(exists('apps/app/lib/_core/telemetry/telemetry.dart'), isTrue);
-      expect(exists('apps/app/test/_core/telemetry/error_hub_test.dart'), isTrue);
+      // The module, the database and the HTTP client are shared packages; the app keeps its glue.
+      expect(exists('apps/app/lib/_core/api_client'), isFalse);
+      expect(exists('apps/app/lib/_core/database'), isFalse);
+      expect(exists('apps/app/lib/_core/telemetry/telemetry.dart'), isFalse);
+      expect(exists('apps/app/test/_core/telemetry'), isFalse);
+      for (final name in const <String>['ui', 'telemetry', 'database', 'api_client']) {
+        expect(exists('packages/$name/pubspec.yaml'), isTrue, reason: name);
+      }
+      for (final relative in sharedPackageTemplateFiles) {
+        expect(exists(relative), isTrue, reason: relative);
+      }
+      for (final relative in sharedPackageSources.values) {
+        expect(read(relative), isNot(contains('package:shop')), reason: relative);
+      }
+      expect(
+        read('packages/api_client/lib/src/middleware/logger_mw.dart'),
+        contains("import 'package:api_client/src/api_client.dart';"),
+      );
+      for (final file in telemetryModuleFiles) {
+        expect(exists('$sharedTelemetryModuleTarget$file'), isTrue, reason: file);
+      }
+      for (final file in telemetryModuleTestFiles) {
+        expect(exists('$sharedTelemetryModuleTestTarget$file'), isTrue, reason: file);
+      }
+      expect(
+        read('packages/telemetry/lib/src/telemetry.dart'),
+        contains("export 'package:telemetry/src/error_hub.dart';"),
+      );
+      expect(read(crashReporterConfigPath), crashReporterConfig(CrashReporter.sentry));
+      for (final name in monorepoSharedPackages) {
+        final pubspec = read('packages/$name/pubspec.yaml');
+        expect(pubspec, contains('environment:\n  sdk: ^3.14.0\n'), reason: name);
+        expect('resolution: workspace'.allMatches(pubspec), hasLength(1), reason: name);
+      }
+      // The glue sits in the app and imports the packages.
+      for (final file in projectTemplateAppFiles.where(
+        (file) => file.startsWith('lib/_core/telemetry/'),
+      )) {
+        expect(exists('apps/app/$file'), isTrue, reason: file);
+      }
+      expect(exists('apps/app/$crashReporterTarget'), isTrue);
+      expect(
+        read('apps/app/lib/_core/telemetry/telemetry_setup_io.dart'),
+        contains("import 'package:telemetry/telemetry.dart';"),
+      );
+      expect(
+        read('apps/app/lib/_core/telemetry/expected_failure.dart'),
+        allOf(
+          contains("import 'package:api_client/api_client.dart';"),
+          contains("<String>{'shop_app', 'ui', 'telemetry', 'database', 'api_client'}"),
+        ),
+      );
       expect(read('apps/app/.gitignore'), contains('config/sentry.local.json'));
+      // `make run` passes the root's config/sentry.local.json.
+      expect(read('.gitignore'), contains('\nconfig/sentry.local.json\n'));
       expect(exists('lib'), isFalse);
       expect(read('apps/app/lib/main.dart'), contains("import 'package:shop_app/"));
       for (final relative in projectTemplateUiFiles) {
@@ -956,7 +1007,16 @@ void main() {
       expect(ui, contains('shaders/shimmer.frag'));
       expect(
         step(runs.last, CreationStepKind.skeleton).output,
-        containsAll(<String>['✎ apps/app/lib/main.dart', '✎ packages/ui/lib/ui.dart']),
+        containsAll(<String>[
+          '✎ apps/app/lib/main.dart',
+          '✎ packages/ui/lib/ui.dart',
+          '✎ packages/telemetry/lib/telemetry.dart',
+          '✎ packages/telemetry/lib/src/error_hub.dart',
+          '✎ packages/telemetry/test/error_hub_test.dart',
+          '✎ packages/database/lib/src/database.dart',
+          '✎ packages/api_client/lib/src/expected_exception.dart',
+          '✎ $crashReporterConfigPath',
+        ]),
       );
 
       final dart = p.join(p.dirname(_flutter), 'dart');
@@ -973,7 +1033,14 @@ void main() {
         <List<Object?>>[
           <Object?>[
             _flutter,
-            <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
+            <String>[
+              'pub',
+              'add',
+              ...skeletonPubAddArgumentsFor(
+                uiPath: '../../packages/ui',
+                sharedPackagesPath: '../../packages',
+              ),
+            ],
             p.join(root(), 'apps', 'app'),
           ],
           <Object?>[
@@ -981,6 +1048,12 @@ void main() {
             <String>['pub', 'add', 'material_ui'],
             p.join(root(), 'packages', 'ui'),
           ],
+          for (final name in monorepoSharedPackages)
+            <Object?>[
+              _flutter,
+              <String>['pub', 'add', ...sharedPackagePubAddArguments(name)],
+              p.join(root(), 'packages', name),
+            ],
           <Object?>[
             _flutter,
             <String>['pub', 'add', 'dev:build_runner'],
@@ -1008,6 +1081,35 @@ void main() {
           ],
         ],
       );
+    });
+
+    test('a log-only monorepo keeps Sentry out of the telemetry package', () async {
+      final runs = await build()
+          .create(
+            NewProjectRequest(
+              name: 'shop',
+              org: 'com.example',
+              parent: parent.path,
+              gitInit: false,
+              structure: ProjectStructure.monorepo,
+              crashReporter: CrashReporter.logOnly,
+            ),
+          )
+          .toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      expect(read(crashReporterConfigPath), crashReporterConfig(CrashReporter.logOnly));
+      expect(exists('${sharedTelemetryModuleTarget}sentry_gateway.dart'), isFalse);
+      expect(read('${sharedTelemetryModuleTarget}telemetry.dart'), isNot(contains('sentry')));
+      final telemetryAdd = started.singleWhere(
+        (process) => process.workingDirectory == p.join(root(), 'packages', 'telemetry'),
+      );
+      expect(telemetryAdd.arguments, <String>[
+        'pub',
+        'add',
+        ...sharedPackagePubAddArguments('telemetry', crashReporter: CrashReporter.logOnly),
+      ]);
+      expect(telemetryAdd.arguments, isNot(contains('sentry')));
     });
 
     test('monorepo target check', () async {
@@ -1081,16 +1183,37 @@ void main() {
     String dart() => p.join(p.dirname(_flutter), 'dart');
 
     /// A monorepo on disk: the root `pubspec.yaml` (with `build_runner` when [buildRunner]),
-    /// `packages/ui` and, when [lock], a `pubspec.lock`.
-    void monorepoOnDisk({bool buildRunner = true, bool lock = true}) {
+    /// `packages/ui`, the shared packages with the crash reporter [reporter] and, when [lock], a
+    /// `pubspec.lock`.
+    void monorepoOnDisk({
+      bool buildRunner = true,
+      bool lock = true,
+      CrashReporter reporter = CrashReporter.sentry,
+    }) {
       Directory(file('packages/ui')).createSync(recursive: true);
       File(file('pubspec.yaml')).writeAsStringSync(
         '${monorepoRootPubspec(name: 'shop', sdkConstraint: '^3.14.0')}'
         '${buildRunner ? '\ndev_dependencies:\n  build_runner: ^2.11.0\n' : ''}',
       );
       File(file('packages/ui/pubspec.yaml')).writeAsStringSync('name: ui\n');
+      for (final name in monorepoSharedPackages) {
+        Directory(file('packages/$name')).createSync(recursive: true);
+        File(file('packages/$name/pubspec.yaml')).writeAsStringSync('name: $name\n');
+      }
+      File(file(crashReporterConfigPath)).writeAsStringSync(crashReporterConfig(reporter));
       if (lock) File(file('pubspec.lock')).writeAsStringSync(lockBefore);
     }
+
+    /// The `pub add` of an added app with the skeleton and [reporter].
+    List<String> memberPubAdd([CrashReporter reporter = CrashReporter.sentry]) => <String>[
+      'pub',
+      'add',
+      ...skeletonPubAddArgumentsFor(
+        uiPath: '../../packages/ui',
+        sharedPackagesPath: '../../packages',
+        crashReporter: reporter,
+      ),
+    ];
 
     NewMemberRequest member({
       MemberKind kind = MemberKind.flutterApp,
@@ -1213,11 +1336,7 @@ void main() {
           ],
           root(),
         ],
-        <Object?>[
-          _flutter,
-          <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
-          admin,
-        ],
+        <Object?>[_flutter, memberPubAdd(), admin],
         <Object?>[
           _flutter,
           <String>['pub', 'get'],
@@ -1255,10 +1374,24 @@ void main() {
         ],
       ]);
       expect(
-        skeletonPubAddArgumentsFor(uiPath: '../../packages/ui'),
-        contains('ui@{path: ../../packages/ui}'),
+        memberPubAdd(),
+        containsAll(<String>[
+          'ui@{path: ../../packages/ui}',
+          'telemetry@{path: ../../packages/telemetry}',
+          'database@{path: ../../packages/database}',
+          'api_client@{path: ../../packages/api_client}',
+        ]),
       );
       expect(read('apps/admin/lib/main.dart'), contains("import 'package:shop_admin/"));
+      expect(
+        read('apps/admin/lib/_core/telemetry/telemetry_setup_io.dart'),
+        contains("import 'package:telemetry/telemetry.dart';"),
+      );
+      expect(exists('apps/admin/lib/_core/api_client'), isFalse);
+      expect(exists('apps/admin/test/_core/telemetry/error_hub_test.dart'), isFalse);
+      expect(runs.last.notes, isEmpty);
+      // The shared packages are the user's now: the add leaves them alone.
+      expect(read('packages/telemetry/pubspec.yaml'), 'name: telemetry\n');
       expect(
         step(runs.last, CreationStepKind.skeleton).output,
         contains('✎ apps/admin/lib/main.dart'),
@@ -1268,6 +1401,80 @@ void main() {
       expect(pubspec, contains('\nflutter:\n  generate: true\n\n'));
       expect(read('apps/admin/analysis_options.yaml'), 'include: ../../analysis_options.yaml\n');
       expect(read('pubspec.lock'), 'lock after\n');
+    });
+
+    test('an added app gets the crash reporter of crash_reporter.yaml', () async {
+      monorepoOnDisk(reporter: CrashReporter.crashlytics);
+      final runs = await build().addMember(member(gitRepo: false)).toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
+      expect(
+        commands(),
+        anyElement(
+          equals(<Object?>[_flutter, memberPubAdd(CrashReporter.crashlytics), file('apps/admin')]),
+        ),
+      );
+      expect(
+        memberPubAdd(CrashReporter.crashlytics),
+        containsAll(<String>['firebase_core', 'firebase_crashlytics']),
+      );
+      // Sentry, for the platforms without Crashlytics, is the telemetry package's.
+      expect(memberPubAdd(CrashReporter.crashlytics), isNot(contains('sentry')));
+      for (final MapEntry(key: from, value: to) in crashReporterTemplateFiles(
+        CrashReporter.crashlytics,
+      ).entries) {
+        expect(
+          read('apps/admin/$to'),
+          monorepoAppFile(
+            fillProjectTemplate(
+              File('$projectTemplateRoot$from').readAsStringSync(),
+              package: 'shop_admin',
+              date: DateTime(2026, 11, 6),
+            ),
+            package: 'shop_admin',
+          ),
+          reason: to,
+        );
+      }
+      expect(runs.last.notes, <CreationNote>[CreationNote.flutterfireConfigure]);
+    });
+
+    for (final (what, prepare, line) in <(String, void Function(), String)>[
+      (
+        'without packages/telemetry',
+        () => Directory(file('packages/telemetry')).deleteSync(recursive: true),
+        'The project has no packages/telemetry, packages/database and packages/api_client',
+      ),
+      (
+        'without crash_reporter.yaml',
+        () => File(file(crashReporterConfigPath)).deleteSync(),
+        '$crashReporterConfigPath names no crash reporter',
+      ),
+      (
+        'with an unknown reporter in crash_reporter.yaml',
+        () => File(file(crashReporterConfigPath)).writeAsStringSync('reporter: bugsnag\n'),
+        '$crashReporterConfigPath names no crash reporter',
+      ),
+    ]) {
+      test('an app with the skeleton $what fails before flutter create', () async {
+        prepare();
+        final runs = await build().addMember(member()).toList();
+
+        final create = step(runs.last, CreationStepKind.memberCreate);
+        expect(create.status, CreationStepStatus.failed);
+        expect(create.output.last, line);
+        expect(started, isEmpty);
+        expect(exists('apps/admin'), isFalse);
+      });
+    }
+
+    test('an empty app needs no shared packages', () async {
+      Directory(file('packages/telemetry')).deleteSync(recursive: true);
+      final runs = await build()
+          .addMember(member(template: NewProjectTemplate.plain, gitRepo: false))
+          .toList();
+
+      expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
     });
 
     test('without build_runner in the root it builds the member alone', () async {
@@ -1758,6 +1965,16 @@ void main() {
       expect(await repository.hasUiPackage(project), isTrue);
     });
 
+    test('hasSharedPackages', () async {
+      final repository = build();
+      expect(await repository.hasSharedPackages(project), isFalse);
+      write('packages/database/pubspec.yaml', 'name: database\n');
+      write('packages/api_client/pubspec.yaml', 'name: api_client\n');
+      expect(await repository.hasSharedPackages(project), isFalse, reason: 'no packages/telemetry');
+      write('packages/telemetry/pubspec.yaml', 'name: telemetry\n');
+      expect(await repository.hasSharedPackages(project), isTrue);
+    });
+
     test('uiUsesSdkMaterial', () async {
       final repository = build();
       expect(await repository.uiUsesSdkMaterial(project), isFalse);
@@ -1825,15 +2042,20 @@ void main() {
         relative: File(p.joinAll(<String>[to, ...relative.split('/')])).readAsStringSync(),
     };
 
-    /// The template's Dart files of [files], filled for [package]: copied as they are.
-    Map<String, String> expected(List<String> files, String package) => <String, String>{
-      for (final relative in files.where((relative) => relative.endsWith('.dart')))
-        relative: fillProjectTemplate(
-          File('$projectTemplateRoot$relative').readAsStringSync(),
-          package: package,
-          date: DateTime(2026, 11, 6),
-        ),
-    };
+    /// The template's Dart files of [files], filled for [package]: copied as they are, or, in a
+    /// [monorepoApp], importing the shared packages.
+    Map<String, String> expected(List<String> files, String package, {bool monorepoApp = false}) =>
+        <String, String>{
+          for (final relative in files.where((relative) => relative.endsWith('.dart')))
+            relative: () {
+              final filled = fillProjectTemplate(
+                File('$projectTemplateRoot$relative').readAsStringSync(),
+                package: package,
+                date: DateTime(2026, 11, 6),
+              );
+              return monorepoApp ? monorepoAppFile(filled, package: package) : filled;
+            }(),
+        };
 
     /// The commands of a one-app architecture project without git.
     List<List<Object?>> oneApp() => <List<Object?>>[
@@ -1911,7 +2133,14 @@ void main() {
     List<List<Object?>> monorepoCommands() => <List<Object?>>[
       <Object?>[
         _flutter,
-        <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
+        <String>[
+          'pub',
+          'add',
+          ...skeletonPubAddArgumentsFor(
+            uiPath: '../../packages/ui',
+            sharedPackagesPath: '../../packages',
+          ),
+        ],
         p.join(shop(), 'apps', 'app'),
       ],
       <Object?>[
@@ -1919,6 +2148,12 @@ void main() {
         <String>['pub', 'add', 'material_ui'],
         p.join(shop(), 'packages', 'ui'),
       ],
+      for (final name in monorepoSharedPackages)
+        <Object?>[
+          _flutter,
+          <String>['pub', 'add', ...sharedPackagePubAddArguments(name)],
+          p.join(shop(), 'packages', name),
+        ],
       <Object?>[
         _flutter,
         <String>['pub', 'add', 'dev:build_runner'],
@@ -1953,7 +2188,7 @@ void main() {
       expect(commands().skip(1), monorepoCommands());
       expect(
         written(p.join(shop(), 'apps', 'app'), projectTemplateAppFiles),
-        expected(projectTemplateAppFiles, 'shop_app'),
+        expected(projectTemplateAppFiles, 'shop_app', monorepoApp: true),
       );
       expect(written(shop(), projectTemplateUiFiles), expected(projectTemplateUiFiles, 'shop'));
     });
@@ -2001,6 +2236,12 @@ void main() {
           '\ndev_dependencies:\n  build_runner: ^2.11.0\n',
         );
         File(p.join(shop(), 'packages', 'ui', 'pubspec.yaml')).writeAsStringSync('name: ui\n');
+        for (final name in monorepoSharedPackages) {
+          Directory(p.join(shop(), 'packages', name)).createSync(recursive: true);
+          File(p.join(shop(), 'packages', name, 'pubspec.yaml')).writeAsStringSync('name: $name\n');
+        }
+        File(p.join(shop(), crashReporterConfigPath))
+            .writeAsStringSync(crashReporterConfig(CrashReporter.sentry));
       });
 
       NewMemberRequest member({NewProjectTemplate template = NewProjectTemplate.architecture}) =>
@@ -2020,7 +2261,14 @@ void main() {
       List<List<Object?>> memberCommands() => <List<Object?>>[
         <Object?>[
           _flutter,
-          <String>['pub', 'add', ...skeletonPubAddArgumentsFor(uiPath: '../../packages/ui')],
+          <String>[
+            'pub',
+            'add',
+            ...skeletonPubAddArgumentsFor(
+              uiPath: '../../packages/ui',
+              sharedPackagesPath: '../../packages',
+            ),
+          ],
           admin(),
         ],
         <Object?>[
@@ -2052,7 +2300,7 @@ void main() {
         expect(commands().skip(1), memberCommands());
         expect(
           written(admin(), projectTemplateAppFiles),
-          expected(projectTemplateAppFiles, 'shop_admin'),
+          expected(projectTemplateAppFiles, 'shop_admin', monorepoApp: true),
         );
         expect(
           File(p.join(shop(), 'packages', 'ui', 'pubspec.yaml')).readAsStringSync(),

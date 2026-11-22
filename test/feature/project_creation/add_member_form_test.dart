@@ -47,6 +47,7 @@ void main() {
     String? flutterVersion = '3.50.0',
     Future<void>? versionAnswered,
     bool uiOnSdkMaterial = false,
+    bool shared = true,
   }) async {
     tester.view
       ..physicalSize = const Size(1280, 800)
@@ -56,6 +57,7 @@ void main() {
       ..takenPackages = <String>{'shop_taken_name'}
       ..uiPackage = ui
       ..uiOnSdkMaterial = uiOnSdkMaterial
+      ..sharedPackages = shared
       ..gitRepo = git;
     dependencies = testDependencies(
       projectCreationRepository: memory,
@@ -281,6 +283,39 @@ void main() {
       expect(memory.memberRequests.single.template, NewProjectTemplate.plain);
     });
   }
+
+  for (final (locale, text) in <(Locale, String)>[
+    (const Locale('en'), 'This project was made before the shared packages; add the app empty.'),
+    (const Locale('ru'), 'Проект создан до общих пакетов: добавьте приложение пустым.'),
+  ]) {
+    testWidgets(
+      'a project without the shared packages offers only Empty (${locale.languageCode})',
+      (tester) async {
+        await openDialog(tester, shared: false, locale: locale);
+
+        expect(shown('template-architecture'), isFalse);
+        expect(shown('template-plain'), isTrue);
+        expect(find.text(text), findsOneWidget);
+        await type(tester, _folder, 'admin');
+        await tester.tap(createButton());
+        await tester.pumpAndSettle(const Duration(seconds: 1));
+        expect(memory.memberRequests.single.template, NewProjectTemplate.plain);
+      },
+    );
+  }
+
+  testWidgets('a project without packages/ui gives that reason alone', (tester) async {
+    await openDialog(tester, ui: false, shared: false);
+
+    expect(shown('template-architecture'), isFalse);
+    expect(find.text('No packages/ui: only the empty template is available'), findsOneWidget);
+    expect(
+      find.text('This project was made before the shared packages; add the app empty.'),
+      findsNothing,
+    );
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('the Flutter hint of My architecture is in Russian too', (tester) async {
     await openDialog(tester, flutterVersion: '3.47.2', locale: const Locale('ru'));

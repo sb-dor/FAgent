@@ -13,10 +13,14 @@ APP ?= $(patsubst apps/%/lib/main.dart,%,$(firstword $(wildcard apps/*/lib/main.
 ENV ?= development
 DEFINES := $(if $(wildcard config/$(ENV).json),--dart-define-from-file=../../config/$(ENV).json,)
 
+# The Sentry DSN (docs/rules/configuration.md): config/sentry.local.json of the root, git-ignored,
+# when it exists. Without it the apps keep their log and send nothing.
+SENTRY := $(if $(wildcard config/sentry.local.json),--dart-define-from-file=../../config/sentry.local.json,)
+
 # Release builds are obfuscated; the symbols to read their stack traces go here. Keep this folder
 # for every release and upload it to the crash reporter (docs/rules/security.md, "Obfuscation").
 DEBUG_INFO_DIR := build/debug-info
-RELEASE := --release --obfuscate --split-debug-info=$(DEBUG_INFO_DIR) $(DEFINES)
+RELEASE := --release --obfuscate --split-debug-info=$(DEBUG_INFO_DIR) $(DEFINES) $(SENTRY)
 
 .PHONY: all
 all: generate format analyze test ## Generate, format, analyze and test
@@ -75,7 +79,7 @@ test: get ## Run the tests of every member
 
 .PHONY: run
 run: get ## Run an app (APP=<folder>, ENV=development by default)
-	@cd apps/$(APP) && flutter run $(DEFINES)
+	@cd apps/$(APP) && flutter run $(DEFINES) $(SENTRY)
 
 .PHONY: build-apk
 build-apk: generate ## Build a release APK of APP

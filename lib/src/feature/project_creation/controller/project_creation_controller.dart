@@ -100,6 +100,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
   /// Whether the monorepo has a `packages/ui` package.
   Future<bool> hasUiPackage(String projectPath) => _repository.hasUiPackage(projectPath);
 
+  /// Whether the monorepo has the shared packages `telemetry`, `database` and `api_client`.
+  Future<bool> hasSharedPackages(String projectPath) => _repository.hasSharedPackages(projectPath);
+
   /// Whether the monorepo's `packages/ui` is still on the SDK's Material or Cupertino.
   Future<bool> uiUsesSdkMaterial(String projectPath) => _repository.uiUsesSdkMaterial(projectPath);
 
