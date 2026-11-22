@@ -23,6 +23,7 @@ import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 
 export 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
@@ -272,7 +273,7 @@ final class AgentHub {
       try {
         callback(live.agentId, options);
       } on Object catch (error, stackTrace) {
-        l.w('AgentHub | the config options callback failed: $error', stackTrace);
+        l.w('AgentHub | the config options callback failed: ${hideDataDetails(error)}', stackTrace);
       }
     });
   }
@@ -364,7 +365,7 @@ final class AgentHub {
       for (final observer in _observers) {
         tokens.add(
           await observer.beforeTurn(live).catchError((Object error) {
-            l.w('AgentHub | turn observer failed before the turn: $error');
+            l.w('AgentHub | turn observer failed before the turn: ${hideDataDetails(error)}');
             return null;
           }),
         );
@@ -405,10 +406,10 @@ final class AgentHub {
       if (live.status.value != SessionStatus.running) return;
       live.preparingTurn.value = false;
       unawaited(
-        _touchSession(
-          live,
-          title: text,
-        ).catchError((Object error) => l.w('AgentHub | could not update the chat title: $error')),
+        _touchSession(live, title: text).catchError(
+          (Object error) =>
+              l.w('AgentHub | could not update the chat title: ${hideDataDetails(error)}'),
+        ),
       );
       sent = true;
       live.firstMessageRules = null;
@@ -449,7 +450,7 @@ final class AgentHub {
         await live.store.flush().catchError((Object _) {});
         for (final (index, token) in tokens.indexed) {
           final result = await _observers[index].afterTurn(live, token).catchError((Object error) {
-            l.w('AgentHub | turn observer failed: $error');
+            l.w('AgentHub | turn observer failed: ${hideDataDetails(error)}');
             return null;
           });
           if (result != null && !live.store.isClosed) {
@@ -746,7 +747,7 @@ final class AgentHub {
     try {
       defaults = await source(live.agentId);
     } on Object catch (error) {
-      l.w('AgentHub | session ${live.id}: could not read the defaults: $error');
+      l.w('AgentHub | session ${live.id}: could not read the defaults: ${hideDataDetails(error)}');
       return;
     }
     for (final MapEntry(key: configId, value: value) in defaults.entries) {
@@ -774,7 +775,9 @@ final class AgentHub {
         l.w('AgentHub | session ${live.id}: the default $configId timed out, skipping the rest');
         return;
       } on Object catch (error) {
-        l.w('AgentHub | session ${live.id}: could not set the default $configId: $error');
+        l.w(
+          'AgentHub | session ${live.id}: could not set the default $configId: ${hideDataDetails(error)}',
+        );
       }
     }
   }
@@ -810,7 +813,10 @@ final class AgentHub {
         connection.initializeResult,
       ).timeout(setupTimeout);
     } on Object catch (error, stackTrace) {
-      l.w('AgentHub | session ${live.id}: no MCP servers and rules: $error', stackTrace);
+      l.w(
+        'AgentHub | session ${live.id}: no MCP servers and rules: ${hideDataDetails(error)}',
+        stackTrace,
+      );
       return SessionContext.empty;
     }
     if (context.skippedServers.isNotEmpty) {

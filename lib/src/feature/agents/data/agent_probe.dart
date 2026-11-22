@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_probe_result.dart';
 import 'package:l/l.dart';
 
@@ -71,7 +72,7 @@ final class AgentProbeImpl implements IAgentProbe {
     } on AgentStartException catch (error) {
       return AgentProbeResult(failure: run.timedOut ? _noAnswer : _firstLine(error));
     } on Object catch (error, stackTrace) {
-      l.w('Agents | probing ${agent.id} failed: $error', stackTrace);
+      l.w('Agents | probing ${agent.id} failed: ${hideDataDetails(error)}', stackTrace);
       return AgentProbeResult(failure: '$error'.split('\n').first);
     } finally {
       _runs.remove(run);

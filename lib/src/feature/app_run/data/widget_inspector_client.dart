@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/inspector_node.dart';
 import 'package:l/l.dart' show l;
 import 'package:meta/meta.dart';
@@ -115,7 +116,8 @@ final class WidgetInspectorClient {
 
   void _onFirstListen() {
     _listen().catchError((Object error) {
-      if (!_closed) l.w('WidgetInspectorClient | cannot listen to the app: $error');
+      if (!_closed)
+        l.w('WidgetInspectorClient | cannot listen to the app: ${hideDataDetails(error)}');
     });
   }
 

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/process/grouped_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:l/l.dart';
@@ -130,7 +131,7 @@ final class McpProbeImpl implements IMcpProbe {
       };
     } on Object catch (error, stackTrace) {
       l.w(
-        'MCP probe | ${server.name} failed after ${deadline.elapsedMilliseconds} ms: $error',
+        'MCP probe | ${server.name} failed after ${deadline.elapsedMilliseconds} ms: ${hideDataDetails(error)}',
         stackTrace,
       );
       return McpProbeFailed(_oneLine('$error'));
@@ -299,7 +300,7 @@ final class _GroupedStdioTransport implements Transport {
             }
           },
           onError: (Object error, StackTrace stackTrace) {
-            l.w('MCP | stdout of the server failed: $error', stackTrace);
+            l.w('MCP | stdout of the server failed: ${hideDataDetails(error)}', stackTrace);
             _finish();
           },
           onDone: _finish,

@@ -5,6 +5,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_exceptions.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/session_status.dart';
 import 'package:flutter_code_agent/src/common/chat_queue/queued_chats.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/src/feature/prompt_sending/data/prompt_sending_repository.dart';
@@ -83,8 +84,10 @@ final class ChatQueueController extends StateController<ChatQueueState> {
         .listen(
           _onStatus,
           // The chat screen shows a chat that cannot be opened.
-          onError: (Object error, StackTrace stackTrace) =>
-              l.w('Chat queue | chat $sessionId cannot be followed: $error', stackTrace),
+          onError: (Object error, StackTrace stackTrace) => l.w(
+            'Chat queue | chat $sessionId cannot be followed: ${hideDataDetails(error)}',
+            stackTrace,
+          ),
         );
   }
 

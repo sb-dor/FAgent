@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
 import 'package:l/l.dart';
@@ -33,7 +34,7 @@ final class ChatLoginMethodsController extends StateController<Map<String, List<
         .listen(
           setState,
           onError: (Object error, StackTrace stackTrace) =>
-              l.w('Chat | the sign-in methods failed: $error', stackTrace),
+              l.w('Chat | the sign-in methods failed: ${hideDataDetails(error)}', stackTrace),
         );
   });
 

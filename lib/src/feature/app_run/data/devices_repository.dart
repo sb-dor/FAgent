@@ -4,6 +4,7 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.d
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/emulator_launcher.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:l/l.dart';
 
@@ -286,7 +287,7 @@ final class _DaemonSession {
     try {
       return _parseEmulators(await connection.request('emulator.getEmulators'));
     } on DaemonRequestException catch (error) {
-      l.w('DevicesRepository | emulator.getEmulators failed: $error');
+      l.w('DevicesRepository | emulator.getEmulators failed: ${hideDataDetails(error)}');
       return _emulators;
     }
   }

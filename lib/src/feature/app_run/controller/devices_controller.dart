@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -68,7 +69,7 @@ final class DevicesController extends StateController<DevicesState>
     _launching.add(deviceId);
     notifyListeners();
     _repository.launch(deviceId).catchError((Object error, StackTrace stackTrace) {
-      l.w('DevicesController | cannot launch $deviceId: $error');
+      l.w('DevicesController | cannot launch $deviceId: ${hideDataDetails(error)}');
       _launching.remove(deviceId);
       _failedLaunches.add(deviceId);
       if (!isDisposed) notifyListeners();

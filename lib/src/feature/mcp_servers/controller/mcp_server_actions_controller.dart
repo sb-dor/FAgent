@@ -1,4 +1,5 @@
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -68,8 +69,10 @@ final class McpServerActionsController extends StateController<McpServerActionsS
   void _check(String id) => _repository
       .check(id: id)
       .catchError(
-        (Object error, StackTrace stackTrace) =>
-            l.w('MCP servers | the status check of $id failed: $error', stackTrace),
+        (Object error, StackTrace stackTrace) => l.w(
+          'MCP servers | the status check of $id failed: ${hideDataDetails(error)}',
+          stackTrace,
+        ),
       )
       .ignore();
 

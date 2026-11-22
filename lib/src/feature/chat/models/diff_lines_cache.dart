@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/utils/line_diff.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_item.dart';
 import 'package:l/l.dart';
@@ -55,7 +56,10 @@ class DiffLinesCache {
     try {
       lines = await LineDiff.computeAsync(key.$1, key.$2);
     } on Object catch (error, stackTrace) {
-      l.w('DiffLinesCache | the diff failed, showing every line as changed: $error', stackTrace);
+      l.w(
+        'DiffLinesCache | the diff failed, showing every line as changed: ${hideDataDetails(error)}',
+        stackTrace,
+      );
       lines = LineDiff.allChanged(key.$1, key.$2);
     }
     if (_disposed || !_pending.remove(key)) return;

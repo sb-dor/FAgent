@@ -3,6 +3,7 @@ import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event_store.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:l/l.dart';
 
 void main() {
   late AppDatabase database;
@@ -248,5 +249,26 @@ void main() {
     expect(view.map((event) => event.seq), store.events.map((event) => event.seq));
     expect(() => view.add(view.first), throwsUnsupportedError);
     await store.close();
+  });
+
+  test('a failed write is logged without the statement or its data', () async {
+    const secret = 'secret prompt text';
+    final logged = <String>[];
+    final sub = l.listen((m) => logged.add('${m.message}'));
+    addTearDown(sub.cancel);
+    // No session 999: the foreign key makes the write fail, and the statement holds the payload.
+    final store = await SessionEventStore.open(
+      database,
+      999,
+      flushInterval: const Duration(hours: 1),
+    );
+    store.addAgentFrame('agent_message_chunk', <String, Object?>{'text': secret});
+
+    await store.close();
+    await pumpEventQueue();
+
+    expect(logged.join('\n'), contains('failed to write'));
+    expect(logged.join('\n'), contains('lost unsaved events on close'));
+    expect(logged.join('\n'), isNot(contains(secret)));
   });
 }

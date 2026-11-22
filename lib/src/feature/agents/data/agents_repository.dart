@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/src/common/acp/agent_preflight.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/process/run_process.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_sign_in.dart';
@@ -227,12 +228,12 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
             _emit();
           },
           onError: (Object error, StackTrace stackTrace) =>
-              l.w('Agents | the options catalog failed: $error', stackTrace),
+              l.w('Agents | the options catalog failed: ${hideDataDetails(error)}', stackTrace),
         );
         custom = watchCustomAgents().listen(
           _onCustomAgents,
           onError: (Object error, StackTrace stackTrace) =>
-              l.w('Agents | the custom agents failed: $error', stackTrace),
+              l.w('Agents | the custom agents failed: ${hideDataDetails(error)}', stackTrace),
         );
       }
       ..onCancel = () async {
@@ -293,7 +294,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
               ? await _checkClaude(definition)
               : await _checkAgent(definition);
         } on Object catch (error, stackTrace) {
-          l.w('Agents | checking $agentId failed: $error', stackTrace);
+          l.w('Agents | checking $agentId failed: ${hideDataDetails(error)}', stackTrace);
           return;
         }
         // Removed while it was checked.
@@ -320,7 +321,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
         hint: error.hint,
       );
     } on Object catch (error, stackTrace) {
-      l.w('Agents | the Claude check failed: $error', stackTrace);
+      l.w('Agents | the Claude check failed: ${hideDataDetails(error)}', stackTrace);
       return base.copyWith(status: AgentStatus.notInstalled, problem: '$error');
     }
     final runtime = await _nodeRuntime();
@@ -381,7 +382,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
       final match = RegExp(r'^v(\d+)\.(\d+)').firstMatch('${result.stdout}'.trim());
       return match == null ? null : 'Node ${match.group(1)}.${match.group(2)}';
     } on Object catch (error) {
-      l.w('Agents | node --version failed: $error');
+      l.w('Agents | node --version failed: ${hideDataDetails(error)}');
       return null;
     }
   }
@@ -398,7 +399,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
       // A signed-out CLI may exit with a non-zero code and still print the JSON.
       return parseClaudeAuthStatus('${result.stdout}');
     } on Object catch (error) {
-      l.w('Agents | claude auth status failed: $error');
+      l.w('Agents | claude auth status failed: ${hideDataDetails(error)}');
       return null;
     }
   }
@@ -418,7 +419,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
           error,
           stackTrace,
         ) {
-          l.w('Agents | the check after login failed: $error', stackTrace);
+          l.w('Agents | the check after login failed: ${hideDataDetails(error)}', stackTrace);
         }),
       );
       return login;
@@ -573,7 +574,7 @@ final class AgentsRepositoryImpl implements IAgentsRepository {
         source: AgentSource.custom,
       );
     } on Object catch (error) {
-      l.w('Agents | skipping custom agent $_customIdPrefix${row.id}: $error');
+      l.w('Agents | skipping custom agent $_customIdPrefix${row.id}: ${hideDataDetails(error)}');
       return null;
     }
   }

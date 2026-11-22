@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.da
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/code_view/models/dart_analysis_status.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
@@ -145,7 +146,7 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
         cancel: _cancelStart.future,
       );
     } on Object catch (error, stackTrace) {
-      l.w('Dart analysis | the server did not start: $error', stackTrace);
+      l.w('Dart analysis | the server did not start: ${hideDataDetails(error)}', stackTrace);
       _setStatus(DartAnalysisStatus.unavailable(reason: '$error'));
       return;
     }
@@ -215,7 +216,7 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
     try {
       return await server.complete(path, position);
     } on Object catch (error) {
-      l.v('Dart analysis | completion failed: $error');
+      l.v('Dart analysis | completion failed: ${hideDataDetails(error)}');
       return const <DartCompletion>[];
     }
   }
@@ -227,7 +228,7 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
     try {
       return await server.resolve(completion);
     } on Object catch (error) {
-      l.v('Dart analysis | resolve failed: $error');
+      l.v('Dart analysis | resolve failed: ${hideDataDetails(error)}');
       return completion;
     }
   }
@@ -246,7 +247,7 @@ final class DartAnalysisRepositoryImpl implements IDartAnalysisRepository {
     try {
       return await request(server);
     } on Object catch (error) {
-      l.v('Dart analysis | request failed: $error');
+      l.v('Dart analysis | request failed: ${hideDataDetails(error)}');
       return fallback;
     }
   }

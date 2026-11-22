@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completi
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
@@ -239,7 +240,7 @@ final class DartAnalysisServer {
       await _connection.request('shutdown', null, timeout: const Duration(seconds: 2));
       _connection.notify('exit', null);
     } on Object catch (error) {
-      l.v('Dart analysis | shutdown not answered: $error');
+      l.v('Dart analysis | shutdown not answered: ${hideDataDetails(error)}');
     }
     await _connection.close();
     await _process.stop();

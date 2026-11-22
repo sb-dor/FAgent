@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/dart_mcp_command.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_servers_repository.dart';
 import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
@@ -297,7 +298,7 @@ final class SessionContextRepositoryImpl implements ISessionContextRepository {
         final text = await _skills.read(rule.id, projectRoot: projectRoot);
         rules.add((source: rule.source, name: rule.name, text: text));
       } on Object catch (error) {
-        l.w('Session context | skipping the rule ${rule.id}: $error');
+        l.w('Session context | skipping the rule ${rule.id}: ${hideDataDetails(error)}');
       }
     }
     return rules;
