@@ -54,8 +54,10 @@ pipeline to an existing project unasked.
   `handle(error:, done:)`.
 - `security.md`: a generic "Crash reports" section: only unexpected errors leave the machine, what
   an event holds, `sendDefaultPii = false`, `package_config` removed in `beforeSend`, what
-  `redactSecrets` replaces, a new kind of secret comes with a test, `HiddenDetailsError`, the user's
-  switch.
+  `redactSecrets` replaces, a new kind of secret comes with a test, `HiddenDetailsError` (an opt-in),
+  the user's switch. Owner's decision 2026-11-22: every exception is sent with its full text (as Sentry's
+  `captureException` and Crashlytics' `recordError` do) after `redactSecrets`; SQLite, drift and
+  `FormatException` errors are not hidden by default.
 - `configuration.md`: "The Sentry DSN": `config/sentry.local.json` (git-ignored, key `SENTRY_DSN`),
   `--dart-define-from-file`, an empty DSN switches sending off and the queue is still kept.
 - `dependencies.md`: "The error log and the reporter": the log is the first initialization step;

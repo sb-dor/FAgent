@@ -161,11 +161,14 @@ void main() {
     });
   });
 
-  test('an error with data in its text reaches the log only in its hidden form', () async {
+  test('an error with data in its text reaches the log and the queue with its text', () async {
     await _quiet(() async {
       final runtime = _runtime();
       final logged = <String>[];
-      final sub = l.listen((m) => logged.add('${m.message}'));
+      final sub = l.listen((m) {
+        runtime.buffer.add(m);
+        logged.add('${m.message}');
+      });
       addTearDown(sub.cancel);
       final error = SqliteException(
         extendedResultCode: 1,
@@ -174,15 +177,15 @@ void main() {
       );
 
       await hub.logError(error, StackTrace.current);
-      expect(console.join('\n'), contains('secret prompt text'));
       hub.configure(runtime);
       await hub.settled();
       await pumpEventQueue();
 
-      expect(logged.join('\n'), isNot(contains('secret prompt text')));
-      expect(logged.join('\n'), contains('details hidden'));
-      expect(runtime.buffer.lastLines(100).join('\n'), isNot(contains('secret prompt text')));
-      expect((await runtime.outbox.oldest(5)).single.type, 'SqliteException');
+      expect(logged.join('\n'), contains('secret prompt text'));
+      expect(runtime.buffer.lastLines(100).join('\n'), contains('secret prompt text'));
+      final entry = (await runtime.outbox.oldest(5)).single;
+      expect(entry.type, 'SqliteException');
+      expect(entry.message, contains('secret prompt text'));
     });
   });
 }

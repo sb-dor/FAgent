@@ -1,11 +1,10 @@
 import 'dart:async';
 
-import 'package:drift/drift.dart'
-    show DatabaseConnection, DriftWrappedException, LazyDatabase, Variable, driftRuntimeOptions;
-import 'package:drift/isolate.dart';
+import 'package:drift/drift.dart' show LazyDatabase, driftRuntimeOptions;
 import 'package:drift/native.dart';
 import 'package:flutter_code_agent/src/common/telemetry/error_outbox.dart';
 import 'package:flutter_code_agent/src/common/telemetry/error_reporter.dart';
+import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/telemetry/log_buffer.dart';
 import 'package:flutter_code_agent/src/common/telemetry/telemetry_database.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,7 +13,7 @@ import 'package:l/l.dart';
 TelemetryDatabase _db() => TelemetryDatabase.forTesting(NativeDatabase.memory());
 
 final class _Case {
-  _Case(this.db, {bool Function(Object)? isExpected}) {
+  _Case(this.db, {bool Function(Object)? isExpected, Object Function(Object)? hideDetails}) {
     outbox = ErrorOutbox(
       db,
       appVersion: '1.0.0',
@@ -25,6 +24,7 @@ final class _Case {
       outbox: outbox,
       buffer: buffer,
       isExpected: isExpected ?? (e) => e is TimeoutException,
+      hideDetails: hideDetails,
       console: console.add,
     );
   }
@@ -163,85 +163,11 @@ void main() {
     });
   });
 
-  group('errors whose text holds data go to the queue as their type, without the text', () {
-    const secret = 'anna@example.com';
-    final sqlite = SqliteException(
-      extendedResultCode: 2067,
-      message: 'UNIQUE constraint failed: users.email',
-      causingStatement: 'INSERT INTO users (email) VALUES (?)',
-      parametersToStatement: const [secret],
-    );
+  group('every error goes out with its full text, cleaned of secrets', () {
+    const text = 'secret prompt text';
+    const key = 'sk-ant-api03-AbCdEf0123456789AbCdEf0123456789';
 
-    Future<OutboxEntry> report(Object error) => _quiet(() async {
-      final db = _db();
-      addTearDown(db.close);
-      final c = _Case(db);
-      final sub = l.listen(c.buffer.add);
-      addTearDown(sub.cancel);
-
-      await c.reporter.logError(error, StackTrace.current, hint: 'save the user');
-
-      return (await c.outbox.oldest(10)).single;
-    });
-
-    void expectHidden(OutboxEntry entry, String type) {
-      expect(entry.type, type);
-      final sent = [entry.message, entry.stack, entry.hint, ...entry.breadcrumbs].join('\n');
-      for (final text in [secret, 'INSERT INTO', 'users', '"token"']) {
-        expect(sent, isNot(contains(text)), reason: text);
-      }
-    }
-
-    test('SqliteException', () async {
-      expectHidden(await report(sqlite), 'SqliteException');
-    });
-
-    test('DriftWrappedException', () async {
-      final entry = await report(
-        DriftWrappedException(message: 'insert into users $secret', cause: sqlite),
-      );
-
-      expectHidden(entry, 'DriftWrappedException');
-      expect(entry.message, contains('extendedResultCode 2067'));
-    });
-
-    test('DriftRemoteException', () async {
-      // A real one: the statement fails behind a drift isolate in this isolate.
-      final server = DriftIsolate.inCurrent(
-        () => DatabaseConnection(NativeDatabase.memory()),
-        killIsolateWhenDone: false,
-      );
-      final remote = TelemetryDatabase.forTesting(await server.connect(singleClientMode: true));
-      addTearDown(remote.close);
-      Object? error;
-      try {
-        await remote
-            .customSelect(
-              'SELECT * FROM users WHERE email = ?',
-              variables: [const Variable(secret)],
-            )
-            .get();
-      } on DriftRemoteException catch (e) {
-        error = e;
-      }
-      expect(error, isA<DriftRemoteException>());
-      expect('$error', contains('users'));
-
-      expectHidden(await report(error!), 'DriftRemoteException');
-    });
-
-    test('FormatException', () async {
-      expectHidden(
-        await report(const FormatException('Unexpected character', '{"token": "$secret"', 9)),
-        'FormatException',
-      );
-    });
-  });
-
-  group('the log keeps the hidden form of an error whose text holds data', () {
-    const secret = 'secret prompt text';
-
-    Future<void> expectOnlyConsoleHasText(Object error, String type) => _quiet(() async {
+    Future<void> expectFullText(Object error, String type) => _quiet(() async {
       final db = _db();
       addTearDown(db.close);
       final c = _Case(db);
@@ -256,50 +182,58 @@ void main() {
       await c.reporter.logError(StateError('later, unrelated'), StackTrace.current);
       await pumpEventQueue();
 
-      expect(logged.join('\n'), isNot(contains(secret)));
-      expect(logged.join('\n'), contains('details hidden'));
-      expect(c.buffer.lastLines(100).join('\n'), isNot(contains(secret)));
-      expect(c.console.join('\n'), contains(secret));
+      expect(logged.join('\n'), contains(text));
+      expect(c.buffer.lastLines(100).join('\n'), contains(text));
       final entries = await c.outbox.oldest(10);
       expect(entries.map((e) => e.type), containsAll([type, 'StateError']));
-      for (final entry in entries) {
-        expect(entry.breadcrumbs.join('\n'), isNot(contains(secret)));
-        expect(entry.message, isNot(contains(secret)));
+      final first = entries.firstWhere((e) => e.type == type);
+      expect(first.message, contains(text));
+      final later = entries.firstWhere((e) => e.type == 'StateError');
+      expect(later.breadcrumbs.join('\n'), contains(text));
+      for (final out in [
+        logged.join('\n'),
+        c.buffer.lastLines(100).join('\n'),
+        for (final e in entries) ...[e.message, e.stack, e.hint ?? '', ...e.breadcrumbs],
+      ]) {
+        expect(out, isNot(contains(key)));
       }
+      expect(logged.join('\n'), contains('[REDACTED]'));
       return 0;
     });
 
     test('SqliteException', () async {
-      await expectOnlyConsoleHasText(
+      await expectFullText(
         SqliteException(
           extendedResultCode: 2067,
-          message: "INSERT INTO chats VALUES ('$secret')",
-          causingStatement: "INSERT INTO chats VALUES ('$secret')",
+          message: "INSERT INTO chats VALUES ('$text', '$key')",
+          causingStatement: "INSERT INTO chats VALUES ('$text', '$key')",
         ),
         'SqliteException',
       );
     });
 
     test('FormatException', () async {
-      await expectOnlyConsoleHasText(
-        const FormatException('Unexpected character', '{"prompt": "$secret"}'),
+      await expectFullText(
+        const FormatException('Unexpected character $text $key', '{"prompt": "$text"}'),
         'FormatException',
       );
     });
 
-    test('an error that is not hidden is logged in full', () async {
+    test('an explicitly passed mapper still hides the text', () async {
       await _quiet(() async {
-        final c = _Case(_db());
-        addTearDown(c.db.close);
-        final logged = <String>[];
-        final sub = l.listen((m) => logged.add('${m.message}'));
-        addTearDown(sub.cancel);
+        final db = _db();
+        addTearDown(db.close);
+        final c = _Case(db, hideDetails: hideDataDetails);
 
-        await c.reporter.logError(StateError('plain failure'), StackTrace.current);
-        await pumpEventQueue();
+        await c.reporter.logError(
+          SqliteException(extendedResultCode: 2067, message: "INSERT ('$text')"),
+          StackTrace.current,
+        );
 
-        expect(logged.join('\n'), contains('plain failure'));
-        expect(c.console, isEmpty);
+        final entry = (await c.outbox.oldest(10)).single;
+        expect(entry.type, 'SqliteException');
+        expect(entry.message, isNot(contains(text)));
+        expect(entry.message, contains('details hidden'));
         return 0;
       });
     });

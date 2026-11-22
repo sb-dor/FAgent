@@ -22,7 +22,7 @@ final class TelemetryRuntime {
   /// Builds the queue, the `ErrorReporter` core and the sender over the log database [db].
   ///
   /// [isExpected] decides that an error is expected and stays out of the queue; [hideDetails] is
-  /// `ErrorReporter.hideDetails` (`hideDataDetails` by default). [projectPackages]
+  /// `ErrorReporter.hideDetails` (none by default: the full text goes out after `redactSecrets`). [projectPackages]
   /// are the packages of the project: they tell the fingerprint which frames are its own. The
   /// sender works only when [enabled] (the user's switch) and [reporterConfigured]: without a
   /// configured reporter nothing is sent.

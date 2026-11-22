@@ -186,11 +186,10 @@ pipeline. The rules for calling it are in "Reporting an error" in `docs/rules/co
   have split an e-mail, a token or a phone that the patterns no longer recognize.
 - **A new kind of secret** is added to `redact.dart` with a test: a positive case and a look-alike
   that must stay (`microphone`, `Device is offline`, `sk-learn`).
-- **An error with details that must not be shown** (SQLite, drift, `FormatException`) goes to the
-  queue as `HiddenDetailsError`: the type of the original, no message. The module does it on its
-  own (`hideDataDetails`, the default `hideDetails` of `startTelemetry`), so do not wrap these
-  yourself; the log on the machine keeps the hidden form too, the full text goes only to the console. Another type whose text holds data goes into
-  `hideDataDetails` with a test, or the app passes its own `hideDetails`.
+- **The text of every error** is sent in full, after `redactSecrets`, like `captureException` in
+  Sentry and `recordError` in Crashlytics do. `HiddenDetailsError` (with `hideDataDetails`) is an
+  opt-in for code whose error text must never leave, for example a server: the app passes it as
+  `hideDetails`. Never put a secret into an exception message: the cleaning is the last net.
 - **Firebase Crashlytics** is a gateway behind the queue, like Sentry: the queue cleans, splits
   and counts, the gateway only sends (`recordError`) what it is given. Never assign
   `FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError` (or

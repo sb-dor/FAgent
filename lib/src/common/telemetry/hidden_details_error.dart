@@ -39,7 +39,7 @@ final class HiddenDetailsError implements Exception, ReportedError {
   String toString() => '$_summary (details hidden)';
 }
 
-/// The default of `ErrorReporter.hideDetails`: the errors whose text can hold the app's data go to
+/// An opt-in `ErrorReporter.hideDetails` (the default sends the full text): the errors whose text can hold the app's data go to
 /// the queue as a [HiddenDetailsError]. `SqliteException` prints the statement and its parameters,
 /// drift's [DriftWrappedException] and [DriftRemoteException] print their cause, and
 /// [FormatException] prints a slice of the input it failed on. Any other error is returned as is.
