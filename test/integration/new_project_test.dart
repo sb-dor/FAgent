@@ -17,12 +17,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 /// Creates a project from the "My architecture" template with the real `flutter` (no git) in a
-/// temp folder, then runs `flutter test` in it (the copied tests of the telemetry module included):
-/// the gate for the skeleton in `assets/project_template/architecture/` and the module in
+/// temp folder, then runs `flutter test` in it (the copied tests of the telemetry module included)
+/// and builds it for the web: the gate for the skeleton in `assets/project_template/architecture/` and the module in
 /// `lib/src/common/telemetry/` (the creation itself runs `flutter analyze`). Then
 /// creates a monorepo (`packages/ui` and the shared `telemetry`, `database` and `api_client`), adds
 /// a member of every kind to it and runs `make analyze`, `make test` (the module's tests in
-/// `packages/telemetry/test/` included) and a macOS build in it: the gate for
+/// `packages/telemetry/test/` included), a macOS and a web build in it: the gate for
 /// `assets/project_template/monorepo/` and "Add to project".
 /// Last, one app with Crashlytics (no `flutterfire configure`) and one with the log only: the
 /// gate for the other crash reporters.
@@ -87,7 +87,7 @@ void main() {
         name: 'skeleton_probe',
         org: 'com.example',
         parent: root.path,
-        platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+        platforms: const <FlutterPlatform>{FlutterPlatform.macos, FlutterPlatform.web},
         gitInit: false,
       );
 
@@ -132,6 +132,15 @@ void main() {
         environment: environment.variables,
       );
       expect(bundled.exitCode, 0, reason: '${bundled.stdout}\n${bundled.stderr}');
+
+      // The web build takes the console-only `ErrorUtil`: the module (drift, `dart:io`) stays out.
+      final web = await io.Process.run(
+        flutter,
+        const <String>['build', 'web'],
+        workingDirectory: p.join(root.path, 'skeleton_probe'),
+        environment: environment.variables,
+      );
+      expect(web.exitCode, 0, reason: '${web.stdout}\n${web.stderr}');
     },
     skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
     timeout: const Timeout(Duration(minutes: 10)),
@@ -190,7 +199,7 @@ void main() {
             environment: environment.variables,
           );
           expect(own.exitCode, 0, reason: '${own.stdout}\n${own.stderr}');
-          expect(own.stdout, contains('+2: All tests passed!'));
+          expect(own.stdout, contains('+5: All tests passed!'));
         }
       },
       skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
@@ -208,7 +217,7 @@ void main() {
         name: 'shop',
         org: 'com.example',
         parent: parent.path,
-        platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+        platforms: const <FlutterPlatform>{FlutterPlatform.macos, FlutterPlatform.web},
         gitInit: false,
         structure: ProjectStructure.monorepo,
       );
@@ -292,6 +301,12 @@ void main() {
         'build',
         'macos',
         '--debug',
+      ], inFolder: p.join(request.path, 'apps', 'app'));
+      // The web build of the app: `packages/telemetry` is reached through the conditional import
+      // only, so drift and `dart:io` stay out of it.
+      await run(flutter, const <String>[
+        'build',
+        'web',
       ], inFolder: p.join(request.path, 'apps', 'app'));
     },
     skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
