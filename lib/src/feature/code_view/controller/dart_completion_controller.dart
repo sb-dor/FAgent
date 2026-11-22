@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
+import 'package:flutter_code_agent/src/common/utils/reentry_guard.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/completion_edit.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/snippet_session.dart';
@@ -52,13 +53,13 @@ final class DartCompletionController extends ChangeNotifier {
   /// Grows with every edit; an answer to an older one is dropped.
   int _edits = 0;
   Timer? _timer;
-  bool _applying = false;
+  final ReentryGuard _applying = ReentryGuard();
   bool _disposed = false;
 
   static final RegExp _wordChar = RegExp(r'[A-Za-z0-9_$]');
 
   void _onEditing() {
-    if (_applying || _disposed) return;
+    if (_applying.active || _disposed) return;
     if (_snippet case final snippet?) {
       // A fold hides lines the snippet's offsets count: the session cannot follow it.
       if (_editing.codeLines.length != _editing.lineCount) snippet.end();
@@ -178,12 +179,7 @@ final class DartCompletionController extends ChangeNotifier {
     dismiss();
     final resolved = item.data == null ? item : await _analysis.resolve(item);
     if (_disposed) return;
-    _applying = true;
-    try {
-      _document.unfoldAll();
-    } finally {
-      _applying = false;
-    }
+    _applying.run(_document.unfoldAll);
     final selection = _editing.selection;
     final caret = LspPosition(line: selection.extentIndex, character: selection.extentOffset);
     final edit = resolved.edit;
@@ -204,12 +200,7 @@ final class DartCompletionController extends ChangeNotifier {
             additionalEdits: resolved.additionalEdits,
           )
         : resolved;
-    _applying = true;
-    try {
-      _snippet = applyCompletion(_editing, completion, caret: caret);
-    } finally {
-      _applying = false;
-    }
+    _snippet = _applying.run(() => applyCompletion(_editing, completion, caret: caret));
     _lines = _editing.codeLines;
     notifyListeners();
   }
@@ -218,12 +209,7 @@ final class DartCompletionController extends ChangeNotifier {
   bool nextStop() {
     final snippet = _snippet;
     if (snippet == null) return false;
-    _applying = true;
-    try {
-      snippet.next();
-    } finally {
-      _applying = false;
-    }
+    _applying.run(snippet.next);
     if (!snippet.active) _snippet = null;
     return true;
   }
@@ -232,12 +218,7 @@ final class DartCompletionController extends ChangeNotifier {
   bool previousStop() {
     final snippet = _snippet;
     if (snippet == null) return false;
-    _applying = true;
-    try {
-      snippet.previous();
-    } finally {
-      _applying = false;
-    }
+    _applying.run(snippet.previous);
     return true;
   }
 

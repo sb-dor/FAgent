@@ -1688,13 +1688,13 @@ void main() {
 /// A picker whose every call fails.
 final class _ThrowingPicker implements IWidgetPickerRepository {
   @override
-  Future<PickResult> pick(int projectId) async => throw StateError('broken');
+  Future<PickResult> pick(int projectId) async => throw Exception('broken');
 
   @override
   Future<void> cancel(int projectId) async {}
 
   @override
-  Future<PickResult> select(int projectId, String id) async => throw StateError('broken');
+  Future<PickResult> select(int projectId, String id) async => throw Exception('broken');
 
   @override
   Future<void> dispose() async {}

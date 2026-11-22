@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/code_view/controller/code_document.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
 import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
@@ -187,8 +188,9 @@ final class CodeTabsController extends ChangeNotifier {
     if (document.kind != CodeDocumentKind.text || document.readOnly) return;
     try {
       await beforeSave?.call(document);
-    } on Object {
-      // Saving matters more than formatting.
+    } on Exception catch (error, stackTrace) {
+      // Saving matters more than formatting: the file is saved as it is, unformatted.
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'formatting before save failed'));
     }
     await document.save(overwrite: overwrite);
   }

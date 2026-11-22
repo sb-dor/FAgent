@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/feature/chat/models/chat_handle.dart';
 
@@ -183,15 +185,15 @@ class WorkspaceDataController with ChangeNotifier {
     final guard = leaveGuard;
     if (_view == WorkspaceView.chat || guard == null || _leaveApproved) return leave();
     final navigations = _navigations;
-    guard().then((agreed) {
-      if (!agreed || navigations != _navigations) return;
-      _leaveApproved = true;
-      try {
-        leave();
-      } finally {
-        _leaveApproved = false;
-      }
-    }).ignore();
+    unawaited(
+      guard().then((agreed) {
+        if (!agreed || navigations != _navigations) return null;
+        _leaveApproved = true;
+        // The flag stays up until [leave] is over, whether it threw or not; a throw is not
+        // swallowed here, it reaches the zone's handler.
+        return Future<void>.sync(leave).whenComplete(() => _leaveApproved = false);
+      }),
+    );
   }
 
   /// Selects a tab of the right pane.

@@ -1,9 +1,9 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/app_close/data/app_close_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
-import 'package:l/l.dart';
 
 part 'app_close_controller.freezed.dart';
 
@@ -60,22 +60,27 @@ final class AppCloseController extends StateController<AppCloseState>
   });
 
   /// Saves the unsaved files, then goes on quitting; a save that leaves some unsaved asks again.
-  void saveAndQuit() => handle(() async {
-    if (state is! AppClose$UnsavedState) return;
-    bool saved;
-    try {
-      saved = await _repository.saveAllFiles();
-    } on Object catch (error, stackTrace) {
+  void saveAndQuit() {
+    var saving = true;
+    handle(
+      () async {
+        if (state is! AppClose$UnsavedState) return;
+        final saved = await _repository.saveAllFiles();
+        saving = false;
+        if (!saved) {
+          setState(AppCloseState.unsaved(files: _repository.unsavedFiles(), saveFailed: true));
+          return;
+        }
+        await _checkAgents();
+      },
       // Not a refusal the files know about; the dialog must come back, or no quit would work.
-      l.w('App close | saving the files failed: $error', stackTrace);
-      saved = false;
-    }
-    if (!saved) {
-      setState(AppCloseState.unsaved(files: _repository.unsavedFiles(), saveFailed: true));
-      return;
-    }
-    await _checkAgents();
-  });
+      error: (error, stackTrace) async {
+        if (saving) {
+          setState(AppCloseState.unsaved(files: _repository.unsavedFiles(), saveFailed: true));
+        }
+      },
+    );
+  }
 
   /// Goes on quitting without saving the unsaved files.
   void quitWithoutSaving() => handle(() async {
@@ -107,9 +112,9 @@ final class AppCloseController extends StateController<AppCloseState>
     setState(const AppCloseState.inProgress());
     try {
       await _repository.shutdown().timeout(shutdownTimeout);
-    } on Object catch (error, stackTrace) {
+    } on Exception catch (error, stackTrace) {
       // Quit anyway rather than hang behind the barrier.
-      l.w('App close | shutdown failed: $error', stackTrace);
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'shutdown before quit failed'));
     }
     await _repository.quit();
   }

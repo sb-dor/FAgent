@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
 import 'package:flutter_code_agent/src/feature/permission_rules/models/permission_rules_exceptions.dart';
 import 'package:flutter_code_agent/src/feature/projects/models/project.dart';
@@ -70,7 +71,9 @@ final class PermissionRulesController extends StateController<PermissionRulesSta
     if (isDisposed) return;
     try {
       await _repository.remove(project.path, rule);
-    } on Object catch (error) {
+    } on Exception catch (error, stackTrace) {
+      // The section is read again below either way, so it shows what the file holds.
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'permission rule was not removed'));
       onRemoveFailed?.call(error);
     }
     final updated = await _read(project);
@@ -85,8 +88,10 @@ final class PermissionRulesController extends StateController<PermissionRulesSta
       return ProjectRules.rules(await _repository.rules(project.path));
     } on PermissionRulesUnreadableException catch (error) {
       return ProjectRules.unreadable(error.path);
-    } on Object {
-      // Any other failure (no access, a vanished folder) leaves the file unusable too.
+    } on Exception catch (error, stackTrace) {
+      // Any other failure (no access, a vanished folder) leaves the file unusable too: the section
+      // shows it as unreadable instead of dropping the whole load.
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'permission rules were not read'));
       return ProjectRules.unreadable(p.join(project.path, '.claude', 'settings.local.json'));
     }
   }

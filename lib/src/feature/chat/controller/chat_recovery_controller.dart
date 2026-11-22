@@ -92,11 +92,7 @@ final class ChatRecoveryController extends StateController<ChatRecoveryState>
     void listener() => onOutput(terminal.output.value);
     terminal.output.addListener(listener);
     listener();
-    try {
-      return await terminal.succeeded;
-    } finally {
-      terminal.output.removeListener(listener);
-    }
+    return terminal.succeeded.whenComplete(() => terminal.output.removeListener(listener));
   }
 
   /// Stops the running browser or key sign-in of [agentId]; the login then ends as failed.

@@ -416,7 +416,7 @@ final class _ThrowingNotesRepository with CreateOnlyProjectCreation {
 
   @override
   Future<List<String>> scriptsListingMembers(String projectPath) async =>
-      throw StateError('no scripts');
+      throw const FileSystemException('no scripts');
 }
 
 final class _FailingRepository with CreateOnlyProjectCreation {

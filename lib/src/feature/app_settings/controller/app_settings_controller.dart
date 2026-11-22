@@ -102,8 +102,8 @@ final class AppSettingsController extends StateController<AppSettingsState>
   /// Waits for the stored row to load first, so a change never builds on (and writes) the defaults.
   void update(AppSettings Function(AppSettings current) change) {
     _pendingWrites++;
-    handle(() async {
-      try {
+    handle(
+      () async {
         if (_subscription == null) _listen();
         await _firstLoad.future;
         final base = _intended;
@@ -116,13 +116,13 @@ final class AppSettingsController extends StateController<AppSettingsState>
         await _repository.update(next);
         _confirmed = next;
         _awaitingEcho = true;
-      } on Object {
+      },
+      error: (error, stackTrace) async {
         _intended = _confirmed;
-        rethrow;
-      } finally {
-        _pendingWrites--;
-      }
-    }, error: (error, stackTrace) async => _fail(error));
+        _fail(error);
+      },
+      done: () async => _pendingWrites--,
+    );
   }
 
   @override

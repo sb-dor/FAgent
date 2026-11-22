@@ -145,9 +145,9 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     afterSuccess: () async {
       try {
         return await _repository.scriptsListingMembers(request.projectPath);
-      } on Object catch (error, stackTrace) {
+      } on Exception catch (error, stackTrace) {
         // The notes are advice only; the member is added either way.
-        ErrorUtil.logError(error, stackTrace).ignore();
+        unawaited(ErrorUtil.logError(error, stackTrace, hint: 'member notes were not read'));
         return const <String>[];
       }
     },
@@ -173,63 +173,64 @@ final class ProjectCreationController extends StateController<ProjectCreationSta
     failed,
     Future<int?> Function()? register,
     required Future<List<String>> Function() afterSuccess,
-  }) => handle(() async {
+  }) {
     if (state is! ProjectCreation$IdleState) return;
-    var steps = <CreationStep>[for (final kind in stepKinds) CreationStep(kind: kind)];
-    setState(running(steps, stopping: false));
-    final finished = _finished = Completer<void>();
-    int? projectId;
-    Object? failure;
-    _subscription = stream().listen(
-      (snapshot) {
-        steps = snapshot.steps;
-        if (!isDisposed) {
-          final current = state;
-          setState(
-            running(steps, stopping: current is ProjectCreation$RunningState && current.stopping),
-          );
-        }
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        failure = error;
-        if (!finished.isCompleted) finished.complete();
-      },
-      onDone: () {
-        if (!finished.isCompleted) finished.complete();
-      },
-      cancelOnError: true,
-    );
-    await finished.future;
-    _subscription = null;
-    if (isDisposed) return;
-    // A stream that ends normally with a failed step is a failed run too, and so is one that
-    // ends before every step is done (for example when the repository is disposed at quit).
-    final failedStep = steps.where((step) => step.status == CreationStepStatus.failed).firstOrNull;
-    final error =
-        failure ??
-        (failedStep != null
-            ? CreationStepFailed(failedStep.kind)
-            : (steps.every((step) => step.status == CreationStepStatus.done)
-                  ? null
-                  : const CreationInterrupted()));
-    // The project is there once `flutter create` is done, even if a later step failed or was
-    // stopped. An interrupted run (the repository disposed) adds nothing.
-    if (register != null &&
-        error is! CreationInterrupted &&
-        failure == null &&
-        steps.first.status == CreationStepStatus.done) {
-      try {
-        projectId = await register();
-      } on Object catch (addError) {
-        if (!isDisposed) setState(failed(steps, addError, null));
-        rethrow;
-      }
+    handle(() async {
+      var steps = <CreationStep>[for (final kind in stepKinds) CreationStep(kind: kind)];
+      setState(running(steps, stopping: false));
+      final finished = _finished = Completer<void>();
+      int? projectId;
+      Object? failure;
+      _subscription = stream().listen(
+        (snapshot) {
+          steps = snapshot.steps;
+          if (!isDisposed) {
+            final current = state;
+            setState(
+              running(steps, stopping: current is ProjectCreation$RunningState && current.stopping),
+            );
+          }
+        },
+        onError: (Object error, StackTrace stackTrace) {
+          failure = error;
+          if (!finished.isCompleted) finished.complete();
+        },
+        onDone: () {
+          if (!finished.isCompleted) finished.complete();
+        },
+        cancelOnError: true,
+      );
+      await finished.future;
+      _subscription = null;
       if (isDisposed) return;
-    }
-    final notes = error == null ? await afterSuccess() : const <String>[];
-    if (isDisposed) return;
-    setState(error == null ? completed(steps, projectId, notes) : failed(steps, error, projectId));
-  }, error: (error, stackTrace) async => _failWith(error));
+      // A stream that ends normally with a failed step is a failed run too, and so is one that
+      // ends before every step is done (for example when the repository is disposed at quit).
+      final failedStep = steps
+          .where((step) => step.status == CreationStepStatus.failed)
+          .firstOrNull;
+      final error =
+          failure ??
+          (failedStep != null
+              ? CreationStepFailed(failedStep.kind)
+              : (steps.every((step) => step.status == CreationStepStatus.done)
+                    ? null
+                    : const CreationInterrupted()));
+      // The project is there once `flutter create` is done, even if a later step failed or was
+      // stopped. An interrupted run (the repository disposed) adds nothing.
+      if (register != null &&
+          error is! CreationInterrupted &&
+          failure == null &&
+          steps.first.status == CreationStepStatus.done) {
+        projectId = await register();
+        if (isDisposed) return;
+      }
+      final notes = error == null ? await afterSuccess() : const <String>[];
+      if (isDisposed) return;
+      setState(
+        error == null ? completed(steps, projectId, notes) : failed(steps, error, projectId),
+      );
+    }, error: (error, stackTrace) async => _failWith(error));
+  }
 
   /// Kills the command that is running now; the creation then ends as failed. Does nothing unless
   /// a creation is running, and a second call while it is stopping does nothing too.

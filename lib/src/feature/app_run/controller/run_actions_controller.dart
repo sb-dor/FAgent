@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
@@ -232,8 +233,9 @@ final class RunActionsController extends StateController<RunActionsState>
       PickResult result;
       try {
         result = await call();
-      } on Object catch (error, stackTrace) {
-        l.w('RunActionsController | the picker failed for $projectId: $error', stackTrace);
+      } on Exception catch (error, stackTrace) {
+        // A failed call is a failed pick the card shows; the log keeps the cause.
+        unawaited(ErrorUtil.logError(error, stackTrace, hint: 'the picker failed for $projectId'));
         result = PickFailed(PickFailure.inspectorError, detail: '$error');
       }
       if (isDisposed || token != _pickToken) return;
