@@ -1,7 +1,9 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:flutter_code_agent/src/common/telemetry/telemetry.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
+import 'package:flutter_code_agent/src/common/utils/expected_failure.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/error_log_step.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/initialize_dependencies.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
@@ -59,6 +61,36 @@ void main() {
       expect(ran, ['Next']);
       expect(console.join('\n'), contains('error log is unavailable'));
       await dependencies.closeErrorLog();
+    },
+  );
+
+  quietTest(
+    'a failing step after "Error log" leaves exactly one fatal entry in logs.sqlite',
+    () async {
+      await expectLater(
+        $initializeDependencies(
+          steps: {
+            'Error log': (d) => startErrorLog(d, supportDirectory: () async => dir),
+            'Boom': (_) => throw StateError('startup boom'),
+          },
+          closers: {'Error log': (d) => d.closeErrorLog()},
+        ),
+        throwsA(anything),
+      );
+
+      final db = openTelemetryDatabase(File('${dir.path}/logs.sqlite'));
+      addTearDown(db.close);
+      final outbox = ErrorOutbox(
+        db,
+        appVersion: '1.0.0',
+        platform: 'test',
+        projectPackages: fagentPackages,
+      );
+      final entries = await outbox.oldest(10);
+      expect(entries, hasLength(1));
+      expect(entries.single.level, 'fatal');
+      expect(entries.single.hint, 'STARTUP ERROR');
+      expect(entries.single.count, 1);
     },
   );
 }

@@ -13,6 +13,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_probe.dart';
@@ -115,6 +116,9 @@ Future<Dependencies> $initializeDependencies({
       finished.add(step.key);
     } on Object catch (error, stackTrace) {
       l.e('Initialization failed at step "${step.key}": $error', stackTrace);
+      // Before the closers: they close the error log, and a report after that is lost.
+      unawaited(ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true));
+      await ErrorUtil.settled();
       for (final name in finished.reversed) {
         final close = closerMap[name];
         if (close == null) continue;

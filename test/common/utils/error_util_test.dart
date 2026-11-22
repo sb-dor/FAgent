@@ -27,6 +27,11 @@ void main() {
     expect(await runtime.outbox.length(), 0);
 
     ErrorUtil.configure(runtime);
+    await ErrorUtil.settled();
+    expect(
+      (await runtime.outbox.oldest(10)).map((entry) => entry.message),
+      contains(contains('too early')),
+    );
     await ErrorUtil.logError(StateError('configured'), StackTrace.current, hint: 'Hint');
     await ErrorUtil.settled();
 

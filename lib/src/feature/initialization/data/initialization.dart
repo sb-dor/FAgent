@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/feature/initialization/data/initialize_dependencies.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/initialization/models/initialization_exception.dart';
 import 'package:l/l.dart';
 
 /// Ephemerally initializes the app and prepares it for use.
@@ -30,7 +31,10 @@ Future<Dependencies> $initializeApp({
     return dependencies;
   } on Object catch (error, stackTrace) {
     onError?.call(error, stackTrace);
-    ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true).ignore();
+    // A failed step is already reported (fatal) before its closers run; this is for the rest.
+    if (error is! InitializationException) {
+      ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true).ignore();
+    }
     rethrow;
   } finally {
     binding.addPostFrameCallback((_) {
