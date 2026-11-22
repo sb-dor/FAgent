@@ -52,8 +52,8 @@ final class ErrorReporter {
   bool Function(Object error) isExpected;
 
   /// The error as the queue gets it: one whose text can hold data comes back as a
-  /// [HiddenDetailsError], so neither the queue nor the crash reporter sees that text. The log keeps
-  /// the full (cleaned) text.
+  /// [HiddenDetailsError], so neither the queue nor the crash reporter sees that text. The log gets
+  /// that hidden form too; the full (cleaned) text goes only to [console].
   final Object Function(Object error) hideDetails;
 
   /// Where failures of the core itself are written; `stderr` by default.
@@ -80,15 +80,23 @@ final class ErrorReporter {
     DateTime? at,
     List<String>? breadcrumbs,
   }) => _guard(() async {
-    final text = redactSecrets(hint == null ? '$error' : '$hint: $error');
-    l.e(text, stackTrace);
+    final hidden = hideDetails(error);
+    final prefix = hint == null ? '' : '$hint: ';
+    if (identical(hidden, error)) {
+      l.e(redactSecrets('$prefix$error'), stackTrace);
+    } else {
+      // The text of this error can hold data: the log, its breadcrumbs and its archive get the
+      // hidden form, only the console (a developer debugging) gets the full cleaned text.
+      l.e(redactSecrets('$prefix$hidden'), stackTrace);
+      _write(redactSecrets('$prefix$error\n$stackTrace'));
+    }
     if (isExpected(error)) {
       return;
     }
     // Only the queue needs the log lines: an expected error does not count them.
     final crumbs = breadcrumbs ?? buffer.lastLines(breadcrumbCount);
     await outbox.add(
-      error: hideDetails(error),
+      error: hidden,
       stack: stackTrace,
       hint: hint,
       level: fatal ? 'fatal' : 'error',

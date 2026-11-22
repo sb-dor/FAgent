@@ -237,4 +237,71 @@ void main() {
       );
     });
   });
+
+  group('the log keeps the hidden form of an error whose text holds data', () {
+    const secret = 'secret prompt text';
+
+    Future<void> expectOnlyConsoleHasText(Object error, String type) => _quiet(() async {
+      final db = _db();
+      addTearDown(db.close);
+      final c = _Case(db);
+      final logged = <String>[];
+      final sub = l.listen((m) {
+        c.buffer.add(m);
+        logged.add('${m.message}');
+      });
+      addTearDown(sub.cancel);
+
+      await c.reporter.logError(error, StackTrace.current, hint: 'save');
+      await c.reporter.logError(StateError('later, unrelated'), StackTrace.current);
+      await pumpEventQueue();
+
+      expect(logged.join('\n'), isNot(contains(secret)));
+      expect(logged.join('\n'), contains('details hidden'));
+      expect(c.buffer.lastLines(100).join('\n'), isNot(contains(secret)));
+      expect(c.console.join('\n'), contains(secret));
+      final entries = await c.outbox.oldest(10);
+      expect(entries.map((e) => e.type), containsAll([type, 'StateError']));
+      for (final entry in entries) {
+        expect(entry.breadcrumbs.join('\n'), isNot(contains(secret)));
+        expect(entry.message, isNot(contains(secret)));
+      }
+      return 0;
+    });
+
+    test('SqliteException', () async {
+      await expectOnlyConsoleHasText(
+        SqliteException(
+          extendedResultCode: 2067,
+          message: "INSERT INTO chats VALUES ('$secret')",
+          causingStatement: "INSERT INTO chats VALUES ('$secret')",
+        ),
+        'SqliteException',
+      );
+    });
+
+    test('FormatException', () async {
+      await expectOnlyConsoleHasText(
+        const FormatException('Unexpected character', '{"prompt": "$secret"}'),
+        'FormatException',
+      );
+    });
+
+    test('an error that is not hidden is logged in full', () async {
+      await _quiet(() async {
+        final c = _Case(_db());
+        addTearDown(c.db.close);
+        final logged = <String>[];
+        final sub = l.listen((m) => logged.add('${m.message}'));
+        addTearDown(sub.cancel);
+
+        await c.reporter.logError(StateError('plain failure'), StackTrace.current);
+        await pumpEventQueue();
+
+        expect(logged.join('\n'), contains('plain failure'));
+        expect(c.console, isEmpty);
+        return 0;
+      });
+    });
+  });
 }

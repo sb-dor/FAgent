@@ -160,4 +160,29 @@ void main() {
       expect(entry.message, isNot(contains('abcdef123456')));
     });
   });
+
+  test('an error with data in its text reaches the log only in its hidden form', () async {
+    await _quiet(() async {
+      final runtime = _runtime();
+      final logged = <String>[];
+      final sub = l.listen((m) => logged.add('${m.message}'));
+      addTearDown(sub.cancel);
+      final error = SqliteException(
+        extendedResultCode: 1,
+        message: "INSERT INTO chats VALUES ('secret prompt text')",
+        causingStatement: "INSERT INTO chats VALUES ('secret prompt text')",
+      );
+
+      await hub.logError(error, StackTrace.current);
+      expect(console.join('\n'), contains('secret prompt text'));
+      hub.configure(runtime);
+      await hub.settled();
+      await pumpEventQueue();
+
+      expect(logged.join('\n'), isNot(contains('secret prompt text')));
+      expect(logged.join('\n'), contains('details hidden'));
+      expect(runtime.buffer.lastLines(100).join('\n'), isNot(contains('secret prompt text')));
+      expect((await runtime.outbox.oldest(5)).single.type, 'SqliteException');
+    });
+  });
 }
