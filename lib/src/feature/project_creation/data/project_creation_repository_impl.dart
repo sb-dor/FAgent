@@ -814,7 +814,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     return was;
   }
 
-  /// Copies the template with the package name filled in, then edits `pubspec.yaml`: gen-l10n on
+  /// Copies the template with the package name filled in, and the telemetry module with its tests
+  /// next to its glue, then keeps the Sentry DSN out of git and edits `pubspec.yaml`: gen-l10n on
   /// and, in a one-app project, `packages/ui` as a workspace member and the shader of its shimmer.
   /// In a [monorepo] only the app's files go to [appPath]; `packages/ui` is written apart and
   /// declares its shader itself.
@@ -825,6 +826,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required String package,
     required bool monorepo,
   }) async {
+    final label = monorepo ? '${p.split(p.relative(appPath, from: run.root)).join('/')}/' : '';
     await _copyTemplate(
       run,
       index,
@@ -832,8 +834,25 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       files: monorepo ? projectTemplateAppFiles : projectTemplateFiles,
       to: appPath,
       package: package,
-      label: monorepo ? '${p.split(p.relative(appPath, from: run.root)).join('/')}/' : '',
+      label: label,
     );
+    for (final (from, to, files) in const <(String, String, List<String>)>[
+      (telemetryModuleRoot, telemetryModuleTarget, telemetryModuleFiles),
+      (telemetryModuleTestRoot, telemetryModuleTestTarget, telemetryModuleTestFiles),
+    ]) {
+      for (final name in files) {
+        final text = await _loadAsset('$from$name');
+        final file = File(p.joinAll(<String>[appPath, ...'$to$name'.split('/')]));
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          copyTelemetryModule(text, importPrefix: 'package:$package/_core/telemetry/'),
+        );
+        run
+          ..addLine(index, '✎ $label$to$name')
+          ..checkLive();
+      }
+    }
+    await _ignoreSentryConfig(File(p.join(appPath, '.gitignore')));
     final pubspec = File(p.join(appPath, 'pubspec.yaml'));
     final lines = (await pubspec.readAsString()).split('\n');
     final flutter = lines.indexOf('flutter:');
@@ -859,6 +878,14 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       '',
     ]);
     await pubspec.writeAsString(lines.join('\n'));
+  }
+
+  /// Adds `config/sentry.local.json` (the Sentry DSN, see `docs/rules/configuration.md`) to
+  /// [gitignore], the one `flutter create` wrote, on a line of its own.
+  Future<void> _ignoreSentryConfig(File gitignore) async {
+    final text = gitignore.existsSync() ? await gitignore.readAsString() : '';
+    final gap = text.isEmpty ? '' : (text.endsWith('\n') ? '\n' : '\n\n');
+    await gitignore.writeAsString('$text$gap$_sentryGitignore');
   }
 
   /// Runs [executable] in [workingDirectory] with the shell environment, its stdout and stderr
@@ -918,6 +945,12 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
 /// The files of the repository that a monorepo's root keeps; the rest of
 /// [projectTemplateRepoFiles] (the Makefile and scripts of one app, the rename tool) is not for it.
 const List<String> _workspaceRepoFiles = <String>['analysis_options.yaml', 'CHANGELOG.md'];
+
+/// The lines [ProjectCreationRepositoryImpl] adds to the `.gitignore` of an app with the skeleton.
+const String _sentryGitignore = '''
+# The Sentry DSN (docs/rules/configuration.md)
+config/sentry.local.json
+''';
 
 /// The `.gitignore` of a monorepo's root; each app and package has its own from `flutter create`.
 const String _workspaceGitignore = '''

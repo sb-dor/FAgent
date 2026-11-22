@@ -46,7 +46,7 @@ void main() {
         hub: hub,
         gateway: _Gateway(),
         reporterConfigured: false,
-        projectPackages: const {'flutter_code_agent'},
+        projectPackages: const {'my_app'},
         appVersion: '1.0.0',
         isExpected: (_) => false,
         defer: (name, step) => steps.add((name, step)),
@@ -86,7 +86,7 @@ void main() {
           db,
           appVersion: '1',
           platform: 'x',
-          projectPackages: const {'flutter_code_agent'},
+          projectPackages: const {'my_app'},
         ).oldest(5)).single.type,
         'StateError',
       );

@@ -358,7 +358,77 @@ void main() {
       );
       final output = step(runs.last, CreationStepKind.skeleton).output;
       expect(output, contains('✎ lib/main.dart'));
-      expect(output.where((line) => line.startsWith('✎ ')), hasLength(projectTemplateFiles.length));
+      expect(
+        output.where((line) => line.startsWith('✎ ')),
+        hasLength(
+          projectTemplateFiles.length +
+              telemetryModuleFiles.length +
+              telemetryModuleTestFiles.length,
+        ),
+      );
+    });
+
+    test(
+      'skeleton copies the telemetry module and its tests with the imports of the app',
+      () async {
+        final runs = await build().create(request(gitInit: false)).toList();
+
+        for (final (from, to) in <(String, String)>[
+          for (final file in telemetryModuleFiles)
+            ('$telemetryModuleRoot$file', '$telemetryModuleTarget$file'),
+          for (final file in telemetryModuleTestFiles)
+            ('$telemetryModuleTestRoot$file', '$telemetryModuleTestTarget$file'),
+        ]) {
+          expect(
+            File(p.joinAll(<String>[path(), ...to.split('/')])).readAsStringSync(),
+            copyTelemetryModule(
+              File(from).readAsStringSync(),
+              importPrefix: 'package:avera_booking/_core/telemetry/',
+            ),
+            reason: to,
+          );
+        }
+        expect(
+          File(p.join(path(), 'lib', '_core', 'telemetry', 'telemetry_database.g.dart'))
+              .existsSync(),
+          isFalse,
+        );
+        expect(
+          File(p.join(path(), 'test', '_core', 'telemetry', 'portability_test.dart')).existsSync(),
+          isFalse,
+        );
+        expect(
+          step(runs.last, CreationStepKind.skeleton).output,
+          containsAll(<String>[
+            '✎ lib/_core/telemetry/telemetry.dart',
+            '✎ test/_core/telemetry/error_hub_test.dart',
+          ]),
+        );
+      },
+    );
+
+    test('skeleton keeps the Sentry DSN out of git', () async {
+      await build().create(request(gitInit: false)).toList();
+      expect(
+        File(p.join(path(), '.gitignore')).readAsStringSync().split('\n'),
+        contains('config/sentry.local.json'),
+      );
+
+      // Appended to what flutter create wrote, on a line of its own.
+      Directory(path()).deleteSync(recursive: true);
+      final create = script;
+      script = (process) {
+        if (isCreate(process)) {
+          Directory(process.arguments.last).createSync(recursive: true);
+          File(p.join(process.arguments.last, '.gitignore')).writeAsStringSync('.dart_tool/');
+        }
+        create(process);
+      };
+      await build().create(request(gitInit: false)).toList();
+      expect(
+        File(p.join(path(), '.gitignore')).readAsStringSync(),
+        '.dart_tool/\n\n# The Sentry DSN (docs/rules/configuration.md)\nconfig/sentry.local.json\n',
+      );
     });
 
     test('generate true goes under flutter', () async {
@@ -766,7 +836,10 @@ void main() {
 
       expect(runs.last.steps.map((step) => step.status), everyElement(CreationStepStatus.done));
       expect(exists('apps/app/lib/main.dart'), isTrue);
-      expect(exists('apps/app/lib/_core/utils/api_client.dart'), isTrue);
+      expect(exists('apps/app/lib/_core/api_client/api_client.dart'), isTrue);
+      expect(exists('apps/app/lib/_core/telemetry/telemetry.dart'), isTrue);
+      expect(exists('apps/app/test/_core/telemetry/error_hub_test.dart'), isTrue);
+      expect(read('apps/app/.gitignore'), contains('config/sentry.local.json'));
       expect(exists('lib'), isFalse);
       expect(read('apps/app/lib/main.dart'), contains("import 'package:shop_app/"));
       for (final relative in projectTemplateUiFiles) {

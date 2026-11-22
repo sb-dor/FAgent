@@ -230,7 +230,7 @@ void main() {
       expect(seen, isNotEmpty);
       // The rules build on the HTTP client a new project gets; their examples import it by name.
       expect(seen, isNot(contains('api_client.dart')));
-      File('assets/project_template/architecture/lib/_core/utils/api_client.dart')
+      File('assets/project_template/architecture/lib/_core/api_client/api_client.dart')
           .copySync(p.join(lib.path, 'api_client.dart'));
 
       Future<void> run(String executable, List<String> arguments) async {

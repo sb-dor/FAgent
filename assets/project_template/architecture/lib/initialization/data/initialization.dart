@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:{{package}}/_core/controller/controller_observer.dart';
-import 'package:{{package}}/_core/utils/error_util/error_util.dart';
+import 'package:l/l.dart';
+import 'package:{{package}}/_core/telemetry/controller_observer.dart';
+import 'package:{{package}}/_core/telemetry/error_util.dart';
 import 'package:{{package}}/initialization/data/initialize_dependencies.dart';
 import 'package:{{package}}/initialization/models/dependencies.dart';
 
@@ -29,7 +30,10 @@ Future<Dependencies> $initializeApp({
     return dependencies;
   } on Object catch (error, stackTrace) {
     onError?.call(error, stackTrace);
-    ErrorUtil.logError(error, stackTrace, hint: 'Failed to initialize app').ignore();
+    // A failed step is already reported (fatal) before the error log closed; this is for the rest.
+    if (error is! InitializationException) {
+      ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true).ignore();
+    }
     rethrow;
   } finally {
     binding.addPostFrameCallback((_) {
@@ -44,6 +48,8 @@ Future<Dependencies> $initializeApp({
 @visibleForTesting
 Future<void> $disposeApp(Dependencies dependencies) async {
   // Close what the dependencies own, in reverse order of creation.
+  // Last: the closing above may still report.
+  await dependencies.closeErrorLog();
 }
 
 /// Whether [_catchExceptions] already installed the handlers. A retried start runs it again, and a
@@ -55,29 +61,22 @@ Future<void> _catchExceptions() async {
   _handlersInstalled = true;
   try {
     PlatformDispatcher.instance.onError = (error, stackTrace) {
-      ErrorUtil.logError(error, stackTrace, hint: 'ROOT ERROR\r\n${Error.safeToString(error)}').ignore();
+      ErrorUtil.logError(error, stackTrace, hint: 'ROOT ERROR').ignore();
       return true;
     };
 
     final sourceFlutterError = FlutterError.onError;
     FlutterError.onError = (details) {
-      // Errors the framework marks silent (a failed image load, for example) are expected in
-      // production: a warning, not a crash.
       if (details.silent) {
-        ErrorUtil.logMessage(
-          details.exceptionAsString(),
-          stackTrace: details.stack,
-          hint: 'FLUTTER ERROR (silent)',
-          warning: true,
+        // The framework marks these as not worth a report (a failed image load, a layout notice).
+        l.w('FLUTTER ERROR (silent) | ${details.exceptionAsString()}', details.stack);
+      } else {
+        ErrorUtil.logError(
+          details.exception,
+          details.stack ?? StackTrace.current,
+          hint: 'FLUTTER ERROR',
         ).ignore();
-        sourceFlutterError?.call(details);
-        return;
       }
-      ErrorUtil.logError(
-        details.exception,
-        details.stack ?? StackTrace.current,
-        hint: 'FLUTTER ERROR\r\n$details',
-      ).ignore();
       sourceFlutterError?.call(details);
     };
   } on Object catch (error, stackTrace) {

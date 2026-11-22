@@ -1,8 +1,10 @@
-import 'dart:developer' as developer;
-
-import 'package:{{package}}/_core/utils/api_client.dart';
+import 'package:l/l.dart';
 import 'package:meta/meta.dart';
+import 'package:{{package}}/_core/api_client/api_client.dart';
 
+/// Logs every request of the `ApiClient` through `l`, so it is in the error log and the archive
+/// (docs/rules/controllers.md, "Reporting an error"). It only logs: a failure goes on to the
+/// caller, and the controller observer reports it. Never log headers or bodies: they carry tokens.
 @immutable
 class ApiClient$LoggerMiddleware {
   const ApiClient$LoggerMiddleware({
@@ -18,28 +20,19 @@ class ApiClient$LoggerMiddleware {
   ApiClientHandler call(ApiClientHandler innerHandler) => (request, context) async {
     final stopwatch = Stopwatch()..start();
     try {
-      if (logRequest) {
-        developer.log(
-          '[${request.method}] ${request.url.path}',
-          name: 'http',
-          time: DateTime.now(),
-          level: 300,
-        );
-      }
+      if (logRequest) l.d('http | [${request.method}] ${request.url.path}');
       final response = await innerHandler(request, context);
       if (logResponse) {
-        developer.log(
-          '[${request.method}] ${request.url.path} -> ok | ${stopwatch.elapsedMilliseconds}ms',
-          name: 'http',
-          time: DateTime.now(),
-          level: 300,
+        l.d(
+          'http | [${request.method}] ${request.url.path} -> ok | '
+          '${stopwatch.elapsedMilliseconds}ms',
         );
       }
       return response;
-    } on APIClientException catch (error, stackTrace) {
+    } on APIClientException catch (error) {
       if (logError) {
-        developer.log(
-          '[${request.method}] ${request.url.path} -> ${switch (error.statusCode) {
+        l.w(
+          'http | [${request.method}] ${request.url.path} -> ${switch (error.statusCode) {
             501 => 'unimplemented',
             500 => 'internalError',
             409 => 'aborted',
@@ -50,11 +43,6 @@ class ApiClient$LoggerMiddleware {
             < 400 => 'unknownError',
             int statusCode => '$statusCode',
           }} | ${stopwatch.elapsedMilliseconds}ms',
-          name: 'http',
-          time: DateTime.now(),
-          level: 900,
-          error: error.statusCode >= 400 ? null : error,
-          stackTrace: error.statusCode >= 400 ? null : stackTrace,
         );
       }
       rethrow;

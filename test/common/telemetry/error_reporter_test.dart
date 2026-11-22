@@ -17,7 +17,7 @@ final class _Case {
       db,
       appVersion: '1.0.0',
       platform: 'test',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
     );
     reporter = ErrorReporter(
       outbox: outbox,

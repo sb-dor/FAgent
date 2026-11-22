@@ -14,6 +14,17 @@ abstract final class Config {
 
   static const bool beta = bool.fromEnvironment('BETA', defaultValue: false);
 
+  /// The app version in crash reports; the `pubspec.yaml` version unless the build passes
+  /// `APP_VERSION`.
+  static const String appVersion = String.fromEnvironment('APP_VERSION', defaultValue: '1.0.0+1');
+
+  // --- CRASH REPORTS --- //
+
+  /// The Sentry DSN, from `config/sentry.local.json` (git-ignored, see "The Sentry DSN" in
+  /// docs/rules/configuration.md); empty means nothing is sent, the log and the queue are still
+  /// kept.
+  static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
   // --- API --- //
 
   /// Base url for api.

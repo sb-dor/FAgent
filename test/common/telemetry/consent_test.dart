@@ -49,7 +49,7 @@ void _test(
         gateway: gateway,
         appVersion: '1.0.0',
         platform: 'test',
-        projectPackages: const {'flutter_code_agent'},
+        projectPackages: const {'my_app'},
         isExpected: (_) => false,
         enabled: enabled,
         consentSince: consentSince,
@@ -68,7 +68,7 @@ Future<void> _add(
   List<String> breadcrumbs = const [],
 }) => runtime.outbox.add(
   error: error,
-  stack: StackTrace.fromString('#0 main (package:flutter_code_agent/main.dart:1:1)'),
+  stack: StackTrace.fromString('#0 main (package:my_app/main.dart:1:1)'),
   level: 'error',
   breadcrumbs: breadcrumbs,
   at: at,
@@ -174,7 +174,7 @@ void main() {
     await runtime.setEnabled(true, since: t1);
     await runtime.outbox.add(
       error: StateError('after'),
-      stack: StackTrace.fromString('#0 main (package:flutter_code_agent/main.dart:1:1)'),
+      stack: StackTrace.fromString('#0 main (package:my_app/main.dart:1:1)'),
       level: 'error',
       breadcrumbs: [
         '${t0.toIso8601String()} [I] before consent',

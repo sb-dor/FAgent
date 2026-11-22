@@ -8,24 +8,29 @@ const String projectTemplateRoot = 'assets/project_template/architecture/';
 /// keeps the package layout (`lib/ui.dart` and `lib/src/`).
 const List<String> projectTemplateFiles = <String>[
   'lib/main.dart',
-  'lib/_core/utils/api_client.dart',
-  'lib/_core/utils/app_zone.dart',
-  'lib/_core/utils/error_util/error_util.dart',
-  'lib/_core/utils/error_util/platform/error_util_vm.dart',
-  'lib/_core/utils/error_util/platform/error_util_js.dart',
+  'lib/_core/api_client/api_client.dart',
+  'lib/_core/api_client/expected_exception.dart',
+  'lib/_core/api_client/middleware/logger_mw.dart',
+  'lib/_core/api_client/middleware/authentication_interceptor.dart',
+  // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles).
+  'lib/_core/telemetry/app_zone.dart',
+  'lib/_core/telemetry/controller_observer.dart',
+  'lib/_core/telemetry/crash_reporter.dart',
+  'lib/_core/telemetry/error_util.dart',
+  'lib/_core/telemetry/expected_failure.dart',
+  'lib/_core/telemetry/telemetry_setup.dart',
+  'lib/_core/telemetry/telemetry_setup_io.dart',
+  'lib/_core/telemetry/telemetry_setup_web.dart',
   'lib/_core/model/virtual_key_codes.dart',
   'lib/_core/utils/color_util.dart',
   'lib/_core/utils/date_util.dart',
   'lib/_core/utils/json_util.dart',
   'lib/_core/utils/keyboard_observer.dart',
-  'lib/_core/utils/log_buffer.dart',
   'lib/_core/utils/placeholders.dart',
   'lib/_core/utils/screen_util.dart',
   'lib/_core/utils/stream_util.dart',
   'lib/_core/utils/timeouts.dart',
   'lib/_core/utils/token_util.dart',
-  'lib/_core/utils/middleware/logger_mw.dart',
-  'lib/_core/utils/middleware/authentication_interceptor.dart',
   'lib/_core/utils/platform/keyboard_observer_interface.dart',
   'lib/_core/utils/platform/keyboard_observer_vm.dart',
   'lib/_core/utils/platform/keyboard_observer_js.dart',
@@ -37,9 +42,7 @@ const List<String> projectTemplateFiles = <String>[
   'lib/_core/localization/localization.dart',
   'lib/_core/localization/intl_en.arb',
   'lib/_core/constant/config.dart',
-  'lib/_core/controller/controller_observer.dart',
   'lib/_core/database/database.dart',
-  'lib/_core/database/tables/log_table.dart',
   'lib/_core/model/app_metadata.dart',
   'lib/_core/utils/extensions.dart',
   'lib/_core/utils/local_pagination.dart',
@@ -93,6 +96,7 @@ const List<String> projectTemplateFiles = <String>[
   'l10n.yaml',
   'analysis_options.yaml',
   'build.yaml',
+  'config/.gitkeep',
   'Makefile',
   'CHANGELOG.md',
   'tool/dart/rename_project.dart',
@@ -119,24 +123,29 @@ const List<String> projectTemplateRepoFiles = <String>[
 /// `apps/<folder>`.
 const List<String> projectTemplateAppFiles = <String>[
   'lib/main.dart',
-  'lib/_core/utils/api_client.dart',
-  'lib/_core/utils/app_zone.dart',
-  'lib/_core/utils/error_util/error_util.dart',
-  'lib/_core/utils/error_util/platform/error_util_vm.dart',
-  'lib/_core/utils/error_util/platform/error_util_js.dart',
+  'lib/_core/api_client/api_client.dart',
+  'lib/_core/api_client/expected_exception.dart',
+  'lib/_core/api_client/middleware/logger_mw.dart',
+  'lib/_core/api_client/middleware/authentication_interceptor.dart',
+  // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles).
+  'lib/_core/telemetry/app_zone.dart',
+  'lib/_core/telemetry/controller_observer.dart',
+  'lib/_core/telemetry/crash_reporter.dart',
+  'lib/_core/telemetry/error_util.dart',
+  'lib/_core/telemetry/expected_failure.dart',
+  'lib/_core/telemetry/telemetry_setup.dart',
+  'lib/_core/telemetry/telemetry_setup_io.dart',
+  'lib/_core/telemetry/telemetry_setup_web.dart',
   'lib/_core/model/virtual_key_codes.dart',
   'lib/_core/utils/color_util.dart',
   'lib/_core/utils/date_util.dart',
   'lib/_core/utils/json_util.dart',
   'lib/_core/utils/keyboard_observer.dart',
-  'lib/_core/utils/log_buffer.dart',
   'lib/_core/utils/placeholders.dart',
   'lib/_core/utils/screen_util.dart',
   'lib/_core/utils/stream_util.dart',
   'lib/_core/utils/timeouts.dart',
   'lib/_core/utils/token_util.dart',
-  'lib/_core/utils/middleware/logger_mw.dart',
-  'lib/_core/utils/middleware/authentication_interceptor.dart',
   'lib/_core/utils/platform/keyboard_observer_interface.dart',
   'lib/_core/utils/platform/keyboard_observer_vm.dart',
   'lib/_core/utils/platform/keyboard_observer_js.dart',
@@ -148,9 +157,7 @@ const List<String> projectTemplateAppFiles = <String>[
   'lib/_core/localization/localization.dart',
   'lib/_core/localization/intl_en.arb',
   'lib/_core/constant/config.dart',
-  'lib/_core/controller/controller_observer.dart',
   'lib/_core/database/database.dart',
-  'lib/_core/database/tables/log_table.dart',
   'lib/_core/model/app_metadata.dart',
   'lib/_core/utils/extensions.dart',
   'lib/_core/utils/local_pagination.dart',
@@ -188,6 +195,7 @@ const List<String> projectTemplateAppFiles = <String>[
   'test/widget_test.dart',
   'l10n.yaml',
   'build.yaml',
+  'config/.gitkeep',
 ];
 
 /// The files of [projectTemplateFiles] of the shared `packages/ui` package.
@@ -208,6 +216,74 @@ const List<String> projectTemplateUiFiles = <String>[
   'packages/ui/lib/src/theme/extensions/colors.dart',
   'packages/ui/pubspec.yaml',
 ];
+
+/// Where the telemetry module lives in FAgent: its own folder, declared as assets. A new project
+/// gets it as [telemetryModuleTarget], so FAgent's tests test what the project gets.
+const String telemetryModuleRoot = 'lib/src/common/telemetry/';
+
+/// The files of the module, relative to [telemetryModuleRoot]: every Dart file but the generated
+/// `telemetry_database.g.dart`, which the project's `build_runner` writes.
+const List<String> telemetryModuleFiles = <String>[
+  'clip.dart',
+  'crash_report_gateway.dart',
+  'error_hub.dart',
+  'error_outbox.dart',
+  'error_reporter.dart',
+  'fingerprint.dart',
+  'hidden_details_error.dart',
+  'log_archive.dart',
+  'log_buffer.dart',
+  'log_record.dart',
+  'log_storage.dart',
+  'log_zone.dart',
+  'redact.dart',
+  'sentry_gateway.dart',
+  'start_telemetry.dart',
+  'telemetry.dart',
+  'telemetry_database.dart',
+  'telemetry_runtime.dart',
+  'telemetry_sender.dart',
+  'telemetry_status.dart',
+];
+
+/// Where the tests of the module live in FAgent.
+const String telemetryModuleTestRoot = 'test/common/telemetry/';
+
+/// The tests of the module, relative to [telemetryModuleTestRoot]. `portability_test.dart` stays:
+/// it checks FAgent's own folder layout.
+const List<String> telemetryModuleTestFiles = <String>[
+  'consent_test.dart',
+  'error_hub_test.dart',
+  'error_outbox_test.dart',
+  'error_reporter_test.dart',
+  'fingerprint_test.dart',
+  'hidden_details_error_test.dart',
+  'log_archive_test.dart',
+  'log_buffer_test.dart',
+  'log_format_test.dart',
+  'log_storage_test.dart',
+  'log_zone_test.dart',
+  'redact_test.dart',
+  'sentry_gateway_test.dart',
+  'start_telemetry_test.dart',
+  'telemetry_runtime_test.dart',
+  'telemetry_sender_test.dart',
+];
+
+/// Where a one-app project keeps the module, next to its glue: relative to the app.
+const String telemetryModuleTarget = 'lib/_core/telemetry/';
+
+/// Where a one-app project keeps the tests of the module: relative to the app.
+const String telemetryModuleTestTarget = 'test/_core/telemetry/';
+
+/// The prefix of every import between the files of the module in FAgent.
+const String _telemetryImportPrefix = 'package:flutter_code_agent/src/common/telemetry/';
+
+/// A file of the telemetry module (or of its tests) as a new project gets it: the module's imports
+/// of itself point at [importPrefix] (`package:<package>/_core/telemetry/` in one app). The module
+/// imports nothing else of FAgent, so nothing else changes.
+String copyTelemetryModule(String text, {required String importPrefix}) =>
+    text.replaceAll(_telemetryImportPrefix, importPrefix);
 
 /// Where the scripts and the Makefile of a monorepo live in the app's assets.
 const String monorepoTemplateRoot = 'assets/project_template/monorepo/';
@@ -280,6 +356,12 @@ List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
   'window_manager',
   'drift',
   'drift_flutter',
+  // The telemetry module (lib/_core/telemetry/): Sentry on plain Dart, the clock of its timers,
+  // the log archive, and the SQLite errors it tells apart.
+  'sentry',
+  'clock',
+  'archive',
+  'sqlite3',
   'web',
   'flutter_localizations@{sdk: flutter}',
   // Flutter 3.47 deprecated the SDK's Material and Cupertino: the template imports these.
@@ -291,6 +373,8 @@ List<String> skeletonPubAddArgumentsFor({required String uiPath}) => <String>[
   'dev:freezed',
   'dev:build_runner',
   'dev:drift_dev',
+  // The timers of the telemetry module's tests.
+  'dev:fake_async',
   'dev:flutter_launcher_icons',
   'dev:flutter_native_splash',
   'dev:integration_test@{sdk: flutter}',

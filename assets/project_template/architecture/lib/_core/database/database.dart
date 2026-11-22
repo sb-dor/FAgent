@@ -1,13 +1,13 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
-import 'package:{{package}}/_core/database/tables/log_table.dart';
 
 part 'database.g.dart';
 
 /// {@template database}
-/// The drift-managed database configuration
+/// The drift-managed database of the app: add its tables to `tables:`. The error log is not here,
+/// it has its own `logs.sqlite` (`lib/_core/telemetry/`).
 /// {@endtemplate}
-@DriftDatabase(tables: [LogTbl, LogPrefixTbl])
+@DriftDatabase(tables: [])
 class AppDatabase extends _$AppDatabase {
   /// {@macro database}
   AppDatabase(super.e);

@@ -18,7 +18,7 @@ description: "Pure DI: the graph is built by hand at startup, dependencies come 
 - Pure DI, no service locator: no `GetIt.instance`, no global or static holder of services, no DI
   container (`injectable`). Dependencies come through the constructor, and widgets read them only
   from `context`. See "Pure DI, not a service locator".
-- One HTTP client, the project's `ApiClient` (`lib/_core/utils/api_client.dart`), created once
+- One HTTP client, the project's `ApiClient` (`lib/_core/api_client/api_client.dart`), created once
   at startup (base URL, middlewares) and shared by every data provider; no Dio, no second wrapper,
   a second instance only for a real difference. It returns the decoded JSON and every failure as an
   `APIClientException`, never the transport's. See "HTTP clients".
@@ -413,7 +413,7 @@ do not crowd the autocomplete of `BuildContext` itself, and the wrapper costs no
 
 ### HTTP clients
 
-A new project has its HTTP client: `ApiClient` in `lib/_core/utils/api_client.dart`. Use it.
+A new project has its HTTP client: `ApiClient` in `lib/_core/api_client/api_client.dart`. Use it.
 When it lacks something, add it in its pattern: a method next to `get` and `post`, or a middleware
 (see "HTTP middleware"). Do not add Dio or a second wrapper around `package:http`. Create it once,
 as an app-wide dependency, with its base URL and middlewares; close it with the app (`close()` in
@@ -484,7 +484,7 @@ wraps it; a handler (`ApiClientHandler`) is
 `APIClientRequest` is the `package:http` request (headers can still be changed before it is
 sent), and `context` is a map that lives for one call and is shared by its middlewares.
 A middleware is a class with `ApiClientHandler call(ApiClientHandler innerHandler)` in
-`lib/_core/utils/middleware/`, like the logging one a project already has
+`lib/_core/api_client/middleware/`, like the logging one a project already has
 (`ApiClient$LoggerMiddleware` in `logger_mw.dart`); `ApiClientMiddlewareWrapper(onRequest:,
 onResponse:, onError:)` builds a small one from callbacks. The list takes their `.call` (the
 `implicit_call_tearoffs` lint asks for it, and an extension type has no implicit one).
@@ -496,13 +496,13 @@ what one throws (a `TimeoutException`) reaches the caller as it is. Checked with
 order, the refresh and retry, and the timeout below.
 
 ```dart
-// lib/_core/utils/middleware/authentication_mw.dart and timeout_mw.dart
+// lib/_core/api_client/middleware/authentication_mw.dart and timeout_mw.dart
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
 import 'package:meta/meta.dart';
 
-import 'package:my_app/_core/utils/api_client.dart';
+import 'package:my_app/_core/api_client/api_client.dart';
 
 /// Adds the access token to every protected request. On a 401 asks [onUnauthorized] for the token
 /// to retry with and sends a copy of the request once more, or rethrows once signed out.

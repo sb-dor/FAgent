@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
@@ -16,8 +17,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 /// Creates a project from the "My architecture" template with the real `flutter` (no git) in a
-/// temp folder, then runs `flutter test` in it: the gate for the skeleton in
-/// `assets/project_template/architecture/` (the creation itself runs `flutter analyze`). Then
+/// temp folder, then runs `flutter test` in it (the copied tests of the telemetry module included):
+/// the gate for the skeleton in `assets/project_template/architecture/` and the module in
+/// `lib/src/common/telemetry/` (the creation itself runs `flutter analyze`). Then
 /// creates a monorepo, adds a member of every kind to it and runs its scripts, `flutter analyze`
 /// and a macOS build in it: the gate for `assets/project_template/monorepo/` and "Add to project".
 ///
@@ -98,6 +100,16 @@ void main() {
       // ignore: avoid_print
       print(report(last));
 
+      // The tests of the telemetry module came with it, and run with the project's own.
+      final moduleTests = io.Directory(
+        p.join(root.path, 'skeleton_probe', 'test', '_core', 'telemetry'),
+      );
+      expect(moduleTests.existsSync(), isTrue);
+      expect(
+        moduleTests.listSync().whereType<io.File>(),
+        hasLength(telemetryModuleTestFiles.length),
+      );
+
       final tested = await io.Process.run(
         flutter,
         const <String>['test'],
@@ -105,6 +117,7 @@ void main() {
         environment: environment.variables,
       );
       expect(tested.exitCode, 0, reason: '${tested.stdout}\n${tested.stderr}');
+      expect(tested.stdout, contains('test/_core/telemetry/'));
 
       // The asset bundle compiles the shader of packages/ui: a wrong path in pubspec.yaml fails
       // here, not in `analyze` or `test`.

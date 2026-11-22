@@ -1,5 +1,3 @@
-import 'dart:io' as io;
-
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:{{package}}/_core/localization/localization.dart';
@@ -25,7 +23,10 @@ class WindowScope extends StatefulWidget {
 
 class _WindowScopeState extends State<WindowScope> {
   @override
-  Widget build(BuildContext context) => kIsWeb || io.Platform.isAndroid || io.Platform.isIOS
+  Widget build(BuildContext context) =>
+      kIsWeb ||
+          defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS
       ? widget.child
       : Column(
           mainAxisSize: MainAxisSize.max,

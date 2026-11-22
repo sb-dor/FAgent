@@ -44,7 +44,7 @@ OutboxEntry _entry({int count = 7, String? stack}) => OutboxEntry(
   level: 'fatal',
   type: 'StateError',
   message: 'Bad state: failure',
-  stack: stack ?? '#0 Repo.load (package:flutter_code_agent/src/repo.dart:10:5)',
+  stack: stack ?? '#0 Repo.load (package:my_app/src/repo.dart:10:5)',
   hint: 'ROOT ERROR',
   breadcrumbs: const ['2026-11-01T07:59:00.000Z [I] first', '2026-11-01T08:00:00.000Z [E] second'],
   appVersion: '1.0.0+1',
@@ -61,7 +61,7 @@ void main() {
       SentryOptions? seen;
       final gateway = SentryGateway(
         dsn: 'https://key@o1.ingest.sentry.io/123',
-        projectPackages: const {'flutter_code_agent'},
+        projectPackages: const {'my_app'},
         environment: 'production',
         release: '1.0.0+1',
         configureOptions: (options) {
@@ -104,7 +104,7 @@ void main() {
     var inits = 0;
     final gateway = SentryGateway(
       dsn: 'https://key@o1.ingest.sentry.io/123',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       configureOptions: (options) {
         inits++;
         options.transport = _Transport();
@@ -123,7 +123,7 @@ void main() {
     final bodies = <String>[];
     final gateway = SentryGateway(
       dsn: 'https://key@o1.ingest.sentry.io/123',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       configureOptions: (options) => options.transport = _Capture(bodies),
     );
     addTearDown(gateway.close);
@@ -141,7 +141,7 @@ void main() {
   test('send: Sentry returned no identifier, the entry is not accepted', () async {
     final gateway = SentryGateway(
       dsn: 'https://key@o1.ingest.sentry.io/123',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       environment: 'production',
       release: '1.0.0+1',
       configureOptions: (options) {
@@ -167,7 +167,7 @@ void main() {
     });
     final up = SentryGateway(
       dsn: 'https://key@o1.ingest.sentry.io/123',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       probeUri: Uri.parse('http://127.0.0.1:${server.port}/'),
     );
     expect(await up.reachable(), isTrue);
@@ -178,7 +178,7 @@ void main() {
     await free.close();
     final down = SentryGateway(
       dsn: 'https://key@o1.ingest.sentry.io/123',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       probeUri: Uri.parse('http://127.0.0.1:$port/'),
     );
     expect(await down.reachable(), isFalse);
@@ -196,7 +196,7 @@ void main() {
 
     final gateway = SentryGateway(
       dsn: 'http://key@127.0.0.1:${server.port}/5',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
     );
 
     expect(await gateway.reachable(), isTrue);
@@ -212,7 +212,7 @@ void main() {
     });
     final gateway = SentryGateway(
       dsn: 'http://key@127.0.0.1:${server.port}/5',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       timeout: const Duration(milliseconds: 300),
     );
 
@@ -228,11 +228,11 @@ void main() {
       db,
       appVersion: '1.0.0+1',
       platform: 'windows',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
     );
     await outbox.add(
       error: StateError('x'),
-      stack: StackTrace.fromString('#0 f (package:flutter_code_agent/a.dart:1:1)'),
+      stack: StackTrace.fromString('#0 f (package:my_app/a.dart:1:1)'),
       level: 'error',
       breadcrumbs: const [],
     );
@@ -241,7 +241,7 @@ void main() {
     server.listen((r) => r.response.close());
     final gateway = SentryGateway(
       dsn: 'https://key@o1.ingest.sentry.io/123',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       environment: 'production',
       release: '1.0.0+1',
       probeUri: Uri.parse('http://127.0.0.1:${server.port}/'),
@@ -257,7 +257,7 @@ void main() {
   test('an empty DSN turns sending off: no connection, Sentry does not start', () async {
     final gateway = SentryGateway(
       dsn: '  ',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       environment: 'development',
     );
 
@@ -271,7 +271,7 @@ void main() {
     SentryOptions? seen;
     final gateway = SentryGateway(
       dsn: 'https://key@sentry.example/1',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       environment: 'production',
       release: '1.0.0',
       configureOptions: (options) {
@@ -294,7 +294,7 @@ void main() {
   test('close stops Sentry; the next send starts it again', () async {
     final gateway = SentryGateway(
       dsn: 'https://key@sentry.example/1',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       configureOptions: (options) => options.transport = _Transport(),
     );
 
@@ -311,7 +311,7 @@ void main() {
   test('close during start waits for the start and closes Sentry', () async {
     final gateway = SentryGateway(
       dsn: 'https://key@sentry.example/1',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
       configureOptions: (options) => options.transport = _Transport(),
     );
 
@@ -328,7 +328,7 @@ void main() {
       final events = <SentryEvent>[];
       final gateway = SentryGateway(
         dsn: 'https://key@sentry.example/1',
-        projectPackages: const {'flutter_code_agent'},
+        projectPackages: const {'my_app'},
         configureOptions: (options) {
           options
             ..transport = _Transport()

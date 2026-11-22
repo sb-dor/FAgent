@@ -19,7 +19,7 @@ TelemetryRuntime _runtime({bool Function(Object)? isExpected}) {
     appVersion: '1.0.0',
     platform: 'test',
     isExpected: isExpected ?? (e) => e is TimeoutException,
-    projectPackages: const {'flutter_code_agent'},
+    projectPackages: const {'my_app'},
     enabled: true,
   );
 }

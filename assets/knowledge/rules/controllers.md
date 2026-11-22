@@ -1164,7 +1164,7 @@ Whole files, one per block; put each where the layout above says and adjust the 
 /// A failure the feature expects as an answer, not a bug: the user can read it and act. The data
 /// layer throws a subtype at the boundary; a controller sets its `error` state, and `ErrorUtil`
 /// writes it to the log but keeps it out of the crash reporter. Lives in
-/// `lib/_core/model/`.
+/// `lib/_core/api_client/expected_exception.dart`.
 abstract base class ExpectedException implements Exception {
   /// Creates the exception.
   const ExpectedException();

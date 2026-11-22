@@ -1,0 +1,2 @@
+# Build settings: config/<ENV>.json (`make run ENV=production`) and config/sentry.local.json, the
+# Sentry DSN, which stays out of git (docs/rules/configuration.md, "The Sentry DSN").

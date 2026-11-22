@@ -11,7 +11,7 @@ import 'package:flutter_code_agent/src/common/telemetry/telemetry_status.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:l/l.dart';
 
-final _stack = StackTrace.fromString('#0 Repo.load (package:flutter_code_agent/repo.dart:10:5)');
+final _stack = StackTrace.fromString('#0 Repo.load (package:my_app/repo.dart:10:5)');
 
 class _Gateway implements ICrashReportGateway {
   bool isReachable = true;
@@ -93,7 +93,7 @@ void main() {
       db,
       appVersion: '1.0.0',
       platform: 'android',
-      projectPackages: const {'flutter_code_agent'},
+      projectPackages: const {'my_app'},
     );
     gateway = _Gateway();
     enabled = true;

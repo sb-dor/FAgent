@@ -1,5 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:{{package}}/_core/utils/api_client.dart';
+import 'package:{{package}}/_core/api_client/api_client.dart';
 
 /// Adds the `Authorization` header to every request of the `ApiClient`, from
 /// [AuthenticationHeaders] in memory: no storage is read per request.

@@ -7,10 +7,14 @@ SHELL := /bin/bash -e -o pipefail
 ENV ?= development
 DEFINES := $(if $(wildcard config/$(ENV).json),--dart-define-from-file=config/$(ENV).json,)
 
+# The Sentry DSN (git-ignored, docs/rules/configuration.md): passed when the file exists, so a clone
+# without it still runs and builds, and sends no crash reports.
+SENTRY := $(if $(wildcard config/sentry.local.json),--dart-define-from-file=config/sentry.local.json,)
+
 # Release builds are obfuscated; the symbols to read their stack traces go here. Keep this folder
 # for every release and upload it to the crash reporter (docs/rules/security.md, "Obfuscation").
 DEBUG_INFO_DIR := build/debug-info
-RELEASE := --release --obfuscate --split-debug-info=$(DEBUG_INFO_DIR) $(DEFINES)
+RELEASE := --release --obfuscate --split-debug-info=$(DEBUG_INFO_DIR) $(DEFINES) $(SENTRY)
 
 .PHONY: all
 all: generate format analyze test ## Generate, format, analyze and test
@@ -76,7 +80,7 @@ test: get ## Run the tests with coverage
 
 .PHONY: run
 run: get ## Run the app (ENV=development by default)
-	@flutter run $(DEFINES)
+	@flutter run $(DEFINES) $(SENTRY)
 
 .PHONY: build-apk
 build-apk: generate ## Build a release APK

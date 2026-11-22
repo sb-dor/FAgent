@@ -100,9 +100,6 @@ flutter:
     - assets/project_template/architecture/
     - assets/project_template/architecture/lib/
     - assets/project_template/architecture/lib/_core/utils/
-    - assets/project_template/architecture/lib/_core/utils/error_util/
-    - assets/project_template/architecture/lib/_core/utils/error_util/platform/
-    - assets/project_template/architecture/lib/_core/utils/middleware/
     - assets/project_template/architecture/lib/_core/utils/platform/
     - assets/project_template/architecture/lib/_core/utils/platform/availability/
     - assets/project_template/architecture/lib/_core/model/
@@ -116,9 +113,11 @@ flutter:
     - assets/project_template/architecture/tool/dart/
     - assets/project_template/architecture/scripts/
     - assets/project_template/architecture/lib/_core/constant/
-    - assets/project_template/architecture/lib/_core/controller/
     - assets/project_template/architecture/lib/_core/database/
-    - assets/project_template/architecture/lib/_core/database/tables/
+    - assets/project_template/architecture/lib/_core/api_client/
+    - assets/project_template/architecture/lib/_core/api_client/middleware/
+    - assets/project_template/architecture/lib/_core/telemetry/
+    - assets/project_template/architecture/config/
     - assets/project_template/architecture/lib/_core/utils/text_input_formatters/
     - assets/project_template/architecture/packages/ui/
     - assets/project_template/architecture/packages/ui/lib/
@@ -131,6 +130,9 @@ flutter:
     - assets/project_template/architecture/packages/ui/shaders/
     - assets/project_template/monorepo/
     - assets/project_template/monorepo/scripts/
+    # The telemetry module and its tests: a new project gets them as lib/_core/telemetry/.
+    - lib/src/common/telemetry/
+    - test/common/telemetry/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
