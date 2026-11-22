@@ -1,0 +1,139 @@
+import 'dart:async';
+
+import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/native.dart';
+import 'package:flutter_code_agent/src/common/telemetry/crash_report_gateway.dart';
+import 'package:flutter_code_agent/src/common/telemetry/error_outbox.dart';
+import 'package:flutter_code_agent/src/common/telemetry/telemetry_database.dart';
+import 'package:flutter_code_agent/src/common/telemetry/telemetry_runtime.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:l/l.dart';
+
+final class _RecordingGateway implements ICrashReportGateway {
+  final List<OutboxEntry> sent = [];
+
+  @override
+  Future<bool> reachable() async => true;
+
+  @override
+  Future<bool> send(OutboxEntry entry) async {
+    sent.add(entry);
+    return true;
+  }
+}
+
+final t0 = DateTime.utc(2026, 1, 1, 10);
+final t1 = DateTime.utc(2026, 1, 1, 11);
+final t2 = DateTime.utc(2026, 1, 1, 12);
+final t3 = DateTime.utc(2026, 1, 1, 13);
+final t4 = DateTime.utc(2026, 1, 1, 14);
+
+/// A test whose log output is swallowed: the test output stays pristine.
+void _test(
+  String name,
+  Future<void> Function(TelemetryRuntime runtime, _RecordingGateway gateway) body, {
+  bool enabled = false,
+  DateTime? consentSince,
+}) {
+  test(
+    name,
+    // ignore: experimental_member_use
+    () => l.capture(() async {
+      final db = TelemetryDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      final gateway = _RecordingGateway();
+      final runtime = TelemetryRuntime(
+        db: db,
+        gateway: gateway,
+        appVersion: '1.0.0',
+        platform: 'test',
+        projectPackages: const {'flutter_code_agent'},
+        isExpected: (_) => false,
+        enabled: enabled,
+        consentSince: consentSince,
+      );
+      addTearDown(runtime.sender.dispose);
+      await body(runtime, gateway);
+      await runtime.settled();
+    }, const LogOptions(output: LogOutput.ignore, handlePrint: false)),
+  );
+}
+
+Future<void> _add(
+  TelemetryRuntime runtime,
+  Object error,
+  DateTime at, {
+  List<String> breadcrumbs = const [],
+}) => runtime.outbox.add(
+  error: error,
+  stack: StackTrace.fromString('#0 main (package:flutter_code_agent/main.dart:1:1)'),
+  level: 'error',
+  breadcrumbs: breadcrumbs,
+  at: at,
+);
+
+/// Waits for the pass that turning on started, then runs one more over the current queue.
+Future<void> _pass(TelemetryRuntime runtime) async {
+  await runtime.sender.stop();
+  await runtime.sender.runPass();
+}
+
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  _test('entries from before consent are never sent', (runtime, gateway) async {
+    await _add(runtime, StateError('a'), t0);
+    await _add(runtime, ArgumentError('b'), t0);
+    await _add(runtime, UnsupportedError('c'), t0);
+
+    await runtime.setEnabled(true, since: t1);
+    await _pass(runtime);
+
+    expect(gateway.sent, isEmpty);
+    expect(await runtime.outbox.length(), 3);
+  });
+
+  _test('a recurrence after consent sends only the new occurrence', (runtime, gateway) async {
+    await _add(runtime, StateError('same'), t0, breadcrumbs: ['old']);
+    await runtime.setEnabled(true, since: t1);
+    await _add(runtime, StateError('same'), t2, breadcrumbs: ['new']);
+
+    await _pass(runtime);
+
+    expect(gateway.sent, hasLength(1));
+    final entry = gateway.sent.single;
+    expect(entry.count, 1);
+    expect(entry.firstAt, t2);
+    expect(entry.lastAt, t2);
+    expect(entry.breadcrumbs, ['new']);
+    expect(entry.attempts, 0);
+  });
+
+  _test('an error after consent is sent', (runtime, gateway) async {
+    await runtime.setEnabled(true, since: t1);
+    await _add(runtime, StateError('later'), t2);
+
+    await _pass(runtime);
+
+    expect(gateway.sent, hasLength(1));
+  });
+
+  _test('no consent time sends everything', (runtime, gateway) async {
+    await _add(runtime, StateError('old'), t0);
+
+    await _pass(runtime);
+
+    expect(gateway.sent, hasLength(1));
+  }, enabled: true);
+
+  _test('turning off and on again moves the consent', (runtime, gateway) async {
+    await runtime.setEnabled(true, since: t1);
+    await _add(runtime, StateError('e'), t2);
+    await runtime.setEnabled(false);
+    await _add(runtime, ArgumentError('f'), t3);
+    await runtime.setEnabled(true, since: t4);
+    await _pass(runtime);
+
+    expect(gateway.sent.where((e) => e.type == 'ArgumentError'), isEmpty);
+  });
+}

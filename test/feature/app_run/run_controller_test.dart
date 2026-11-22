@@ -1053,7 +1053,9 @@ void main() {
       config = MemoryRunConfigRepository(
         apps: <int, List<String>>{1: apps},
         selected: <int, String>{1: 'Mobile prod'},
-        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[mobile])},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[mobile]),
+        },
       );
       final run = follow(1);
       await pumpEventQueue();
@@ -1064,7 +1066,11 @@ void main() {
 
     test('arguments follow the app', () async {
       await config.save(1, const RunArguments(flavor: 'desk'), appFolder: 'apps/desktop');
-      await config.save(1, const RunArguments(dartDefines: <String>['M=1']), appFolder: 'apps/mobile');
+      await config.save(
+        1,
+        const RunArguments(dartDefines: <String>['M=1']),
+        appFolder: 'apps/mobile',
+      );
       final run = follow(1);
       await pumpEventQueue();
       expect(run.state.arguments, const RunArguments(flavor: 'desk'));
@@ -1134,7 +1140,12 @@ void main() {
       run.chooseApp(1, 'apps/mobile');
       await pumpEventQueue();
 
-      actions.start(1, device: _macos, mode: run.state.mode, arguments: () => run.startArgumentsFor(1));
+      actions.start(
+        1,
+        device: _macos,
+        mode: run.state.mode,
+        arguments: () => run.startArgumentsFor(1),
+      );
       await Future<void>.delayed(_step * 50);
 
       expect(repository.starts.single.appFolder, 'apps/mobile');
@@ -1163,7 +1174,9 @@ void main() {
     test('a configuration with cwd starts a monorepo without a Flutter app', () async {
       config = MemoryRunConfigRepository(
         apps: <int, List<String>>{1: const <String>[]},
-        launch: <int, LaunchConfigs>{1: const LaunchConfigsRead(<LaunchConfig>[example])},
+        launch: <int, LaunchConfigs>{
+          1: const LaunchConfigsRead(<LaunchConfig>[example]),
+        },
       );
       final run = follow(1);
       await pumpEventQueue();

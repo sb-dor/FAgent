@@ -132,7 +132,7 @@ final class TelemetrySender {
       // same pass is accepted: then the service is healthy and the entry is bad. The rejected
       // tail gets no attempts.
       final rejected = <OutboxEntry>[];
-      final batch = _newestFirst ? await outbox.newest(perPass) : await outbox.oldest(perPass);
+      final batch = await outbox.sendable(perPass, newestFirst: _newestFirst);
       var acceptedCount = 0;
       var completed = true;
       for (final entry in batch) {

@@ -67,6 +67,7 @@ final class ErrorOutbox {
     required this.platform,
     required this.projectPackages,
     this.capacity = 200,
+    this.consentSince,
   });
 
   final TelemetryDatabase _db;
@@ -78,6 +79,11 @@ final class ErrorOutbox {
 
   /// How many entries are kept; on overflow the oldest by `lastAt` goes.
   final int capacity;
+
+  /// The moment the user turned crash reports on. Only entries whose first occurrence is at or
+  /// after it may be sent ([sendable]); earlier ones stay on the machine. `null`: no switch, every
+  /// entry may be sent.
+  DateTime? consentSince;
 
   /// Called after the queue changes (the sender updates its counter from it).
   void Function()? onChanged;
@@ -99,6 +105,28 @@ final class ErrorOutbox {
         _db.errorOutboxEntries,
       )..where((t) => t.fingerprint.equals(fingerprint))).getSingleOrNull();
       if (existing != null) {
+        final since = consentSince?.toUtc().millisecondsSinceEpoch;
+        if (since != null && existing.firstAt < since) {
+          // The stored occurrence predates consent: its data must never leave the machine, so the
+          // row now describes only this new occurrence.
+          await (_db.update(_db.errorOutboxEntries)..where((t) => t.id.equals(existing.id))).write(
+            ErrorOutboxEntriesCompanion(
+              firstAt: Value(now),
+              lastAt: Value(now),
+              count: const Value(1),
+              attempts: const Value(0),
+              level: Value(level),
+              type: Value(errorTypeName(error)),
+              message: Value(cleanForLog(error.toString())),
+              stack: Value(cleanForLog(stack.toString())),
+              hint: Value(hint == null ? null : cleanForLog(hint)),
+              breadcrumbs: Value(jsonEncode([for (final b in breadcrumbs) cleanForLog(b)])),
+              appVersion: Value(appVersion),
+              platform: Value(platform),
+            ),
+          );
+          return;
+        }
         await (_db.update(_db.errorOutboxEntries)..where((t) => t.id.equals(existing.id))).write(
           ErrorOutboxEntriesCompanion(count: Value(existing.count + 1), lastAt: Value(now)),
         );
@@ -151,6 +179,22 @@ final class ErrorOutbox {
               ..limit(n))
             .get();
     return [for (final row in rows.reversed) _entry(row)];
+  }
+
+  /// Up to [n] entries that may be sent: those first seen at or after [consentSince] (all when it
+  /// is `null`). The oldest ones, or with [newestFirst] the newest ones, from oldest to newest.
+  Future<List<OutboxEntry>> sendable(int n, {required bool newestFirst}) async {
+    final since = consentSince?.toUtc().millisecondsSinceEpoch;
+    final query = _db.select(_db.errorOutboxEntries);
+    if (since != null) {
+      query.where((t) => t.firstAt.isBiggerOrEqualValue(since));
+    }
+    final order = newestFirst ? OrderingTerm.desc : OrderingTerm.asc;
+    query
+      ..orderBy([(t) => order(t.firstAt), (t) => order(t.id)])
+      ..limit(n);
+    final rows = await query.get();
+    return [for (final row in newestFirst ? rows.reversed : rows) _entry(row)];
   }
 
   /// Up to [n] latest entries by time of the last occurrence, newest first.

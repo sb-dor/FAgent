@@ -253,10 +253,7 @@ void main() {
         },
       );
       run.dispose();
-      run = RunController(
-        repository: dependencies.appRunRepository,
-        configRepository: configs,
-      );
+      run = RunController(repository: dependencies.appRunRepository, configRepository: configs);
       await pumpTab(tester);
       await tester.pump();
 
@@ -525,9 +522,7 @@ void main() {
       run.dispose();
       run = RunController(
         repository: dependencies.appRunRepository,
-        configRepository: MemoryRunConfigRepository(
-          apps: <int, List<String>>{1: const <String>[]},
-        ),
+        configRepository: MemoryRunConfigRepository(apps: <int, List<String>>{1: const <String>[]}),
       );
       await pumpTab(tester);
       await tester.pump();
@@ -1399,9 +1394,7 @@ void main() {
       await disposeTestApp(tester, dependencies);
     });
 
-    testWidgets('a monorepo without a Flutter app cannot start from the title bar', (
-      tester,
-    ) async {
+    testWidgets('a monorepo without a Flutter app cannot start from the title bar', (tester) async {
       dependencies = testDependencies(
         devicesRepository: fakeDevices,
         runConfigRepository: MemoryRunConfigRepository(

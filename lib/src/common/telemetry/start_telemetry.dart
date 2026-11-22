@@ -14,7 +14,9 @@ import 'package:path/path.dart' as p;
 /// If the database cannot be opened (disk full, file busy or damaged), returns `null`: the app
 /// works without the log on disk, [hub] writes to the console. Closing the resources is passed to
 /// [defer] (the app's shutdown step). Sending starts with [enabled]; apps turn it on once the
-/// user's setting is read. [projectPackages] are the packages of the project (fingerprint frames).
+/// user's setting is read. [consentSince] is when the user turned crash reports on: nothing recorded
+/// before it is sent (`null`: no switch, everything may be sent). [projectPackages] are the
+/// packages of the project (fingerprint frames).
 Future<TelemetryRuntime?> startTelemetry({
   required Future<Directory> Function() supportDirectory,
   required ErrorHub hub,
@@ -27,6 +29,7 @@ Future<TelemetryRuntime?> startTelemetry({
   Future<void> Function()? releaseGateway,
   String? platform,
   bool enabled = false,
+  DateTime? consentSince,
 }) async {
   TelemetryDatabase? db;
   try {
@@ -43,6 +46,7 @@ Future<TelemetryRuntime?> startTelemetry({
       isExpected: isExpected,
       projectPackages: projectPackages,
       enabled: enabled,
+      consentSince: consentSince,
       reporterConfigured: reporterConfigured,
       releaseGateway: releaseGateway,
     )..buffer.addAll(stored);

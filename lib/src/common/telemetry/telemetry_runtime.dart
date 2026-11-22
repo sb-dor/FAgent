@@ -33,6 +33,7 @@ final class TelemetryRuntime {
     required bool Function(Object error) isExpected,
     required Set<String> projectPackages,
     bool enabled = false,
+    DateTime? consentSince,
     this.reporterConfigured = true,
     this.releaseGateway,
     LogBuffer? buffer,
@@ -43,6 +44,7 @@ final class TelemetryRuntime {
          appVersion: appVersion,
          platform: platform,
          projectPackages: projectPackages,
+         consentSince: consentSince,
        ) {
     reporter = ErrorReporter(outbox: outbox, buffer: this.buffer, isExpected: isExpected);
     sender = TelemetrySender(
@@ -81,16 +83,22 @@ final class TelemetryRuntime {
 
   /// Applies the user's switch: turning on runs an extra pass, turning off stops the sender and
   /// closes the gateway. Repeating the same value does nothing.
-  Future<void> setEnabled(bool enabled) {
+  ///
+  /// [since] is the moment of consent: only errors first seen at or after it are sent. It is set
+  /// before the pass that turning on starts.
+  Future<void> setEnabled(bool enabled, {DateTime? since}) {
     // Calls go in turn: a quick "off, on" will not close the gateway after the turn on.
-    final next = _setting.then((_) => _apply(enabled));
+    final next = _setting.then((_) => _apply(enabled, since));
     _setting = next.catchError((Object _) {});
     return next;
   }
 
   Future<void> _setting = Future<void>.value();
 
-  Future<void> _apply(bool enabled) async {
+  Future<void> _apply(bool enabled, DateTime? since) async {
+    if (since != null) {
+      outbox.consentSince = since;
+    }
     final was = toggle.enabled;
     toggle.enabled = enabled;
     if (enabled && !was) {
