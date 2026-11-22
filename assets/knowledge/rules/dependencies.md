@@ -717,7 +717,6 @@ extension type AppContext(BuildContext _context) {
 ```dart
 // file: initialization.dart
 import 'dart:async';
-import 'dart:developer' as developer;
 
 import 'package:control/control.dart';
 import 'package:flutter/foundation.dart';
@@ -738,7 +737,7 @@ Future<Dependencies> initializeApp({
   final binding = WidgetsFlutterBinding.ensureInitialized()..deferFirstFrame();
   try {
     _catchErrors();
-    Controller.observer = const LoggingControllerObserver();
+    Controller.observer = const ReportingControllerObserver();
     return await _runSteps(steps, onProgress);
   } finally {
     binding.addPostFrameCallback((_) => binding.allowFirstFrame());
@@ -753,10 +752,10 @@ Future<Dependencies> _runSteps(
   var done = 0;
   for (final MapEntry(key: name, value: step) in steps.entries) {
     onProgress?.call(done * 100 ~/ steps.length, name);
-    developer.log('Initialization: $name', name: 'app');
     try {
       await step(dependencies);
     } on Object catch (error, stackTrace) {
+      _report(error, stackTrace, 'STARTUP ERROR');
       // Close what the earlier steps opened: a retry runs every step again.
       await dependencies.disposer.dispose();
       // The step's name travels with the error; the stack trace stays the original one.
@@ -777,14 +776,8 @@ void _catchErrors() {
   final presentError = FlutterError.onError;
   FlutterError.onError = (details) {
     if (details.silent) {
-      // An image that failed to load and the like: the environment, not a bug. A warning, no crash.
-      developer.log(
-        'Flutter warning',
-        error: details.exception,
-        stackTrace: details.stack,
-        name: 'app',
-        level: 900,
-      );
+      // An image that failed to load and the like: the environment, not a bug. Not a crash,
+      // so it is not reported (a project with a log writes it there as a warning).
     } else {
       _report(details.exception, details.stack ?? StackTrace.current, 'Flutter error');
     }
@@ -796,13 +789,16 @@ void _catchErrors() {
   };
 }
 
-/// Sends an error to the log; the crash reporter goes here too.
+/// The one place startup reports an error. A project that has `ErrorUtil` calls
+/// `ErrorUtil.logError(error, stackTrace, hint: hint)` here (see "The error log and the reporter");
+/// this sample hands the error to the zone's handler, which is the same path without the pipeline.
+/// Never `print`, `debugPrint` or `developer.log`: they reach neither the log nor the reporter.
 void _report(Object error, StackTrace stackTrace, String hint) =>
-    developer.log(hint, error: error, stackTrace: stackTrace, name: 'app', level: 1000);
+    Zone.current.handleUncaughtError(error, stackTrace);
 
-/// Reports what every controller does: its state transitions to the log, its errors as errors.
-final class LoggingControllerObserver implements IControllerObserver {
-  const LoggingControllerObserver();
+/// Reports the errors of every controller; the observer sees all of them, expected or not.
+final class ReportingControllerObserver implements IControllerObserver {
+  const ReportingControllerObserver();
 
   @override
   void onCreate(Controller controller) {}
@@ -814,8 +810,7 @@ final class LoggingControllerObserver implements IControllerObserver {
   void onHandler(HandlerContext context) {}
 
   @override
-  void onStateChanged<S extends Object>(StateController<S> controller, S prevState, S nextState) =>
-      developer.log('${controller.name}: $prevState -> $nextState', name: 'controller');
+  void onStateChanged<S extends Object>(StateController<S> controller, S prevState, S nextState) {}
 
   @override
   void onError(Controller controller, Object error, StackTrace stackTrace) =>

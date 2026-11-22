@@ -387,15 +387,24 @@ void signIn(String email, String password) => handle(
 );
 
 /// The app's one decision, used by the reporter behind the observer: the failures that are
-/// answers to the user, not bugs.
-bool isExpectedFailure(Object error) => error is ExpectedException;
+/// answers to the user or conditions of the environment, not bugs.
+bool isExpectedFailure(Object error) => switch (error) {
+  ExpectedException() => true, // RejectedException included, with any code
+  APIClientException$Network() => true, // no connection, a 5xx
+  APIClientException$Authorization() => true, // the middleware refreshes or signs out
+  TimeoutException() => true,
+  SocketException() => true, // dart:io, so VM only: a web build leaves this case out
+  _ => false,
+};
 ```
 
-Every `ExpectedException` is expected, a `RejectedException` with any code included: the server
+Every `ExpectedException` is expected (`error is ExpectedException`), a `RejectedException` with
+any code included: the server
 said no and the screen shows its text. A failure that is a bug is not an `ExpectedException`:
 the data layer does not turn a code it cannot place into a rejection, it passes the client's own
-exception on, and that one is reported. Only the app's own types may subclass `ExpectedException`,
-so the list of expected failures stays in the type hierarchy and in `isExpectedFailure`, not in a
+exception on, and that one is reported. A type the project does not own (a `PlatformException`
+with a known code, say) is added as one more case in `isExpectedFailure`, never in a `catch`.
+The list of expected failures lives in the type hierarchy and in this one function, not in a
 list of codes.
 
 ### Storing tokens

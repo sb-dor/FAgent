@@ -64,7 +64,19 @@ void main() {
   });
 
   test('security.md treats every ExpectedException as expected', () {
-    expect(_rule('security'), isNot(contains('a `RejectedException` with a known code')));
+    final security = _rule('security');
+    expect(security, isNot(contains('a `RejectedException` with a known code')));
+    final start = security.indexOf('### Expected errors');
+    final section = security.substring(start, security.indexOf('### Storing tokens'));
+    expect(section, contains('error is ExpectedException'));
+    expect(section, contains('ExpectedException() => true'));
+    expect(section, contains('TimeoutException'));
+    expect(section, contains('APIClientException\$Network'));
+    expect(section, contains('APIClientException\$Authorization'));
+  });
+
+  test('dependencies.md does not log errors with developer.log', () {
+    expect(_rule('dependencies'), isNot(contains('developer.log(')));
   });
 
   test('configuration.md has the DSN', () {
