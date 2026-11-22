@@ -266,7 +266,7 @@ void main() {
         'Observer, publish/subscribe and a state machine',
         'Filters and reloading',
         'Cached data first, then fresh',
-        'Where the rethrown error goes',
+        'Where the error goes',
         'Ephemeral and application state',
         'Optimistic update',
         'Expected and unexpected errors',

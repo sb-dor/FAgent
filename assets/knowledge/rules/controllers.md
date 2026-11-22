@@ -7,7 +7,9 @@ description: "StateController with one state recipe (idle, processing, successfu
 
 ## Rules
 
-- Extend `StateController<XState>` and run every action in `handle(() async {...})`.
+- Extend `StateController<XState>` and run every action in
+  `handle(() async {...}, error: ..., done: ...)`: the body is the happy path, `error:` sets the
+  `error` state, `done:` sets `idle`. See "One recipe for states".
 - States are freezed and always the same four: `idle`, `processing`, `successful`, `error`. Every
   one carries the controller's current data (`XState.idle(data: ...)`), so the screen never loses
   what it shows. One recipe for every action: see "One recipe for states".
@@ -19,9 +21,29 @@ description: "StateController with one state recipe (idle, processing, successfu
 - The `error` state holds the error object, never a display string (`message`): the widget turns it
   into text with `errorText(lcl, error)` (see "Error messages" in `docs/rules/localization.md`). A
   controller has no `BuildContext` and so no localization.
-- Rethrow only an unexpected error. An expected failure (an `ExpectedException`: wrong credentials,
-  a value the server rejected) sets the `error` state and is not rethrown, so the observer and the
-  crash reporter see only bugs and outages. See "Expected and unexpected errors".
+- Catch nothing in the body. A failure leaves the body, `handle` gives it to the observer
+  (`Controller.observer`, every error, expected or not) and then to `error:`, which sets the
+  `error` state; `done:` runs last. `on Object catch`, a `catch` without a type and `finally`
+  are not used in a controller. Only a concrete type that needs its own reaction is
+  caught inside the body (`on VersionConflictException catch`); that error does not reach
+  `error:` or the observer. `rethrow` is allowed only inside such a typed `on`, for the cases of
+  that type that need no reaction of their own (see "Typed `on` with `rethrow`" below).
+  `ErrorUtil` decides what the crash reporter gets: an expected failure
+  (an `ExpectedException`, the network) stays in the log. See "Where the error goes" and "Expected
+  and unexpected errors".
+- Showing a message is `error:` plus `errorText` in the widget's `listener`. A special reaction
+  (resolving a conflict, a fallback value) is a typed `on` in the body. A controller never calls
+  back into the UI (no callback, no `BuildContext`, no `Navigator`): it sets a state and the widget
+  reacts.
+- A guard that makes the action pointless (no next page, no data to save yet) stands before
+  `handle`: `if (!state.data.hasMore) return; handle(...)`. A `return` inside the body would still
+  run `done:` and give a lone `idle` with no `processing` before it. A guard that the body needs
+  for a type promotion, or that a call waiting in a `Sequential` queue must check again when its
+  turn comes (the page was read by the call before it), stays in the body as well: for paged
+  lists it stands in both places (see "Paginated controllers"). An action whose lone `idle` is
+  unwanted sets a `started` flag after the guard and sets `idle` in `done:` only when it is set.
+- Report an error through the project's one reporter (`ErrorUtil.logError` in a project that has
+  it, see "Reporting an error"): never `print`, `debugPrint`, `developer.log` or a private logger.
 - `SequentialControllerHandler` for load/watch and pagination.
   `DroppableControllerHandler` for mutations (create, save, delete). Every controller picks one:
   without a handler its calls run at the same time and race on its state. See "One queue per
@@ -273,21 +295,21 @@ sealed class AuthState with _$AuthState {
   bool get isAuthenticated => user is AuthenticatedUser;
 }
 
-void signIn(String login, String password) => handle(() async {
-  setState(AuthState.processing(user: state.user));
-  try {
+void signIn(String login, String password) => handle(
+  () async {
+    setState(AuthState.processing(user: state.user));
     final user = await _repository.signIn(login, password);
     setState(AuthState.successful(user: user));
-  } on Object catch (error) {
-    setState(AuthState.error(user: state.user, error: error));
-    // A wrong password is an answer, not a bug. Anything else: `handle` reports it to the
-    // controller observer (the log and the crash reporter).
-    if (error is! ExpectedException) rethrow;
-  } finally {
-    setState(AuthState.idle(user: state.user));
-  }
-});
+  },
+  // Every error, a wrong password or a bug, comes here after the controller observer has seen it;
+  // `ErrorUtil` behind the observer keeps the expected ones out of the crash reporter.
+  error: (error, stackTrace) async => setState(AuthState.error(user: state.user, error: error)),
+  done: () async => setState(AuthState.idle(user: state.user)),
+);
 ```
+
+- The body has no `try`: a failure goes out of it. `error:` builds the `error` state from the data
+  the screen shows now, `done:` returns to `idle` whether the action succeeded or failed.
 
 - A field declared in every variant (`user`, `data`) is on the union itself: `state.user` works in
   any state, so there is no `switch` just to read the data.
@@ -298,11 +320,12 @@ void signIn(String login, String password) => handle(() async {
   separate fields of every variant.
 - An action without data (a deletion) uses the same four states without the data field.
 - An error that must stay on screen (a first load that failed, shown in place of the list with a
-  retry) is part of the data, not a state: `ProductsData.error`, set in the `catch` and cleared by
+  retry) is part of the data, not a state: `ProductsData.error`, set in `error:` and cleared by
   the next successful load, which builds fresh data. The `error` state still passes for the
   listener (a SnackBar for a failed page); the `idle` state that follows keeps the error in its
   data, and the builder shows the error view while there are no rows (see
-  `products_controller.dart` and `products_list_widget.dart`).
+  `products_controller.dart` and `products_list_widget.dart`). A screen does not keep a failure in its
+  own `State`, a `ValueNotifier` or a SnackBar only: the error that must stay on screen is in the data.
 
 ### Cached data first, then fresh
 
@@ -310,20 +333,19 @@ void signIn(String login, String password) => handle(() async {
 saved copy at once, the server's answer when it arrives.
 
 ```dart
-void load() => handle(() async {
-  setState(ProductsState.processing(data: state.data));
-  try {
+void load() => handle(
+  () async {
+    setState(ProductsState.processing(data: state.data));
     final cached = await _repository.cachedProducts(); // the local database: fast
     setState(ProductsState.processing(data: cached));
     final fresh = await _repository.fetchProducts(); // the server; the repository saves it
     setState(ProductsState.successful(data: fresh));
-  } on Object catch (error) {
-    setState(ProductsState.error(data: state.data, error: error));
-    if (error is! ExpectedException) rethrow;
-  } finally {
-    setState(ProductsState.idle(data: state.data));
-  }
-});
+  },
+  // `state.data` is the cached list when the server failed: `error:` runs after the body.
+  error: (error, stackTrace) async =>
+      setState(ProductsState.error(data: state.data, error: error)),
+  done: () async => setState(ProductsState.idle(data: state.data)),
+);
 ```
 
 - The screen shows the cached list while a small progress indicator says that more is coming;
@@ -340,22 +362,25 @@ An edit the server almost always accepts (a rename, a like, a toggle) shows the 
 in `processing`, and rolls back if the server refuses:
 
 ```dart
-void rename(String name) => handle(() async {
-  final previous = state.profile;
-  setState(ProfileState.processing(profile: previous.copyWith(name: name)));
-  try {
-    final saved = await _repository.update(previous.copyWith(name: name));
-    setState(ProfileState.successful(profile: saved));
-  } on Object catch (error) {
-    setState(ProfileState.error(profile: previous, error: error)); // the rollback
-    if (error is! ExpectedException) rethrow;
-  } finally {
-    setState(ProfileState.idle(profile: state.profile));
-  }
-});
+void rename(String name) {
+  late final Profile previous; // set by the first line of the body, read by `error:`
+  handle(
+    () async {
+      previous = state.profile; // before the first setState
+      setState(ProfileState.processing(profile: previous.copyWith(name: name)));
+      final saved = await _repository.update(previous.copyWith(name: name));
+      setState(ProfileState.successful(profile: saved));
+    },
+    error: (error, stackTrace) async =>
+        setState(ProfileState.error(profile: previous, error: error)), // the rollback
+    done: () async => setState(ProfileState.idle(profile: state.profile)),
+  );
+}
 ```
 
-- Keep the previous data in a local variable before the first `setState`; `error` carries it, so
+- Keep the previous data in a `late final` local declared before `handle` and assigned by the first
+  line of the body, so it is read when the body starts (matters for `Sequential`, where a queued call
+  starts after the previous one). `error:` closes over it and carries it, so
   the screen shows the old value again, and `idle` follows with whatever the last state had (the
   saved profile, or the old one). Checked by a test: `processing` has the new name, `error` and
   `idle` the old one.
@@ -365,20 +390,28 @@ void rename(String name) => handle(() async {
 - `Droppable` for a single save button. When every call must apply in order (a like tapped twice),
   use `Sequential`, and build each call from `state`, which holds the previous call's result.
 
-### Where the rethrown error goes
+### Where the error goes
 
-The `rethrow` does not crash anything and does not reach the widget:
+An error that leaves the body does not crash anything and does not reach the widget:
 
-- `handle` runs the action inside a guarded zone and catches what it throws. It always passes the
-  error to `Controller.observer`'s `onError`, and the `Future` of the call completes normally (with
-  `null`), so the caller has nothing to catch. In `bloc`, `BlocObserver.onError` plays the same role.
-- The optional `error:` callback of `handle` runs after the observer, not instead of it: it cannot
-  keep an error out of the log. Only the action itself can, by catching and not rethrowing (see
-  "Expected and unexpected errors"). Checked in the pinned `control` source and by a test.
+- `handle` runs the action inside a guarded zone and catches what it throws. The order is fixed:
+  `Controller.observer`'s `onError` first, then the action's `error:`, then `done:`, which runs
+  whether the action succeeded or not. The `Future` of the call completes normally (with the body's result, or `null` when the body failed),
+  so the caller has nothing to catch. In `bloc`, `BlocObserver.onError` plays the same role.
+- `error:` runs after the observer, not instead of it: it cannot keep an error out of the log. Only
+  a typed `on X catch` inside the body can, and then the error reaches neither `error:` nor the
+  observer. Checked in the pinned `control` source and by a test.
+- An error thrown by `error:` or `done:` itself (a `setState` that failed) goes to the observer
+  too, and `done:` still runs: it does not crash the app. After `dispose` the body's failure reaches
+  neither `error:` nor the observer: the error of a closed controller goes nowhere (as in `control`
+  0.2). `done:` still runs after `dispose`; its `setState` on a disposed controller draws nothing.
+- `DroppableControllerHandler` on a busy controller returns `null` without running the body, the
+  callbacks or the observer; a repeated tap is dropped, not an error.
 - The widget learns about the failure from the `error` state, not from an exception.
-- Set `Controller.observer` once at startup to an observer that logs and reports to the crash
-  reporter; without one, the rethrown error is reported nowhere.
-- Await every `Future` inside `handle`. An unawaited one that fails escapes the `try` and lands in
+- Set `Controller.observer` once at startup to an observer whose `onError` calls
+  `ErrorUtil.logError` (one record per error, state changes logged by their types only, never
+  their contents); without one, the error is reported nowhere.
+- Await every `Future` inside `handle`. An unawaited one that fails escapes the body and lands in
   the zone's handler, which also reports it but asserts in debug mode: the assert points at the
   missing `await`.
 
@@ -394,21 +427,233 @@ with the first, it hides the bugs among thousands of mistyped passwords.
   in `docs/rules/repositories.md`): it throws a subtype of `ExpectedException`
   (`app_exception.dart` below), such as `RejectedException(code: 'wrong_password')`. Whether a
   failure is an answer is known where the server's code is read, so it is decided there once.
-- The action sets the `error` state for every error, and rethrows only what is not an
-  `ExpectedException`: `if (error is! ExpectedException) rethrow;`. The screen shows both kinds the
-  same way, through `errorText`; only the unexpected kind reaches `Controller.observer.onError`.
-  Checked by a test: an `ExpectedException` gives processing, error, idle and no observer call; a
-  `StateError` gives the same states and one observer call.
-- A lost connection (`APIClientException$Network`) is reported too: it is not a bug, but how often
-  it happens is worth knowing. The observer may log it at a lower level by its type.
-- An expired session (`APIClientException$Authorization`) is the authentication middleware's: it
-  refreshes the token, or signs the user out (see "HTTP middleware" in
-  `docs/rules/dependencies.md`). The controller sets `error` and rethrows it like any other, and
-  the crash reporter leaves it out: once a reporter is added, `$captureException`
-  (`lib/_core/utils/error_util/platform/` in a new project) returns early for it.
-- Never catch `on Object` without the rethrow line: that silences every bug of the action.
-- With `bloc`, the same split: for an `ExpectedException` emit the error state and return; let
-  everything else reach `onError` (`BlocObserver.onError`).
+  In a project that has `ErrorUtil` the split below is made by it; a project with another reporter
+  keeps that reporter and follows the same split (the observer sees every error, the reporter keeps
+  the expected ones out of the crash reports); a new project starts with the pipeline.
+- The action does not tell them apart: `error:` sets the `error` state for every error, and the
+  observer gets every error, expected or not. The screen shows both kinds the same way, through
+  `errorText`; `ErrorUtil` (behind the observer) writes both to the log and queues only the
+  unexpected kind for the crash reporter. Checked by a test: an `ExpectedException` and a
+  `StateError` both give processing, error, idle and one observer call; with `ControllerObserver`
+  and `ErrorUtil` wired up, the expected one is in the log and not in the queue, the unexpected one
+  is in the queue.
+- A lost connection (`APIClientException$Network`), a timeout and a socket failure are not bugs
+  either, and with no internet for weeks they would fill the queue: they are expected, go to the
+  log only and never to the crash reporter.
+- An expired session or a denied access (`APIClientException$Authorization`) is the authentication
+  middleware's: it refreshes the token, or signs the user out (see "HTTP middleware" in
+  `docs/rules/dependencies.md`). The controller sets `error` like for any other; it is expected
+  too, so `ErrorUtil` writes it to the log and not to the queue.
+- What counts as expected is decided in one place, `isExpectedFailure` of the app (one app:
+  `lib/_core/telemetry/expected_failure.dart`; a monorepo: the same path inside the app,
+  `apps/<app>/lib/_core/telemetry/`): the network, a timeout, a socket failure,
+  `APIClientException$Authorization`, a server refusal with a code (`RejectedException`) and every
+  `ExpectedException`. A new kind of expected failure is added there, not in a `catch`.
+- Never catch `on Object` in a controller: it would keep the bugs of the action from the observer.
+  Catch a concrete type inside the body only when it needs a reaction of its own (a version conflict
+  that the screen resolves, a closed period); that error is handled there and is not reported.
+- With `bloc`, the same: every error reaches `onError` (`BlocObserver.onError`), and `ErrorUtil`
+  decides there.
+
+A concrete type with its own reaction is the one thing caught inside the body. The error is
+handled there, so it does not reach `error:` or the observer:
+
+```dart
+void save(Draft draft) => handle(
+  () async {
+    setState(DraftState.processing(data: state.data));
+    try {
+      final saved = await _repository.save(draft, version: state.data.version);
+      setState(DraftState.successful(data: state.data.withSaved(saved)));
+    } on VersionConflictException {
+      // Someone saved first: take the newest version instead of showing a failure.
+      setState(DraftState.successful(data: state.data.withSaved(await _repository.latest(draft.id))));
+    }
+  },
+  error: (error, stackTrace) async => setState(DraftState.error(data: state.data, error: error)),
+  done: () async => setState(DraftState.idle(data: state.data)),
+);
+```
+
+#### Typed `on` with `rethrow`
+
+When only some cases of a type need their own reaction, `rethrow` inside that typed `on` hands the
+rest on: it is not "catch everything", it is the same type narrowed by a condition, and the error
+then goes to the observer and `error:` as if it had not been caught. `Error.throwWithStackTrace`
+is not needed for that:
+
+```dart
+void loadExtras() => handle(
+  () async {
+    setState(FormState.processing(data: state.data));
+    try {
+      final extras = await _repository.extras();
+      setState(FormState.successful(data: state.data.withExtras(extras)));
+    } on RejectedException catch (error) {
+      if (error.code != ApiErrorCode.forbidden) rethrow; // not ours: observer and `error:`
+      setState(FormState.successful(data: state.data)); // forbidden: the form works without them
+    }
+  },
+  error: (error, stackTrace) async => setState(FormState.error(data: state.data, error: error)),
+  done: () async => setState(FormState.idle(data: state.data)),
+);
+```
+
+#### A side read that the screen can do without
+
+A side read that the screen can do without (a counter, a hint, a re-read of a record after a
+refusal, a list of backups after the new one was made) may be caught as `on Exception catch` or as
+a typed `on X catch` (for example `RejectedException` and `APIClientException`, so that a
+`FormatException` is not swallowed): it is the failures of the call, not "everything". Three
+conditions, all required:
+
+1. `ErrorUtil.logError(error, stackTrace, hint: '<what was not read>')`. The failure must not
+   vanish: the observer no longer sees it (it was caught), so the log does (an expected failure
+   stays in the log, an unexpected one is also queued for the crash reporter).
+2. A comment saying why the action is not dropped (the screen is more important than the hint, the
+   copy is already made) and what stays instead (the previous value).
+3. An `Error` (a bug) is not swallowed: `on Exception` does not catch it, it leaves the body and goes
+   to the observer and `error:`.
+
+```dart
+Future<int> _unreadCountOrPrevious() async {
+  try {
+    return await _repository.unreadCount();
+  } on Exception catch (error, stackTrace) {
+    // The messages matter more than the counter: keep the previous value, do not drop the action.
+    unawaited(ErrorUtil.logError(error, stackTrace, hint: 'unread count was not read'));
+    return state.data.unreadCount;
+  }
+}
+```
+
+A read must not live in `error:`. `error:` only builds a state from what the body has already
+collected: a re-read that fails there is not covered by the typed `on` and leaves `error:` half
+done. Do the re-read in the body, in a typed `on X catch` that ends with `rethrow`, and keep the
+result in a local variable that `error:` reads (`fresh ?? state.data`). Keep the original refusal in
+a variable too (`refusal ?? error`): if the re-read fails with a bug (`Error`), that bug goes to
+the observer, but the window must still react to the refusal, not to the bug, and the refusal is
+written to the log with `ErrorUtil.logError` so that it is not lost:
+
+```dart
+void _change(String id, Future<void> Function() operation) {
+  Record? fresh; // read by `error:`, filled in the body
+  ExpectedException? refusal; // the original refusal, in case the re-read fails with a bug
+  handle(
+    () async {
+      setState(RecordState.processing(data: state.data));
+      try {
+        await operation();
+      } on ExpectedException catch (error) {
+        refusal = error;
+        fresh = await _freshOrNull(id); // a side read as above, logs its own failure
+        rethrow; // the refusal still goes to the observer and `error:`
+      }
+      setState(RecordState.successful(data: state.data));
+    },
+    error: (error, stackTrace) async {
+      final original = refusal;
+      if (original != null && !identical(original, error)) {
+        // The re-read failed with a bug: the observer has the bug, the log keeps the refusal.
+        unawaited(ErrorUtil.logError(original, stackTrace, hint: 'refusal before the re-read'));
+      }
+      setState(RecordState.error(data: fresh ?? state.data, error: original ?? error));
+    },
+    done: () async => setState(RecordState.idle(data: state.data)),
+  );
+}
+```
+
+### An action of two steps
+
+Some actions do a second thing after the main one (read the list again after a save, read the
+totals after an entry). Two cases:
+
+- **The second step is part of the same result** (the list the screen shows after a deletion): keep
+  it in one `handle` and a local flag `applied` that the body sets after the first step succeeded.
+  `error:` reads it: before it, the action failed (`error` with the old data); after it, the change
+  is made, so the state is `successful` with the old data and the failed read is reported as its
+  own error (`successful`, then `error(RefreshFailed(error))`).
+  The observer still gets the original cause.
+
+  ```dart
+  void _change(Future<void> Function() action) {
+    var applied = false;
+    handle(
+      () async {
+        setState(ListState.processing(data: state.data));
+        await action();
+        applied = true;
+        setState(ListState.successful(data: await _repository.list()));
+      },
+      error: (error, stackTrace) async {
+        if (applied) setState(ListState.successful(data: state.data));
+        setState(ListState.error(
+          data: state.data,
+          error: applied ? RefreshFailed(error) : error,
+        ));
+      },
+      done: () async => setState(ListState.idle(data: state.data)),
+    );
+  }
+  ```
+
+- **The second step is independent** (a hint, a re-read of another period): after the first
+  `handle` completes, call a second `handle`, separate. Its failure goes to the observer and to its
+  own `error` state; nothing is swallowed by a `try` or `.then(onError:)`. The sequence is
+  processing, successful or error, idle, and again for the second step.
+
+  A second `handle` is a second run of states, and the screen sees it: a second `processing` and a
+  second `successful` or `error`. Bind the steps like this:
+
+  ```dart
+  void save(String key) => unawaited(_save(key));
+
+  Future<void> _save(String key) async {
+    var outdated = false;
+    await handle(
+      () async { /* step one */ },
+      error: (error, stackTrace) async {
+        outdated = error is RejectedException && error.code == ApiErrorCode.dataChanged;
+        setState(SaveState.error(data: state.data, error: error));
+      },
+      done: () async => setState(SaveState.idle(data: state.data)),
+    );
+    if (outdated) await _reread(); // its own `handle`
+  }
+  ```
+
+  `await handle` (the result is `null` when the body failed or the call was dropped) or a flag set
+  in `error:` links them. With `SequentialControllerHandler`, another caller's action may run
+  between the two steps: the second does not follow the first immediately. And the screen that
+  waited for "one action" now gets two results. If it must wait for both as one (one spinner, one
+  message, one set of totals), either the widget holds the first result until the second arrives, or
+  the second step is a controller of its own that the widget starts in parallel and waits for with
+  its own flag.
+
+### Reporting an error
+
+`ErrorUtil` is the one place where code reports an error: `ErrorUtil.logError(error, stackTrace,
+hint: ...)` for an exception and `ErrorUtil.logMessage(...)` for a failure that did not throw. A
+project that has `ErrorUtil` reports through it; a project with another reporter keeps it and
+follows the same split; a new project starts with the pipeline (see "Where the pieces live" in
+`docs/rules/architecture.md`). Do not add the pipeline to an existing project unasked.
+
+- It writes the record to the log (`logs.sqlite`, the last 10 000 records) and, if the error is
+  unexpected, puts it in the queue for the crash reporter with the last 100 log lines. An expected
+  one stays in the log.
+- It never throws and never calls itself again: a failure of the log or the queue goes to the
+  console. So `catch` blocks may call it without a `try` around it.
+- Secrets are removed before the queue and the archive (see "Crash reports" in
+  `docs/rules/security.md`); still, do not put a token, a password or a key in the message.
+- `print`, `debugPrint` and `developer.log` are not used for errors: they reach neither the log nor
+  the queue, so the error is lost for support. Ordinary progress messages go through `l`
+  (`l.i`, `l.w`); they are in the log and the archive, but not in the queue.
+- A widget never calls `ErrorUtil`: an error comes to it as the `error` state. The places that call
+  it are the controller observer, the zone and platform handlers, the startup, and a `catch` that
+  swallows an error on purpose. A controller does not call it, except in the `catch` of a side read
+  (see "A side read that the screen can do without"): `handle` gives every other error to the
+  observer.
 
 ## Testing a controller
 
@@ -459,8 +704,12 @@ test('a failed signIn keeps the old user and goes back to idle', () async {
 - Controllers with timers (debounce, polling) run inside `fakeAsync`: see `docs/rules/testing.md`.
 - To check what is reported, set `Controller.observer` to a fake that records `onError` calls and
   put the old one back with `addTearDown`; count after the `emitsInOrder` expectation has seen
-  `idle`, then `await pumpEventQueue()` (the report runs after the action's last state). An
-  expected failure leaves the list empty.
+  `idle`, then `await pumpEventQueue()`. An expected failure and an unexpected one each leave one
+  call, with the same error object. To check the crash reporter, set
+  `Controller.observer = const ControllerObserver()` with a configured `ErrorUtil`: the expected
+  one reaches the log and not the queue, the unexpected one the queue.
+- A sample controller in the test (`controller_errors_test.dart`) shows that an error thrown
+  inside `error:` or `done:` reaches the observer and does not crash the app.
 - With `bloc`, `bloc.stream` is a broadcast stream that does not buffer: states emitted before the
   test listens are lost. Start the expectation first, act, then await it:
   `final expectation = expectLater(cubit.stream, emitsInOrder([...])); cubit.save(...); await
@@ -561,18 +810,16 @@ interfaces in `example_mutation_repositories.dart` (in Examples below; adjust th
 class ExampleCreationController extends StateController<ExampleCreationState>
     with DroppableControllerHandler {
   void save({required String title, required String content, Example? existing}) =>
-      handle(() async {
-        setState(ExampleCreationState.processing(example: state.example));
-        try {
+      handle(
+        () async {
+          setState(ExampleCreationState.processing(example: state.example));
           final saved = await _repo.save(title: title, content: content, existing: existing);
           setState(ExampleCreationState.successful(example: saved));
-        } on Object catch (error) {
-          setState(ExampleCreationState.error(example: state.example, error: error));
-          if (error is! ExpectedException) rethrow;
-        } finally {
-          setState(ExampleCreationState.idle(example: state.example));
-        }
-      });
+        },
+        error: (error, stackTrace) async =>
+            setState(ExampleCreationState.error(example: state.example, error: error)),
+        done: () async => setState(ExampleCreationState.idle(example: state.example)),
+      );
 }
 ```
 
@@ -804,6 +1051,14 @@ between hand-rolled paginators are where the silent bugs live.
    the user. Sequential runs it after the page, and its fresh page 1 replaces the rows. (The
    `hasMore` guard and the widget's `isProcessing` check keep repeated scroll events from queueing
    pages.)
+   **The guard goes in two places.** `if (!state.data.hasMore) return;` before `handle` keeps a
+   scroll event from queueing a page that is not needed. But a `Sequential` call that waits in the
+   queue is checked against the data of the moment it was made, not of the moment it runs: a `load`
+   ahead of it may fail and reset the data to "no page" (or a `page!` in the body would crash).
+   So the same guard is the first line of the body, after the data is read, before `processing`.
+   The body returns before any state; `done:` still gives one lone `idle` with the same data, an
+   `idle` over an `idle`, which is harmless (a test checks that the error stays and no page is
+   read).
 5. **The async controller stays query-stateless.** No `_query`, `_from`, `_storeUid` fields. The
    active query and filters live in a `ChangeNotifier` data controller under `widgets/controllers/`;
    the config widget reads them and passes them to `load(...)` / `paginate(...)` on every call.
@@ -818,6 +1073,22 @@ and the server total as a record, `typedef ProductsPage = (List<Product> product
 `local_pagination_util.dart`, `product.dart`, `products_data_controller.dart`,
 `products_list_widget.dart`. `paginate`'s `hasMore` guard is what makes the repeated firing of a
 bottom-of-list scroll notification safe.
+
+```dart
+void loadMore(SalesFilter filter) {
+  if (!state.data.hasMore) return; // 1: a repeated scroll event queues nothing
+  handle(
+    () async {
+      // 2: a call that waited in the queue may find the data reset by a failed `load`.
+      if (!state.data.hasMore) return;
+      setState(SalesState.processing(data: state.data));
+      // ...read the page, append, `successful`
+    },
+    error: (error, stackTrace) async => setState(SalesState.error(data: state.data, error: error)),
+    done: () async => setState(SalesState.idle(data: state.data)),
+  );
+}
+```
 
 ### Convenience getters on the state
 
@@ -891,8 +1162,8 @@ Whole files, one per block; put each where the layout above says and adjust the 
 ```dart
 // file: app_exception.dart
 /// A failure the feature expects as an answer, not a bug: the user can read it and act. The data
-/// layer throws a subtype at the boundary; a controller sets its `error` state and does not
-/// rethrow it, so the observer and the crash reporter never see it. Lives in
+/// layer throws a subtype at the boundary; a controller sets its `error` state, and `ErrorUtil`
+/// writes it to the log but keeps it out of the crash reporter. Lives in
 /// `lib/_core/model/`.
 abstract base class ExpectedException implements Exception {
   /// Creates the exception.
@@ -924,7 +1195,6 @@ final class RejectedException extends ExpectedException {
 import 'package:control/control.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'app_exception.dart';
 import 'example.dart';
 import 'example_mutation_repositories.dart';
 
@@ -956,21 +1226,18 @@ final class ExampleCreationController extends StateController<ExampleCreationSta
 
   final IExampleCreationRepository _repository;
 
-  void save({required String title, required String content, Example? existing}) =>
-      handle(() async {
-        setState(ExampleCreationState.processing(example: state.example));
-        try {
-          final saved = await _repository.save(title: title, content: content, existing: existing);
-          setState(ExampleCreationState.successful(example: saved));
-        } on Object catch (error) {
-          setState(ExampleCreationState.error(example: state.example, error: error));
-          // A rejected value is an answer: shown, not reported. Anything else goes to the
-          // controller observer through `handle`.
-          if (error is! ExpectedException) rethrow;
-        } finally {
-          setState(ExampleCreationState.idle(example: state.example));
-        }
-      });
+  void save({required String title, required String content, Example? existing}) => handle(
+    () async {
+      setState(ExampleCreationState.processing(example: state.example));
+      final saved = await _repository.save(title: title, content: content, existing: existing);
+      setState(ExampleCreationState.successful(example: saved));
+    },
+    // A rejected value is an answer: shown here, and `ErrorUtil` keeps it out of the crash
+    // reporter. The observer has seen it before this callback runs.
+    error: (error, stackTrace) async =>
+        setState(ExampleCreationState.error(example: state.example, error: error)),
+    done: () async => setState(ExampleCreationState.idle(example: state.example)),
+  );
 }
 ```
 
@@ -981,7 +1248,6 @@ final class ExampleCreationController extends StateController<ExampleCreationSta
 import 'package:control/control.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'app_exception.dart';
 import 'example_mutation_repositories.dart';
 
 part 'example_deletion_controller.freezed.dart';
@@ -1009,18 +1275,15 @@ final class ExampleDeletionController extends StateController<ExampleDeletionSta
 
   final IExampleDeletionRepository _repository;
 
-  void delete(int id) => handle(() async {
-    setState(const ExampleDeletionState.processing());
-    try {
+  void delete(int id) => handle(
+    () async {
+      setState(const ExampleDeletionState.processing());
       await _repository.delete(id);
       setState(const ExampleDeletionState.successful());
-    } on Object catch (error) {
-      setState(ExampleDeletionState.error(error: error));
-      if (error is! ExpectedException) rethrow;
-    } finally {
-      setState(const ExampleDeletionState.idle());
-    }
-  });
+    },
+    error: (error, stackTrace) async => setState(ExampleDeletionState.error(error: error)),
+    done: () async => setState(const ExampleDeletionState.idle()),
+  );
 }
 ```
 
@@ -1161,7 +1424,6 @@ class Product {
 import 'package:control/control.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'app_exception.dart';
 import 'local_pagination_util.dart';
 import 'product.dart';
 import 'products_repository.dart';
@@ -1220,9 +1482,9 @@ final class ProductsController extends StateController<ProductsState>
   final int _limitInPage;
 
   /// Page 1; replaces the rows when it lands (they stay on screen meanwhile).
-  void load({String query = '', int? categoryId}) => handle(() async {
-    setState(ProductsState.processing(data: state.data));
-    try {
+  void load({String query = '', int? categoryId}) => handle(
+    () async {
+      setState(ProductsState.processing(data: state.data));
       final (items, total) = await _productsRepository.products(
         categoryId: categoryId,
         query: query,
@@ -1240,22 +1502,21 @@ final class ProductsController extends StateController<ProductsState>
           ),
         ),
       );
-    } on Object catch (error) {
+    },
+    error: (error, stackTrace) async {
       // Kept in the data: the idle state after it still has the error to show.
       final data = state.data.copyWith(error: error);
       setState(ProductsState.error(data: data, error: error));
-      if (error is! ExpectedException) rethrow;
-    } finally {
-      setState(ProductsState.idle(data: state.data));
-    }
-  });
+    },
+    done: () async => setState(ProductsState.idle(data: state.data)),
+  );
 
   /// Appends the next page. A failure keeps the rows and the cursor, so the page is asked again.
-  void paginate({String query = '', int? categoryId}) => handle(() async {
-    final current = state.data;
-    if (!current.hasMore) return;
-    setState(ProductsState.processing(data: current));
-    try {
+  void paginate({String query = '', int? categoryId}) => handle(
+    () async {
+      final current = state.data;
+      if (!current.hasMore) return;
+      setState(ProductsState.processing(data: current));
       final (next, total) = await _productsRepository.products(
         categoryId: categoryId,
         query: query,
@@ -1274,13 +1535,12 @@ final class ProductsController extends StateController<ProductsState>
           ),
         ),
       );
-    } on Object catch (error) {
-      setState(ProductsState.error(data: current, error: error));
-      if (error is! ExpectedException) rethrow;
-    } finally {
-      setState(ProductsState.idle(data: state.data));
-    }
-  });
+    },
+    // The state is still `processing(data: current)`: the rows and the cursor stay.
+    error: (error, stackTrace) async =>
+        setState(ProductsState.error(data: state.data, error: error)),
+    done: () async => setState(ProductsState.idle(data: state.data)),
+  );
 
   int _nextPage(List<Product> list, int page) => _localPaginationUtil.checkIsListHasMorePageInt(
     list: list,

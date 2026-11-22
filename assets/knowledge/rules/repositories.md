@@ -78,9 +78,9 @@ try {
   catch what nobody wrapped. In Dart the stack trace is not part of the exception, so a union that
   holds only the error loses it, and an error thrown again from it points at the line that
   unwrapped it. A sealed `Result` checked by an exhaustive `switch` does work in Dart 3; these rules
-  still keep one mechanism: exceptions, caught in the controller's action, which sets the `error`
-  state and rethrows what is not an `ExpectedException` to `handle` (see "Expected and unexpected
-  errors" in `docs/rules/controllers.md`).
+  still keep one mechanism: exceptions, which leave the controller's action body and reach the
+  observer and the action's `error:` callback, which sets the `error` state (see "Expected and
+  unexpected errors" in `docs/rules/controllers.md`).
 - **Never swallow.** An empty `catch`, a `catch` that returns `null`, `[]` or another default, and
   `.ignore()` on a future all hide the failure from the controller, the user and the crash report.
   Return a default only when it is the answer (an optional file that is missing), and say so in a
@@ -104,7 +104,17 @@ try {
   and crash reports (see "Rules" in `docs/rules/security.md`).
 - **Catch what you mean.** `on APIClientException$Client`, `on FormatException`, not a bare
   `catch` around a whole method; the controller's `handle` is the one place that catches everything.
-- **No `try` / `finally` without an `on Object catch`.** Write the catch, even when it only logs
+- **Report with `ErrorUtil`, nothing else.** A project that has `ErrorUtil` reports through it; a
+  project with another reporter keeps it and follows the same split; a new project starts with the
+  pipeline. A `catch` that swallows an error on purpose reports it with
+  `ErrorUtil.logError(error, stackTrace, hint: ...)` (see "Reporting an error" in
+  `docs/rules/controllers.md`). `print`, `debugPrint` and `developer.log` are not used for errors.
+  The data layer marks the expected kinds by throwing an `ExpectedException`; the network, timeouts
+  and denied access are expected by their type (`isExpectedFailure`) and go to the log only. A
+  step that must not fail the caller (cleaning a file, a cache) catches `FileSystemException` or
+  the type it means, reports through `l.w` or `ErrorUtil`, and goes on.
+- **No `try` / `finally` without an `on Object catch`** (outside controllers: a controller has no
+  `try` / `finally`, `handle(error:, done:)` does that part). Write the catch, even when it only logs
   and `rethrow`s: `try { ... } on Object catch (error, stackTrace) { ...; rethrow; } finally { ... }`.
   A bare `try` / `finally` hides what happens to the error, and the `finally` decides it silently:
   a `return` in `finally` drops the error, a `throw` (or a failing cleanup call) in `finally`
@@ -159,7 +169,6 @@ must release all of them even when one fails, and must not hang on one that neve
 ```dart
 // file: dispose_all.dart
 import 'dart:async';
-import 'dart:developer' as developer;
 
 /// Runs every cleanup step, in order, even when some fail: each one gets [timeout], and a failure
 /// goes to [onError] instead of stopping the rest.
@@ -177,12 +186,9 @@ Future<void> disposeAll(
   }
 }
 
-void _log(String step, Object error, StackTrace stackTrace) => developer.log(
-  'Dispose step "$step" failed',
-  error: error,
-  stackTrace: stackTrace,
-  name: 'dispose',
-);
+// The zone's error handler is where the app reports (`ErrorUtil` sits behind it).
+void _log(String step, Object error, StackTrace stackTrace) =>
+    Zone.current.handleUncaughtError(error, stackTrace);
 ```
 
 ```dart
@@ -240,13 +246,12 @@ is a method tear-off, equal every time it is read (checked), so it is safe to pa
 ```dart
 // file: disposer.dart
 import 'dart:async';
-import 'dart:developer' as developer;
 
 /// Collects cleanup steps as resources are created and runs them in reverse order on [dispose]:
 /// what was created first is released last.
 ///
 /// Every step runs even when another fails or hangs: each one gets [timeout], and a failure goes
-/// to `onError` (the log by default) instead of stopping the rest.
+/// to `onError` (the zone's error handler by default) instead of stopping the rest.
 final class Disposer {
   Disposer({
     this.timeout = const Duration(seconds: 5),
@@ -294,12 +299,9 @@ final class Disposer {
     }
   }
 
-  static void _log(String step, Object error, StackTrace stackTrace) => developer.log(
-    'Dispose step "$step" failed',
-    error: error,
-    stackTrace: stackTrace,
-    name: 'dispose',
-  );
+  // The zone's error handler is where the app reports (`ErrorUtil` sits behind it).
+  static void _log(String step, Object error, StackTrace stackTrace) =>
+      Zone.current.handleUncaughtError(error, stackTrace);
 }
 ```
 

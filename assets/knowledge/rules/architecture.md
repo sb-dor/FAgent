@@ -122,6 +122,26 @@ docs/rules/               # one set for the whole repository
 - Use `example` as a placeholder for the real feature name. Do not invent another architecture
   unless the surrounding code already requires it.
 
+### Where the pieces live
+
+The error pipeline (see "Reporting an error" in `docs/rules/controllers.md`) is three shared parts
+plus the app's own glue. A project that already has them keeps its places; a new project puts them
+here:
+
+| Piece | One app | Monorepo |
+| --- | --- | --- |
+| Log, queue, `ErrorUtil`, redaction, crash reporter gateway | `lib/_core/telemetry/` | `packages/telemetry/` |
+| Database (and the log's own database) | `lib/_core/database/` | `packages/database/` |
+| HTTP client, middlewares, `ExpectedException`, `RejectedException` | `lib/_core/api_client/` | `packages/api_client/` |
+| App glue: `isExpectedFailure`, the controller observer, startup | `lib/_core/telemetry/` | `apps/<app>/lib/_core/telemetry/` |
+
+- In a monorepo each package has `lib/<name>.dart` and `lib/src/` and is imported by its public
+  library only. There is no catch-all `core` package: a type belongs to the package that throws or
+  uses it, so `ExpectedException` and `RejectedException` live in `api_client`.
+- `isExpectedFailure` is the one place that decides whether a failure is expected (see "Expected and
+  unexpected errors" in `docs/rules/controllers.md`); it stays in the app, because only the app
+  knows its exception types.
+
 ### Layers and dependency direction
 
 1. **UI**: `example_config_widget.dart` creates and owns the controllers.
@@ -1096,7 +1116,6 @@ class ExampleConfigWidgetState extends State<ExampleConfigWidget> {
 import 'package:control/control.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
-import 'app_exception.dart';
 import 'example.dart';
 import 'example_repository.dart';
 
@@ -1132,20 +1151,18 @@ final class ExampleController extends StateController<ExampleState>
   final IExampleRepository _repository;
 
   /// The filter arrives as an argument on every call; the controller keeps no query field.
-  void load({String query = ''}) => handle(() async {
-    setState(ExampleState.processing(examples: state.examples));
-    try {
+  void load({String query = ''}) => handle(
+    () async {
+      setState(ExampleState.processing(examples: state.examples));
       final examples = await _repository.examples(query: query);
       setState(ExampleState.successful(examples: examples));
-    } on Object catch (error) {
-      setState(ExampleState.error(examples: state.examples, error: error));
-      // An expected answer is shown, not reported; anything else goes to the controller observer
-      // through `handle` (see "Expected and unexpected errors" in docs/rules/controllers.md).
-      if (error is! ExpectedException) rethrow;
-    } finally {
-      setState(ExampleState.idle(examples: state.examples));
-    }
-  });
+    },
+    // Every error reaches the controller observer first; the reporter keeps an expected answer out
+    // of the crash reports (see "Expected and unexpected errors" in docs/rules/controllers.md).
+    error: (error, stackTrace) async =>
+        setState(ExampleState.error(examples: state.examples, error: error)),
+    done: () async => setState(ExampleState.idle(examples: state.examples)),
+  );
 }
 ```
 
