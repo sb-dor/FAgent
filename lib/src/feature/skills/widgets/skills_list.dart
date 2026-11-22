@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/widget/empty_state.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/src/feature/skills/controller/skill_library_controller.dart';
@@ -210,7 +209,7 @@ class _RulesSource extends StatelessWidget {
     try {
       await Dependencies.of(context).openUrl(chat);
     } on Object catch (error, stackTrace) {
-      l.w('Could not open $chat: ${hideDataDetails(error)}', stackTrace);
+      l.w('Could not open $chat: $error', stackTrace);
     }
   }
 

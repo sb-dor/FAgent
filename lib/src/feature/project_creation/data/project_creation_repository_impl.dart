@@ -6,7 +6,6 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/pub_workspace/pub_workspace.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
@@ -93,10 +92,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       final studio = p.join(_home, 'StudioProjects');
       return Directory(studio).existsSync() ? studio : _home;
     } on Object catch (error, stackTrace) {
-      l.w(
-        'Project creation | default folder | falling back to home: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Project creation | default folder | falling back to home: $error', stackTrace);
       return _home;
     }
   }
@@ -193,7 +189,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         }
       }
     } on FileSystemException catch (error, stackTrace) {
-      l.w('Project creation | reading scripts failed: ${hideDataDetails(error)}', stackTrace);
+      l.w('Project creation | reading scripts failed: $error', stackTrace);
     }
     return listing..sort();
   }
@@ -275,10 +271,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       }
       line = 'Removed ${member.relative}';
     } on Object catch (error, stackTrace) {
-      l.w(
-        'Project creation | rolling back ${member.relative} failed: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Project creation | rolling back ${member.relative} failed: $error', stackTrace);
       line = 'Could not remove ${member.relative}: $error';
     }
     final last = run.steps.lastIndexWhere((step) => step.status != CreationStepStatus.pending);
@@ -314,10 +307,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         }
       }
     } on Object catch (error, stackTrace) {
-      l.w(
-        'Project creation | unstaging ${member.relative} failed: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Project creation | unstaging ${member.relative} failed: $error', stackTrace);
     }
   }
 
@@ -351,7 +341,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         if (error is _StepFailure) {
           line = error.line;
         } else {
-          l.w('Project creation | ${kind.name} failed: ${hideDataDetails(error)}', stackTrace);
+          l.w('Project creation | ${kind.name} failed: $error', stackTrace);
           line = '$error';
         }
         run.update(
@@ -645,10 +635,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       final yaml = loadYaml(File(p.join(root, 'pubspec.yaml')).readAsStringSync());
       return yaml is YamlMap ? yaml : null;
     } on Object catch (error, stackTrace) {
-      l.w(
-        'Project creation | reading $root/pubspec.yaml failed: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Project creation | reading $root/pubspec.yaml failed: $error', stackTrace);
       return null;
     }
   }
@@ -813,10 +800,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     try {
       if (file.existsSync()) text = await file.readAsString();
     } on FileSystemException catch (error, stackTrace) {
-      l.w(
-        'Project creation | reading $crashReporterConfigPath failed: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Project creation | reading $crashReporterConfigPath failed: $error', stackTrace);
     }
     return readCrashReporterConfig(text) ??
         (throw const _StepFailure('$crashReporterConfigPath names no crash reporter'));

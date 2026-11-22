@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/controller/flutter_sdk_controller.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
@@ -166,7 +165,7 @@ class _AddMemberFormState extends State<AddMemberForm> {
         if (!_skeletonOffered) _template = NewProjectTemplate.plain;
       });
     } on Object catch (error, stackTrace) {
-      l.w('Add to project | read the project | ${hideDataDetails(error)}', stackTrace);
+      l.w('Add to project | read the project | $error', stackTrace);
       if (mounted) setState(() => _projectFailed = true);
     }
   }
@@ -206,7 +205,7 @@ class _AddMemberFormState extends State<AddMemberForm> {
             _checkMember();
           },
           onError: (Object error, StackTrace stackTrace) {
-            l.w('Add to project | suggest the package | ${hideDataDetails(error)}', stackTrace);
+            l.w('Add to project | suggest the package | $error', stackTrace);
           },
         );
   }
@@ -234,7 +233,7 @@ class _AddMemberFormState extends State<AddMemberForm> {
             });
           },
           onError: (Object error, StackTrace stackTrace) {
-            l.w('Add to project | check the member | ${hideDataDetails(error)}', stackTrace);
+            l.w('Add to project | check the member | $error', stackTrace);
             if (!mounted || number != _checkNumber) return;
             setState(() {
               _checked = true;

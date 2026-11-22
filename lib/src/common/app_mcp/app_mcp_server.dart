@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tokens.dart';
 import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_tool.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart' hide LogLevel;
 import 'package:mcp_dart/mcp_dart.dart';
 
@@ -117,7 +116,7 @@ final class AppMcpServerImpl implements IAppMcpServer {
       await _bind(http);
     } on Object catch (error, stackTrace) {
       _startError = error;
-      l.w('App MCP | the server could not start: ${hideDataDetails(error)}', stackTrace);
+      l.w('App MCP | the server could not start: $error', stackTrace);
       return;
     }
     _startError = null;
@@ -188,7 +187,7 @@ final class AppMcpServerImpl implements IAppMcpServer {
     try {
       result = await tool.call(caller, arguments);
     } on Object catch (error, stackTrace) {
-      l.w('App MCP | ${tool.name} failed: ${hideDataDetails(error)}', stackTrace);
+      l.w('App MCP | ${tool.name} failed: $error', stackTrace);
       return _error('${tool.name} failed: $error');
     }
     return switch (result) {

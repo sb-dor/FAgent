@@ -9,7 +9,6 @@ import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_connection.d
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/flutter_error_listener.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_output_parser.dart';
@@ -136,7 +135,7 @@ Future<String> saveScreenshotPng(String root, List<int> bytes, {required String 
       if (old.path != file.path) await io.File(old.path).delete();
     }
   } on io.FileSystemException catch (error) {
-    l.w('Screenshots | cannot prune the screenshots in ${folder.path}: ${hideDataDetails(error)}');
+    l.w('Screenshots | cannot prune the screenshots in ${folder.path}: $error');
   }
   return p.posix.join(kScreenshotsFolder, '$unique.png');
 }
@@ -392,9 +391,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     } on TimeoutException {
       message = 'timed out';
     } on Object catch (error) {
-      l.w(
-        'AppRunRepository | ${full ? 'hot restart' : 'hot reload'} of $projectId failed: ${hideDataDetails(error)}',
-      );
+      l.w('AppRunRepository | ${full ? 'hot restart' : 'hot reload'} of $projectId failed: $error');
       message = '$error';
     }
     _logFailure(run, launch, kind, title, message);
@@ -410,10 +407,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       try {
         await _openUrl(_devToolsUrl(devToolsUri, vmServiceUri));
       } on Object catch (error, stackTrace) {
-        l.w(
-          'AppRunRepository | cannot open DevTools of $projectId: ${hideDataDetails(error)}',
-          stackTrace,
-        );
+        l.w('AppRunRepository | cannot open DevTools of $projectId: $error', stackTrace);
         _logFailure(run, launch, RunErrorKind.devToolsFailed, 'Opening DevTools failed', '$error');
       }
     }
@@ -446,10 +440,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     } on DaemonRequestException catch (error) {
       _logFailure(run, launch, RunErrorKind.screenshotFailed, title, '${error.error}');
     } on Object catch (error, stackTrace) {
-      l.w(
-        'AppRunRepository | screenshot of $projectId failed: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('AppRunRepository | screenshot of $projectId failed: $error', stackTrace);
       _logFailure(run, launch, RunErrorKind.screenshotFailed, title, '$error');
     }
     return null;
@@ -498,7 +489,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
     try {
       return io.Directory(path).resolveSymbolicLinksSync();
     } on io.FileSystemException catch (error) {
-      l.v('AppRunRepository | cannot resolve $path: ${hideDataDetails(error)}');
+      l.v('AppRunRepository | cannot resolve $path: $error');
       return null;
     }
   }
@@ -509,7 +500,7 @@ final class AppRunRepositoryImpl implements IAppRunRepository {
       final yaml = loadYaml(io.File(p.join(path, 'pubspec.yaml')).readAsStringSync());
       if (yaml case {'name': final String name}) return name;
     } on Object catch (error) {
-      l.v('AppRunRepository | no package name in $path: ${hideDataDetails(error)}');
+      l.v('AppRunRepository | no package name in $path: $error');
     }
     return p.basename(path);
   }
@@ -636,7 +627,7 @@ final class _Launch {
     try {
       process = await spawn();
     } on Object catch (error, stackTrace) {
-      l.w('AppRunRepository | cannot start flutter run: ${hideDataDetails(error)}', stackTrace);
+      l.w('AppRunRepository | cannot start flutter run: $error', stackTrace);
       if (_stopping) {
         _finish(const RunStopped());
       } else {
@@ -830,7 +821,7 @@ final class _Launch {
           },
           onError: (Object error, StackTrace stackTrace) {
             l.w(
-              'AppRunRepository | runtime errors come from the output: no VM service at $uri: ${hideDataDetails(error)}',
+              'AppRunRepository | runtime errors come from the output: no VM service at $uri: $error',
               stackTrace,
             );
           },

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
 import 'package:l/l.dart' show l;
@@ -113,9 +112,7 @@ final class FlutterErrorListener implements IFlutterErrorListener {
       if (!_enabled.isCompleted) {
         _enabled.completeError(error, stackTrace);
       } else if (!_closed) {
-        l.w(
-          'FlutterErrorListener | cannot switch structured errors on in $id: ${hideDataDetails(error)}',
-        );
+        l.w('FlutterErrorListener | cannot switch structured errors on in $id: $error');
       }
     }).ignore();
   }

@@ -8,7 +8,6 @@ import 'package:flutter_code_agent/src/feature/initialization/data/error_log_ste
 import 'package:flutter_code_agent/src/feature/initialization/data/initialize_dependencies.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 import '../../support/error_log_support.dart';
 
@@ -92,44 +91,6 @@ void main() {
       expect(entries.single.level, 'fatal');
       expect(entries.single.hint, 'STARTUP ERROR');
       expect(entries.single.count, 1);
-    },
-  );
-
-  quietTest(
-    'a failing step with SQL text in its error leaves no text in the log rows or breadcrumbs',
-    () async {
-      const secret = 'secret prompt text';
-      await expectLater(
-        $initializeDependencies(
-          steps: {
-            'Error log': (d) => startErrorLog(d, supportDirectory: () async => dir),
-            'Boom': (_) => throw SqliteException(
-              extendedResultCode: 2067,
-              message: "INSERT INTO chats VALUES ('$secret')",
-              causingStatement: "INSERT INTO chats VALUES ('$secret')",
-            ),
-          },
-          closers: {'Error log': (d) => d.closeErrorLog()},
-        ),
-        throwsA(anything),
-      );
-
-      final db = openTelemetryDatabase(File('${dir.path}/logs.sqlite'));
-      addTearDown(db.close);
-      final rows = await db.select(db.logEntries).get();
-      expect(rows.map((r) => '${r.message}\n${r.stack}').join('\n'), isNot(contains(secret)));
-      expect(rows.map((r) => r.message).join('\n'), contains('details hidden'));
-      final outbox = ErrorOutbox(
-        db,
-        appVersion: '1.0.0',
-        platform: 'test',
-        projectPackages: fagentPackages,
-      );
-      final entries = await outbox.oldest(10);
-      expect(entries, isNotEmpty);
-      for (final e in entries) {
-        expect('${e.message}\n${e.stack}\n${e.hint}\n${e.breadcrumbs}', isNot(contains(secret)));
-      }
     },
   );
 }

@@ -4,7 +4,6 @@ import 'dart:io' as io;
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/process/run_process.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/doctor_output_parser.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
@@ -127,12 +126,9 @@ final class FlutterSdkRepositoryImpl implements IFlutterSdkRepository {
     } on TimeoutException {
       l.w('Flutter SDK | $flutter --version did not finish in $versionTimeout');
     } on io.ProcessException catch (error, stackTrace) {
-      l.w('Flutter SDK | cannot run $flutter --version: ${hideDataDetails(error)}', stackTrace);
+      l.w('Flutter SDK | cannot run $flutter --version: $error', stackTrace);
     } on FormatException catch (error, stackTrace) {
-      l.w(
-        'Flutter SDK | cannot read the output of $flutter --version: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Flutter SDK | cannot read the output of $flutter --version: $error', stackTrace);
     }
     return null;
   }

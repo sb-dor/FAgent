@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_code_agent/src/common/dart_analysis/lsp_process.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 import 'package:meta/meta.dart';
 
@@ -62,7 +61,7 @@ final class LspConnection {
     _subscription = _process.stdout.listen(
       _onBytes,
       onError: (Object error, StackTrace stackTrace) =>
-          l.w('LSP | stdout failed: ${hideDataDetails(error)}', stackTrace),
+          l.w('LSP | stdout failed: $error', stackTrace),
       onDone: _onClosed,
     );
   }
@@ -163,7 +162,7 @@ final class LspConnection {
     try {
       decoded = jsonDecode(text);
     } on FormatException catch (error) {
-      l.w('LSP | not JSON: ${hideDataDetails(error)}');
+      l.w('LSP | not JSON: $error');
       return;
     }
     if (decoded is! Map<String, Object?>) return;
@@ -195,7 +194,7 @@ final class LspConnection {
     try {
       result = await onServerRequest(method, params);
     } on Object catch (error, stackTrace) {
-      l.w('LSP | answering $method failed: ${hideDataDetails(error)}', stackTrace);
+      l.w('LSP | answering $method failed: $error', stackTrace);
     }
     if (_closed) return;
     _write(<String, Object?>{'jsonrpc': '2.0', 'id': id, 'result': result});

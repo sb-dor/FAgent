@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:control/control.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/models/app_run_exceptions.dart';
@@ -409,7 +408,7 @@ final class RunController extends StateController<RunViewState> with SequentialC
     if (!gone) return;
     setState(state.copyWith(selectedConfig: null));
     _configRepository.saveSelected(projectId, null).catchError((Object error, StackTrace stack) {
-      l.w('RunController | cannot store Default for $projectId: ${hideDataDetails(error)}', stack);
+      l.w('RunController | cannot store Default for $projectId: $error', stack);
     }).ignore();
   }
 

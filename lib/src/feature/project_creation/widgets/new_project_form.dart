@@ -3,7 +3,6 @@ import 'package:flutter_code_agent/src/common/design/app_colors.dart';
 import 'package:flutter_code_agent/src/common/design/app_text.dart';
 import 'package:flutter_code_agent/src/common/design/app_theme.dart';
 import 'package:flutter_code_agent/src/common/localization/localization.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/widget/compact_button.dart';
 import 'package:flutter_code_agent/src/common/widget/preview_badge.dart';
 import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
@@ -104,7 +103,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         _checkTarget();
       },
       onError: (Object error, StackTrace stackTrace) {
-        l.w('New project | default folder | ${hideDataDetails(error)}', stackTrace);
+        l.w('New project | default folder | $error', stackTrace);
         if (!mounted || _parent != null) return;
         setState(() => _folderFailed = true);
       },
@@ -209,7 +208,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
             });
           },
           onError: (Object error, StackTrace stackTrace) {
-            l.w('New project | check folder | ${hideDataDetails(error)}', stackTrace);
+            l.w('New project | check folder | $error', stackTrace);
             if (!mounted || number != _checkNumber) return;
             setState(() {
               _targetChecked = true;

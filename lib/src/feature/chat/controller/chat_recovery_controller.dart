@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:control/control.dart';
 import 'package:dart_acp_sdk/dart_acp_sdk.dart' show CancellationException;
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
 import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -103,10 +102,7 @@ final class ChatRecoveryController extends StateController<ChatRecoveryState>
     if (isDisposed) return;
     unawaited(
       _agents.cancelLogin(agentId).catchError((Object error, StackTrace stackTrace) {
-        l.w(
-          'Chat | cancelling the sign-in of $agentId failed: ${hideDataDetails(error)}',
-          stackTrace,
-        );
+        l.w('Chat | cancelling the sign-in of $agentId failed: $error', stackTrace);
       }),
     );
   }

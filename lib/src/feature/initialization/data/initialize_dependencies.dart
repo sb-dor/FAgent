@@ -13,7 +13,6 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/common/utils/error_util.dart';
 import 'package:flutter_code_agent/src/common/utils/url_opener.dart';
 import 'package:flutter_code_agent/src/feature/agents/data/agent_options_catalog.dart';
@@ -116,7 +115,7 @@ Future<Dependencies> $initializeDependencies({
       }
       finished.add(step.key);
     } on Object catch (error, stackTrace) {
-      l.e('Initialization failed at step "${step.key}": ${hideDataDetails(error)}', stackTrace);
+      l.e('Initialization failed at step "${step.key}": $error', stackTrace);
       // Before the closers: they close the error log, and a report after that is lost.
       unawaited(ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true));
       await ErrorUtil.settled();
@@ -193,10 +192,8 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
     onConfigOptions: (agentId, options) => dependencies.agentOptionsCatalog
         .save(agentId, options)
         .catchError(
-          (Object error, StackTrace stackTrace) => l.w(
-            'Agent options | could not save the options of $agentId: ${hideDataDetails(error)}',
-            stackTrace,
-          ),
+          (Object error, StackTrace stackTrace) =>
+              l.w('Agent options | could not save the options of $agentId: $error', stackTrace),
         ),
   ),
   // In memory; quitting asks first while a chat still has queued messages.
@@ -230,7 +227,7 @@ final Map<String, InitializationStep> _initializationSteps = <String, Initializa
         if (!first.isCompleted) first.complete();
       },
       onError: (Object error, StackTrace stackTrace) {
-        l.w('Custom agents | could not read them: ${hideDataDetails(error)}', stackTrace);
+        l.w('Custom agents | could not read them: $error', stackTrace);
         if (!first.isCompleted) first.complete();
       },
     );

@@ -6,7 +6,6 @@ import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_hub_types.dart';
 import 'package:flutter_code_agent/src/common/acp/live_session.dart';
 import 'package:flutter_code_agent/src/common/acp/raw_acp_message.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 
 /// Answers a permission request of generation `generation` of [slot]'s process.
@@ -226,7 +225,7 @@ final class AgentSlotRegistry {
   /// for it.
   void track(Future<void> work) {
     final tracked = work.catchError((Object error, StackTrace stackTrace) {
-      l.w('AgentHub | updating an agent failed: ${hideDataDetails(error)}', stackTrace);
+      l.w('AgentHub | updating an agent failed: $error', stackTrace);
     });
     _closing.add(tracked);
     unawaited(tracked.whenComplete(() => _closing.remove(tracked)));

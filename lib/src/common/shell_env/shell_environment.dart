@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io' as io;
 
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as p;
@@ -69,10 +68,7 @@ final class ShellEnvironment {
       }
       return ShellEnvironment(Map<String, String>.unmodifiable(variables));
     } on Object catch (error, stackTrace) {
-      l.w(
-        'Shell environment | falling back to the app environment: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('Shell environment | falling back to the app environment: $error', stackTrace);
       return fallback(current);
     }
   }

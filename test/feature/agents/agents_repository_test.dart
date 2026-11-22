@@ -20,7 +20,6 @@ import 'package:flutter_code_agent/src/feature/agents/models/agents_exceptions.d
 import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.dart';
 import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
 import '../../support/fake_agent_binary.dart';
@@ -738,27 +737,6 @@ void main() {
 
       expect(agents.map((agent) => agent.id), ['custom:1']);
     });
-  });
-
-  test('a custom agent skipped for bad JSON is logged without the slice of the input', () async {
-    const secret = 'secret prompt text';
-    final logged = <String>[];
-    final sub = l.listen((m) => logged.add('${m.message}'));
-    addTearDown(sub.cancel);
-    await database
-        .into(database.customAgentsTable)
-        .insert(
-          CustomAgentsTableCompanion.insert(
-            name: 'Broken',
-            executable: 'broken',
-            arguments: const Value('{not json $secret'),
-          ),
-        );
-
-    await newRepository().watchCustomAgents().first;
-
-    expect(logged.join('\n'), contains('skipping custom agent'));
-    expect(logged.join('\n'), isNot(contains(secret)));
   });
 
   test('nothing is busy without chats', () async {

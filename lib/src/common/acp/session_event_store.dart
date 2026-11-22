@@ -6,7 +6,6 @@ import 'dart:isolate';
 import 'package:drift/drift.dart';
 import 'package:flutter_code_agent/src/common/acp/session_event.dart';
 import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 
 /// {@template session_event_store}
@@ -164,7 +163,7 @@ final class SessionEventStore {
       await flush();
     } on Object catch (error, stackTrace) {
       l.w(
-        'SessionEventStore | session $sessionId lost unsaved events on close: ${hideDataDetails(error)}',
+        'SessionEventStore | session $sessionId lost unsaved events on close: $error',
         stackTrace,
       );
     } finally {
@@ -219,7 +218,7 @@ final class SessionEventStore {
     // the error.
     _writes = write.catchError((Object error, StackTrace stackTrace) {
       l.w(
-        'SessionEventStore | session $sessionId failed to write ${batch.length} events: ${hideDataDetails(error)}',
+        'SessionEventStore | session $sessionId failed to write ${batch.length} events: $error',
         stackTrace,
       );
       _pending.insertAll(0, batch.where((e) => !identical(e, durable)));

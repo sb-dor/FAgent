@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_inspector_client.dart';
 import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
@@ -103,10 +102,7 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
       client = await _client(project, uri);
     } on Object catch (error, stackTrace) {
       if (pick.cancelled) return const PickCancelled();
-      l.w(
-        'WidgetPicker | cannot connect to the app of ${project.projectId}: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('WidgetPicker | cannot connect to the app of ${project.projectId}: $error', stackTrace);
       return const PickFailed(PickFailure.connectionLost);
     }
     if (pick.cancelled) return const PickCancelled();
@@ -182,13 +178,10 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
           ? const PickFailed(PickFailure.connectionLost)
           : const PickGone();
     } on io.IOException catch (error) {
-      l.w('WidgetPicker | lost the app of $projectId: ${hideDataDetails(error)}');
+      l.w('WidgetPicker | lost the app of $projectId: $error');
       return const PickFailed(PickFailure.connectionLost);
     } on Object catch (error, stackTrace) {
-      l.w(
-        'WidgetPicker | cannot select $id in the app of $projectId: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('WidgetPicker | cannot select $id in the app of $projectId: $error', stackTrace);
       return PickFailed(PickFailure.inspectorError, detail: '$error');
     }
   }
@@ -231,17 +224,14 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     } on RPCError catch (error, stackTrace) {
       // The widget is worth having without its picture; a lost connection is not.
       if (_isConnectionLoss(error)) rethrow;
-      l.w('WidgetPicker | no PNG of ${node.name}: ${hideDataDetails(error)}', stackTrace);
+      l.w('WidgetPicker | no PNG of ${node.name}: $error', stackTrace);
     }
     String? screenshot;
     if (png != null && root != null) {
       try {
         screenshot = await saveScreenshotPng(root, png, name: 'widget-${_fileSafe(node.name)}');
       } on io.FileSystemException catch (error, stackTrace) {
-        l.w(
-          'WidgetPicker | cannot save the PNG of ${node.name}: ${hideDataDetails(error)}',
-          stackTrace,
-        );
+        l.w('WidgetPicker | cannot save the PNG of ${node.name}: $error', stackTrace);
       }
     }
     return PickedWidget(
@@ -268,16 +258,10 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
     if (pick.cancelled) return const PickCancelled();
     if (error is SentinelException) return const PickCancelled(); // The isolate exited.
     if (error is io.IOException || error is RPCError && _isConnectionLoss(error)) {
-      l.w(
-        'WidgetPicker | lost the app of ${project.projectId}: ${hideDataDetails(error)}',
-        stackTrace,
-      );
+      l.w('WidgetPicker | lost the app of ${project.projectId}: $error', stackTrace);
       return _lost(project.projectId, uri);
     }
-    l.w(
-      'WidgetPicker | the pick in the app of ${project.projectId} failed: ${hideDataDetails(error)}',
-      stackTrace,
-    );
+    l.w('WidgetPicker | the pick in the app of ${project.projectId} failed: $error', stackTrace);
     return PickFailed(
       PickFailure.inspectorError,
       detail: error is RPCError ? error.message : '$error',
@@ -339,9 +323,8 @@ final class WidgetPickerRepositoryImpl implements IWidgetPickerRepository {
       )
       ..run = _watchRun(project.projectId).listen(
         (state) => _onRun(project, client, state),
-        onError: (Object error, StackTrace stackTrace) => l.w(
-          'WidgetPicker | cannot follow the run of ${project.projectId}: ${hideDataDetails(error)}',
-        ),
+        onError: (Object error, StackTrace stackTrace) =>
+            l.w('WidgetPicker | cannot follow the run of ${project.projectId}: $error'),
       );
     return client;
   }

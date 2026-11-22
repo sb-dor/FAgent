@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:dart_acp_sdk/dart_acp_sdk.dart' hide Error;
 import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
 import 'package:flutter_code_agent/src/common/acp/agent_slot_registry.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 
 /// {@template agent_sign_in}
@@ -54,7 +53,7 @@ final class AgentSignIn {
               await _continueAfterSignIn(agentId);
             })
             .catchError((Object error, StackTrace stackTrace) {
-              l.w('AgentHub | restart after login failed: ${hideDataDetails(error)}', stackTrace);
+              l.w('AgentHub | restart after login failed: $error', stackTrace);
             })
             .whenComplete(() => _restartAfter.remove(login)),
       );

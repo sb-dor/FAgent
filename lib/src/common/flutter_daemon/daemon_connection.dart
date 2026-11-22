@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_exceptions.dart';
-import 'package:flutter_code_agent/src/common/telemetry/hidden_details_error.dart';
 import 'package:l/l.dart';
 
 /// {@template daemon_event}
@@ -39,14 +38,14 @@ final class DaemonConnection {
   DaemonConnection(this._process) {
     _stdoutSubscription = _process.stdoutLines.listen(
       _onStdoutLine,
-      onError: (Object error) => l.w('DaemonConnection | stdout error: ${hideDataDetails(error)}'),
+      onError: (Object error) => l.w('DaemonConnection | stdout error: $error'),
       onDone: () {
         if (!_stdoutDone.isCompleted) _stdoutDone.complete();
       },
     );
     _stderrSubscription = _process.stderrLines.listen(
       (line) => _addOutput(line, isError: true),
-      onError: (Object error) => l.w('DaemonConnection | stderr error: ${hideDataDetails(error)}'),
+      onError: (Object error) => l.w('DaemonConnection | stderr error: $error'),
       onDone: () {
         if (!_stderrDone.isCompleted) _stderrDone.complete();
       },

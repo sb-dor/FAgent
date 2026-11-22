@@ -3,7 +3,6 @@ import 'dart:convert';
 
 import 'package:flutter_code_agent/src/common/dart_analysis/lsp_connection.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:l/l.dart';
 
 import '../../support/scripted_lsp_process.dart';
 
@@ -155,20 +154,5 @@ void main() {
     await expectLater(pending, throwsA(isA<LspClosedException>()));
     await expectLater(connection.request('late', null), throwsA(isA<LspClosedException>()));
     await connection.done;
-  });
-
-  test('a payload that is not JSON is logged without its text', () async {
-    const secret = 'secret prompt text';
-    final logged = <String>[];
-    final sub = l.listen((m) => logged.add('${m.message}'));
-    addTearDown(sub.cancel);
-    final body = utf8.encode('{"x": $secret');
-
-    process.sendRaw(<int>[...ascii.encode('Content-Length: ${body.length}\r\n\r\n'), ...body]);
-    await settle();
-    await settle();
-
-    expect(logged.join('\n'), contains('not JSON'));
-    expect(logged.join('\n'), isNot(contains(secret)));
   });
 }
