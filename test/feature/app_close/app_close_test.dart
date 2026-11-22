@@ -195,10 +195,9 @@ void main() {
   });
 
   testWidgets('a bug while shutting down still quits', (tester) async {
-    final repository = await pumpGuard(tester);
-    repository.shutdownError = StateError('database closed twice');
-
-    repository.close();
+    final repository = await pumpGuard(tester)
+      ..shutdownError = StateError('database closed twice')
+      ..close();
     await tester.pump();
     await tester.pump();
 

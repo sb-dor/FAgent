@@ -10,7 +10,6 @@ import 'package:flutter_code_agent/src/common/telemetry/log_buffer.dart';
 import 'package:flutter_code_agent/src/common/telemetry/telemetry_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:l/l.dart';
-import 'package:sqlite3/sqlite3.dart' show SqliteException;
 
 TelemetryDatabase _db() => TelemetryDatabase.forTesting(NativeDatabase.memory());
 

@@ -71,8 +71,8 @@ void main() {
     expect(section, contains('error is ExpectedException'));
     expect(section, contains('ExpectedException() => true'));
     expect(section, contains('TimeoutException'));
-    expect(section, contains('APIClientException\$Network'));
-    expect(section, contains('APIClientException\$Authorization'));
+    expect(section, contains(r'APIClientException$Network'));
+    expect(section, contains(r'APIClientException$Authorization'));
   });
 
   test('dependencies.md does not log errors with developer.log', () {
