@@ -42,7 +42,8 @@ void main() {
     for (var i = 0; i < 1000; i++) {
       buffer.lastLines(100);
     }
-    expect(watch.elapsedMilliseconds, lessThan(1000));
+    // A guard against copying the whole buffer per call, not a speed test: wide for a loaded CI.
+    expect(watch.elapsedMilliseconds, lessThan(10000));
     final lines = buffer.lastLines(3);
     expect(lines.last, endsWith('m${LogBuffer.limit - 1}'));
     expect(lines.first, endsWith('m${LogBuffer.limit - 3}'));

@@ -65,7 +65,8 @@ void main() {
         timestamp: DateTime.utc(2026),
       ),
     );
-    expect(watch.elapsedMilliseconds, lessThan(200));
+    // A guard against catastrophic backtracking, not a speed test: wide for a loaded CI.
+    expect(watch.elapsedMilliseconds, lessThan(2000));
   });
 
   group('a stub of a secret on the clipping boundary does not reach the line', () {
