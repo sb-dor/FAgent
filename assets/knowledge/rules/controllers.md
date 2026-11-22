@@ -425,7 +425,7 @@ with the first, it hides the bugs among thousands of mistyped passwords.
 
 - The data layer marks the expected kind when it translates an error at the boundary (see "Errors"
   in `docs/rules/repositories.md`): it throws a subtype of `ExpectedException`
-  (`app_exception.dart` below), such as `RejectedException(code: 'wrong_password')`. Whether a
+  (`expected_exception.dart` below), such as `RejectedException(code: 'wrong_password')`. Whether a
   failure is an answer is known where the server's code is read, so it is decided there once.
   In a project that has `ErrorUtil` the split below is made by it; a project with another reporter
   keeps that reporter and follows the same split (the observer sees every error, the reporter keeps
@@ -1157,10 +1157,10 @@ page controls) does not use this pattern: fetch it in one `load()` and render it
 
 Whole files, one per block; put each where the layout above says and adjust the imports.
 
-### `app_exception.dart`
+### `expected_exception.dart`
 
 ```dart
-// file: app_exception.dart
+// file: expected_exception.dart
 /// A failure the feature expects as an answer, not a bug: the user can read it and act. The data
 /// layer throws a subtype at the boundary; a controller sets its `error` state, and `ErrorUtil`
 /// writes it to the log but keeps it out of the crash reporter. Lives in

@@ -130,10 +130,10 @@ here:
 
 | Piece | One app | Monorepo |
 | --- | --- | --- |
-| Log, queue, `ErrorUtil`, redaction, crash reporter gateway | `lib/_core/telemetry/` | `packages/telemetry/` |
+| Log, queue, redaction, crash reporter gateway (monorepo: `lib/telemetry.dart` is the whole module, `lib/portable.dart` the web-safe part that app code which also builds for the web may import) | `lib/_core/telemetry/` | `packages/telemetry/` |
 | Database (and the log's own database) | `lib/_core/database/` | `packages/database/` |
 | HTTP client, middlewares, `ExpectedException`, `RejectedException` | `lib/_core/api_client/` | `packages/api_client/` |
-| App glue: `isExpectedFailure`, the controller observer, startup | `lib/_core/telemetry/` | `apps/<app>/lib/_core/telemetry/` |
+| App glue: `ErrorUtil`, `isExpectedFailure`, the controller observer, `appZone`, the crash reporter | `lib/_core/telemetry/` | `apps/<app>/lib/_core/telemetry/` |
 
 - In a monorepo each package has `lib/<name>.dart` and `lib/src/` and is imported by its public
   library only. There is no catch-all `core` package: a type belongs to the package that throws or

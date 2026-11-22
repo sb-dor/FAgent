@@ -114,7 +114,7 @@ void main() {
     'app_brand.dart',
     'order_status.dart',
     'anchored_popup.dart',
-    'app_exception.dart',
+    'expected_exception.dart',
     'background_prefs.dart',
     'camera.dart',
     'cancellable_import.dart',

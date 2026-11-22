@@ -250,6 +250,16 @@ knowledge/                        # Markdown: правила и skills, отда
   вперёд (⌃- / ⌃⇧-), вкладки только для чтения для кода Flutter и пакетов, форматирование при
   сохранении и ⇧⌥F (`docs/superpowers/specs/2026-11-05-code-navigation-design.md`)
 
+### Ошибки и телеметрия (после вида «Код»)
+
+- [x] Рецепт ошибок контроллера в правилах (`handle(..., error:, done:)`, ожидаемые и неожиданные
+  сбои, `ErrorUtil`) и модуль `lib/src/common/telemetry/` в самом FAgent: журнал и очередь в своей
+  базе `logs.sqlite`, отчёты о сбоях только по согласию (Настройки → «Отчёты о сбоях», по умолчанию
+  выключено, Sentry)
+- [x] Шаблон нового проекта: конвейер ошибок с выбором Sentry, Crashlytics или «только журнал»;
+  монорепо делит пакеты `telemetry`, `database` и `api_client`
+  (`docs/superpowers/specs/2026-11-22-error-telemetry-design.md`)
+
 ### M7. Релиз (1–2 недели)
 
 - [x] README: установка, требования (Flutter, Node для адаптеров), скриншоты, как писать свои правила; CONTRIBUTING.md

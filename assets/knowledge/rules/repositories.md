@@ -55,7 +55,7 @@ description: "Stateless repositories: interface plus Impl, no StreamController f
   an answer (a 401 with `invalid_credentials` on sign-in, a request sent without a token), it
   reads `error.data` with a map pattern and throws the app's exception. A failure the user can
   read and act on (a wrong password, a used coupon) is thrown as a subtype of `ExpectedException`
-  (`app_exception.dart` in `docs/rules/controllers.md`): the controller shows it and does not
+  (`expected_exception.dart` in `docs/rules/controllers.md`): the controller shows it and does not
   report it. An unknown code, or no body, is rethrown: it keeps its own type and is reported. A
   local query that found no row throws the feature's `NotFoundException`. Keep the original stack
   trace with `Error.throwWithStackTrace`:
@@ -816,7 +816,7 @@ final class ThemeDataProviderLocal implements IThemeDataProvider {
 ```dart
 // file: payments_data_provider.dart
 import 'api_client.dart';
-import 'app_exception.dart';
+import 'expected_exception.dart';
 
 /// The failures of a payment that the app handles in their own way. Sealed: a `switch` over them
 /// is checked by the compiler. Expected: the controller shows them and does not report them.
