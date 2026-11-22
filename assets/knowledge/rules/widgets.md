@@ -40,7 +40,8 @@ description: "Widget conventions: ListenableBuilder, super.key, what goes in a s
   `builder` renders the data, not the error. An error that must stay as a widget (an error view in
   place of a list that never loaded) is read from the data (`state.data.error`), where the
   controller keeps it; see "One recipe for states" in `docs/rules/controllers.md`. The text comes
-  from `errorText` (see "Error messages" in `docs/rules/localization.md`).
+  from `errorText` (see "Error messages" in `docs/rules/localization.md`). The five places an
+  error is shown are in "Showing an error".
 - Dispose what the widget created (that drops its listeners too); remove the listeners you added to
   what it did not create. See "Listeners and dispose".
 - `didUpdateWidget` runs on almost every rebuild of the parent: compare the old and new fields
@@ -1423,6 +1424,143 @@ is short.
   file; only UI pieces and UI-only state do.
 - Hundreds of private widgets in a 5,000-line file are fine when they belong to one screen; a
   5,000-line file that mixes several screens, models and logic is not.
+
+## Showing an error
+
+The controller publishes a state, the widget reacts. The controller knows nothing of
+`BuildContext`, a navigator or a dialog service; SnackBars, dialogs and navigation are opened by the
+widget, in the `listener` of its `StateConsumer` (called once per transition, only while the widget
+is in the tree).
+
+- The `builder` draws the data and `processing`. It does not draw the error of the transition,
+  because `idle` follows `error` at once; the one exception is an error that lives in the data.
+- A widget never calls `ErrorUtil`: the observer already reported the error (see "Reporting an
+  error" in `docs/rules/controllers.md`).
+- The text is `errorText(lcl, error)` and nothing else: never `error.toString()`, never
+  `error.message` (see "Error messages" in `docs/rules/localization.md`).
+
+| Situation | Where it is shown |
+|---|---|
+| 1. An action on the screen failed, the data is there | A SnackBar with "Retry", from the `listener` |
+| 2. The server rejected one field | Red text under that field |
+| 3. An action inside a dialog failed | Red text at the bottom of the dialog body (the screen's SnackBar sits under the barrier) |
+| 4. The first load failed, there is no data | `LoadErrorView` (the reason and "Retry") in place of the list, from `state.data.error` |
+| 5. A re-read failed, the old data is there | `RefreshFailedNotice` ("Could not refresh" and a retry) above the old data |
+
+**1. A SnackBar with a retry.** One trouble, one message: when the list shows `LoadErrorView` for
+the same failure, the `listener` stays silent (`newState.data.error == null`).
+
+```dart
+listener: (context, controller, oldState, newState) {
+  if (newState case Sales$ErrorState(:final error) when newState.data.error == null) {
+    _showError(context, error, onRetry: controller.load);
+  }
+},
+
+void _showError(BuildContext context, Object error, {required VoidCallback onRetry}) {
+  final lcl = Localization.of(context);
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar() // do not queue messages
+    ..showSnackBar(
+      SnackBar(
+        content: Text('${lcl.salesLoadFailed}: ${errorText(lcl, error)}'),
+        action: SnackBarAction(label: lcl.retry, onPressed: onRetry), // a retry is a controller call
+      ),
+    );
+}
+```
+
+**2 and 3. Under a field and inside a dialog.** The dialog owns its action controller (created in
+`initState`, closed in `dispose`) and reacts in `listener`: success pops with `true`; an error that
+names a field (`invalid_input` with `details.field`) goes under that field; any other error is kept
+in the dialog's `State` and drawn at the bottom of the body. The next attempt clears both. Checks the
+widget can make itself run first and set the errors as values (an enum or a map of field to error),
+without calling the server.
+
+```dart
+if (_error case final error?)
+  Text(
+    errorText(lcl, error),
+    key: const ValueKey('save-error'),
+    style: TextStyle(color: context.colors.danger),
+  ),
+```
+
+The dialog does not close while the action runs (`PopScope(canPop: !processing)`), its buttons are
+disabled on `processing`, and the changes controller is `Droppable`, so a double tap does nothing.
+A load that fails inside a dialog is `data.error` with its own "Retry" in the dialog body.
+
+**4. A first load that failed.** The error is part of the data (`data.error`, set in `error:` and
+cleared by the next successful load), so `idle` after `error` still has it:
+
+```dart
+if (state.data.items case final items when items.isNotEmpty) return _List(items: items);
+if (state is Sales$ProcessingState) return const Center(child: CircularProgressIndicator());
+return LoadErrorView(
+  key: const ValueKey('sales-load-error'),
+  title: lcl.salesLoadFailed,
+  error: state.data.error,
+  retryKey: const ValueKey('sales-retry'),
+  onRetry: controller.load,
+);
+```
+
+`LoadErrorView` is one shared widget (`common/widget/` or `_core/widget/`), not one per screen. An
+empty list is a different widget (`EmptyState`), not an error.
+
+```dart
+class LoadErrorView extends StatelessWidget {
+  const LoadErrorView({
+    required this.title,
+    required this.error,
+    required this.onRetry,
+    this.retryKey,
+    super.key,
+  });
+
+  final String title; // what could not be loaded
+  final Object? error; // null: the title only
+  final VoidCallback? onRetry; // null: the button is off while a new attempt runs
+  final Key? retryKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final lcl = Localization.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            switch (error) {
+              final error? => '$title: ${errorText(lcl, error)}',
+              null => title,
+            },
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          UiButton.primary(key: retryKey, onPressed: onRetry, child: Text(lcl.retry)),
+        ],
+      ),
+    );
+  }
+}
+```
+
+**5. A re-read that failed.** The old data stays on screen; `RefreshFailedNotice` is a slim banner
+above it with the reason from `errorText` and a retry. It is the same `data.error`, now with data
+present. It is not a SnackBar: it stays until the next successful load.
+
+- Do not `await` a controller's result in a widget: call the method and react in the `listener`. If an
+  `await` is needed (a confirmation), take the navigator and messenger before it and check
+  `mounted` after; never silence `use_build_context_synchronously`.
+- Close a dialog with the context of its own `builder`: `Navigator.pop(pageContext)` closes the page
+  under the dialog.
+- A confirmation dialog needs no controller: `static Future<bool> ask(...)`, the caller checks
+  `mounted` and then calls the controller's method.
+- Validation errors are values (an enum or a sealed class); the widget turns them into text with
+  `Localization.of(context)`.
+- Put `ValueKey`s on the error text, "Retry" and the dialog's buttons, so tests find the error where
+  the user would.
 
 ## Forms
 

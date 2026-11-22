@@ -140,6 +140,63 @@ ones, and writes the mapping to `build/symbols`.
 - On the web there is no `--obfuscate`: a release build is minified; keep its source maps
   (`--source-maps`) for the crash reporter.
 
+## Crash reports
+
+What leaves the machine, and how it is cleaned. A project that has `ErrorUtil` reports through it
+(`ErrorUtil` over `ErrorHub`, the log `logs.sqlite`, the queue, the sender, the gateway); a project
+with another reporter keeps it and follows the same split; a new project starts with this
+pipeline. The rules for calling it are in "Reporting an error" in `docs/rules/controllers.md`.
+
+- **Only an unexpected error goes to the crash reporter.** The network, timeouts, a refused access
+  (`APIClientException$Authorization`), a server refusal and every other `ExpectedException` stay
+  in the log on the machine (`isExpectedFailure`). A user's switch ("Send crash reports", off
+  until the user turns it on) stops the sender; a developer's own app, where the developer is the
+  owner, sends whenever a reporter is configured.
+- **Consent covers only what comes after it.** The log and the queue are kept while the switch is
+  off, so a settings screen and the archive show them, but nothing recorded before the switch was
+  turned on (its message, stack, breadcrumbs or count) ever leaves the machine. Store the moment
+  of consent with the setting, give it to the sender, and move it when the switch is turned off
+  and on again. An entry from before consent and the same fingerprint recurring after it do not
+  send the earlier occurrence's data. Test both.
+- **The event holds:** the type, the cleaned message, the stack frames (an obfuscated stack that
+  does not parse goes as one raw string in `extra.stack`: symbolize it by hand, see "Obfuscation"),
+  the time of the first occurrence, the counter of identical ones, the last 100 log lines, the app
+  version, the platform and the environment. `sendDefaultPii` is `false`: no user, no IP, no
+  request or headers. The SDK adds its own contexts (the operating system, the Dart runtime, the
+  language and time zone, the processor count, the memory, the build mode); the path to
+  `package_config.json` is removed in `beforeSend`, so no absolute path of the machine leaves it.
+  Paths in texts lose the user name (`C:\Users\<name>`, `/Users/<name>`, `/home/<name>`).
+- **`redactSecrets` runs before the queue, before the log database and before every archive.** It
+  replaces with `[REDACTED]`:
+  - `Bearer ...` and `Authorization: <scheme> ...` (the scheme stays);
+  - the values of the fields `token`, `key`, `password`, `pin`, `secret` and `recoveryCode`, with
+    any prefix or suffix (`apiKey`, `pin_code`), quoted or not;
+  - keys that coding agents and their tools print: `sk-ant-...`, `sk-...` and `sk-proj-...`,
+    `ghp_...`, `gho_...` and `github_pat_...`, `AIza...`, `xox[abp]-...`;
+  - the secrets of the project's own server in free text, in the shape that server issues them;
+  - the user name in paths (`C:\Users\<name>` in any case and with the doubled `\\` of JSON,
+    `/Users/<name>`, `/home/<name>`; the name runs to the next separator, so `John Smith` goes
+    whole);
+  - phone numbers (fields in any format, text only with a leading `+`) and e-mail.
+
+  Certificate fingerprints, a lone UUID and a sha256 are not touched: they are not secrets and
+  support needs them. A line is cut to 16 KB first, so the expressions run in linear time on any
+  input. A log line takes at most 1100 characters of the raw text before cleaning; when the raw
+  text was longer, the last 200 characters of the cleaned text are dropped, because the cut may
+  have split an e-mail, a token or a phone that the patterns no longer recognize.
+- **A new kind of secret** is added to `redact.dart` with a test: a positive case and a look-alike
+  that must stay (`microphone`, `Device is offline`, `sk-learn`).
+- **An error with details that must not be shown** (SQLite, drift, `FormatException`) goes to the
+  queue as `HiddenDetailsError`: the type of the original, no message.
+- **Firebase Crashlytics** is a gateway behind the queue, like Sentry: the queue cleans, splits
+  and counts, the gateway only sends (`recordError`) what it is given. Never assign
+  `FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError` (or
+  `PlatformDispatcher.instance.onError` the same way): that path sends the raw error, with no
+  cleaning, no `isExpectedFailure` and no consent. Keep collection off until the user's switch
+  is on (`setCrashlyticsCollectionEnabled`).
+- **Never in a log line or an error message:** a token, a password, an API key, a card number, a
+  customer's phone. The cleaning is the last net, not the plan.
+
 ## Untrusted input
 
 Everything that comes into the app is checked before it is used, the app's own backend included:
@@ -315,8 +372,8 @@ app. The data layer reads the server's error code from the `APIClientException`'
 it to the app's exception (`RejectedException(code: 'invalid_credentials')`, see "Errors" in
 `docs/rules/repositories.md`), the screen shows it through `errorText`
 (`docs/rules/localization.md`), and it is not reported. In the controller there is nothing to catch: the observer sees every error, and
-`isExpectedFailure` keeps the expected ones (a `RejectedException` with a known code) out of the
-crash reporter, while `error:` sets the `error` state for all of them (see "Where the error goes" in
+`isExpectedFailure` keeps the expected ones (every `ExpectedException`, a `RejectedException`
+included) out of the crash reporter, while `error:` sets the `error` state for all of them (see "Where the error goes" in
 `docs/rules/controllers.md`):
 
 ```dart
@@ -329,16 +386,17 @@ void signIn(String email, String password) => handle(
   done: () async => setState(AuthState.idle(user: state.user)),
 );
 
-/// The app's one decision, used by the reporter behind the observer: the server's codes that are
-/// answers to the user, not failures.
-bool isExpectedFailure(Object error) =>
-    error is RejectedException && _answers.contains(error.code);
-
-const Set<String> _answers = {'invalid_credentials', 'email_taken', 'weak_password'};
+/// The app's one decision, used by the reporter behind the observer: the failures that are
+/// answers to the user, not bugs.
+bool isExpectedFailure(Object error) => error is ExpectedException;
 ```
 
-The codes are listed, not "every rejection": an unknown code is reported with the code and the
-server's message, since it is either a new server rule the app must learn or a bug.
+Every `ExpectedException` is expected, a `RejectedException` with any code included: the server
+said no and the screen shows its text. A failure that is a bug is not an `ExpectedException`:
+the data layer does not turn a code it cannot place into a rejection, it passes the client's own
+exception on, and that one is reported. Only the app's own types may subclass `ExpectedException`,
+so the list of expected failures stays in the type hierarchy and in `isExpectedFailure`, not in a
+list of codes.
 
 ### Storing tokens
 

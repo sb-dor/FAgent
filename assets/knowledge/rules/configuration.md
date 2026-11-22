@@ -62,6 +62,35 @@ echo "const String mapsKey = '$MAPS_KEY';" > lib/_core/config/env.dart
 - Keep one `Config` (in `_core/config/`) as the only place that reads the environment; the rest
   of the app imports its constants.
 
+### The Sentry DSN
+
+The DSN of the crash reporter is a build-time value, not a secret (an ingest key can only send
+events), and it still stays out of the repository: the owner of the project puts their own into
+`config/sentry.local.json` (git-ignored) with one key per app, `SENTRY_DSN`:
+
+```json
+{ "SENTRY_DSN": "https://<key>@<host>/<project>" }
+```
+
+```dart
+// lib/_core/config/config.dart
+static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
+```
+
+- Pass the file as a `--dart-define-from-file` (a later file wins over an earlier one):
+  `flutter run -d macos --dart-define-from-file=config/sentry.local.json`. In a project with a
+  Makefile, the `run` and `build` targets pass it when the file exists, so a clone without the
+  file still builds.
+- An empty DSN switches sending off. The log and the queue are still kept, so the errors are
+  there once a DSN is set (what was recorded before the user's consent is still never sent, see
+  "Crash reports" in `docs/rules/security.md`).
+- One key per app: an app of a monorepo reads its own `SENTRY_DSN` from its own file, so the apps
+  report to separate Sentry projects. Do not add a second key for a variant of the same app.
+- The `environment` of an event is the flavor (`dev`, `prod`) and the `release` is the app
+  version.
+- The project's `.gitignore` lists `config/sentry.local.json`; a committed `config/*.json` holds
+  only empty values.
+
 ## Flavors
 
 A flavor is one more app built from the same code: its own application and bundle ID, name, icon,

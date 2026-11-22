@@ -4,10 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 String _rule(String name) => File('assets/knowledge/rules/$name.md').readAsStringSync();
 
-Iterable<String> _dartBlocks(String markdown) => RegExp(
-  r'```dart\n(.*?)```',
-  dotAll: true,
-).allMatches(markdown).map((match) => match.group(1)!);
+Iterable<String> _dartBlocks(String markdown) =>
+    RegExp(r'```dart\n(.*?)```', dotAll: true).allMatches(markdown).map((match) => match.group(1)!);
 
 void main() {
   test('controllers.md has the handle recipe', () {
@@ -30,9 +28,18 @@ void main() {
   });
 
   test('no cafe specifics', () {
-    for (final name in ['controllers', 'repositories', 'architecture']) {
+    // `PIN` is only checked in the files that never talk about PINs as a general topic.
+    const pinFree = {'controllers', 'repositories', 'architecture'};
+    const files = {...pinFree, 'security', 'configuration', 'dependencies', 'widgets', 'testing'};
+    for (final name in files) {
       final text = _rule(name);
-      for (final word in ['CAFEPOS', 'deviceGuard', 'venue', 'заведени', 'PIN']) {
+      for (final word in [
+        'CAFEPOS',
+        'deviceGuard',
+        'venue',
+        'заведени',
+        if (pinFree.contains(name)) 'PIN',
+      ]) {
         expect(text, isNot(contains(word)), reason: '$name.md contains $word');
       }
     }
@@ -40,5 +47,45 @@ void main() {
 
   test('repositories.md reports with ErrorUtil', () {
     expect(_rule('repositories'), contains('**Report with `ErrorUtil`, nothing else.**'));
+  });
+
+  test('security.md has Crash reports', () {
+    final security = _rule('security');
+    expect(security, contains('## Crash reports'));
+    for (final word in [
+      'sendDefaultPii',
+      'redactSecrets',
+      'HiddenDetailsError',
+      'Firebase Crashlytics',
+      'recorded before',
+    ]) {
+      expect(security, contains(word));
+    }
+  });
+
+  test('security.md treats every ExpectedException as expected', () {
+    expect(_rule('security'), isNot(contains('a `RejectedException` with a known code')));
+  });
+
+  test('configuration.md has the DSN', () {
+    final configuration = _rule('configuration');
+    expect(configuration, contains('### The Sentry DSN'));
+    for (final word in ['config/sentry.local.json', '--dart-define-from-file', 'SENTRY_DSN']) {
+      expect(configuration, contains(word));
+    }
+  });
+
+  test('dependencies.md has the error log step', () {
+    final dependencies = _rule('dependencies');
+    expect(dependencies, contains('### The error log and the reporter'));
+    expect(dependencies, contains('catchExceptions'));
+    expect(dependencies, contains('STARTUP ERROR'));
+  });
+
+  test('widgets.md names the five places', () {
+    final widgets = _rule('widgets');
+    for (final word in ['LoadErrorView', 'RefreshFailedNotice', 'errorText']) {
+      expect(widgets, contains(word));
+    }
   });
 }

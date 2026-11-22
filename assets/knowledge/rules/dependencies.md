@@ -300,6 +300,73 @@ catch to the log and the crash reporter:
   in `bloc`): an awaited error inside `handle` reaches neither handler above. See "Where the
   error goes" in `docs/rules/controllers.md`.
 
+### The error log and the reporter
+
+A project that has `ErrorUtil` starts its error log as the first initialization step; a project
+with another reporter keeps it and follows the same order; a new project starts with this one.
+The log is first so that every later step, and the failure of one, is already recorded.
+
+- **Where the code lives.** One app: `lib/_core/telemetry/` (the module) and `lib/_core/database/`;
+  a monorepo: `packages/telemetry/`, `packages/database/`, and the app's glue in
+  `apps/<app>/lib/_core/telemetry/` (`isExpectedFailure`, the step, the gateway choice). The module
+  is plain Dart, imports no Flutter and nothing of the app.
+- **The first step** (`'Error log'`) calls `startTelemetry(...)`: it creates the folder, opens
+  `logs.sqlite` in the application support directory (its own drift database, never a table of the
+  app's database), reads the old lines into the buffer, builds the runtime (log buffer, queue,
+  reporter, sender), connects `ErrorUtil` to it, registers its shutdown in the `Disposer` right
+  after creation, and starts the sender. If the database cannot be opened (full disk, locked or
+  corrupt file) it returns `null`: the app runs without the log on disk and the errors go to the
+  console. Its parameters: `isExpected: isExpectedFailure`, the app version, the gateway, whether a
+  DSN is set, the project's own packages (for the fingerprint), and `enabled: false` until the
+  user's setting is read.
+- **`ErrorUtil` is a static facade,** not an injected service: `catch` blocks and zone handlers
+  have no `Dependencies`. Before the first step connects it, errors go to the console and wait in
+  memory (up to 100, each with its own time and log lines), so nothing before the log is lost.
+- **The zone and the handlers.** `main` runs everything in `appZone` (`runZonedGuarded` plus the
+  log capture, so `print` reaches the log). `catchExceptions()` installs `FlutterError.onError` and
+  `PlatformDispatcher.instance.onError` once (a retry must not wrap them twice; see "Retrying a
+  failed startup"), and `Controller.observer` is set next to it:
+
+```dart
+void main() => appZone(_start);
+
+Future<void> _start() async {
+  try {
+    final dependencies = await initializeApp();
+    runApp(DependenciesScope(dependencies: dependencies, child: const App()));
+  } on Object {
+    // runInitializationSteps already recorded the error; "Retry" runs every step again.
+    runApp(const App(home: StartupFailedScreen(onRetry: _start)));
+  }
+}
+
+Future<Dependencies> runInitializationSteps(Map<String, InitializationStep> steps) async {
+  final dependencies = $MutableDependencies();
+  for (final MapEntry(key: name, value: step) in steps.entries) {
+    try {
+      await step(dependencies);
+    } on Object catch (error, stackTrace) {
+      await ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true);
+      await ErrorUtil.settled(); // the record reaches the log before the disposer closes it
+      await dependencies.disposer.dispose(); // the steps before this one, last first
+      Error.throwWithStackTrace(StateError('Initialization failed at "$name": $error'), stackTrace);
+    }
+  }
+  return dependencies.freeze();
+}
+```
+
+- **A failing step** is logged as `STARTUP ERROR` (`fatal`), the steps before it are disposed, and
+  the error goes on to the failed-startup screen. The log is closed last, so the line is written.
+- **Shutdown order** (the one the log step registers): stop the sender, wait for the records and
+  queue counters already begun (`settled`), disconnect `ErrorUtil`, flush the log lines to
+  `logs.sqlite`, dispose the sender, close the database. The gateway is closed when the user's
+  switch goes off and on exit.
+- **The sender** runs at start and every 5 minutes, only while the user's switch is on and the DSN
+  is not empty (see "The Sentry DSN" in `docs/rules/configuration.md`).
+- A test that starts the log uses an in-memory database and a fake gateway; the console output of
+  `l` is switched off in the test.
+
 ### Callbacks instead of references
 
 A constructor can take functions as well as interfaces. A class then reaches the outside world

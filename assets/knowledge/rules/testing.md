@@ -341,6 +341,42 @@ Test behaviour the user sees, not the widget tree layout.
   (checked), so build counts after re-pumping say nothing about rebuilds in the app.
 - Run with `flutter test test/<feature>/`.
 
+### Testing errors
+
+Controllers and the pipeline behind them:
+
+- An `ExpectedException` and a `StateError` thrown in a controller both give `processing` →
+  `error` → `idle` and one call of the observer. With the real `ControllerObserver` and
+  `ErrorUtil`, the expected one is in the log and not in the queue, the unexpected one is in the
+  queue.
+- An error caught by a typed `on` in the body reaches neither the observer nor `error:`; a typed
+  `on` with `rethrow` reaches both once.
+- `runZonedGuarded`: a failed `unawaited` future reaches the handler, `.ignore()` does not.
+- `ErrorHub`: an error before `configure` reaches the queue after it with its own time and its
+  breadcrumbs; the limit is 100.
+- `ErrorReporter`: a failing queue does not throw out of it; a call from inside the core is
+  skipped.
+- `redactSecrets`: for each pattern a case that is cleaned and a look-alike that stays; a line of
+  5 MB is processed fast. A new kind of secret comes with both.
+- The queue: identical errors merge by fingerprint, the capacity is 200, the fingerprint does not
+  change with numbers and UUIDs.
+- The sender, with a fake gateway: no connection spends no attempts; a partly accepted batch; three
+  attempts delete the entry; a switched-off setting sends nothing; an entry from before consent
+  never sends its data.
+- `errorText` against the real HTTP client over `MockClient`: 503, 401, 403, 404, no connection,
+  and a 4xx with a code.
+
+Widgets, with fake controllers or repositories:
+
+- A failed save in a dialog: the dialog stays open, the text from `errorText` is at the bottom, the
+  fields keep what was typed.
+- `invalid_input` with a `field`: the text is under that field, not at the bottom.
+- Success: the dialog closes with `true` and the screen re-reads its list.
+- On `processing`: Escape and the barrier do not close the dialog, the buttons are off.
+- A first load that failed: `LoadErrorView` is shown, "Retry" calls `load`, and there is no
+  SnackBar. A re-read that failed with data present: `RefreshFailedNotice` over the old data.
+- A cancelled confirmation does not call the controller's method.
+
 ## Integration tests
 
 An integration test runs the real app on a device, an emulator, the desktop or a browser. It is
