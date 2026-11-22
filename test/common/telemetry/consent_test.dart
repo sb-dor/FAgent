@@ -191,4 +191,52 @@ void main() {
       '${t2.toIso8601String()} [E] after consent',
     ]);
   });
+
+  _test('breadcrumbs kept before the consent time was known are dropped at send', (
+    runtime,
+    gateway,
+  ) async {
+    // The runtime started without a consent time (FAgent reads it later): the error is recorded
+    // with every log line, the previous session's included.
+    await _add(
+      runtime,
+      StateError('startup'),
+      t2,
+      breadcrumbs: [
+        '${t0.toIso8601String()} [I] previous session',
+        '${t2.toIso8601String()} [E] after consent',
+      ],
+    );
+
+    await runtime.setEnabled(true, since: t1);
+    await _pass(runtime);
+
+    expect(gateway.sent.single.breadcrumbs, ['${t2.toIso8601String()} [E] after consent']);
+  });
+
+  _test('consent moved later mid-pass: breadcrumbs before it are not sent', (
+    runtime,
+    gateway,
+  ) async {
+    await _add(runtime, StateError('first'), t1);
+    await _add(
+      runtime,
+      ArgumentError('second'),
+      t4,
+      breadcrumbs: ['${t2.toIso8601String()} [I] between', '${t4.toIso8601String()} [E] late'],
+    );
+    var moved = false;
+    gateway.onSend = () async {
+      if (!moved) {
+        moved = true;
+        runtime.outbox.consentSince = t3;
+      }
+    };
+    runtime.outbox.consentSince = t0;
+
+    await runtime.sender.runPass();
+
+    expect(gateway.sent.map((e) => e.type), ['StateError', 'ArgumentError']);
+    expect(gateway.sent.last.breadcrumbs, ['${t4.toIso8601String()} [E] late']);
+  }, enabled: true);
 }

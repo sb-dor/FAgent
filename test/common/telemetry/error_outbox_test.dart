@@ -213,6 +213,39 @@ void main() {
       'Bad state: ${_name(2)}',
     ]);
   });
+
+  test('sendable takes the newest entries since consent, with their later breadcrumbs', () async {
+    final db = _db();
+    addTearDown(db.close);
+    final outbox = _outbox(db);
+    final start = DateTime.utc(2026, 11, 1);
+    DateTime at(int minute) => start.add(Duration(minutes: minute));
+    for (var i = 0; i < 5; i++) {
+      await outbox.add(
+        error: StateError(_name(i)),
+        stack: _stack,
+        level: 'error',
+        breadcrumbs: [
+          '${at(i - 1).toIso8601String()} [I] before',
+          '${at(i).toIso8601String()} [E] at',
+        ],
+        at: at(i),
+      );
+    }
+    outbox.consentSince = at(2);
+
+    final newest = await outbox.sendable(2, newestFirst: true);
+    final oldest = await outbox.sendable(2, newestFirst: false);
+
+    expect(newest.map((e) => e.message), ['Bad state: ${_name(3)}', 'Bad state: ${_name(4)}']);
+    expect(oldest.map((e) => e.message), ['Bad state: ${_name(2)}', 'Bad state: ${_name(3)}']);
+    // The line written before consent (entry 2's "before" at minute 1) does not go.
+    expect(oldest.first.breadcrumbs, ['${at(2).toIso8601String()} [E] at']);
+    expect(newest.last.breadcrumbs, [
+      '${at(3).toIso8601String()} [I] before',
+      '${at(4).toIso8601String()} [E] at',
+    ]);
+  });
 }
 
 final class _Hidden implements ReportedError {

@@ -145,7 +145,8 @@ final class TelemetrySender {
         if (since != null && entry.firstAt.isBefore(since)) {
           continue;
         }
-        if (await _send(entry)) {
+        // The same goes for its breadcrumbs.
+        if (await _send(outbox.consented(entry))) {
           acceptedCount++;
           for (final bad in rejected) {
             await _penalize(bad);

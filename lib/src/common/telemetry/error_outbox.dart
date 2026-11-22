@@ -57,6 +57,24 @@ final class OutboxEntry {
   final List<String> breadcrumbs;
   final String appVersion;
   final String platform;
+
+  /// The same entry with [breadcrumbs] instead of its own.
+  OutboxEntry withBreadcrumbs(List<String> breadcrumbs) => OutboxEntry(
+    id: id,
+    fingerprint: fingerprint,
+    firstAt: firstAt,
+    lastAt: lastAt,
+    count: count,
+    attempts: attempts,
+    level: level,
+    type: type,
+    message: message,
+    stack: stack,
+    hint: hint,
+    breadcrumbs: breadcrumbs,
+    appVersion: appVersion,
+    platform: platform,
+  );
 }
 
 /// The queue of errors to send: secrets cleaned, merged by fingerprint, at most [capacity].
@@ -176,6 +194,13 @@ final class ErrorOutbox {
     ];
   }
 
+  /// [entry] with only the breadcrumbs written at or after [consentSince]. An entry recorded while
+  /// the consent time was not known yet (the app reads it after the log starts) kept every line,
+  /// the previous sessions' included; the filter is applied again whenever an entry leaves the
+  /// queue for sending.
+  OutboxEntry consented(OutboxEntry entry) =>
+      consentSince == null ? entry : entry.withBreadcrumbs(_afterConsent(entry.breadcrumbs));
+
   static DateTime? _lineTime(String line) {
     final end = line.indexOf(' ');
     return DateTime.tryParse(end < 0 ? line : line.substring(0, end));
@@ -202,7 +227,8 @@ final class ErrorOutbox {
   }
 
   /// Up to [n] entries that may be sent: those first seen at or after [consentSince] (all when it
-  /// is `null`). The oldest ones, or with [newestFirst] the newest ones, from oldest to newest.
+  /// is `null`), with only the breadcrumbs written since then ([consented]). The oldest ones, or
+  /// with [newestFirst] the newest ones, from oldest to newest.
   Future<List<OutboxEntry>> sendable(int n, {required bool newestFirst}) async {
     final since = consentSince?.toUtc().millisecondsSinceEpoch;
     final query = _db.select(_db.errorOutboxEntries);
@@ -214,7 +240,7 @@ final class ErrorOutbox {
       ..orderBy([(t) => order(t.firstAt), (t) => order(t.id)])
       ..limit(n);
     final rows = await query.get();
-    return [for (final row in newestFirst ? rows.reversed : rows) _entry(row)];
+    return [for (final row in newestFirst ? rows.reversed : rows) consented(_entry(row))];
   }
 
   /// Up to [n] latest entries by time of the last occurrence, newest first.
