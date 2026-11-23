@@ -146,6 +146,68 @@ void main() {
     timeout: const Timeout(Duration(minutes: 10)),
   );
 
+  test(
+    'a typed application ID reaches every platform and the macOS and Android builds',
+    () async {
+      final (repository, flutter, environment) = await realRepository();
+      final root = io.Directory.systemTemp.createTempSync('new_project_test');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final app = p.join(root.path, 'id_probe');
+      final request = NewProjectRequest(
+        name: 'id_probe',
+        org: 'tj.avera',
+        applicationId: 'tj.avera.pos_app',
+        parent: root.path,
+        platforms: FlutterPlatform.values.toSet(),
+        template: NewProjectTemplate.plain,
+        gitInit: false,
+      );
+
+      final last = (await repository.create(request).toList()).last;
+      expectFinished(last);
+      String read(String relative) => io.File(p.join(app, relative)).readAsStringSync();
+
+      expect(read('android/app/build.gradle.kts'), contains('applicationId = "tj.avera.pos_app"'));
+      expect(read('android/app/build.gradle.kts'), contains('namespace = "tj.avera.pos_app"'));
+      expect(
+        read('android/app/src/main/kotlin/tj/avera/pos_app/MainActivity.kt'),
+        startsWith('package tj.avera.pos_app'),
+      );
+      expect(read('linux/CMakeLists.txt'), contains('APPLICATION_ID "tj.avera.pos_app"'));
+      for (final file in const <String>[
+        'ios/Runner.xcodeproj/project.pbxproj',
+        'macos/Runner.xcodeproj/project.pbxproj',
+        'macos/Runner/Configs/AppInfo.xcconfig',
+      ]) {
+        final text = read(file);
+        expect(text, contains('PRODUCT_BUNDLE_IDENTIFIER = tj.avera.posApp'), reason: file);
+        expect(text, isNot(contains('idProbe')), reason: file);
+      }
+
+      final macos = await io.Process.run(
+        flutter,
+        const <String>['build', 'macos', '--debug'],
+        workingDirectory: app,
+        environment: environment.variables,
+      );
+      expect(macos.exitCode, 0, reason: '${macos.stdout}\n${macos.stderr}');
+      final plist = io.File(
+        p.join(app, 'build/macos/Build/Products/Debug/id_probe.app/Contents/Info.plist'),
+      ).readAsStringSync();
+      expect(plist, contains('<string>tj.avera.posApp</string>'));
+
+      final apk = await io.Process.run(
+        flutter,
+        const <String>['build', 'apk', '--debug'],
+        workingDirectory: app,
+        environment: environment.variables,
+      );
+      expect(apk.exitCode, 0, reason: '${apk.stdout}\n${apk.stderr}');
+    },
+    skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
+    timeout: const Timeout(Duration(minutes: 20)),
+  );
+
   for (final reporter in const <CrashReporter>[CrashReporter.crashlytics, CrashReporter.logOnly]) {
     test(
       'one app with ${reporter.name} passes analyze and test',

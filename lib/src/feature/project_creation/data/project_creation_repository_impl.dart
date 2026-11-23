@@ -6,6 +6,7 @@ import 'package:flutter_code_agent/src/common/database/database.dart';
 import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
 import 'package:flutter_code_agent/src/common/pub_workspace/pub_workspace.dart';
 import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/application_id.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
@@ -427,6 +428,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
             platforms: request.platforms,
             sdkConstraint: _sdkConstraint(run),
           );
+          await _applyApplicationId(run, index, request.appPath, request.appPackageName);
           return;
         }
         // `flutter create` writes into an existing folder without a word.
@@ -455,6 +457,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           if (request.skeleton) '--no-pub',
           root,
         ], workingDirectory: request.parent);
+        await _applyApplicationId(run, index, root, request.name);
       case CreationStepKind.gitInit:
         await _command(run, index, _git(), const <String>['init'], workingDirectory: root);
       case CreationStepKind.skeleton:
@@ -600,6 +603,25 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       '--apply',
       '--code=directives_ordering',
     ], workingDirectory: fixIn);
+  }
+
+  /// Writes the request's `applicationId` over the IDs `flutter create` made for [package] in the
+  /// app at [appPath]; each changed file is a line of the step's output.
+  Future<void> _applyApplicationId(_Run run, int index, String appPath, String package) async {
+    final applicationId = run.request.applicationId;
+    if (applicationId == null) return;
+    final changed = await applyApplicationId(
+      appPath,
+      org: run.request.org,
+      package: package,
+      applicationId: applicationId,
+    );
+    final prefix = appPath == run.root ? '' : '${p.relative(appPath, from: run.root)}/';
+    for (final file in changed) {
+      run
+        ..addLine(index, '✎ $prefix$file')
+        ..checkLive();
+    }
   }
 
   /// The `memberCreate` step of an add: checks that the folder is free, then creates the member

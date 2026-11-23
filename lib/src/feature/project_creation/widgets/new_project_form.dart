@@ -9,6 +9,7 @@ import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.
 import 'package:flutter_code_agent/src/feature/flutter_sdk/controller/flutter_sdk_controller.dart';
 import 'package:flutter_code_agent/src/feature/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/src/feature/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/src/feature/project_creation/data/application_id.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
@@ -21,16 +22,18 @@ import 'package:flutter_code_agent/src/feature/workspace/widgets/workspace_confi
 import 'package:l/l.dart';
 
 /// {@template new_project_form}
-/// What the New project dialog asks: the project type, the package name, the organization, the
-/// folder, the platforms, the template, the crash reporter and two switches, and below them the
+/// What the New project dialog asks: the project type, the package name, the application ID (the
+/// organization for a type other than an app), the folder, the platforms, the template, the crash reporter and two switches, and below them the
 /// Flutter version with Cancel and Create.
 ///
 /// The type comes first, as in `flutter create --template`: the platforms show only for an app and
 /// a plugin, the template only for an app, and the crash reporter only for "My architecture".
 ///
 /// The name is checked as `flutter create` does; "Create" is on only when everything is fine: the
-/// name, the organization, the folder (checked against the disk, the latest answer wins), the
-/// platforms and a Flutter SDK. The organization and the template start as the Settings have them
+/// name, the application ID or organization, the folder (checked against the disk, the latest
+/// answer wins), the platforms and a Flutter SDK. The application ID is shown whole
+/// (`<org>.<name>`) and follows the name until it is typed; then it is the user's, every segment
+/// of it. The organization and the template start as the Settings have them
 /// (a git template starts as the architecture), but the form never changes the Settings. "My
 /// architecture" needs Flutter [kArchitectureMinFlutter]: on an older or unknown SDK it is off and
 /// the empty template is made.
@@ -48,11 +51,15 @@ class _NewProjectFormState extends State<NewProjectForm> {
   late final FlutterSdkController _sdk;
   late final TextEditingController _name;
   late final TextEditingController _org;
+  late final TextEditingController _applicationId;
   late final TextEditingController _appFolder;
   late final TextEditingController _appPackage;
 
   /// Whether the app package was typed: until then it follows `<name>_<folder>`.
   bool _appPackageEdited = false;
+
+  /// Whether the application ID was typed: until then it follows `<org>.<name>`.
+  bool _applicationIdEdited = false;
 
   /// The folder `<parent>/<name>` goes into; `null` until the suggestion has arrived.
   String? _parent;
@@ -88,6 +95,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
     final settings = _scope.settingsController.settings;
     _name = TextEditingController();
     _org = TextEditingController(text: settings.projectOrg);
+    _applicationId = TextEditingController(text: '${settings.projectOrg}.');
     _appFolder = TextEditingController(text: 'app');
     _appPackage = TextEditingController();
     _template = settings.projectTemplate == NewProjectTemplate.git
@@ -118,6 +126,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
       ..dispose();
     _name.dispose();
     _org.dispose();
+    _applicationId.dispose();
     _appFolder.dispose();
     _appPackage.dispose();
     super.dispose();
@@ -175,9 +184,20 @@ class _NewProjectFormState extends State<NewProjectForm> {
 
   bool get _orgValid => AppSettings.orgPattern.hasMatch(_org.text);
 
+  bool get _applicationIdValid => applicationIdPattern.hasMatch(_applicationId.text);
+
+  /// Whether the project is an app: an app gets the whole application ID, any other type the org.
+  bool get _isApp => _type == FlutterProjectType.app;
+
+  /// Keeps the application ID at `<org>.<name>` until it is typed.
+  void _followApplicationId() {
+    if (_applicationIdEdited) return;
+    _applicationId.text = '${_org.text}.${_name.text}';
+  }
+
   bool get _canCreate =>
       _nameProblem == null &&
-      _orgValid &&
+      (_isApp ? _applicationIdValid : _orgValid) &&
       (!_monorepo || (_appFolderValid && _appPackageProblem == null && !_appPackageTaken)) &&
       _parent != null &&
       _targetChecked &&
@@ -245,7 +265,8 @@ class _NewProjectFormState extends State<NewProjectForm> {
     _scope.projectCreation.start(
       NewProjectRequest(
         name: _name.text,
-        org: _org.text,
+        org: _isApp ? applicationIdOrg(_applicationId.text) : _org.text,
+        applicationId: _isApp ? _applicationId.text : null,
         parent: parent,
         platforms: _platforms,
         type: _type,
@@ -308,7 +329,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
           children: <Widget>[
             Expanded(child: _nameField(context)),
             const SizedBox(width: 10),
-            Expanded(child: _orgField(context)),
+            Expanded(child: _isApp ? _applicationIdField(context) : _orgField(context)),
           ],
         ),
         if (_monorepo) ...<Widget>[
@@ -583,7 +604,10 @@ class _NewProjectFormState extends State<NewProjectForm> {
         autofocus: true,
         error: bad,
         onChanged: (_) {
-          setState(_followAppPackage);
+          setState(() {
+            _followAppPackage();
+            _followApplicationId();
+          });
           _checkTarget();
         },
         onSubmitted: (_) => _create(),
@@ -606,6 +630,28 @@ class _NewProjectFormState extends State<NewProjectForm> {
         controller: _org,
         error: !_orgValid,
         onChanged: (_) => setState(() {}),
+        onSubmitted: (_) => _create(),
+      ),
+    );
+  }
+
+  Widget _applicationIdField(BuildContext context) {
+    final localization = Localization.of(context);
+    // An untouched ID over an empty name is not wrong yet: it waits for the name.
+    final bad = !_applicationIdValid && (_applicationIdEdited || _name.text.isNotEmpty);
+    return CreationField(
+      label: localization.newProjectApplicationId,
+      messages: <Widget>[
+        if (bad)
+          CreationMessage.error(localization.newProjectApplicationIdInvalid)
+        else
+          CreationMessage.hint(localization.newProjectApplicationIdHint),
+      ],
+      child: CreationTextInput(
+        fieldKey: const ValueKey<String>('new-project-application-id'),
+        controller: _applicationId,
+        error: bad,
+        onChanged: (_) => setState(() => _applicationIdEdited = true),
         onSubmitted: (_) => _create(),
       ),
     );

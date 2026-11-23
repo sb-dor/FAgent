@@ -82,8 +82,13 @@ abstract class NewProjectRequest with _$NewProjectRequest {
     /// The package name, also the folder's name.
     required String name,
 
-    /// The organization, for example `com.example`.
+    /// The organization, for example `com.example`: `flutter create --org`.
     required String org,
+
+    /// The full application ID of an app, for example `com.example.shop`; `null` keeps what
+    /// `flutter create` makes of [org] and the package name. Its segments before the last are
+    /// [org].
+    String? applicationId,
 
     /// The folder `<parent>/<name>` is created in.
     required String parent,

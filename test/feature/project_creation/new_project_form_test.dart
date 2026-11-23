@@ -24,6 +24,7 @@ import '../../support/test_app.dart';
 
 const _name = ValueKey<String>('new-project-name');
 const _org = ValueKey<String>('new-project-org');
+const _applicationId = ValueKey<String>('new-project-application-id');
 
 WorkspaceConfigWidgetState _workspace(WidgetTester tester) =>
     tester.state<WorkspaceConfigWidgetState>(find.byType(WorkspaceConfigWidget));
@@ -202,7 +203,8 @@ void main() {
     expect(find.byType(NewProjectDialog), findsOneWidget);
     expect(find.text('New Flutter project'), findsOneWidget);
     expect(find.byTooltip('Close'), findsOneWidget);
-    expect(tester.widget<TextField>(find.byKey(_org)).controller!.text, 'com.example');
+    expect(tester.widget<TextField>(find.byKey(_applicationId)).controller!.text, 'com.example.');
+    expect(find.byKey(_org), findsNothing);
     expect(find.text('/Users/test/StudioProjects/'), findsOneWidget);
     expect(platformOn(tester, FlutterPlatform.ios), isTrue);
     expect(platformOn(tester, FlutterPlatform.android), isTrue);
@@ -223,26 +225,58 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('starts with the org of the settings', (tester) async {
-    await openDialog(tester, org: 'dev.avaz');
+  String applicationIdOf(WidgetTester tester) =>
+      tester.widget<TextField>(find.byKey(_applicationId)).controller!.text;
 
-    expect(tester.widget<TextField>(find.byKey(_org)).controller!.text, 'dev.avaz');
+  testWidgets('the application ID starts as the org of the settings and follows the name', (
+    tester,
+  ) async {
+    await openDialog(tester, org: 'dev.avaz');
+    expect(applicationIdOf(tester), 'dev.avaz.');
+    // Nothing is wrong before a name.
+    expect(find.text('For example, com.example.my_app'), findsNothing);
+
+    await typeName(tester, 'avera_booking');
+    expect(applicationIdOf(tester), 'dev.avaz.avera_booking');
+    expect(canCreate(tester), isTrue);
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('a bad org blocks creation and leaves the settings alone', (tester) async {
+  testWidgets('a typed application ID no longer follows the name and goes whole', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+    await tester.enterText(find.byKey(_applicationId), 'tj.avera.booking');
+    await tester.pumpAndSettle();
+
+    await typeName(tester, 'avera_shop');
+    expect(applicationIdOf(tester), 'tj.avera.booking');
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    final request = memory.requests.single;
+    expect(request.name, 'avera_shop');
+    expect(request.org, 'tj.avera');
+    expect(request.applicationId, 'tj.avera.booking');
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a bad application ID blocks creation and leaves the settings alone', (
+    tester,
+  ) async {
     await openDialog(tester);
     await typeName(tester, 'avera_booking');
     expect(canCreate(tester), isTrue);
 
-    await tester.enterText(find.byKey(_org), 'Com.Example');
-    await tester.pumpAndSettle();
-    expect(find.text('For example, com.example'), findsOneWidget);
-    expect(canCreate(tester), isFalse);
+    for (final bad in const <String>['Com.Example.App', 'booking', 'com.example.', 'com.1x.app']) {
+      await tester.enterText(find.byKey(_applicationId), bad);
+      await tester.pumpAndSettle();
+      expect(find.text('For example, com.example.my_app'), findsOneWidget, reason: bad);
+      expect(canCreate(tester), isFalse, reason: bad);
+    }
 
-    await tester.enterText(find.byKey(_org), 'dev.avaz');
+    await tester.enterText(find.byKey(_applicationId), 'dev.avaz.booking');
     await tester.pumpAndSettle();
-    expect(find.text('For example, com.example'), findsNothing);
+    expect(find.text('For example, com.example.my_app'), findsNothing);
     expect(canCreate(tester), isTrue);
     expect(
       AppSettingsConfigInhWidget.of(tester.element(find.byType(NewProjectDialog)))
@@ -251,6 +285,28 @@ void main() {
           .projectOrg,
       'com.example',
     );
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a package asks for the org, not an application ID', (tester) async {
+    await openDialog(tester, org: 'dev.avaz');
+    await typeName(tester, 'avera_kit');
+    await tester.tap(find.text('Package'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(_applicationId), findsNothing);
+    expect(tester.widget<TextField>(find.byKey(_org)).controller!.text, 'dev.avaz');
+    await tester.enterText(find.byKey(_org), 'Com.Example');
+    await tester.pumpAndSettle();
+    expect(find.text('For example, com.example'), findsOneWidget);
+    expect(canCreate(tester), isFalse);
+    await tester.enterText(find.byKey(_org), 'dev.avaz');
+    await tester.pumpAndSettle();
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.org, 'dev.avaz');
+    expect(memory.requests.single.applicationId, isNull);
     await disposeTestApp(tester, dependencies);
   });
 
@@ -492,6 +548,7 @@ void main() {
     final request = memory.requests.single;
     expect(request.name, 'avera_booking');
     expect(request.org, 'com.example');
+    expect(request.applicationId, 'com.example.avera_booking');
     expect(request.parent, '/Users/test/StudioProjects');
     expect(request.platforms, <FlutterPlatform>{FlutterPlatform.ios, FlutterPlatform.android});
     expect(request.template, NewProjectTemplate.plain);
