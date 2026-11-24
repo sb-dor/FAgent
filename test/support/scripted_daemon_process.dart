@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_code_agent/src/common/flutter_daemon/daemon_process.dart';
+import 'package:flutter_code_agent/_core/flutter_daemon/daemon_process.dart';
 
 /// A [DaemonProcess] whose other side is driven by the test.
 ///

@@ -1,0 +1,155 @@
+import 'package:control/control.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
+import 'package:flutter_code_agent/chat/widgets/chat_config_widget.dart';
+import 'package:flutter_code_agent/code_view/models/code_view_state.dart';
+import 'package:flutter_code_agent/code_view/widgets/code_view.dart';
+import 'package:flutter_code_agent/projects/controller/projects_controller.dart';
+import 'package:flutter_code_agent/projects/models/project.dart';
+import 'package:flutter_code_agent/skills/controller/skill_library_controller.dart';
+import 'package:flutter_code_agent/skills/models/chat_skills.dart';
+import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+
+/// {@template workspace_chat_area}
+/// The selected chat, or a hint to pick one.
+/// {@endtemplate}
+class WorkspaceChatArea extends StatefulWidget {
+  /// {@macro workspace_chat_area}
+  const WorkspaceChatArea({super.key});
+
+  @override
+  State<WorkspaceChatArea> createState() => _WorkspaceChatAreaState();
+}
+
+class _WorkspaceChatAreaState extends State<WorkspaceChatArea> {
+  late final _scope = WorkspaceConfigInhWidget.of(context);
+
+  /// The skills of [project] once its library is loaded; nothing while another project's library
+  /// or none is, so the chip does not show the wrong count. A library that failed to load after it
+  /// had loaded keeps the last one.
+  ChatSkills _chatSkills(Project project) {
+    final controller = _scope.skillLibraryController;
+    final loaded = switch (controller.state) {
+      SkillLibrary$LoadedState(:final projectId) => projectId == project.id,
+      SkillLibrary$FailedState(:final projectId) =>
+        projectId == project.id && controller.library.skills.isNotEmpty,
+      _ => false,
+    };
+    return loaded ? ChatSkills.of(controller.library, projectName: project.name) : ChatSkills.empty;
+  }
+
+  @override
+  Widget build(BuildContext context) => StateConsumer<ProjectsController, ProjectsState>(
+    controller: _scope.projectsController,
+    builder: (context, _, _) => ListenableBuilder(
+      listenable: _scope.dataController,
+      builder: (context, _) {
+        final workspace = _scope.codeWorkspace;
+        if (workspace == null) return _buildChat(context);
+        return ListenableBuilder(
+          listenable: workspace.tabs,
+          builder: (context, _) {
+            final code = workspace.tabs.mode == CodeViewMode.code;
+            final localization = Localization.of(context);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, bottom: 4),
+                  child: Center(
+                    child: SegmentedControl<CodeViewMode>(
+                      key: const ValueKey<String>('code-view-switch'),
+                      segments: <(CodeViewMode, String)>[
+                        (CodeViewMode.chat, localization.codeViewChat),
+                        (CodeViewMode.code, localization.codeViewCode),
+                      ],
+                      selected: workspace.tabs.mode,
+                      onChanged: workspace.tabs.setMode,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      // The chat stays mounted under the Code view, so its draft, scroll and drop
+                      // target come back as they were; hidden, it takes no drop or focus.
+                      Offstage(
+                        offstage: code,
+                        child: TickerMode(
+                          enabled: !code,
+                          child: ExcludeFocus(excluding: code, child: _buildChat(context)),
+                        ),
+                      ),
+                      if (code)
+                        CodeView(
+                          key: ValueKey<int>(workspace.projectId),
+                          workspace: workspace,
+                          onOpenExternally: (path) => _scope.openPath(path).ignore(),
+                          listFiles: () => _scope.projectFilesController.list(workspace.root),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ),
+  );
+
+  Widget _buildChat(BuildContext context) {
+    final project = _scope.selectedProject;
+    final sessionId = _scope.dataController.sessionId;
+    if (project == null || sessionId == null) {
+      // Without any project the way forward is to open one; with projects, to pick or start a chat.
+      final hasProjects = switch (_scope.projectsController.state) {
+        Projects$CompletedState(:final projects) => projects.isNotEmpty,
+        _ => false,
+      };
+      return _Hint(
+        text: hasProjects
+            ? Localization.of(context).selectChat
+            : Localization.of(context).chatPlaceholder,
+      );
+    }
+    return ListenableBuilder(
+      // The devices too: what `/run` can do changes when the chosen emulator has booted without the
+      // run changing.
+      listenable: Listenable.merge(<Listenable>[
+        _scope.runController,
+        _scope.devicesController,
+        _scope.runLink,
+        _scope.skillLibraryController,
+      ]),
+      builder: (context, _) => ChatConfigWidget(
+        key: ValueKey<int>(sessionId),
+        sessionId: sessionId,
+        project: project,
+        onHandle: _scope.dataController.publishChatHandle,
+        onOpenChange: _scope.openChange,
+        runContext: _scope.runLink.mentions,
+        onAppCommand: _scope.runLink.runCommand,
+        chatSkills: _chatSkills(project),
+        onOpenSkills: _scope.dataController.openSkills,
+      ),
+    );
+  }
+}
+
+class _Hint extends StatelessWidget {
+  const _Hint({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Text(text, style: theme.textTheme.bodyLarge?.copyWith(color: context.colors.muted)),
+    );
+  }
+}

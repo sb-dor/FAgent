@@ -1,12 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_completion.dart';
-import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_diagnostic.dart';
-import 'package:flutter_code_agent/src/common/dart_analysis/models/dart_hover.dart';
-import 'package:flutter_code_agent/src/common/dart_analysis/models/lsp_location.dart';
-import 'package:flutter_code_agent/src/feature/code_view/data/dart_analysis_repository.dart';
-import 'package:flutter_code_agent/src/feature/code_view/models/dart_analysis_status.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/dart_completion.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/dart_hover.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/lsp_location.dart';
+import 'package:flutter_code_agent/code_view/data/dart_analysis_repository.dart';
+import 'package:flutter_code_agent/code_view/models/dart_analysis_status.dart';
 
 /// [IDartAnalysisRepository] in memory: every call lands in [calls], completions come from
 /// [onComplete], and the test pushes [push] diagnostics and sets [status].

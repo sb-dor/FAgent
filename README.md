@@ -115,9 +115,9 @@ The **Skills and rules** screen lists them next to your own rules and skills and
 `flutter create`, then the app lays out a project that follows the rules — no agent, no tokens,
 the same every time:
 
-- `lib/src/_core/`: the HTTP client with middlewares (logging, authentication), error reporting,
+- `lib/_core/`: the HTTP client with middlewares (logging, authentication), error reporting,
   config, a drift database, a controller observer, localization in English and Russian, utils and
-  common widgets; every feature in its own folder in `lib/src/`;
+  common widgets; every feature in its own folder in `lib/`;
 - `packages/ui` as a pub workspace member with the theme and shared components;
 - a strict `analysis_options.yaml`, `build.yaml`, a `Makefile`, `CHANGELOG.md`, `scripts/` and
   `tool/dart/rename_project.dart`;

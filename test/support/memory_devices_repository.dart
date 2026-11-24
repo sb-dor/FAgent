@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/app_run/data/devices_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
+import 'package:flutter_code_agent/app_run/data/devices_repository.dart';
+import 'package:flutter_code_agent/app_run/models/device.dart';
 
 /// The devices [MemoryDevicesRepository] starts with. Deterministic.
 const List<Device> kTestDevices = <Device>[

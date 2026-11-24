@@ -1,5 +1,5 @@
 import 'package:drift/native.dart';
-import 'package:flutter_code_agent/src/common/database/database.dart';
+import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

@@ -1,0 +1,302 @@
+import 'package:drift/drift.dart' hide isNull;
+import 'package:drift_dev/api/migrations_native.dart';
+import 'package:flutter_code_agent/_core/database/database.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../../generated_migrations/schema.dart';
+import '../../generated_migrations/schema_v1.dart' as v1;
+import '../../generated_migrations/schema_v10.dart' as v10;
+import '../../generated_migrations/schema_v11.dart' as v11;
+import '../../generated_migrations/schema_v12.dart' as v12;
+import '../../generated_migrations/schema_v2.dart' as v2;
+import '../../generated_migrations/schema_v3.dart' as v3;
+import '../../generated_migrations/schema_v4.dart' as v4;
+import '../../generated_migrations/schema_v5.dart' as v5;
+import '../../generated_migrations/schema_v6.dart' as v6;
+import '../../generated_migrations/schema_v7.dart' as v7;
+import '../../generated_migrations/schema_v8.dart' as v8;
+import '../../generated_migrations/schema_v9.dart' as v9;
+
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+  late SchemaVerifier verifier;
+
+  setUpAll(() => verifier = SchemaVerifier(GeneratedHelper()));
+
+  test('v1 → v2 matches the v2 schema and keeps projects', () async {
+    final schema = await verifier.schemaAt(1);
+    final old = v1.DatabaseAtV1(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 2);
+
+    // Columns of v2 only: today's table class has columns later versions added.
+    final project = await database
+        .customSelect('SELECT path, is_flutter, trusted_at FROM projects')
+        .getSingle();
+    expect(project.read<String>('path'), '/work/app');
+    expect(project.read<bool>('is_flutter'), isFalse);
+    expect(project.readNullable<DateTime>('trusted_at'), isNull);
+  });
+
+  test('v2 → v3 matches the v3 schema and keeps chats without bypass consent', () async {
+    final schema = await verifier.schemaAt(2);
+    final old = v2.DatabaseAtV2(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 3);
+
+    final chat = await database.select(database.sessionsTable).getSingle();
+    expect(chat.title, 'chat');
+    expect(chat.bypassAllowedAt, isNull);
+  });
+
+  test('v3 → v4 matches the v4 schema and keeps chats', () async {
+    final schema = await verifier.schemaAt(3);
+    final old = v3.DatabaseAtV3(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 4);
+
+    final chat = await database.select(database.sessionsTable).getSingle();
+    expect(chat.title, 'chat');
+    expect(await database.select(database.appSettingsTable).get(), isEmpty);
+  });
+
+  test('v4 → v5 adds skill_states and keeps settings', () async {
+    final schema = await verifier.schemaAt(4);
+    final old = v4.DatabaseAtV4(schema.newConnection());
+    await old.customStatement("INSERT INTO app_settings (key, value) VALUES ('app', '{}')");
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 5);
+
+    final setting = await database.select(database.appSettingsTable).getSingle();
+    expect(setting.key, 'app');
+    expect(await database.select(database.skillStatesTable).get(), isEmpty);
+  });
+
+  test('v5 → v6 adds mcp tables and keeps skill states', () async {
+    final schema = await verifier.schemaAt(5);
+    final old = v5.DatabaseAtV5(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO skill_states (skill_id, project_id, enabled) VALUES ('skill:user:a', 1, 0)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 6);
+
+    final state = await database.select(database.skillStatesTable).getSingle();
+    expect(state.skillId, 'skill:user:a');
+    expect(await database.select(database.mcpServersTable).get(), isEmpty);
+    expect(await database.select(database.mcpServerStatesTable).get(), isEmpty);
+  });
+
+  test('v6 → v7 adds run_configs and keeps projects and mcp servers', () async {
+    final schema = await verifier.schemaAt(6);
+    final old = v6.DatabaseAtV6(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO mcp_servers (name, transport, config) VALUES ('figma', 'stdio', '{}')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 7);
+
+    final project = await database.customSelect('SELECT path FROM projects').getSingle();
+    expect(project.read<String>('path'), '/work/app');
+    expect((await database.select(database.mcpServersTable).getSingle()).name, 'figma');
+    expect(await database.select(database.runConfigsTable).get(), isEmpty);
+  });
+
+  test('v7 → v8 adds chat_skill_states and keeps chats', () async {
+    final schema = await verifier.schemaAt(7);
+    final old = v7.DatabaseAtV7(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 8);
+
+    expect((await database.select(database.sessionsTable).getSingle()).title, 'chat');
+    expect(await database.select(database.chatSkillStatesTable).get(), isEmpty);
+    await database
+        .into(database.chatSkillStatesTable)
+        .insert(
+          ChatSkillStatesTableCompanion.insert(
+            sessionId: 1,
+            skillId: 'skill:user:a',
+            enabled: false,
+          ),
+        );
+    expect(await database.select(database.chatSkillStatesTable).get(), hasLength(1));
+  });
+
+  test('v8 → v9 adds custom_agents and keeps chats', () async {
+    final schema = await verifier.schemaAt(8);
+    final old = v8.DatabaseAtV8(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO sessions (project_id, agent_id, title) VALUES (1, 'claude', 'chat')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 9);
+
+    expect((await database.select(database.sessionsTable).getSingle()).title, 'chat');
+    expect(await database.select(database.customAgentsTable).get(), isEmpty);
+    await database
+        .into(database.customAgentsTable)
+        .insert(CustomAgentsTableCompanion.insert(name: 'Mine', executable: 'mine'));
+    expect(
+      (await database.select(database.customAgentsTable).getSingle()).rulesChannel,
+      'firstMessage',
+    );
+  });
+
+  test('v9 → v10 keeps run args and adds selectedConfig null', () async {
+    final schema = await verifier.schemaAt(9);
+    final old = v9.DatabaseAtV9(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      'INSERT INTO run_configs (project_id, flavor, dart_defines, extra_args) '
+      "VALUES (1, 'dev', '[\"A=1\"]', '--verbose')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 10);
+
+    // Columns of v10 only: today's table class has columns later versions added.
+    final row = await database
+        .customSelect('SELECT flavor, dart_defines, extra_args, selected_config FROM run_configs')
+        .getSingle();
+    expect(row.read<String>('flavor'), 'dev');
+    expect(row.read<String>('dart_defines'), '["A=1"]');
+    expect(row.read<String>('extra_args'), '--verbose');
+    expect(row.readNullable<String>('selected_config'), isNull);
+  });
+
+  test('v10 → v11 creates code_view_state and keeps data', () async {
+    final schema = await verifier.schemaAt(10);
+    final old = v10.DatabaseAtV10(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.customStatement(
+      "INSERT INTO run_configs (project_id, flavor, selected_config) VALUES (1, 'dev', 'Dev')",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 11);
+
+    final row = await database.customSelect('SELECT selected_config FROM run_configs').getSingle();
+    expect(row.read<String>('selected_config'), 'Dev');
+    expect(await database.select(database.codeViewStateTable).get(), isEmpty);
+  });
+
+  test('v11 → v12 adds rules_offered false and keeps projects', () async {
+    final schema = await verifier.schemaAt(11);
+    final old = v11.DatabaseAtV11(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/app', 'app', 0)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 12);
+
+    final project = await database.select(database.projectsTable).getSingle();
+    expect(project.path, '/work/app');
+    expect(project.rulesOffered, isFalse);
+  });
+
+  test('migration v12 → v13 keeps arguments and the selected configuration', () async {
+    final schema = await verifier.schemaAt(12);
+    final old = v12.DatabaseAtV12(schema.newConnection());
+    await old.customStatement(
+      "INSERT INTO projects (path, name, created_at) VALUES ('/work/a', 'a', 0), "
+      "('/work/b', 'b', 0)",
+    );
+    await old.customStatement(
+      'INSERT INTO run_configs (project_id, flavor, dart_defines, extra_args, selected_config) '
+      "VALUES (1, 'dev', '[\"A=1\"]', '--verbose', 'Dev'), (2, NULL, '[]', '', NULL)",
+    );
+    await old.close();
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 13);
+
+    final rows = await (database.select(
+      database.runConfigsTable,
+    )..orderBy([(row) => OrderingTerm.asc(row.projectId)])).get();
+    expect(rows, hasLength(2));
+    final first = rows.first;
+    expect(first.projectId, 1);
+    expect(first.appFolder, '');
+    expect(first.flavor, 'dev');
+    expect(first.dartDefines, '["A=1"]');
+    expect(first.extraArgs, '--verbose');
+    expect(first.selectedConfig, 'Dev');
+    expect(first.selectedApp, isNull);
+    expect(rows.last.appFolder, '');
+    expect(rows.last.selectedConfig, isNull);
+
+    // The new key lets a project keep a row per app.
+    await database
+        .into(database.runConfigsTable)
+        .insert(
+          RunConfigsTableCompanion.insert(projectId: 1, appFolder: const Value('apps/desktop')),
+        );
+    expect(await database.select(database.runConfigsTable).get(), hasLength(3));
+  });
+}

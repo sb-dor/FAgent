@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/app_run/data/launch_config_reader.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/run_config_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
+import 'package:flutter_code_agent/app_run/data/launch_config_reader.dart';
+import 'package:flutter_code_agent/app_run/data/run_config_repository.dart';
+import 'package:flutter_code_agent/app_run/models/run_arguments.dart';
 
 /// In-memory run arguments (per project and app folder), selections, apps and `launch.json`
 /// contents for tests. [saved] lists every [save] in order ([savedFor] with the app folder),

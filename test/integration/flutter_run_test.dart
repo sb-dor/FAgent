@@ -4,12 +4,12 @@ library;
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'package:flutter_code_agent/src/common/flutter_daemon/flutter_executable.dart';
-import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/_core/flutter_daemon/flutter_executable.dart';
+import 'package:flutter_code_agent/_core/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/app_run/models/device.dart';
+import 'package:flutter_code_agent/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/app_run/models/run_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

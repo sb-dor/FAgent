@@ -1,7 +1,7 @@
 import 'dart:io';
 
-import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
-import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
+import 'package:flutter_code_agent/_core/shell_env/shell_environment.dart';
 import 'package:path/path.dart' as p;
 
 /// Compiles `test/support/fake_agent.dart` into [directory] and returns an

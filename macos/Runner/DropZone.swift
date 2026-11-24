@@ -3,7 +3,7 @@ import FlutterMacOS
 
 /// The window's drop zone: a transparent view over the Flutter view that takes files dragged onto
 /// the window and reports the drag to Dart over the `flutter_code_agent/drop_zone` event channel
-/// (`lib/src/common/drop_zone/`).
+/// (`lib/_core/drop_zone/`).
 ///
 /// Events are `{type: enter|over|leave|drop, dx, dy}` in points from the top-left corner of the
 /// Flutter view; a drop adds `paths` (absolute, in drop order) and `failed` (items that could not

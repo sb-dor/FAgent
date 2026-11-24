@@ -1,5 +1,5 @@
-import 'package:flutter_code_agent/src/feature/code_view/data/code_view_state_repository.dart';
-import 'package:flutter_code_agent/src/feature/code_view/models/code_view_state.dart';
+import 'package:flutter_code_agent/code_view/data/code_view_state_repository.dart';
+import 'package:flutter_code_agent/code_view/models/code_view_state.dart';
 
 /// [ICodeViewStateRepository] in memory, with every save recorded.
 final class MemoryCodeViewStateRepository implements ICodeViewStateRepository {

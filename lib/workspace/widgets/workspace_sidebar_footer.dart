@@ -1,0 +1,73 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:flutter_code_agent/_core/widget/status.dart';
+import 'package:flutter_code_agent/agents/models/agent_info.dart';
+import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_row.dart';
+
+/// Name of the agent [id] among [agents]. A custom agent that is not listed was removed, so it
+/// is shown as "Removed agent"; any other unlisted agent is shown by its id.
+String agentDisplayName(String id, List<AgentInfo> agents, GeneratedLocalization localization) =>
+    agents.where((agent) => agent.id == id).firstOrNull?.name ??
+    (id.startsWith('custom:') ? localization.agentRemovedName : id);
+
+/// {@template workspace_sidebar_footer}
+/// The bottom of the sidebar: the Skills and Settings screens and the default agent.
+/// {@endtemplate}
+class WorkspaceSidebarFooter extends StatelessWidget {
+  /// {@macro workspace_sidebar_footer}
+  const WorkspaceSidebarFooter({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = WorkspaceConfigInhWidget.of(context);
+    final localization = Localization.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        WorkspaceSidebarRow(
+          icon: Icons.extension_outlined,
+          label: localization.skills,
+          onTap: () => scope.dataController.openView(WorkspaceView.skills),
+        ),
+        WorkspaceSidebarRow(
+          icon: Icons.settings_outlined,
+          label: localization.settings,
+          onTap: () => scope.dataController.openView(WorkspaceView.settings),
+        ),
+        ListenableBuilder(
+          listenable: Listenable.merge(<Listenable>[
+            scope.settingsController,
+            scope.agentsController,
+          ]),
+          builder: (context, _) => Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            child: Row(
+              children: <Widget>[
+                // Whether the agent is signed in arrives with the Agents settings.
+                const StatusDot(tone: AppStatusTone.none),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    agentDisplayName(
+                      scope.settingsController.settings.defaultAgentId,
+                      scope.agentsController.agents,
+                      localization,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall!
+                        .copyWith(color: context.colors.muted),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

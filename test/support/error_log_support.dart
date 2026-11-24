@@ -1,7 +1,7 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
-import 'package:flutter_code_agent/src/common/telemetry/telemetry.dart';
-import 'package:flutter_code_agent/src/common/utils/expected_failure.dart';
+import 'package:flutter_code_agent/_core/telemetry/telemetry.dart';
+import 'package:flutter_code_agent/_core/utils/expected_failure.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:l/l.dart';
 

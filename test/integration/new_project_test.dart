@@ -4,22 +4,22 @@ library;
 import 'dart:io' as io;
 
 import 'package:drift/native.dart';
-import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
-import 'package:flutter_code_agent/src/feature/app_settings/models/app_settings.dart';
-import 'package:flutter_code_agent/src/feature/flutter_sdk/data/flutter_sdk_repository_impl.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository_impl.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/data/project_template.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
+import 'package:flutter_code_agent/_core/database/database.dart';
+import 'package:flutter_code_agent/_core/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/app_settings/models/app_settings.dart';
+import 'package:flutter_code_agent/flutter_sdk/data/flutter_sdk_repository_impl.dart';
+import 'package:flutter_code_agent/project_creation/data/project_creation_repository_impl.dart';
+import 'package:flutter_code_agent/project_creation/data/project_template.dart';
+import 'package:flutter_code_agent/project_creation/models/creation_step.dart';
+import 'package:flutter_code_agent/project_creation/models/new_member_request.dart';
+import 'package:flutter_code_agent/project_creation/models/new_project_request.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 /// Creates a project from the "My architecture" template with the real `flutter` (no git) in a
 /// temp folder, then runs `flutter test` in it (the copied tests of the telemetry module included)
 /// and builds it for the web: the gate for the skeleton in `assets/project_template/architecture/` and the module in
-/// `lib/src/common/telemetry/` (the creation itself runs `flutter analyze`). Then
+/// `lib/_core/telemetry/` (the creation itself runs `flutter analyze`). Then
 /// creates a monorepo (`packages/ui` and the shared `telemetry`, `database` and `api_client`), adds
 /// a member of every kind to it and runs `make analyze`, `make test` (the module's tests in
 /// `packages/telemetry/test/` included), a macOS and a web build in it: the gate for

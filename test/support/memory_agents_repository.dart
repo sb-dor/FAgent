@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:dart_acp_sdk/dart_acp_sdk.dart' show CancellationException;
-import 'package:flutter_code_agent/src/common/acp/agent_auth.dart';
-import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
-import 'package:flutter_code_agent/src/feature/agents/data/agents_repository.dart';
-import 'package:flutter_code_agent/src/feature/agents/models/agent_info.dart';
-import 'package:flutter_code_agent/src/feature/agents/models/custom_agent_draft.dart';
+import 'package:flutter_code_agent/_core/acp/agent_auth.dart';
+import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
+import 'package:flutter_code_agent/agents/data/agents_repository.dart';
+import 'package:flutter_code_agent/agents/models/agent_info.dart';
+import 'package:flutter_code_agent/agents/models/custom_agent_draft.dart';
 
 /// Claude, signed in.
 const AgentInfo memoryClaudeAgent = AgentInfo(

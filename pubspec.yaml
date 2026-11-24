@@ -138,8 +138,8 @@ flutter:
     - assets/project_template/monorepo/packages/api_client/
     - assets/project_template/monorepo/packages/api_client/lib/
     # The telemetry module and its tests: a new project gets them as lib/_core/telemetry/.
-    - lib/src/common/telemetry/
-    - test/common/telemetry/
+    - lib/_core/telemetry/
+    - test/_core/telemetry/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_code_agent/src/common/acp/session_status.dart';
-import 'package:flutter_code_agent/src/feature/chat/data/chat_repository.dart';
-import 'package:flutter_code_agent/src/feature/chat/models/chat_runtime.dart';
-import 'package:flutter_code_agent/src/feature/prompt_sending/models/slash_command.dart';
-import 'package:flutter_code_agent/src/feature/session_config/models/config_option.dart';
+import 'package:flutter_code_agent/_core/acp/session_status.dart';
+import 'package:flutter_code_agent/chat/data/chat_repository.dart';
+import 'package:flutter_code_agent/chat/models/chat_runtime.dart';
+import 'package:flutter_code_agent/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/session_config/models/config_option.dart';
 
 /// A chat of the test with nothing in it but [status].
 ChatRuntime statusRuntime(int sessionId, SessionStatus status) => ChatRuntime(

@@ -1,5 +1,5 @@
-import 'package:flutter_code_agent/src/common/telemetry/telemetry.dart';
-import 'package:flutter_code_agent/src/feature/crash_reports/data/crash_reports_repository.dart';
+import 'package:flutter_code_agent/_core/telemetry/telemetry.dart';
+import 'package:flutter_code_agent/crash_reports/data/crash_reports_repository.dart';
 
 /// An [ICrashReportsRepository] with scripted data that records what it was asked to do.
 final class FakeCrashReportsRepository implements ICrashReportsRepository {

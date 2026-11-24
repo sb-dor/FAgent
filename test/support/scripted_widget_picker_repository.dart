@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/app_run/data/widget_picker_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/app_run/models/picked_widget.dart';
 
 /// A widget picker for tests: a pick waits [step] and returns [result] (the booking card by
 /// default) unless [cancel] ends it first; [select] returns [selectResult]. Every call is recorded.

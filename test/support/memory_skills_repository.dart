@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/common/database/database.dart';
-import 'package:flutter_code_agent/src/feature/skills/data/knowledge_copy.dart';
-import 'package:flutter_code_agent/src/feature/skills/data/knowledge_scanner.dart';
-import 'package:flutter_code_agent/src/feature/skills/data/skill_states.dart';
-import 'package:flutter_code_agent/src/feature/skills/data/skills_repository.dart';
-import 'package:flutter_code_agent/src/feature/skills/models/knowledge_exceptions.dart';
-import 'package:flutter_code_agent/src/feature/skills/models/knowledge_item.dart';
-import 'package:flutter_code_agent/src/feature/skills/models/skill_library.dart';
+import 'package:flutter_code_agent/_core/database/database.dart';
+import 'package:flutter_code_agent/skills/data/knowledge_copy.dart';
+import 'package:flutter_code_agent/skills/data/knowledge_scanner.dart';
+import 'package:flutter_code_agent/skills/data/skill_states.dart';
+import 'package:flutter_code_agent/skills/data/skills_repository.dart';
+import 'package:flutter_code_agent/skills/models/knowledge_exceptions.dart';
+import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
+import 'package:flutter_code_agent/skills/models/skill_library.dart';
 
 final RegExp _validName = RegExp(r'^[a-z0-9][a-z0-9-]{0,63}$');
 

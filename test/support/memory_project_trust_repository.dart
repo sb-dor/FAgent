@@ -1,4 +1,4 @@
-import 'package:flutter_code_agent/src/feature/project_trust/data/project_trust_repository.dart';
+import 'package:flutter_code_agent/project_trust/data/project_trust_repository.dart';
 
 /// [IProjectTrustRepository] for tests: no settings files; the trusted ids go into [trusted].
 final class MemoryProjectTrustRepository implements IProjectTrustRepository {

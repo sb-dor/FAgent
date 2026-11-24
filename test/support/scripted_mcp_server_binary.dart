@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/_core/shell_env/shell_environment.dart';
 import 'package:path/path.dart' as p;
 
 /// Compiles `test/support/scripted_mcp_server.dart` into [directory] and returns the path of the

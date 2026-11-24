@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:io' as io;
 
-import 'package:flutter_code_agent/src/feature/code_view/data/code_files_repository.dart';
-import 'package:flutter_code_agent/src/feature/code_view/models/code_file.dart';
+import 'package:flutter_code_agent/code_view/data/code_files_repository.dart';
+import 'package:flutter_code_agent/code_view/models/code_file.dart';
 import 'package:path/path.dart' as p;
 
 /// [ICodeFilesRepository] in memory: [files] (absolute path → text) and [folders], with a stamp per

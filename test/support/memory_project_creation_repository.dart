@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/project_creation/data/project_creation_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/creation_step.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/new_member_request.dart';
-import 'package:flutter_code_agent/src/feature/project_creation/models/new_project_request.dart';
+import 'package:flutter_code_agent/project_creation/data/project_creation_repository.dart';
+import 'package:flutter_code_agent/project_creation/models/creation_step.dart';
+import 'package:flutter_code_agent/project_creation/models/new_member_request.dart';
+import 'package:flutter_code_agent/project_creation/models/new_project_request.dart';
 import 'package:path/path.dart' as p;
 
 /// How long each made-up step "took".

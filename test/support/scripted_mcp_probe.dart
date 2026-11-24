@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/mcp_servers/data/mcp_probe.dart';
-import 'package:flutter_code_agent/src/feature/mcp_servers/models/mcp_server.dart';
+import 'package:flutter_code_agent/mcp_servers/data/mcp_probe.dart';
+import 'package:flutter_code_agent/mcp_servers/models/mcp_server.dart';
 
 /// An [IMcpProbe] that answers from [results] by server id (by default [fallback]) and records
 /// every server it was asked about, so tests never start a process or open a connection.

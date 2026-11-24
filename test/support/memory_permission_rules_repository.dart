@@ -1,5 +1,5 @@
-import 'package:flutter_code_agent/src/feature/permission_rules/data/permission_rules_repository.dart';
-import 'package:flutter_code_agent/src/feature/permission_rules/models/permission_rules_exceptions.dart';
+import 'package:flutter_code_agent/permission_rules/data/permission_rules_repository.dart';
+import 'package:flutter_code_agent/permission_rules/models/permission_rules_exceptions.dart';
 import 'package:path/path.dart' as p;
 
 /// [IPermissionRulesRepository] that keeps the rules in memory, for tests; it never touches the

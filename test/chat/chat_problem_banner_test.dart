@@ -1,0 +1,143 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/_core/acp/live_session.dart';
+import 'package:flutter_code_agent/_core/acp/session_status.dart';
+import 'package:flutter_code_agent/agents/models/agent_info.dart';
+import 'package:flutter_code_agent/chat/models/chat_item.dart';
+import 'package:flutter_code_agent/chat/models/chat_view.dart';
+import 'package:flutter_code_agent/chat/widgets/chat_problem_banner.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../support/memory_agents_repository.dart';
+import '../support/test_app.dart';
+
+const ChatView _codexChat = ChatView(
+  sessionId: 1,
+  agentId: 'codex',
+  items: <ChatItem>[],
+  status: SessionStatus.needsAuth,
+  problem: SessionProblem(SessionProblemKind.auth, 'Authentication required'),
+);
+
+Widget _banner(
+  List<AgentLoginMethod> methods, {
+  ValueChanged<String>? onLogin,
+  VoidCallback? onCancelLogin,
+  bool busy = false,
+}) => ChatProblemBanner(
+  view: _codexChat,
+  busy: busy,
+  onCancelLogin: onCancelLogin,
+  loginFailed: false,
+  loginMethods: methods,
+  onRetry: () {},
+  onStartNewAgentSession: () {},
+  onForceStop: () {},
+  onLogin: onLogin ?? (_) {},
+  onRepeatPrompt: () {},
+);
+
+void main() {
+  testWidgets("the banner's methods for a Codex chat", (tester) async {
+    final methods = <String>[];
+    await tester.pumpWidget(testApp(_banner(memoryCodexAgent.methods, onLogin: methods.add)));
+
+    expect(find.text('The agent needs you to sign in.'), findsOneWidget);
+    // A browser method is a button with the agent's own name for it.
+    await tester.tap(find.widgetWithText(FilledButton, 'Login with ChatGPT'));
+    expect(methods, <String>['chat-gpt']);
+    // A key method without its variable explains the variable instead of offering a button.
+    expect(find.widgetWithText(FilledButton, 'Use OPENAI_API_KEY'), findsNothing);
+    expect(
+      find.text(
+        'To sign in with a key, set CODEX_API_KEY or OPENAI_API_KEY in your shell profile, '
+        'then restart the app to pick up the key.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a key method with its variable is a button', (tester) async {
+    final methods = <String>[];
+    await tester.pumpWidget(
+      testApp(
+        _banner(<AgentLoginMethod>[
+          memoryCodexAgent.methods.last.copyWith(keyPresent: true),
+        ], onLogin: methods.add),
+      ),
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Use OPENAI_API_KEY'));
+
+    expect(methods, <String>['api-key']);
+    expect(find.textContaining('restart the app'), findsNothing);
+  });
+
+  testWidgets('unsupported methods are left out', (tester) async {
+    await tester.pumpWidget(testApp(_banner(memoryGeminiAgent.methods)));
+
+    expect(find.widgetWithText(FilledButton, 'Log in with Google'), findsOneWidget);
+    expect(find.textContaining('Vertex AI'), findsNothing);
+  });
+
+  testWidgets('Claude methods keep their localized names', (tester) async {
+    await tester.pumpWidget(
+      testApp(_banner(memoryClaudeAgent.methods), locale: const Locale('ru')),
+    );
+
+    expect(find.text('Агент просит войти в аккаунт.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Войти через Claude.ai'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Войти через Anthropic Console'), findsOneWidget);
+  });
+
+  testWidgets('the buttons are off while a sign-in runs', (tester) async {
+    await tester.pumpWidget(testApp(_banner(memoryCodexAgent.methods, busy: true)));
+
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Login with ChatGPT'))
+          .onPressed,
+      isNull,
+    );
+  });
+
+  testWidgets('needsAuth with no methods shows the message and the Settings pointer', (
+    tester,
+  ) async {
+    await tester.pumpWidget(testApp(_banner(const <AgentLoginMethod>[])));
+
+    expect(find.text('The agent needs you to sign in.'), findsOneWidget);
+    expect(find.text('Sign in from Settings → Agents.'), findsOneWidget);
+    expect(find.byType(FilledButton), findsNothing);
+  });
+
+  testWidgets('only methods set up in the agent also point to Settings', (tester) async {
+    await tester.pumpWidget(
+      testApp(
+        _banner(const <AgentLoginMethod>[
+          AgentLoginMethod(id: 'vertex-ai', name: 'Vertex AI', kind: AgentLoginKind.unsupported),
+        ]),
+      ),
+    );
+
+    expect(find.text('Sign in from Settings → Agents.'), findsOneWidget);
+  });
+
+  testWidgets('a running browser sign-in can be cancelled from the banner', (tester) async {
+    var cancels = 0;
+    await tester.pumpWidget(
+      testApp(_banner(memoryCodexAgent.methods, busy: true, onCancelLogin: () => cancels++)),
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Cancel'));
+
+    expect(cancels, 1);
+  });
+
+  testWidgets('no Cancel without a running cancellable sign-in', (tester) async {
+    await tester.pumpWidget(testApp(_banner(memoryCodexAgent.methods, onCancelLogin: () {})));
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
+
+    await tester.pumpWidget(testApp(_banner(memoryClaudeAgent.methods, busy: true)));
+    expect(find.widgetWithText(OutlinedButton, 'Cancel'), findsNothing);
+  });
+}

@@ -51,7 +51,7 @@ app.*.map.json
 *.g.dart
 *.freezed.dart
 *.gen.dart
-lib/src/common/localization/generated/
+lib/_core/localization/generated/
 .superpowers/
 
 # Secrets and signing material (see assets/knowledge/rules/security.md)

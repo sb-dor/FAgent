@@ -12,10 +12,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dart_acp_sdk/dart_acp_sdk.dart';
-import 'package:flutter_code_agent/src/common/acp/agent_connection.dart';
-import 'package:flutter_code_agent/src/common/acp/agent_definition.dart';
-import 'package:flutter_code_agent/src/common/acp/raw_acp_message.dart';
-import 'package:flutter_code_agent/src/common/shell_env/shell_environment.dart';
+import 'package:flutter_code_agent/_core/acp/agent_connection.dart';
+import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
+import 'package:flutter_code_agent/_core/acp/raw_acp_message.dart';
+import 'package:flutter_code_agent/_core/shell_env/shell_environment.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 

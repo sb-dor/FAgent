@@ -1,0 +1,159 @@
+import 'package:control/control.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:flutter_code_agent/app_close/controller/app_close_controller.dart';
+import 'package:flutter_code_agent/app_close/data/app_close_repository.dart';
+import 'package:flutter_code_agent/app_settings/data/app_settings_repository.dart';
+import 'package:flutter_code_agent/initialization/models/dependencies.dart';
+
+/// {@template app_close_guard}
+/// Asks before quitting while agents work, and covers the app while they are
+/// being stopped.
+/// {@endtemplate}
+class AppCloseGuard extends StatefulWidget {
+  /// {@macro app_close_guard}
+  const AppCloseGuard({required this.child, this.repository, super.key});
+
+  /// The app.
+  final Widget child;
+
+  /// Overrides the window-backed repository (tests).
+  final IAppCloseRepository? repository;
+
+  @override
+  State<AppCloseGuard> createState() => _AppCloseGuardState();
+}
+
+class _AppCloseGuardState extends State<AppCloseGuard> {
+  late final AppCloseController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    final dependencies = Dependencies.of(context);
+    _controller = AppCloseController(
+      repository:
+          widget.repository ??
+          AppCloseRepositoryImpl(
+            hub: dependencies.agentHub,
+            database: dependencies.database,
+            settings: AppSettingsRepositoryImpl(database: dependencies.database),
+            appRun: dependencies.appRunRepository,
+            devices: dependencies.devicesRepository,
+            widgetPicker: dependencies.widgetPickerRepository,
+            appMcpServer: dependencies.appMcpServer,
+            mcpProbe: dependencies.mcpProbe,
+            agentProbe: dependencies.agentProbe,
+            projectCreation: dependencies.projectCreationRepository,
+            queuedChats: dependencies.chatQueues,
+            unsavedFiles: dependencies.codeViews,
+            stopCodeViews: dependencies.codeViews.close,
+            stopAgentList: dependencies.stopFollowingCustomAgents,
+            stopMcpServers: dependencies.mcpServersRepository.dispose,
+            closeErrorLog: dependencies.closeErrorLog,
+          ),
+    )..watch();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onState(AppCloseState previous, AppCloseState current) async {
+    if (current case AppClose$UnsavedState(:final files, :final saveFailed)) {
+      final localization = Localization.of(context);
+      final answer = await showDialog<_UnsavedAnswer>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(localization.quitUnsavedTitle),
+          content: Text(
+            saveFailed
+                ? '${localization.quitUnsavedBody(files)}\n${localization.quitUnsavedFailed}'
+                : localization.quitUnsavedBody(files),
+          ),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(localization.cancel)),
+            TextButton(
+              onPressed: () => Navigator.pop(context, _UnsavedAnswer.discard),
+              child: Text(localization.codeDontSave),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, _UnsavedAnswer.save),
+              child: Text(localization.saveAll),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      switch (answer) {
+        case _UnsavedAnswer.save:
+          _controller.saveAndQuit();
+        case _UnsavedAnswer.discard:
+          _controller.quitWithoutSaving();
+        case null:
+          _controller.cancel();
+      }
+      return;
+    }
+    if (current case AppClose$ConfirmingState(:final busyChats)) {
+      final localization = Localization.of(context);
+      final quit = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(localization.quitWhileBusyTitle),
+          content: Text(localization.quitWhileBusyBody(busyChats)),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(localization.cancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(localization.quit),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      (quit ?? false) ? _controller.confirm() : _controller.cancel();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => StateConsumer<AppCloseController, AppCloseState>(
+    controller: _controller,
+    listener: (context, controller, previous, current) => _onState(previous, current),
+    builder: (context, state, child) => Stack(
+      children: <Widget>[
+        child!,
+        if (state is AppClose$InProgressState) ...<Widget>[
+          ModalBarrier(dismissible: false, color: context.colors.bg.withValues(alpha: 0.7)),
+          Center(
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    const SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                    const SizedBox(width: 16),
+                    Text(Localization.of(context).stoppingAgents),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    ),
+    child: widget.child,
+  );
+}
+
+enum _UnsavedAnswer { save, discard }

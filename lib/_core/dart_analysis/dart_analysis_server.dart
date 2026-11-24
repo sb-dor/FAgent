@@ -1,0 +1,249 @@
+import 'dart:async';
+
+import 'package:flutter_code_agent/_core/dart_analysis/lsp_connection.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/lsp_process.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/dart_completion.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/dart_diagnostic.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/dart_hover.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/models/lsp_location.dart';
+import 'package:l/l.dart';
+import 'package:path/path.dart' as p;
+
+/// [DartAnalysisServer.start] was cancelled before the server answered `initialize`.
+final class DartAnalysisStartCancelled implements Exception {
+  /// Creates the exception.
+  const DartAnalysisStartCancelled();
+
+  @override
+  String toString() => 'DartAnalysisStartCancelled';
+}
+
+/// {@template dart_analysis_server}
+/// The Dart analysis server of one project over LSP (`dart language-server`): open files and
+/// their text, completion, and the errors it publishes.
+/// {@endtemplate}
+final class DartAnalysisServer {
+  DartAnalysisServer._(this._process, this._connection) {
+    _connection.notifications.listen(_onNotification);
+    _exited = _connection.done;
+  }
+
+  /// Starts the server for the project in [root] with the `dart` [executable] and initializes it.
+  ///
+  /// Throws when the process does not start or `initialize` fails or times out after
+  /// [initializeTimeout]; the process is stopped then.
+  static Future<DartAnalysisServer> start({
+    required String executable,
+    required String root,
+    required Map<String, String> environment,
+    LspProcessStarter starter = startGroupedLspProcess,
+    Duration initializeTimeout = const Duration(seconds: 30),
+    Future<void>? cancel,
+  }) async {
+    final process = await starter(
+      executable,
+      const <String>['language-server', '--protocol=lsp', '--client-id=flutter_code_agent'],
+      workingDirectory: root,
+      environment: environment,
+    );
+    final connection = LspConnection(process)..onServerRequest = _answerServer;
+    final server = DartAnalysisServer._(process, connection);
+    try {
+      final rootUri = Uri.directory(root).toString().replaceFirst(RegExp(r'/$'), '');
+      final initialize = connection.request('initialize', <String, Object?>{
+        'processId': null,
+        'clientInfo': <String, Object?>{'name': 'flutter_code_agent'},
+        'rootUri': rootUri,
+        'workspaceFolders': <Object?>[
+          <String, Object?>{'uri': rootUri, 'name': p.basename(root)},
+        ],
+        'capabilities': <String, Object?>{
+          'workspace': <String, Object?>{'configuration': true, 'workspaceFolders': true},
+          'window': <String, Object?>{'workDoneProgress': false},
+          'textDocument': <String, Object?>{
+            'synchronization': <String, Object?>{'didSave': false},
+            'completion': <String, Object?>{
+              'completionItem': <String, Object?>{
+                'snippetSupport': true,
+                'documentationFormat': <String>['markdown', 'plaintext'],
+                'resolveSupport': <String, Object?>{
+                  'properties': <String>['additionalTextEdits', 'documentation'],
+                },
+              },
+              'contextSupport': true,
+            },
+            'publishDiagnostics': <String, Object?>{},
+            'hover': <String, Object?>{
+              'contentFormat': <String>['markdown', 'plaintext'],
+            },
+            'definition': <String, Object?>{'linkSupport': true},
+            'references': <String, Object?>{},
+            'formatting': <String, Object?>{},
+          },
+        },
+      }, timeout: initializeTimeout);
+      // Quitting while the server starts must not wait for its answer.
+      await Future.any<Object?>(<Future<Object?>>[
+        initialize,
+        if (cancel != null) cancel.then<Object?>((_) => throw const DartAnalysisStartCancelled()),
+      ]);
+      connection.notify('initialized', <String, Object?>{});
+    } on Object {
+      await connection.close();
+      await process.stop();
+      rethrow;
+    }
+    return server;
+  }
+
+  static Object? _answerServer(String method, Object? params) => switch (method) {
+    // One (empty: the defaults) settings object per asked item.
+    'workspace/configuration' => <Object?>[
+      for (final _ in switch (params) {
+        {'items': final List<Object?> items} => items,
+        _ => const <Object?>[],
+      })
+        <String, Object?>{},
+    ],
+    _ => null,
+  };
+
+  final LspProcess _process;
+  final LspConnection _connection;
+  late final Future<void> _exited;
+  final StreamController<DartFileDiagnostics> _diagnostics =
+      StreamController<DartFileDiagnostics>.broadcast();
+  final StreamController<bool> _analyzing = StreamController<bool>.broadcast();
+  bool _disposed = false;
+
+  /// The errors and warnings the server publishes, a file at a time.
+  Stream<DartFileDiagnostics> get diagnostics => _diagnostics.stream;
+
+  /// `true` while the server analyzes, `false` when it is done.
+  Stream<bool> get analyzing => _analyzing.stream;
+
+  /// Completes when the server's output ends (it exited or crashed).
+  Future<void> get exited => _exited;
+
+  static String _uri(String path) => Uri.file(path).toString();
+
+  /// Tells the server [path] is open with [text].
+  void open(String path, String text, int version) =>
+      _connection.notify('textDocument/didOpen', <String, Object?>{
+        'textDocument': <String, Object?>{
+          'uri': _uri(path),
+          'languageId': 'dart',
+          'version': version,
+          'text': text,
+        },
+      });
+
+  /// Sends the whole new [text] of the open [path].
+  void change(String path, String text, int version) =>
+      _connection.notify('textDocument/didChange', <String, Object?>{
+        'textDocument': <String, Object?>{'uri': _uri(path), 'version': version},
+        'contentChanges': <Object?>[
+          <String, Object?>{'text': text},
+        ],
+      });
+
+  /// Tells the server [path] is no longer open (it reads the disk again).
+  void close(String path) => _connection.notify('textDocument/didClose', <String, Object?>{
+    'textDocument': <String, Object?>{'uri': _uri(path)},
+  });
+
+  /// The completions at [position] of the open [path].
+  Future<List<DartCompletion>> complete(String path, LspPosition position) async {
+    final result = await _connection.request('textDocument/completion', <String, Object?>{
+      'textDocument': <String, Object?>{'uri': _uri(path)},
+      'position': position.toJson(),
+    });
+    final items = switch (result) {
+      {'items': final List<Object?> items} => items,
+      final List<Object?> list => list,
+      _ => const <Object?>[],
+    };
+    return <DartCompletion>[for (final item in items) ?DartCompletion.fromJson(item)];
+  }
+
+  /// [completion] with the parts the server sends only on demand (an `import` to add).
+  Future<DartCompletion> resolve(DartCompletion completion) async {
+    final result = await _connection.request('completionItem/resolve', completion.toJson());
+    return switch (DartCompletion.fromJson(result)) {
+      final resolved? => completion.withResolved(resolved),
+      null => completion,
+    };
+  }
+
+  Map<String, Object?> _at(String path, LspPosition position) => <String, Object?>{
+    'textDocument': <String, Object?>{'uri': _uri(path)},
+    'position': position.toJson(),
+  };
+
+  /// The declaration and dartdoc of the name at [position] of [path]; `null` where there is none.
+  Future<DartHover?> hover(String path, LspPosition position) async =>
+      DartHover.fromJson(await _connection.request('textDocument/hover', _at(path, position)));
+
+  /// Where the name at [position] of [path] is declared.
+  Future<List<LspLocation>> definition(String path, LspPosition position) async =>
+      LspLocation.listFromJson(
+        await _connection.request('textDocument/definition', _at(path, position)),
+      );
+
+  /// Every use of the name at [position] of [path], its declaration included.
+  Future<List<LspLocation>> references(String path, LspPosition position) async =>
+      LspLocation.listFromJson(
+        await _connection.request('textDocument/references', <String, Object?>{
+          ..._at(path, position),
+          'context': <String, Object?>{'includeDeclaration': true},
+        }),
+      );
+
+  /// The edits that format [path]; `null` when the server cannot (a syntax error).
+  Future<List<LspTextEdit>?> format(
+    String path, {
+    Duration timeout = const Duration(seconds: 2),
+  }) async {
+    final result = await _connection.request('textDocument/formatting', <String, Object?>{
+      'textDocument': <String, Object?>{'uri': _uri(path)},
+      'options': <String, Object?>{'tabSize': 2, 'insertSpaces': true},
+    }, timeout: timeout);
+    if (result is! List) return null;
+    final edits = <LspTextEdit>[for (final edit in result) ?LspTextEdit.fromJson(edit)];
+    // Part of a formatting applied would corrupt the file: a malformed edit means "cannot format".
+    return edits.length == result.length ? edits : null;
+  }
+
+  void _onNotification(LspNotification notification) {
+    final params = notification.params;
+    switch (notification.method) {
+      case 'textDocument/publishDiagnostics' when params is Map:
+        final uri = Uri.tryParse('${params['uri']}');
+        if (uri == null || !uri.isScheme('file')) return;
+        _diagnostics.add(
+          DartFileDiagnostics(uri.toFilePath(), <DartDiagnostic>[
+            if (params['diagnostics'] case final List<Object?> entries)
+              for (final entry in entries) ?DartDiagnostic.fromJson(entry),
+          ]),
+        );
+      case r'$/analyzerStatus' when params is Map:
+        if (params['isAnalyzing'] case final bool analyzing) _analyzing.add(analyzing);
+    }
+  }
+
+  /// Asks the server to shut down and exit, then stops its process group (within 2 s).
+  Future<void> dispose() async {
+    if (_disposed) return;
+    _disposed = true;
+    try {
+      await _connection.request('shutdown', null, timeout: const Duration(seconds: 2));
+      _connection.notify('exit', null);
+    } on Object catch (error) {
+      l.v('Dart analysis | shutdown not answered: $error');
+    }
+    await _connection.close();
+    await _process.stop();
+    await _diagnostics.close();
+    await _analyzing.close();
+  }
+}

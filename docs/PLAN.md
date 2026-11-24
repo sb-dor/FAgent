@@ -28,26 +28,24 @@ Flutter-проект и работает с ним в одном окне: ча�
 ```
 lib/
 ├── main.dart
-└── src/
-    ├── common/
-    │   ├── acp/              # запуск агента как процесса, ACP-соединение, общие модели
-    │   ├── flutter_daemon/   # flutter run --machine, устройства, DTD/VM service URI
-    │   ├── mcp/              # MCP-сервер приложения (знания + инструменты приложения)
-    │   ├── shell_env/        # PATH из login shell (GUI-приложение macOS его не наследует)
-    │   ├── database/         # drift: projects, sessions, messages
-    │   ├── localization/     # intl_en.arb, intl_ru.arb
-    │   └── widget/
-    └── feature/
-        ├── initialization/       # Dependencies, DependenciesScope, шаги инициализации
-        ├── workspace/            # каркас окна: сайдбар, чат, панель запуска
-        ├── projects/             # список проектов и сессий (сайдбар)
-        ├── project_creation/     # мастер нового проекта
-        ├── chat/                 # сессия с агентом: поток сообщений, отправка промпта, отмена
-        ├── permission_request/   # подтверждение действий агента (ACP request_permission)
-        ├── file_diff/            # просмотр изменений, сделанных агентом
-        ├── app_run/              # устройства, запуск, hot reload/restart, логи
-        ├── agent_settings/       # выбор и настройка агентов
-        └── widget_picker/        # выбор виджета в запущенном приложении
+├── _core/
+│   ├── acp/              # запуск агента как процесса, ACP-соединение, общие модели
+│   ├── flutter_daemon/   # flutter run --machine, устройства, DTD/VM service URI
+│   ├── mcp/              # MCP-сервер приложения (знания + инструменты приложения)
+│   ├── shell_env/        # PATH из login shell (GUI-приложение macOS его не наследует)
+│   ├── database/         # drift: projects, sessions, messages
+│   ├── localization/     # intl_en.arb, intl_ru.arb
+│   └── widget/
+├── initialization/       # Dependencies, DependenciesScope, шаги инициализации
+├── workspace/            # каркас окна: сайдбар, чат, панель запуска
+├── projects/             # список проектов и сессий (сайдбар)
+├── project_creation/     # мастер нового проекта
+├── chat/                 # сессия с агентом: поток сообщений, отправка промпта, отмена
+├── permission_request/   # подтверждение действий агента (ACP request_permission)
+├── file_diff/            # просмотр изменений, сделанных агентом
+├── app_run/              # устройства, запуск, hot reload/restart, логи
+├── agent_settings/       # выбор и настройка агентов
+└── widget_picker/        # выбор виджета в запущенном приложении
 knowledge/                        # Markdown: правила и skills, отдаются через MCP-сервер приложения
 ```
 
@@ -57,6 +55,7 @@ knowledge/                        # Markdown: правила и skills, отда
 
 ### Отличия от `AI_INSTRUCTIONS.md` для этого репо
 
+- Без `lib/src/`: общий код в `lib/_core/`, каждая фича — папка прямо в `lib/`, как в шаблоне «Моя архитектура».
 - Только десктопный UI: без `widgets/mobile/` и `screenSizeMaybeWhen`, если не понадобится узкое окно.
 - Нет аутентификации и прав доступа: без `AuthenticationInProgressListener` и `*_permissions.dart`.
 - Нет `ApiClient`: репозитории работают с процессами (агент, `flutter`), файлами и drift.
@@ -253,7 +252,7 @@ knowledge/                        # Markdown: правила и skills, отда
 ### Ошибки и телеметрия (после вида «Код»)
 
 - [x] Рецепт ошибок контроллера в правилах (`handle(..., error:, done:)`, ожидаемые и неожиданные
-  сбои, `ErrorUtil`) и модуль `lib/src/common/telemetry/` в самом FAgent: журнал и очередь в своей
+  сбои, `ErrorUtil`) и модуль `lib/_core/telemetry/` в самом FAgent: журнал и очередь в своей
   базе `logs.sqlite`, отчёты о сбоях только по согласию (Настройки → «Отчёты о сбоях», по умолчанию
   выключено, Sentry)
 - [x] Шаблон нового проекта: конвейер ошибок с выбором Sentry, Crashlytics или «только журнал»;
@@ -281,7 +280,7 @@ knowledge/                        # Markdown: правила и skills, отда
 
 | Риск | Что делать |
 | --- | --- |
-| ACP или адаптер меняют протокол | Все вызовы ACP за одним интерфейсом в `common/acp/`; версии адаптеров закреплять |
+| ACP или адаптер меняют протокол | Все вызовы ACP за одним интерфейсом в `_core/acp/`; версии адаптеров закреплять |
 | GUI-приложение macOS не видит PATH, `npx`/`flutter` не находятся | `shell_env` в M1 первым пунктом |
 | App Sandbox блокирует запуск процессов | Выключить в M0; для Mac App Store не публикуемся |
 | Агент не залогинен / не установлен | Понятный экран с командой установки и входа |

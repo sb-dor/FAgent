@@ -1,0 +1,525 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
+import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
+import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:flutter_code_agent/file_mention/models/file_mention.dart';
+import 'package:flutter_code_agent/prompt_sending/models/composer_file.dart';
+import 'package:flutter_code_agent/prompt_sending/models/composer_image.dart';
+import 'package:flutter_code_agent/prompt_sending/models/run_mentions.dart';
+import 'package:flutter_code_agent/prompt_sending/models/slash_command.dart';
+import 'package:flutter_code_agent/prompt_sending/models/slash_commands.dart';
+import 'package:flutter_code_agent/prompt_sending/widgets/command_suggestions.dart';
+import 'package:flutter_code_agent/prompt_sending/widgets/file_chips.dart';
+import 'package:flutter_code_agent/prompt_sending/widgets/image_chips.dart';
+import 'package:flutter_code_agent/prompt_sending/widgets/mention_suggestions.dart';
+import 'package:flutter_code_agent/skills/models/chat_skills.dart';
+
+/// {@template prompt_composer}
+/// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs
+/// the send button becomes Stop. Shift+Tab calls [onCycleMode] (it is consumed even without one,
+/// so the focus stays in the field). [toolbar] (the chips) sits under the field, the send button
+/// on its right. Typing `@` suggests project files (arrows choose, Enter or Tab inserts, Escape
+/// closes); a `/` at the start of the text suggests the project's [chatSkills], the app's commands
+/// (as [runContext] lets them work; choosing one calls [onAppCommand]) and the agent's [commands]
+/// the same way. While a permission request waits, Enter and Escape
+/// (without Shift, Command, Alt or Control) in an empty field call [onAcceptPending] and
+/// [onRejectPending]. ⌘↵ with text calls [onQueue] while the agent is [busy] (plain Enter does
+/// nothing then) and [onSend] otherwise; it never answers a permission request. [images] show as
+/// chips above the text; ⌘V calls [onPasteImage] and still pastes text as usual.
+/// {@endtemplate}
+class PromptComposer extends StatefulWidget {
+  /// {@macro prompt_composer}
+  const PromptComposer({
+    required this.controller,
+    required this.focusNode,
+    required this.canSend,
+    required this.canStop,
+    required this.onSend,
+    required this.onStop,
+    this.stopping = false,
+    this.busy = false,
+    this.onQueue,
+    this.mentionFiles,
+    this.onMentionStart,
+    this.toolbar = const <Widget>[],
+    this.onCycleMode,
+    this.commands = const <SlashCommand>[],
+    this.onAcceptPending,
+    this.onRejectPending,
+    this.runContext,
+    this.onAppCommand,
+    this.chatSkills = ChatSkills.empty,
+    this.images = const <ComposerImage>[],
+    this.onRemoveImage,
+    this.files = const <ComposerFile>[],
+    this.onRemoveFile,
+    this.onPasteImage,
+    super.key,
+  });
+
+  /// Prompt text.
+  final TextEditingController controller;
+
+  /// Focus of the field.
+  final FocusNode focusNode;
+
+  /// A prompt can be sent now.
+  final bool canSend;
+
+  /// A turn can be stopped now.
+  final bool canStop;
+
+  /// A stop is in progress: the button stays a Stop button, disabled, with a spinner.
+  final bool stopping;
+
+  /// The agent works (a turn or its setup): ⌘↵ queues instead of sending, the hint says so.
+  final bool busy;
+
+  /// Queues the text (⌘↵ while [busy]); `null` queues nothing.
+  final VoidCallback? onQueue;
+
+  /// Sends the text.
+  final VoidCallback onSend;
+
+  /// Stops the turn.
+  final VoidCallback onStop;
+
+  /// Project files to mention; `null` turns mentions off.
+  final List<String>? mentionFiles;
+
+  /// A new `@` mention started (time to refresh the file list).
+  final VoidCallback? onMentionStart;
+
+  /// Widgets under the field, left of the send button.
+  final List<Widget> toolbar;
+
+  /// Switches the permission mode (Shift+Tab); `null` makes Shift+Tab do nothing.
+  final VoidCallback? onCycleMode;
+
+  /// Commands of the agent for the `/` menu (the app's own are added by the menu).
+  final List<SlashCommand> commands;
+
+  /// Enter in an empty field allows the waiting permission request; `null` when none waits.
+  final VoidCallback? onAcceptPending;
+
+  /// Escape in an empty field rejects the waiting permission request; `null` when none waits.
+  final VoidCallback? onRejectPending;
+
+  /// What the running app offers the `@` menu; `null` offers nothing.
+  final RunMentions? runContext;
+
+  /// An app command (`run`, `reload`, `restart`, `screenshot`) was chosen in the `/` menu: the typed
+  /// `/query` is removed from the field and the name is passed here, nothing is inserted. `null`
+  /// inserts the command as text like any other.
+  final ValueChanged<String>? onAppCommand;
+
+  /// The skills of the chat's project for the `/` menu (shown before the app's commands).
+  final ChatSkills chatSkills;
+
+  /// The images that go with the message, as chips above the text.
+  final List<ComposerImage> images;
+
+  /// Removes the image at the index (its chip's ✕); `null` hides the ✕.
+  final ValueChanged<int>? onRemoveImage;
+
+  /// The files and folders from outside the project that go with the message, as cards above the
+  /// text.
+  final List<ComposerFile> files;
+
+  /// Removes a card (its ✕); `null` hides the ✕.
+  final ValueChanged<ComposerFile>? onRemoveFile;
+
+  /// ⌘V was pressed: the clipboard may hold an image. `null` pastes text only.
+  final VoidCallback? onPasteImage;
+
+  @override
+  State<PromptComposer> createState() => _PromptComposerState();
+}
+
+/// What the open suggestion list completes.
+enum _Trigger { mention, command }
+
+class _PromptComposerState extends State<PromptComposer> {
+  _Trigger? _trigger;
+
+  /// Where the typed `@…` or `/…` starts.
+  int _start = 0;
+  String _query = '';
+  List<MentionRow> _rows = const [];
+  List<SlashCommand> _commands = const <SlashCommand>[];
+  int _highlighted = 0;
+
+  /// Start of a list closed with Escape: it stays closed while typed on.
+  int? _dismissedAt;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onText);
+  }
+
+  @override
+  void didUpdateWidget(PromptComposer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onText);
+      widget.controller.addListener(_onText);
+    }
+    // The file and command lists load after the trigger is typed.
+    if (_trigger != null &&
+        (oldWidget.mentionFiles != widget.mentionFiles ||
+            oldWidget.commands != widget.commands ||
+            oldWidget.runContext != widget.runContext ||
+            oldWidget.chatSkills != widget.chatSkills)) {
+      _search(refresh: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onText);
+    super.dispose();
+  }
+
+  /// Number of rows in the open list.
+  int get _count => switch (_trigger) {
+    _Trigger.mention => _rows.length,
+    _Trigger.command => _commands.length,
+    null => 0,
+  };
+
+  bool _selectable(int index) => switch (_trigger) {
+    _Trigger.mention => _rows[index].enabled,
+    _Trigger.command => _commands[index].enabled,
+    null => false,
+  };
+
+  /// Fills the rows for the current trigger; the first selectable one is highlighted.
+  ///
+  /// With [refresh] the lists were reloaded under an open menu: nothing changes when the rows
+  /// are the same, and the highlight stays on its item while that is still listed.
+  void _search({bool refresh = false}) {
+    final highlightedBefore = _highlighted;
+    int keep;
+    switch (_trigger) {
+      case _Trigger.mention:
+        final found = mentionRows(widget.mentionFiles ?? const [], _query, widget.runContext);
+        if (refresh && listEquals(found, _rows)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _rows.length
+            ? found.indexOf(_rows[highlightedBefore])
+            : -1;
+        _rows = found;
+      case _Trigger.command:
+        final found = slashMenuRows(
+          localization: Localization.of(context),
+          skills: widget.chatSkills,
+          agent: widget.commands,
+          query: _query,
+          run: widget.runContext,
+        );
+        if (refresh && listEquals(found, _commands)) return;
+        keep = refresh && highlightedBefore >= 0 && highlightedBefore < _commands.length
+            ? found.indexOf(_commands[highlightedBefore])
+            : -1;
+        _commands = found;
+      case null:
+        return;
+    }
+    _highlighted = keep >= 0
+        ? keep
+        : List<int>.generate(_count, (i) => i).firstWhere(_selectable, orElse: () => -1);
+  }
+
+  void _onText() {
+    final value = widget.controller.value;
+    final caret = value.selection.baseOffset;
+    final collapsed = value.selection.isCollapsed;
+    final command = collapsed ? slashQueryAt(value.text, caret) : null;
+    final mention = collapsed && widget.mentionFiles != null
+        ? mentionQueryAt(value.text, caret)
+        : null;
+    final trigger = command != null
+        ? (_Trigger.command, 0, command)
+        : mention != null
+        ? (_Trigger.mention, mention.start, mention.query)
+        : null;
+    if (trigger == null || trigger.$2 == _dismissedAt) {
+      if (trigger == null) _dismissedAt = null;
+      if (_trigger != null) setState(_close);
+      return;
+    }
+    if (trigger.$1 == _Trigger.mention && (_trigger != _Trigger.mention || _start != trigger.$2)) {
+      widget.onMentionStart?.call();
+    }
+    setState(() {
+      _trigger = trigger.$1;
+      _start = trigger.$2;
+      _query = trigger.$3;
+      _search();
+    });
+  }
+
+  void _close() {
+    _trigger = null;
+    _rows = const [];
+    _commands = const <SlashCommand>[];
+    _highlighted = 0;
+  }
+
+  /// Replaces the typed `@…` or `/…` with [inserted].
+  void _insert(String inserted) {
+    if (_trigger == null) return;
+    final value = widget.controller.value;
+    widget.controller.value = TextEditingValue(
+      text: value.text.replaceRange(_start, value.selection.baseOffset, inserted),
+      selection: TextSelection.collapsed(offset: _start + inserted.length),
+    );
+    setState(_close);
+  }
+
+  /// Inserts the row at [index] unless it is disabled; the list stays open then.
+  void _pick(int index) {
+    if (index < 0 || index >= _count || !_selectable(index)) return;
+    if (_trigger == _Trigger.mention) return _insert(_rows[index].insert);
+    final command = _commands[index];
+    final onAppCommand = widget.onAppCommand;
+    if (command.source == SlashSource.app && onAppCommand != null) {
+      _insert('');
+      onAppCommand(command.name);
+      return;
+    }
+    _insert('/${command.name} ');
+  }
+
+  /// Moves the highlight [step] rows, skipping the ones that cannot be chosen.
+  void _move(int step) {
+    for (var i = 1; i <= _count; i++) {
+      final index = (_highlighted + step * i) % _count;
+      if (_selectable(index)) {
+        setState(() => _highlighted = index);
+        return;
+      }
+    }
+  }
+
+  /// Shift, Command, Alt or Control is held.
+  bool get _hasModifier {
+    final keyboard = HardwareKeyboard.instance;
+    return keyboard.isShiftPressed ||
+        keyboard.isMetaPressed ||
+        keyboard.isAltPressed ||
+        keyboard.isControlPressed;
+  }
+
+  KeyEventResult _onKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) return KeyEventResult.ignored;
+    final key = event.logicalKey;
+    if (_count > 0) {
+      if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.arrowUp) {
+        _move(key == LogicalKeyboardKey.arrowDown ? 1 : -1);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.enter || key == LogicalKeyboardKey.tab) {
+        // Shift+Tab is not Tab: it inserts nothing, and the focus stays in the field.
+        if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
+          return KeyEventResult.handled;
+        }
+        _pick(_highlighted);
+        return KeyEventResult.handled;
+      }
+      if (key == LogicalKeyboardKey.escape) {
+        setState(() {
+          _dismissedAt = _start;
+          _close();
+        });
+        return KeyEventResult.handled;
+      }
+    }
+    if (key == LogicalKeyboardKey.tab && HardwareKeyboard.instance.isShiftPressed) {
+      // Always consumed, or the focus would leave the field when there is no mode to cycle.
+      if (event is KeyDownEvent) widget.onCycleMode?.call();
+      return KeyEventResult.handled;
+    }
+    if (event is KeyDownEvent && key == LogicalKeyboardKey.keyV) {
+      final keyboard = HardwareKeyboard.instance;
+      if (keyboard.isMetaPressed &&
+          !keyboard.isShiftPressed &&
+          !keyboard.isAltPressed &&
+          !keyboard.isControlPressed) {
+        widget.onPasteImage?.call();
+      }
+      // The field pastes the text, if there is any.
+      return KeyEventResult.ignored;
+    }
+    // A waiting permission request is answered from an empty field only (any text, even a
+    // space, is a draft the key must not skip over).
+    // Only the bare key answers: ⌘↵, ⇧↵ and the like are something else.
+    if (event is KeyDownEvent && widget.controller.text.isEmpty && !_hasModifier) {
+      final answer = key == LogicalKeyboardKey.escape
+          ? widget.onRejectPending
+          : key == LogicalKeyboardKey.enter
+          ? widget.onAcceptPending
+          : null;
+      if (answer != null) {
+        answer();
+        return KeyEventResult.handled;
+      }
+    }
+    if (event is! KeyDownEvent || key != LogicalKeyboardKey.enter) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (keyboard.isShiftPressed) return KeyEventResult.ignored;
+    // ⌘↵: queued while the agent works, sent when it does not.
+    if (keyboard.isMetaPressed) {
+      if (_hasContent) {
+        if (widget.busy) {
+          widget.onQueue?.call();
+        } else if (widget.canSend) {
+          widget.onSend();
+        }
+      }
+      return KeyEventResult.handled;
+    }
+    if (widget.canSend) widget.onSend();
+    return KeyEventResult.handled;
+  }
+
+  /// The field holds text or the message has images: there is something to send.
+  bool get _hasContent =>
+      widget.controller.text.trim().isNotEmpty ||
+      widget.images.isNotEmpty ||
+      widget.files.isNotEmpty;
+
+  /// `⌘↵ Queue` next to the button while the agent works and there is something to queue.
+  Widget _queueHint(GeneratedLocalization localization) => ListenableBuilder(
+    listenable: widget.controller,
+    builder: (context, _) => widget.busy && _hasContent
+        ? Padding(
+            padding: const EdgeInsets.only(right: 8, bottom: 12),
+            child: Text(
+              localization.queueHint,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(color: context.colors.muted),
+            ),
+          )
+        : const SizedBox.shrink(),
+  );
+
+  Widget _sendButton(GeneratedLocalization localization) => widget.stopping
+      ? IconButton.filledTonal(
+          tooltip: localization.statusCancelling,
+          onPressed: null,
+          icon: const SizedBox.square(
+            dimension: 18,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        )
+      : widget.canStop
+      ? IconButton.filledTonal(
+          tooltip: localization.stop,
+          onPressed: widget.onStop,
+          icon: const Icon(Icons.stop_rounded),
+        )
+      : ListenableBuilder(
+          listenable: widget.controller,
+          builder: (context, _) => IconButton.filled(
+            tooltip: localization.send,
+            onPressed: widget.canSend && _hasContent ? widget.onSend : null,
+            icon: const Icon(Icons.arrow_upward_rounded),
+          ),
+        );
+
+  @override
+  Widget build(BuildContext context) {
+    final localization = Localization.of(context);
+    final colors = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kChatColumnWidth),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: colors.surface,
+              border: Border.all(color: colors.border),
+              borderRadius: BorderRadius.circular(AppRadius.large),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // In the field's tap region too: removing a card keeps the caret.
+                if (widget.files.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: FileChips(files: widget.files, onRemove: widget.onRemoveFile),
+                    ),
+                  ),
+                // In the field's tap region too: removing an image keeps the caret.
+                if (widget.images.isNotEmpty)
+                  TextFieldTapRegion(
+                    child: ImageChips(images: widget.images, onRemove: widget.onRemoveImage),
+                  ),
+                // Part of the field's tap region: a click keeps the caret.
+                if (_count > 0)
+                  TextFieldTapRegion(
+                    child: switch (_trigger!) {
+                      _Trigger.mention => MentionSuggestions(
+                        isPreview: widget.runContext?.isPreview ?? false,
+                        rows: _rows,
+                        highlighted: _highlighted,
+                        onSelected: (row) => _pick(_rows.indexOf(row)),
+                      ),
+                      _Trigger.command => CommandSuggestions(
+                        commands: _commands,
+                        highlighted: _highlighted,
+                        onSelected: (command) => _pick(_commands.indexOf(command)),
+                      ),
+                    },
+                  ),
+                Focus(
+                  onKeyEvent: _onKey,
+                  child: TextField(
+                    controller: widget.controller,
+                    focusNode: widget.focusNode,
+                    autofocus: true,
+                    minLines: 1,
+                    maxLines: 10,
+                    keyboardType: TextInputType.multiline,
+                    decoration: InputDecoration(
+                      hintText: widget.busy ? localization.promptBusyHint : localization.promptHint,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: widget.toolbar,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      _queueHint(localization),
+                      _sendButton(localization),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

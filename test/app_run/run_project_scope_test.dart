@@ -1,0 +1,163 @@
+import 'dart:async';
+
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
+import 'package:flutter_code_agent/_core/database/database.dart';
+import 'package:flutter_code_agent/app_run/data/widget_picker_repository.dart';
+import 'package:flutter_code_agent/app_run/models/picked_widget.dart';
+import 'package:flutter_code_agent/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/initialization/models/dependencies.dart';
+import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
+import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:flutter_code_agent/workspace/widgets/workspace_right_pane.dart';
+import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import '../support/test_app.dart';
+
+/// A picker whose pick ends when the test says so.
+final class _ManualPicker implements IWidgetPickerRepository {
+  final List<Completer<PickResult>> pending = <Completer<PickResult>>[];
+
+  @override
+  Future<PickResult> pick(int projectId) {
+    final completer = Completer<PickResult>();
+    pending.add(completer);
+    return completer.future;
+  }
+
+  @override
+  Future<void> cancel(int projectId) async {}
+
+  @override
+  Future<PickResult> select(int projectId, String id) async => const PickGone();
+
+  @override
+  Future<void> dispose() async {}
+}
+
+const PickedWidget _fromA = PickedWidget(
+  name: 'WidgetOfA',
+  file: 'lib/a.dart',
+  line: 1,
+  ancestors: <PickedAncestor>[],
+);
+
+void main() {
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
+  late _ManualPicker picker;
+  late Dependencies dependencies;
+  late int a;
+  late int b;
+
+  setUp(() {
+    picker = _ManualPicker();
+    dependencies = testDependencies(widgetPickerRepository: picker);
+  });
+
+  Future<void> settle(WidgetTester tester) async {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+
+  Finder inPane(String tooltip) =>
+      find.descendant(of: find.byType(WorkspaceRightPane), matching: find.byTooltip(tooltip));
+
+  Future<WorkspaceConfigWidgetState> pump(WidgetTester tester) async {
+    useDesktopView(tester);
+    await tester.runAsync(() async {
+      final database = dependencies.database;
+      a = await database
+          .into(database.projectsTable)
+          .insert(ProjectsTableCompanion.insert(path: '/a', name: 'proj-a'));
+      b = await database
+          .into(database.projectsTable)
+          .insert(ProjectsTableCompanion.insert(path: '/b', name: 'proj-b'));
+      for (final id in <int>[a, b]) {
+        await database
+            .into(database.sessionsTable)
+            .insert(
+              SessionsTableCompanion.insert(
+                projectId: id,
+                agentId: 'claude',
+                title: Value<String>('Chat $id'),
+              ),
+            );
+      }
+    });
+    await tester.pumpWidget(
+      testApp(const WorkspaceConfigWidget(), dependencies: dependencies, withSettings: true),
+    );
+    await settle(tester);
+    await tester.pumpAndSettle();
+    final state = WorkspaceConfigInhWidget.of(tester.element(find.byType(WorkspaceWidget)));
+    state.dataController
+      ..selectProject(a)
+      ..selectPaneTab(RightPaneTab.run);
+    for (var i = 0; i < 3; i++) {
+      await settle(tester);
+    }
+    // Picking needs a running app.
+    await tester.tap(inPane('Run'));
+    for (var i = 0; i < 3 && state.runController.state.run is! RunRunning; i++) {
+      await settle(tester);
+    }
+    expect(state.runController.state.run, isA<RunRunning>());
+    return state;
+  }
+
+  testWidgets('a widget picked in one project never lands in the next one', (tester) async {
+    final state = await pump(tester);
+    expect(state.runController.state.projectId, a);
+
+    await tester.tap(inPane('Pick a widget in the app'));
+    await tester.pump();
+    expect(find.text('Tap a widget in the running app…'), findsOneWidget);
+
+    state.dataController.selectProject(b);
+    for (var i = 0; i < 3; i++) {
+      await settle(tester);
+    }
+    expect(state.runController.state.projectId, b);
+    expect(
+      find.text('Tap a widget in the running app…'),
+      findsNothing,
+      reason: 'project B never asked for a pick',
+    );
+
+    picker.pending.single.complete(const PickPicked(_fromA));
+    await settle(tester);
+    await settle(tester);
+
+    expect(state.runController.state.projectId, b);
+    expect(state.runActionsController.pick.value.projectId, a, reason: 'it stays with project A');
+    expect(find.text('WidgetOfA'), findsNothing);
+    expect(find.text('Add to message'), findsNothing);
+    expect(
+      state.runLink.mentions?.isEmpty ?? true,
+      isTrue,
+      reason: 'the @ menu offers nothing from project A',
+    );
+
+    state.dataController.selectProject(a);
+    for (var i = 0; i < 3; i++) {
+      await settle(tester);
+    }
+    expect(find.text('a.dart:1'), findsOneWidget, reason: 'back in project A its card is there');
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('a pick finished in the selected project is kept', (tester) async {
+    final state = await pump(tester);
+
+    await tester.tap(inPane('Pick a widget in the app'));
+    await tester.pump();
+    picker.pending.single.complete(const PickPicked(_fromA));
+    await settle(tester);
+    await settle(tester);
+
+    expect(state.runActionsController.pick.value.widget, _fromA);
+    expect(find.text('a.dart:1'), findsOneWidget);
+    await disposeTestApp(tester, dependencies);
+  });
+}

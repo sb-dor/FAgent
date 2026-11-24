@@ -1,4 +1,4 @@
-import 'package:flutter_code_agent/src/common/app_mcp/app_mcp_server.dart';
+import 'package:flutter_code_agent/_core/app_mcp/app_mcp_server.dart';
 
 /// An [IAppMcpServer] with a fixed [url] and [startError]; it never listens.
 final class StubAppMcpServer implements IAppMcpServer {

@@ -27,7 +27,7 @@ a screenshot.
    flutter test
    ```
 
-   Generated files (`*.g.dart`, `*.freezed.dart`, `lib/src/common/localization/generated/`) are not
+   Generated files (`*.g.dart`, `*.freezed.dart`, `lib/_core/localization/generated/`) are not
    committed. Every visible string goes into both `intl_en.arb` and `intl_ru.arb`.
 
 ## The built-in rules
@@ -41,15 +41,15 @@ projects, so they have to be right:
 - A fenced `dart` block whose first line is `// file: name.dart` is compiled by the tests. Check it:
 
   ```bash
-  flutter test test/feature/skills
-  FLUTTER_RUN_TEST=1 flutter test test/feature/skills/builtin_knowledge_content_test.dart --plain-name compile
+  flutter test test/skills
+  FLUTTER_RUN_TEST=1 flutter test test/skills/builtin_knowledge_content_test.dart --plain-name compile
   ```
 
 ## The new project template
 
 The files a new project gets are in
 [`assets/project_template/architecture/`](assets/project_template/architecture), listed in
-`lib/src/feature/project_creation/data/project_template.dart`. A change there is checked by creating
+`lib/project_creation/data/project_template.dart`. A change there is checked by creating
 a real project, which needs the network:
 
 ```bash

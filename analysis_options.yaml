@@ -16,9 +16,9 @@ analyzer:
     # Fixture package for the built-in skill templates (has its own pubspec and generated code)
     - "test/fixtures/knowledge_templates/**"
     # Generated
-    - "lib/src/common/localization/generated/**"
-    - "lib/src/common/constants/pubspec.yaml.g.dart"
-    - "lib/src/common/model/generated/**"
+    - "lib/_core/localization/generated/**"
+    - "lib/_core/constants/pubspec.yaml.g.dart"
+    - "lib/_core/model/generated/**"
     - "**.g.dart"
     - "test/generated_migrations/**"
     - "**.gql.dart"

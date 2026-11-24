@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/project_rules/data/project_rules_repository.dart';
-import 'package:flutter_code_agent/src/feature/project_rules/models/project_rule.dart';
+import 'package:flutter_code_agent/project_rules/data/project_rules_repository.dart';
+import 'package:flutter_code_agent/project_rules/models/project_rule.dart';
 
 /// [IProjectRulesRepository] in memory. [withRules] holds the project folders that have
 /// `docs/rules`; with [allHaveRules] every folder has them, so nothing is ever offered (the default

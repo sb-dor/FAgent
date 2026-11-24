@@ -25,7 +25,7 @@ What to test, by layer:
 
 Rules:
 
-- Tests live under `test/`, mirroring `lib/src/` paths (`test/feature/<feature>/...`).
+- Tests live under `test/`, mirroring `lib/` paths (`test/<feature>/...`, `test/_core/...`).
 - No real network, no real agents, no real `flutter run` in tests.
 - Run `flutter test <paths>` for what you touched, then the full `flutter test`.
 - Report: which tests you added, the command you ran, and its result. If something fails, say whether

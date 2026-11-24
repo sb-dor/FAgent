@@ -13,7 +13,7 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
-    // Files dragged onto the window (lib/src/common/drop_zone/).
+    // Files dragged onto the window (lib/_core/drop_zone/).
     DropZoneView.install(on: flutterViewController)
 
     // Answers to a quit request (see AppDelegate.applicationShouldTerminate).

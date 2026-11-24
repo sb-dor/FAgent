@@ -1,12 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter_code_agent/src/feature/app_run/data/app_run_repository.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/device.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/log_entry.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_arguments.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_error.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_error_kind.dart';
-import 'package:flutter_code_agent/src/feature/app_run/models/run_state.dart';
+import 'package:flutter_code_agent/app_run/data/app_run_repository.dart';
+import 'package:flutter_code_agent/app_run/models/device.dart';
+import 'package:flutter_code_agent/app_run/models/log_entry.dart';
+import 'package:flutter_code_agent/app_run/models/run_arguments.dart';
+import 'package:flutter_code_agent/app_run/models/run_error.dart';
+import 'package:flutter_code_agent/app_run/models/run_error_kind.dart';
+import 'package:flutter_code_agent/app_run/models/run_state.dart';
 
 /// What one project's fake run holds: its state, its output and the timers of the running scenario.
 final class _FakeRun {

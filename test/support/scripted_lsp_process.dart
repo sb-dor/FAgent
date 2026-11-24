@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_code_agent/src/common/dart_analysis/lsp_process.dart';
+import 'package:flutter_code_agent/_core/dart_analysis/lsp_process.dart';
 
 /// An [LspProcess] whose server side is played by the test.
 ///
