@@ -1,8 +1,8 @@
 import 'dart:io' as io;
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// Desktop window setup. The app ships for desktop only.

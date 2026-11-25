@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:flutter_code_agent/_core/design/markdown_style.dart';
 import 'package:flutter_code_agent/code_view/controller/code_navigation_controller.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_diagnostic_spans.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Splits hover [markdown] into its first fenced `dart` block (the declaration) and the rest (the
 /// dartdoc); the declaration is `null` without such a block.
@@ -91,7 +92,7 @@ class CodeHoverCard extends StatelessWidget {
                   if (doc != null && doc.docs.isNotEmpty)
                     MarkdownBody(
                       data: doc.docs,
-                      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
+                      styleSheet: appMarkdownStyle(context).copyWith(
                         p: small,
                         code: AppText.mono(context, size: 12).copyWith(color: colors.text),
                       ),

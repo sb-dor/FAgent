@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/database/database.dart' show ProjectsTableCompanion;
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
@@ -16,6 +15,7 @@ import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/flutter_version_runner.dart';
 import '../support/test_app.dart';

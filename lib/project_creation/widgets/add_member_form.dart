@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/project_creation/widgets/platform_chips.dart'
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:l/l.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template add_member_form}
 /// What the Add to project dialog asks: the kind of member (Flutter app, Dart app, Flutter package,

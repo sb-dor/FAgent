@@ -1,5 +1,4 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
@@ -11,6 +10,7 @@ import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_code_agent/skills/controller/skill_library_controller.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_chat_area}
 /// The selected chat, or a hint to pick one.

@@ -1,7 +1,7 @@
 // ignore_for_file: avoid_classes_with_only_static_members
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Corner radii of the design system.
 abstract final class AppRadius {

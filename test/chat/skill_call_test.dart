@@ -1,11 +1,11 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/chat/models/skill_call.dart';
 import 'package:flutter_code_agent/chat/widgets/chat_item_view.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/drop_zone/drop_zone.dart';
 import 'package:flutter_code_agent/_core/drop_zone/drop_zone_event.dart';
 import 'package:flutter_code_agent/_core/widget/drop_zone_overlay.dart';
@@ -11,6 +10,7 @@ import 'package:flutter_code_agent/chat/widgets/chat_drop_target.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/test_app.dart';

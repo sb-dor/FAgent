@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/chat/models/tool_row_label.dart';
 import 'package:flutter_code_agent/chat/widgets/tool_path_text.dart';
 import 'package:flutter_code_agent/turn_files/models/file_change_kind.dart';
 import 'package:flutter_code_agent/turn_files/widgets/file_change_label.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template changes_file_list}
 /// The files of the Changes tab: name (mono) with its folder (muted), what happened to the file

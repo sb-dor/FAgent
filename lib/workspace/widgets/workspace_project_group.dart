@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_project_header}
 /// The title of a project group: a ▸/▾ chevron that collapses the group, the project name that

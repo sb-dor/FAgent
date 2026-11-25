@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/app_run/controller/devices_controller.dart';
 import 'package:flutter_code_agent/app_run/controller/run_controller.dart';
 import 'package:flutter_code_agent/app_run/models/device.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/app_run/widgets/run_app_chip.dart';
 import 'package:flutter_code_agent/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

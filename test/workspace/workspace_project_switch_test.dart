@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart' hide isNotNull, isNull;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_code_agent/code_view/models/code_view_state.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_explorer.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_code_files_repository.dart';
 import '../support/memory_code_view_state_repository.dart';

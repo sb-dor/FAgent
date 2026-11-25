@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_row.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Name of the agent [id] among [agents]. A custom agent that is not listed was removed, so it
 /// is shown as "Removed agent"; any other unlisted agent is shown by its id.

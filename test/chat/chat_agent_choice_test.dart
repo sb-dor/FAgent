@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/acp/live_session.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_code_agent/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

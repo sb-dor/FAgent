@@ -1,11 +1,11 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/app_close/controller/app_close_controller.dart';
 import 'package:flutter_code_agent/app_close/data/app_close_repository.dart';
 import 'package:flutter_code_agent/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template app_close_guard}
 /// Asks before quitting while agents work, and covers the app while they are

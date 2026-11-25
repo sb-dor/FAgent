@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/acp/agent_hub.dart';
 import 'package:flutter_code_agent/_core/acp/live_session.dart';
@@ -19,6 +18,7 @@ import 'package:flutter_code_agent/chat/data/chat_repository.dart';
 import 'package:flutter_code_agent/chat/widgets/chat_config_widget.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/fake_agent_binary.dart';

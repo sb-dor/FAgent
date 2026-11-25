@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/mcp_servers/models/mcp_exceptions.dart';
 import 'package:flutter_code_agent/mcp_servers/models/mcp_input.dart';
 import 'package:flutter_code_agent/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_code_agent/mcp_servers/widgets/mcp_servers_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template add_mcp_server_dialog}
 /// Asks for a new MCP server over [transport]: a command with arguments and variables for `stdio`,

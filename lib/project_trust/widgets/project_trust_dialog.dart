@@ -1,5 +1,4 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/error_text.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/project_trust/controller/project_trust_controller.dart';
 import 'package:flutter_code_agent/project_trust/data/project_trust_repository.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template project_trust_dialog}
 /// Asks whether agents may run the folder's own settings and hooks, listing

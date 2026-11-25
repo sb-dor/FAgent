@@ -1,5 +1,4 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/error_text.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widg
 import 'package:flutter_code_agent/app_settings/widgets/settings_row.dart';
 import 'package:flutter_code_agent/crash_reports/controller/crash_reports_controller.dart';
 import 'package:flutter_code_agent/crash_reports/widgets/crash_reports_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template crash_reports_settings_section}
 /// The "Crash reports" section of Settings: the switch, what was recorded and sent, the last

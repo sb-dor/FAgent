@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/agents/widgets/agents_config_widget.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/app_settings/widgets/settings_row.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template general_settings_section}
 /// The "General" section of Settings: the app language, the agent a new chat starts with and

@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/project_creation/models/creation_step.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template creation_chip}
 /// The sidebar chip of the creation that is running or waits to be acknowledged: "Creating `name` ·

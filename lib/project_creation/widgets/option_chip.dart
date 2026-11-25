@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template option_chip}
 /// A small chip of the New project form: a chosen one has the accent background and a check.

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/compact_button.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/app_run/widgets/run_device_chip.dart';
 import 'package:flutter_code_agent/app_run/widgets/run_mode_chip.dart';
 import 'package:flutter_code_agent/workspace/widgets/app_title_bar.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_run_controls}
 /// The run controls of the title bar: the device and mode chips, Run (Stop while the app builds or runs) and

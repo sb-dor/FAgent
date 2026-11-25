@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/constant/window_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/workspace/widgets/app_title_bar.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_page_scaffold}
 /// A full-window screen (Skills, Settings): the title bar with "← Back to chat" and [title], a

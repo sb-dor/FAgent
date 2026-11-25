@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/session_config/models/config_option.dart';
 import 'package:flutter_code_agent/session_config/models/config_roles.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The settings of an agent a new chat can start with.
 enum AgentDefaultRole {

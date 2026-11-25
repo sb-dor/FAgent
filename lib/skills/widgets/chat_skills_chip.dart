@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_skills_chip}
 /// The 🧩 chip of the composer: how many skills are on for this chat. Its menu lists the skills

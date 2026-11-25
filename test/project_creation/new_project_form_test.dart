@@ -3,7 +3,6 @@ import 'dart:io' as io;
 import 'dart:io' show FileSystemException;
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/app_settings/models/app_settings.dart';
@@ -18,6 +17,7 @@ import 'package:flutter_code_agent/project_creation/widgets/new_project_dialog.d
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_project_creation_repository.dart';
 import '../support/test_app.dart';
@@ -260,9 +260,7 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('a bad application ID blocks creation and leaves the settings alone', (
-    tester,
-  ) async {
+  testWidgets('a bad application ID blocks creation and leaves the settings alone', (tester) async {
     await openDialog(tester);
     await typeName(tester, 'avera_booking');
     expect(canCreate(tester), isTrue);

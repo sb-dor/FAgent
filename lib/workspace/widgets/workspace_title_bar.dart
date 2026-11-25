@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/sessions/controller/sessions_controller.dart';
 import 'package:flutter_code_agent/workspace/widgets/app_title_bar.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_run_controls.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_title_bar}
 /// Title bar of the chat screen: the sidebar toggle, "chat · project", the run controls and the

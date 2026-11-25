@@ -1,5 +1,5 @@
+import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;
 import 'package:drift/native.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/agent_hub.dart';
 import 'package:flutter_code_agent/_core/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/_core/app_mcp/app_mcp_tokens.dart';
@@ -39,8 +39,9 @@ import 'package:flutter_code_agent/project_trust/data/project_trust_repository.d
 import 'package:flutter_code_agent/prompt_sending/data/prompt_sending_repository.dart';
 import 'package:flutter_code_agent/skills/data/chat_skills_repository.dart';
 import 'package:flutter_code_agent/skills/data/skills_repository.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart' show GlobalWidgetsLocalizations;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'fake_project_rules.dart';
 import 'flutter_version_runner.dart';

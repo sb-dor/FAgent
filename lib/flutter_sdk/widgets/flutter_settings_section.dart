@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -13,6 +12,7 @@ import 'package:flutter_code_agent/app_settings/widgets/settings_row.dart';
 import 'package:flutter_code_agent/flutter_sdk/controller/flutter_sdk_controller.dart';
 import 'package:flutter_code_agent/flutter_sdk/models/flutter_sdk.dart';
 import 'package:flutter_code_agent/flutter_sdk/widgets/flutter_sdk_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template flutter_settings_section}
 /// The "Flutter" section of Settings: the SDK and the version the project pins with fvm, the

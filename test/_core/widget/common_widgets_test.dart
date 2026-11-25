@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
@@ -11,6 +10,7 @@ import 'package:flutter_code_agent/_core/widget/preview_badge.dart';
 import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
 import 'package:flutter_code_agent/_core/widget/status.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../support/test_app.dart';
 

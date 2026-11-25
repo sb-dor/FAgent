@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_code_agent/skills/models/knowledge_exceptions.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/skills/widgets/skill_error_message.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template skill_editor}
 /// The text of the `SKILL.md` (or the rule file) of [item] in a monospace field, with a Save button.

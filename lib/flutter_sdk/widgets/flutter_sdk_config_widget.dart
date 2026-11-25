@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/flutter_sdk/controller/flutter_sdk_controller.dart';
 import 'package:flutter_code_agent/flutter_sdk/models/flutter_sdk.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Gives the widgets of the Flutter section access to [FlutterSdkConfigWidgetState].
 class FlutterSdkConfigInhWidget extends InheritedWidget {

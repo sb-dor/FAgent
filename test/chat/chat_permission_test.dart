@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/acp/permission_broker.dart';
 import 'package:flutter_code_agent/_core/acp/session_event.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_code_agent/permission_request/controller/permission_answer_controller.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

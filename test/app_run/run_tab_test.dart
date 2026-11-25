@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/flutter_daemon/flutter_exceptions.dart';
@@ -26,6 +25,7 @@ import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dar
 import 'package:flutter_code_agent/workspace/widgets/workspace_right_pane.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_devices_repository.dart';
 import '../support/memory_run_config_repository.dart';

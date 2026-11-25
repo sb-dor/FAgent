@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/code_view/models/dart_analysis_status.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template code_analysis_footer}
 /// Under a Dart file: «Analyzing…» while the analysis starts or works, a line with **Restart**

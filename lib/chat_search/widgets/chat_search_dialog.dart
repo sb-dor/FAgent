@@ -1,5 +1,4 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/chat_search/controller/chat_search_controller
 import 'package:flutter_code_agent/chat_search/data/chat_search_repository.dart';
 import 'package:flutter_code_agent/chat_search/models/chat_search_result.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Asks which chat to open. Resolves to the chosen chat, or `null` when the dialog was dismissed.
 Future<ChatSearchResult?> showChatSearch(BuildContext context) =>

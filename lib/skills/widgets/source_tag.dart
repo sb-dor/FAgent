@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template source_tag}
 /// A small pill that says where a skill or rule comes from: built-in, mine or project.

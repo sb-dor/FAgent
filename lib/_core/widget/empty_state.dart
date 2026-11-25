@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template empty_state}
 /// A centered placeholder: [icon], [title], an optional [message], an action button and a [badge].

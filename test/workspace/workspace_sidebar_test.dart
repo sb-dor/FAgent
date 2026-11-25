@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
@@ -14,6 +13,7 @@ import 'package:flutter_code_agent/workspace/widgets/workspace_chat_tile.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_agents_repository.dart';
 import '../support/test_app.dart';

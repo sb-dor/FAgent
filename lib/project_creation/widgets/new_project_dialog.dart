@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/project_creation/widgets/creation_dialog.dart';
 import 'package:flutter_code_agent/project_creation/widgets/new_project_form.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template new_project_dialog}
 /// The New project wizard: a [CreationDialog] that asks for the project ([NewProjectForm]) and,

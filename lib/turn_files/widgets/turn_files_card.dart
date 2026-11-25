@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/turn_files/models/file_change_kind.dart';
 import 'package:flutter_code_agent/turn_files/widgets/file_change_label.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template turn_files_card}
 /// Files the turn changed (from `git status` before and after it), collapsed

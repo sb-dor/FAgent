@@ -1,11 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/skills/widgets/skill_list_tile.dart';
 import 'package:flutter_code_agent/skills/widgets/skill_scope.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 const KnowledgeItem _agents = KnowledgeItem(
   id: agentsRuleId,

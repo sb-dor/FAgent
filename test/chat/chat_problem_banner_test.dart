@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/live_session.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
 import 'package:flutter_code_agent/agents/models/agent_info.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/chat/models/chat_view.dart';
 import 'package:flutter_code_agent/chat/widgets/chat_problem_banner.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_agents_repository.dart';
 import '../support/test_app.dart';

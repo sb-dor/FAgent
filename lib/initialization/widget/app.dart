@@ -1,5 +1,5 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
+import 'package:cupertino_ui/cupertino_ui.dart' show GlobalCupertinoLocalizations;
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/app_close/widgets/app_close_guard.dart';
@@ -8,7 +8,8 @@ import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widg
 import 'package:flutter_code_agent/crash_reports/widgets/crash_reports_config_widget.dart';
 import 'package:flutter_code_agent/hub_notices/widgets/hub_notices_listener.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart' show GlobalWidgetsLocalizations;
+import 'package:material_ui/material_ui.dart';
 
 /// {@template app}
 /// App widgets.

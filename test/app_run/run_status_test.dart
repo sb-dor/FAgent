@@ -1,16 +1,18 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
-import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/app_run/models/run_state.dart';
 import 'package:flutter_code_agent/app_run/widgets/run_status.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// [child] with the app's theme and strings; [RunStatus] needs nothing else.
 Widget _app(Widget child, {Locale locale = const Locale('en')}) => MaterialApp(
   theme: AppTheme.light(),
   locale: locale,
-  localizationsDelegates: GeneratedLocalization.localizationsDelegates,
+  localizationsDelegates: const <LocalizationsDelegate<Object?>>[
+    ...GlobalMaterialLocalizations.delegates,
+    Localization.delegate,
+  ],
   supportedLocales: Localization.supportedLocales,
   home: Scaffold(body: child),
 );

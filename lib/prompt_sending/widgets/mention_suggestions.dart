@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/preview_badge.dart';
 import 'package:flutter_code_agent/file_mention/models/file_mention.dart';
 import 'package:flutter_code_agent/prompt_sending/models/run_mentions.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 /// What a row of the `@` menu stands for.

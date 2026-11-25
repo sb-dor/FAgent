@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/acp/live_session.dart';
@@ -21,6 +20,7 @@ import 'package:flutter_code_agent/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_code_agent/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/memory_agents_repository.dart';

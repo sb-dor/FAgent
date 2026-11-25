@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_code_agent/_core/widget/preview_badge.dart';
 import 'package:flutter_code_agent/app_settings/widgets/settings_row.dart';
 import 'package:flutter_code_agent/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_code_agent/mcp_servers/widgets/mcp_servers_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template mcp_server_row}
 /// One MCP server in the section: where it stands (a dot), its name, what it runs or where it

@@ -1,9 +1,9 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/app_mcp/app_mcp_server.dart';
 import 'package:flutter_code_agent/hub_notices/widgets/hub_notices_listener.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

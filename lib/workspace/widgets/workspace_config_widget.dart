@@ -1,7 +1,6 @@
 import 'dart:io' as io;
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/constant/window_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
@@ -53,6 +52,7 @@ import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_run_link.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 /// Gives the workspace widgets access to [WorkspaceConfigWidgetState].

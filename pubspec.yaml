@@ -38,6 +38,7 @@ dependencies:
       url: https://github.com/PlugFox/control.git
       ref: 685a9bc6ef60c987b99b5526e125813adba54e2a
   crypto: ^3.0.8
+  cupertino_ui: ^1.1.7
   dart_acp_sdk: 0.1.1
   drift: ^2.35.3
   drift_flutter: ^0.3.1
@@ -50,6 +51,7 @@ dependencies:
   freezed_annotation: ^3.1.0
   intl: any
   l: ^5.0.1
+  material_ui: ^1.11.1
   mcp_dart: ^2.4.3
   meta: ^1.19.0
   pasteboard: ^0.6.0

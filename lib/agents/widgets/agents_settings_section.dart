@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/compact_button.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/agents/controller/agents_controller.dart';
 import 'package:flutter_code_agent/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/agents/widgets/agent_card.dart';
 import 'package:flutter_code_agent/agents/widgets/agents_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template agents_settings_section}
 /// The "Agents" section of Settings: one [AgentCard] per agent and the button that adds a custom

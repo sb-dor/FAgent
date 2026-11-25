@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/_core/widget/secret_lines_field.dart';
 import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/agents/models/custom_agent_draft.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template custom_agent_dialog}
 /// Asks for a custom ACP agent: its name, the command and its arguments (one per line, no shell),

@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/project_creation/widgets/new_project_header.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// How many of the last output lines of a step are shown.
 const int kCreationOutputLines = 6;

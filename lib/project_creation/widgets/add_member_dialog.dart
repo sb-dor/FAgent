@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/project_creation/widgets/add_member_form.dart';
 import 'package:flutter_code_agent/project_creation/widgets/creation_dialog.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template add_member_dialog}
 /// The Add to project dialog: a [CreationDialog] that asks for the new member of a monorepo

@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/workspace/widgets/workspace_right_pane.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

@@ -1,5 +1,4 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
@@ -14,6 +13,7 @@ import 'package:flutter_code_agent/permission_request/widgets/permission_card.da
 import 'package:flutter_code_agent/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_code_agent/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

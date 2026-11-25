@@ -1,10 +1,10 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/dart_analysis/models/lsp_range.dart';
 import 'package:flutter_code_agent/code_view/controller/code_workspace.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_view.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:re_editor/re_editor.dart';
 
 import '../support/memory_code_files_repository.dart';

@@ -1,6 +1,5 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -16,6 +15,7 @@ import 'package:flutter_code_agent/skills/widgets/controllers/skills_view_contro
 import 'package:flutter_code_agent/skills/widgets/skill_error_message.dart';
 import 'package:flutter_code_agent/skills/widgets/skill_name_dialog.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Gives the widgets of the Skills screen access to [SkillsConfigWidgetState].
 class SkillsConfigInhWidget extends InheritedWidget {

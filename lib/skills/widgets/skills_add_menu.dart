@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/_core/widget/preview_badge.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 enum _AddAction { create, folder, git, generate }
 

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
 import 'package:flutter_code_agent/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/chat/models/feed_grouping.dart';
 import 'package:flutter_code_agent/chat/widgets/chat_item_view.dart';
 import 'package:flutter_code_agent/chat/widgets/read_group_row.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_feed}
 /// The feed, newest at the bottom; it sticks to the bottom while new items

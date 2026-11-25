@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/utils/line_diff.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/changes_pane/widgets/changes_file_list.dart';
 import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/chat/models/diff_lines_cache.dart';
 import 'package:flutter_code_agent/turn_files/models/file_change_kind.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 /// {@template changes_view}

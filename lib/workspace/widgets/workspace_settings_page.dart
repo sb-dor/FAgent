@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/agents/widgets/agents_config_widget.dart';
 import 'package:flutter_code_agent/agents/widgets/agents_settings_section.dart';
@@ -15,6 +14,7 @@ import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_
 import 'package:flutter_code_agent/workspace/widgets/shortcuts_settings_section.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_page_scaffold.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_settings_page}
 /// The Settings screen: a rail or list of sections and the one that is open.

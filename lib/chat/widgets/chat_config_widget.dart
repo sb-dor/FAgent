@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/localization/error_text.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
@@ -48,6 +47,7 @@ import 'package:flutter_code_agent/skills/controller/chat_skills_controller.dart
 import 'package:flutter_code_agent/skills/controller/skill_text_controller.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as p;
 

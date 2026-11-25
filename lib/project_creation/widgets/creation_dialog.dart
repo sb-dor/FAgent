@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/project_creation/controller/project_creation_controller.dart';
 import 'package:flutter_code_agent/project_creation/widgets/creation_progress.dart';
 import 'package:flutter_code_agent/project_creation/widgets/new_project_header.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template creation_dialog}
 /// The shell of the New project and Add to project dialogs: a 560 px dialog that shows [title] and

@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_shortcuts}
 /// Window shortcuts: ⌘N starts a chat, ⌘K searches the chats, ⌘\ toggles the sidebar, ⌘J the right pane, ⌘, opens

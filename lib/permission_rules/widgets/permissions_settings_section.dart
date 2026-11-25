@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/app_settings/widgets/settings_row.dart';
 import 'package:flutter_code_agent/permission_rules/controller/permission_rules_controller.dart';
 import 'package:flutter_code_agent/permission_rules/widgets/permission_rules_config_widget.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template permissions_settings_section}
 /// The "Permissions" section of Settings: for every project, a card with the rules "Always allow

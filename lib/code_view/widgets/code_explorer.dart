@@ -1,11 +1,11 @@
 import 'package:control/control.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/code_view/controller/file_tree_controller.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template code_explorer}
 /// The project's folders and files: one flat list of the visible rows, so a folder with thousands

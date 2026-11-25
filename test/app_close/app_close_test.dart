@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/app_close/data/app_close_repository.dart';
 import 'package:flutter_code_agent/app_close/widgets/app_close_guard.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

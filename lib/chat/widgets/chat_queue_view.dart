@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/chat/models/queued_prompt.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_queue_view}
 /// The chat's queued messages above the composer, in the order they go: the first line of each

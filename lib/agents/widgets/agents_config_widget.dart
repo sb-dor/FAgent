@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_code_agent/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/agents/models/agents_exceptions.dart';
 import 'package:flutter_code_agent/agents/widgets/custom_agent_dialog.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Gives the widgets of the agent settings access to [AgentsConfigWidgetState].
 class AgentsConfigInhWidget extends InheritedWidget {

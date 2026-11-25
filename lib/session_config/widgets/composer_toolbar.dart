@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_code_agent/session_config/widgets/bypass_confirm_dialog.
 import 'package:flutter_code_agent/session_config/widgets/model_menu_footer.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/skills/widgets/chat_skills_chip.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template composer_toolbar}
 /// The chips under the prompt: attach, agent, model (with effort in its menu), permission

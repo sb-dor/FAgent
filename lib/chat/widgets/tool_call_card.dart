@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_code_agent/chat/models/tool_row_label.dart';
 import 'package:flutter_code_agent/chat/widgets/expandable_row.dart';
 import 'package:flutter_code_agent/chat/widgets/tool_path_text.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 /// {@template tool_call_card}

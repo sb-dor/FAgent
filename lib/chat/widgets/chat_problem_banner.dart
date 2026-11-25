@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/session_problem.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/chat/models/chat_view.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_problem_banner}
 /// Why the chat cannot continue and what can be done about it: retry, a new

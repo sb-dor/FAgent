@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
@@ -16,6 +15,7 @@ import 'package:flutter_code_agent/agents/models/agent_info.dart';
 import 'package:flutter_code_agent/agents/widgets/agent_defaults.dart';
 import 'package:flutter_code_agent/agents/widgets/agents_config_widget.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template agent_card}
 /// One agent on the Settings screen: its name, version and runtime, where it stands (checking,

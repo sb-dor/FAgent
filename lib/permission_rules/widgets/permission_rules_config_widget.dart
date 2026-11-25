@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/error_text.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/permission_rules/controller/permission_rules_
 import 'package:flutter_code_agent/projects/controller/projects_controller.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Gives the widgets of the Permissions section access to [PermissionRulesConfigWidgetState].
 class PermissionRulesConfigInhWidget extends InheritedWidget {

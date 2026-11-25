@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_code_agent/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_code_agent/project_creation/widgets/add_member_dialog.da
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_run_config_repository.dart';
 import '../support/test_app.dart';

@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/status.dart';
 import 'package:flutter_code_agent/sessions/models/chat_session.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Tone of the status dot of a chat in [status].
 AppStatusTone statusTone(SessionStatus status) => switch (status) {

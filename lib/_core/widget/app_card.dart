@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template app_card}
 /// A bordered card (radius `AppRadius.medium`, padding 14/16) with a header and an optional [body].

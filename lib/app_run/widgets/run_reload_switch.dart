@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template run_reload_switch}
 /// The switch that makes the app hot reload after every agent turn; it is stored in the settings.

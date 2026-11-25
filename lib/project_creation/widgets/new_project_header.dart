@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template new_project_header}
 /// The title row of the New project dialog: [title] and a ✕ that closes the dialog.

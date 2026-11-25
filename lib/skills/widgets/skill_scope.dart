@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/projects/models/project.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template skill_scope}
 /// Where [item] is on: a switch for all projects, a chip for every project that differs from it

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_code_agent/skills/widgets/skill_list_tile.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_add_menu.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
 import 'package:l/l.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template skills_list}
 /// The middle column of the Skills screen: a search field over the items of the open section that

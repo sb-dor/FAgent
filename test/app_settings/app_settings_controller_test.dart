@@ -1,11 +1,11 @@
 import 'dart:async';
 
 import 'package:drift/drift.dart' hide isNull;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/app_settings/controller/app_settings_controller.dart';
 import 'package:flutter_code_agent/app_settings/data/app_settings_repository.dart';
 import 'package:flutter_code_agent/app_settings/models/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

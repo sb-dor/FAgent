@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/changes_pane/models/changed_file.dart';
 import 'package:flutter_code_agent/changes_pane/widgets/changes_view.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template changes_tab}
 /// The Changes tab of the right pane for the open chat: its [files], the file chosen in the

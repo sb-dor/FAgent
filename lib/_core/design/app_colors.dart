@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template app_colors}
 /// Color tokens of the app. Two palettes: [light] and [dark].

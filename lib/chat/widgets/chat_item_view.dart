@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:flutter_code_agent/_core/design/markdown_style.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/chat/models/mention_spans.dart';
@@ -15,6 +15,7 @@ import 'package:flutter_code_agent/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/turn_files/widgets/turn_files_card.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_item_view}
 /// Renders one feed item.
@@ -111,7 +112,11 @@ class ChatItemView extends StatelessWidget {
           ),
         ),
       ),
-      AgentMessageItem(:final text) => MarkdownBody(data: text, selectable: true),
+      AgentMessageItem(:final text) => MarkdownBody(
+        data: text,
+        selectable: true,
+        styleSheet: appMarkdownStyle(context),
+      ),
       AgentThoughtItem(:final text, :final duration) => ExpandableRow(
         bordered: false,
         header: Row(

@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/widget/diff_view.dart';
 import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/permission_request/widgets/permission_card.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

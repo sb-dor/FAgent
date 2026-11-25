@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/secret_lines_field.dart';
 import 'package:flutter_code_agent/app_run/controller/run_config_controller.dart';
 import 'package:flutter_code_agent/app_run/models/run_arguments.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template run_arguments_dialog}
 /// Edits what a project adds to every `flutter run`: the flavor, the `--dart-define`s (one per

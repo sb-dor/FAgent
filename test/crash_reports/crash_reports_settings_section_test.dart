@@ -1,13 +1,13 @@
 import 'dart:io';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/telemetry/telemetry.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/crash_reports/widgets/crash_reports_config_widget.dart';
 import 'package:flutter_code_agent/crash_reports/widgets/crash_reports_settings_section.dart';
 import 'package:flutter_code_agent/initialization/models/dependencies.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/fake_crash_reports_repository.dart';
 import '../support/test_app.dart';

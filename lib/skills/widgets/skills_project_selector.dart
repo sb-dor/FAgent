@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template skills_project_selector}
 /// `Project: <name> ▾` in the title bar of the Skills screen: the project whose switches the

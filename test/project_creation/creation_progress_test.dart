@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io' as io;
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/database/database.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/project_creation/widgets/creation_progress.da
 import 'package:flutter_code_agent/project_creation/widgets/new_project_dialog.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/memory_project_creation_repository.dart';
 import '../support/test_app.dart';

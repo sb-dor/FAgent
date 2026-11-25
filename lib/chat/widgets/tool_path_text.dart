@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/chat/models/tool_row_label.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template tool_path_text}
 /// The text of a tool row on one line: the agent's wording, the file name (mono, prominent) and

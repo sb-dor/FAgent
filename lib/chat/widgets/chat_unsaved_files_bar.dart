@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_unsaved_files_bar}
 /// Above the composer while a message waits because the project has unsaved files: save them

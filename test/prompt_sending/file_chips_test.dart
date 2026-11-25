@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/live_session.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
 import 'package:flutter_code_agent/_core/database/database.dart';
@@ -16,6 +15,7 @@ import 'package:flutter_code_agent/prompt_sending/models/composer_file.dart';
 import 'package:flutter_code_agent/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_code_agent/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import '../support/test_app.dart';

@@ -2,7 +2,6 @@ import 'dart:io' as io;
 import 'dart:ui' as ui;
 
 import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/acp/agent_definition.dart';
@@ -33,6 +32,7 @@ import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dar
 import 'package:flutter_code_agent/workspace/widgets/workspace_right_pane.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_widget.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:re_editor/re_editor.dart';
 
 import '../support/memory_agents_repository.dart';
@@ -840,7 +840,7 @@ void main() {
 ''';
 
 const String _screenSource = '''
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:shop_app/src/common/localization/localization.dart';
 import 'package:shop_app/src/feature/orders/controller/orders_controller.dart';
 import 'package:shop_app/src/feature/orders/controller/orders_state.dart';

@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template bypass_gate_banner}
 /// The chat's mode is `bypassPermissions` (from the user's Claude settings):

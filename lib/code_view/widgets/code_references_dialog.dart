@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/code_view/controller/code_navigation_controller.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The [references] whose label or code contains [query], case-insensitively.
 List<CodeReference> codeReferenceMatches(List<CodeReference> references, String query) {

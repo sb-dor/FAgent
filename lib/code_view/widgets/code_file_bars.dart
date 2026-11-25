@@ -1,10 +1,10 @@
 import 'dart:io' as io;
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/code_view/controller/code_document.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template code_conflict_bar}
 /// Over a file with unsaved edits that changed on disk: take the file from disk or keep the edits.

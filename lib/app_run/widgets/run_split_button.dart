@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/app_run/models/launch_config.dart';
 import 'package:flutter_code_agent/app_run/widgets/launch_config_texts.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template run_split_button}
 /// The Run button of the Run tab, split in two: the main part starts the app with the selected run

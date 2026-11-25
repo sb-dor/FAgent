@@ -1,9 +1,9 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/drop_zone/drop_zone_event.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/drop_zone_overlay.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_drop_target}
 /// Takes files dragged onto the whole chat: while they hover the chat shows a [DropZoneOverlay],

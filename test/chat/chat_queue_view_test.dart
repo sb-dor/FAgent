@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/chat/models/queued_prompt.dart';
 import 'package:flutter_code_agent/chat/widgets/chat_queue_view.dart';
 import 'package:flutter_code_agent/prompt_sending/models/composer_image.dart';
 import 'package:flutter_code_agent/prompt_sending/models/prompt_attachment.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

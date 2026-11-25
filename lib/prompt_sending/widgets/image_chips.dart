@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/prompt_sending/models/composer_image.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template image_chips}
 /// The composer's images as thumbnails, each with ✕ ([onRemove] gets its index) when it can be

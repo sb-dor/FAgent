@@ -1,6 +1,5 @@
 import 'dart:io' as io;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/dart_analysis/models/lsp_range.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/code_view/widgets/code_file_bars.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_quick_open.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_references_dialog.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_tab_bar.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 /// {@template code_view}

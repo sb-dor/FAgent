@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/skills/widgets/skills_list.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_navigation.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_project_selector.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_page_scaffold.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Width of the list of skills and rules.
 const double _kListWidth = 320;

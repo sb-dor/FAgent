@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/agents/models/agent_info.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/sessions/models/chat_session.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_chat_tile.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_footer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

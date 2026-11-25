@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/prompt_sending/models/slash_command.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// The list of commands under a typed `/`, in sections (skills, app, then agent) in the order of
 /// [commands]. [highlighted] is the row Enter would insert; commands that are not enabled are

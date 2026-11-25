@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/compact_button.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/mcp_servers/controller/mcp_servers_controller
 import 'package:flutter_code_agent/mcp_servers/models/mcp_server.dart';
 import 'package:flutter_code_agent/mcp_servers/widgets/mcp_server_row.dart';
 import 'package:flutter_code_agent/mcp_servers/widgets/mcp_servers_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template mcp_settings_section}
 /// The "MCP servers" section of Settings: a card with a [McpServerRow] per server (the built-in

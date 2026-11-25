@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/constant/window_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -6,6 +5,7 @@ import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/preview_badge.dart';
 import 'package:flutter_code_agent/skills/models/knowledge_item.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template skills_navigation}
 /// The "Sources" part of the Skills screen's navigation, under the Skills and Rules sections: one

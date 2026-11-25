@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
 import 'package:flutter_code_agent/app_settings/models/app_settings.dart';
 import 'package:flutter_code_agent/app_settings/widgets/app_settings_config_widget.dart';
 import 'package:flutter_code_agent/app_settings/widgets/settings_row.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template appearance_settings_section}
 /// The "Appearance" section of Settings: the theme and the density of the chat feed.

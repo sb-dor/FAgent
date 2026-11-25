@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_code_agent/skills/widgets/skill_error_message.dart';
 import 'package:flutter_code_agent/skills/widgets/skill_scope.dart';
 import 'package:flutter_code_agent/skills/widgets/skills_config_widget.dart';
 import 'package:flutter_code_agent/skills/widgets/source_tag.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Width of the labels of the fields.
 const double _kLabelWidth = 120;

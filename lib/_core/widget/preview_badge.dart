@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template preview_badge}
 /// A small "Preview" pill that marks a screen or feature as not final.

@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
@@ -8,6 +7,7 @@ import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
 import 'package:flutter_code_agent/app_run/models/log_entry.dart';
 import 'package:flutter_code_agent/app_run/models/run_error.dart';
 import 'package:flutter_code_agent/app_run/widgets/run_error_block.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Which lines the logs show.
 enum RunLogFilter {

@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/dart_analysis/models/dart_completion.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template code_completion_list}
 /// The completion list at the caret: a kind icon, the label and its type or signature per row,

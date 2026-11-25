@@ -1,5 +1,4 @@
 import 'package:control/control.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/acp/session_problem.dart';
 import 'package:flutter_code_agent/_core/acp/session_status.dart';
 import 'package:flutter_code_agent/_core/localization/error_text.dart';
@@ -29,6 +28,7 @@ import 'package:flutter_code_agent/session_config/widgets/composer_toolbar.dart'
 import 'package:flutter_code_agent/skills/controller/chat_skills_controller.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_footer.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template chat_screen}
 /// Feed, problem banner, status line and composer of one chat.

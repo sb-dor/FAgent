@@ -1,5 +1,4 @@
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
 import 'package:flutter_code_agent/_core/widget/preview_badge.dart';
@@ -9,6 +8,7 @@ import 'package:flutter_code_agent/prompt_sending/widgets/command_suggestions.da
 import 'package:flutter_code_agent/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/prompt_sending/widgets/prompt_composer.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../support/test_app.dart';
 

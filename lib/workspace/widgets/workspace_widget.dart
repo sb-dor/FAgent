@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/constant/window_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
@@ -10,6 +9,7 @@ import 'package:flutter_code_agent/workspace/widgets/workspace_shortcuts.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_skills_page.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_title_bar.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_widget}
 /// Main window layout: the title bar over [sidebar | chat | right pane], or over the Skills or

@@ -1,10 +1,10 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/generated/generated_localization.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/app_run/models/device.dart';
 import 'package:flutter_code_agent/app_run/models/run_arguments.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template run_device_chip}
 /// The chip of the device the app runs on, with the menu of the devices (running ones first, then

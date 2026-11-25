@@ -1,6 +1,6 @@
 import 'package:collection/collection.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// How tightly the chat feed packs its rows.
 enum FeedDensity {

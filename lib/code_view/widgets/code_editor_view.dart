@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/code_view/widgets/code_find_panel.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_highlight.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_hover_card.dart';
 import 'package:flutter_code_agent/code_view/widgets/code_pointer_position.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:re_editor/re_editor.dart';
 
 /// {@template code_editor_view}

@@ -163,7 +163,7 @@ void main() {
 
 /// An app with one widget of its own, `Greeting`, inside a `Scaffold` in a `MaterialApp`.
 const String _app = '''
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() => runApp(
   const MaterialApp(

@@ -23,8 +23,7 @@ import 'package:flutter_code_agent/session_config/models/config_option.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 
-export 'package:flutter_code_agent/_core/process/run_process.dart'
-    show runProcessKillingOnTimeout;
+export 'package:flutter_code_agent/_core/process/run_process.dart' show runProcessKillingOnTimeout;
 
 /// Runs [executable] and returns its result. With a [timeout] the process is killed when it runs
 /// longer and a [TimeoutException] is thrown.

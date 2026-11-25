@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_code_agent/_core/constant/chat_constants.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/prompt_sending/widgets/file_chips.dart';
 import 'package:flutter_code_agent/prompt_sending/widgets/image_chips.dart';
 import 'package:flutter_code_agent/prompt_sending/widgets/mention_suggestions.dart';
 import 'package:flutter_code_agent/skills/models/chat_skills.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template prompt_composer}
 /// The prompt field: Enter sends, Shift+Enter adds a line. While a turn runs

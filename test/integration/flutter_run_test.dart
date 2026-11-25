@@ -157,7 +157,7 @@ void main() {
 
 /// An app whose only screen overflows: a `Row` (line 14) 100 px wide with a 142 px child.
 const String _overflowingApp = '''
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 void main() => runApp(const MyApp());
 

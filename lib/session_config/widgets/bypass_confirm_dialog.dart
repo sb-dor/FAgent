@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Asks whether the agent may act without asking in this chat; `true` when the user agrees.
 Future<bool> confirmBypass(BuildContext context) async {

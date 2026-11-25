@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
@@ -20,6 +19,7 @@ import 'package:flutter_code_agent/project_creation/widgets/platform_chips.dart'
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
 import 'package:l/l.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template new_project_form}
 /// What the New project dialog asks: the project type, the package name, the application ID (the

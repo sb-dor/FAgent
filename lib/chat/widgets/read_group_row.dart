@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_text.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
@@ -7,6 +6,7 @@ import 'package:flutter_code_agent/chat/models/tool_row_label.dart';
 import 'package:flutter_code_agent/chat/widgets/expandable_row.dart';
 import 'package:flutter_code_agent/chat/widgets/tool_call_card.dart';
 import 'package:flutter_code_agent/chat/widgets/tool_path_text.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template read_group_row}
 /// Consecutive file reads as one row: "Read N files" and the first file (name and folder, relative

@@ -1,6 +1,6 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/design/app_theme.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_sidebar_row}
 /// A 28 px action row of the sidebar: [icon], [label], and a [shortcut] hint or a [trailing]

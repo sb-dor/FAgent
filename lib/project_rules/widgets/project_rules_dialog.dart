@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/project_rules/models/project_rule.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template project_rules_dialog}
 /// Offers the app's built-in [rules] to a project: one checkbox per rule, its name and description,

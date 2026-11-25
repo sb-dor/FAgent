@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/segmented_control.dart';
 import 'package:flutter_code_agent/session_config/models/config_option.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template model_menu_footer}
 /// The bottom of the model menu: the effort as segments (when the agent has one) and

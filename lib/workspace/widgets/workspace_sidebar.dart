@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
@@ -15,6 +14,7 @@ import 'package:flutter_code_agent/workspace/widgets/workspace_project_group.dar
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_footer.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_order.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_sidebar_row.dart';
+import 'package:material_ui/material_ui.dart';
 
 enum _ProjectAction { reveal, settings, addToProject, remove }
 

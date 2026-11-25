@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/empty_state.dart';
 import 'package:flutter_code_agent/app_run/controller/devices_controller.dart';
@@ -17,6 +16,7 @@ import 'package:flutter_code_agent/app_run/widgets/run_arguments_dialog.dart';
 import 'package:flutter_code_agent/app_run/widgets/run_header.dart';
 import 'package:flutter_code_agent/app_run/widgets/run_logs.dart';
 import 'package:l/l.dart' show l;
+import 'package:material_ui/material_ui.dart';
 
 /// {@template run_tab}
 /// The Run tab of the right pane for [projectId]: device, mode and buttons on top, the widget

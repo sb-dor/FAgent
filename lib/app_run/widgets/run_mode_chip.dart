@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/widget/app_menu.dart';
 import 'package:flutter_code_agent/_core/widget/selector_chip.dart';
 import 'package:flutter_code_agent/app_run/models/build_mode.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template run_mode_chip}
 /// The build mode chip (debug, profile, release) of the next start, in the title bar and the Run

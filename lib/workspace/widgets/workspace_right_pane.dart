@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_code_agent/_core/design/app_colors.dart';
 import 'package:flutter_code_agent/_core/localization/localization.dart';
 import 'package:flutter_code_agent/_core/widget/pane_tabs.dart';
@@ -12,6 +11,7 @@ import 'package:flutter_code_agent/chat/models/chat_item.dart';
 import 'package:flutter_code_agent/plan_pane/widgets/plan_tab.dart';
 import 'package:flutter_code_agent/workspace/widgets/controllers/workspace_data_controller.dart';
 import 'package:flutter_code_agent/workspace/widgets/workspace_config_widget.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// {@template workspace_right_pane}
 /// The right pane: Changes, Run and Plan tabs. Its left edge is a handle that resizes the pane.
