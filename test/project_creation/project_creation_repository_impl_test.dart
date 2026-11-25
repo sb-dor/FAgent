@@ -979,6 +979,38 @@ void main() {
       ]);
     });
 
+    for (final type in <FlutterProjectType>[
+      FlutterProjectType.package,
+      FlutterProjectType.plugin,
+      FlutterProjectType.packageFfi,
+    ]) {
+      test('a ${type.template} leaves out both state management rules', () async {
+        await build()
+            .create(request(type: type, gitInit: false, stateManagement: StateManagement.bloc))
+            .toList();
+
+        expect(rulesLeftOut, <Set<String>>[
+          <String>{'controllers', 'bloc'},
+        ]);
+      });
+    }
+
+    test('a module gets the rule of its state management', () async {
+      await build()
+          .create(
+            request(
+              type: FlutterProjectType.module,
+              gitInit: false,
+              stateManagement: StateManagement.bloc,
+            ),
+          )
+          .toList();
+
+      expect(rulesLeftOut, <Set<String>>[
+        <String>{'controllers'},
+      ]);
+    });
+
     test('no rule written lists nothing', () async {
       ruleNames = const <String>[];
 

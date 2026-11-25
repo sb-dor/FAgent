@@ -695,10 +695,27 @@ void main() {
     await disposeTestApp(tester, dependencies);
   });
 
-  testWidgets('state management: control by default, also for a package', (tester) async {
+  for (final type in <FlutterProjectType>[
+    FlutterProjectType.package,
+    FlutterProjectType.plugin,
+    FlutterProjectType.packageFfi,
+  ]) {
+    testWidgets('state management: a ${type.template} is not asked for one', (tester) async {
+      await openDialog(tester);
+      await typeName(tester, 'avera_booking');
+      await tester.tap(find.byKey(ValueKey<String>('type-${type.name}')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('State management'), findsNothing);
+      expect(find.byKey(const ValueKey<String>('new-project-state-management')), findsNothing);
+      await disposeTestApp(tester, dependencies);
+    });
+  }
+
+  testWidgets('state management: a module is asked for one, control by default', (tester) async {
     await openDialog(tester);
     await typeName(tester, 'avera_booking');
-    await tester.tap(find.byKey(const ValueKey<String>('type-package')));
+    await tester.tap(find.byKey(const ValueKey<String>('type-module')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey<String>('state-management-control')), findsOneWidget);

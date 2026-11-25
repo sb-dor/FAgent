@@ -49,6 +49,10 @@ enum FlutterProjectType {
 
   /// Whether `flutter create --platforms` applies: only to an app and a plugin.
   bool get hasPlatforms => this == app || this == plugin;
+
+  /// Whether the project picks a [StateManagement]: an app and a module have screens and business
+  /// logic. A package, a plugin and an FFI package leave that to the apps that use them.
+  bool get hasStateManagement => this == app || this == module;
 }
 
 /// How an app project is laid out.
@@ -94,6 +98,11 @@ enum StateManagement {
   Set<String> get otherRuleNames => <String>{
     for (final other in StateManagement.values)
       if (other != this) other.ruleName,
+  };
+
+  /// The rules of every state management package.
+  static Set<String> get ruleNames => <String>{
+    for (final value in StateManagement.values) value.ruleName,
   };
 }
 
@@ -145,7 +154,7 @@ abstract class NewProjectRequest with _$NewProjectRequest {
     @Default(CrashReporter.sentry) CrashReporter crashReporter,
 
     /// The state management package: decides the rule the project gets and, with the skeleton,
-    /// its observer and packages.
+    /// its observer and packages. Only a [type] that [FlutterProjectType.hasStateManagement] uses it.
     @Default(StateManagement.control) StateManagement stateManagement,
   }) = _NewProjectRequest;
 
@@ -162,6 +171,11 @@ abstract class NewProjectRequest with _$NewProjectRequest {
 
   /// Where the app is: the project folder, or `apps/<appFolder>` in a monorepo.
   String get appPath => monorepo ? p.join(path, 'apps', appFolder) : path;
+
+  /// The built-in rules the project leaves out: those of the other state management packages, or
+  /// all of them for a type without one.
+  Set<String> get rulesLeftOut =>
+      type.hasStateManagement ? stateManagement.otherRuleNames : StateManagement.ruleNames;
 
   /// Whether the architecture skeleton is written: only into an app that starts from it.
   bool get skeleton =>

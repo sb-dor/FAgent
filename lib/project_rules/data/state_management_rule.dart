@@ -13,8 +13,10 @@ const Set<String> stateManagementRuleNames = <String>{controlRuleName, blocRuleN
 
 /// The state management rule of the project at [root]: [blocRuleName] when a `pubspec.yaml` of it
 /// (the root or a member in `apps/`) depends on `bloc` or `flutter_bloc` and none depends on
-/// `control`, [controlRuleName] otherwise. A file that cannot be read counts as no dependency.
-String stateManagementRuleOf(String root) {
+/// `control`, [controlRuleName] when one depends on `control` or the project is an app (it has
+/// `lib/main.dart` or `apps/`), and `null` for a package or a plugin on neither: it leaves state
+/// management to the apps that use it. A file that cannot be read counts as no dependency.
+String? stateManagementRuleOf(String root) {
   final pubspecs = <File>[
     File(p.join(root, 'pubspec.yaml')),
     if (Directory(p.join(root, 'apps')).existsSync())
@@ -33,7 +35,11 @@ String stateManagementRuleOf(String root) {
     if (_dependsOn(text, 'control')) return controlRuleName;
     bloc = bloc || _dependsOn(text, 'bloc') || _dependsOn(text, 'flutter_bloc');
   }
-  return bloc ? blocRuleName : controlRuleName;
+  if (bloc) return blocRuleName;
+  final app =
+      File(p.join(root, 'lib', 'main.dart')).existsSync() ||
+      Directory(p.join(root, 'apps')).existsSync();
+  return app ? controlRuleName : null;
 }
 
 /// Whether [pubspec] lists [package] as a dependency: a `  <package>:` key indented under a

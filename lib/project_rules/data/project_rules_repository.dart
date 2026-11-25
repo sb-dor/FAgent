@@ -62,7 +62,8 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
   @override
   Future<List<ProjectRule>> builtinRules({String? projectRoot}) async {
     final library = await _skills.watch().first;
-    final stateManagement = projectRoot == null ? null : stateManagementRuleOf(projectRoot);
+    final project = projectRoot != null;
+    final stateManagement = project ? stateManagementRuleOf(projectRoot) : null;
     return <ProjectRule>[
       for (final rule in library.rules)
         if (rule.source == SkillSource.builtin)
@@ -71,10 +72,11 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
             name: rule.name,
             description: rule.description,
             // The global switch: new projects and the offer have no project exception yet. A
-            // project gets the rule of its own state management package only.
+            // project gets the rule of its own state management package only, a package or a
+            // plugin none of them.
             enabled:
                 rule.enabledGlobally &&
-                (stateManagement == null ||
+                (!project ||
                     !stateManagementRuleNames.contains(rule.name) ||
                     rule.name == stateManagement),
           ),

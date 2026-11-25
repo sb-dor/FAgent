@@ -407,8 +407,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
             _crashReporterField(context),
           ],
         ],
-        gap,
-        _stateManagementField(context),
+        if (_type.hasStateManagement) ...<Widget>[gap, _stateManagementField(context)],
         gap,
         Wrap(
           spacing: 18,

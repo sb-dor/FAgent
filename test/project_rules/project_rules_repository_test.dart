@@ -146,6 +146,39 @@ void main() {
       expect(rules.singleWhere((rule) => rule.name == 'bloc').enabled, isFalse);
       expect(rules.singleWhere((rule) => rule.name == 'controllers').enabled, isTrue);
     });
+
+    test('builtinRules of an app on neither package checks controllers', () async {
+      File(p.join(project.path, 'pubspec.yaml')).writeAsStringSync('name: shop\n');
+      File(p.join(project.path, 'lib', 'main.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('void main() {}\n');
+
+      final rules = await repository.builtinRules(projectRoot: project.path);
+
+      expect(rules.singleWhere((rule) => rule.name == 'bloc').enabled, isFalse);
+      expect(rules.singleWhere((rule) => rule.name == 'controllers').enabled, isTrue);
+    });
+
+    test('builtinRules of a package or plugin checks neither state management rule', () async {
+      File(p.join(project.path, 'pubspec.yaml')).writeAsStringSync(
+        'name: shop_plugin\nflutter:\n  plugin:\n    platforms:\n      ios:\n'
+        '        pluginClass: ShopPlugin\n',
+      );
+      File(p.join(project.path, 'lib', 'shop_plugin.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('class ShopPlugin {}\n');
+      // The example app is not the project.
+      File(p.join(project.path, 'example', 'lib', 'main.dart'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('void main() {}\n');
+
+      final rules = await repository.builtinRules(projectRoot: project.path);
+
+      expect(
+        <String, bool>{for (final rule in rules) rule.name: rule.enabled},
+        <String, bool>{'architecture': true, 'controllers': false, 'bloc': false},
+      );
+    });
   });
 
   test('writeBuiltinRules without an enabled rule writes nothing', () async {

@@ -530,11 +530,9 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           'analyze',
         ], workingDirectory: member?.path ?? root);
       case CreationStepKind.rules:
-        // The project gets the rule of its state management package, not the other one.
-        for (final name in await _writeRules(
-          root,
-          without: run.request.stateManagement.otherRuleNames,
-        )) {
+        // An app gets the rule of its state management package, not the other one; a package
+        // or a plugin gets none.
+        for (final name in await _writeRules(root, without: run.request.rulesLeftOut)) {
           run.addLine(index, '✎ docs/rules/$name.md');
         }
       case CreationStepKind.firstCommit:
@@ -826,10 +824,14 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     run.addLine(index, '✎ $crashReporterConfigPath');
   }
 
-  /// The state management of the project at [root]: that of its `pubspec.yaml` files.
+  /// The state management of the monorepo at [root]: that of its `pubspec.yaml` files, control
+  /// when they have none.
   static StateManagement _stateManagementOf(String root) {
     final rule = stateManagementRuleOf(root);
-    return StateManagement.values.firstWhere((value) => value.ruleName == rule);
+    return StateManagement.values.firstWhere(
+      (value) => value.ruleName == rule,
+      orElse: () => StateManagement.control,
+    );
   }
 
   /// The crash reporter [crashReporterConfigPath] of the monorepo at [root] names. Fails the step
