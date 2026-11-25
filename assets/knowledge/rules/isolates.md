@@ -1,6 +1,6 @@
 ---
 name: isolates
-description: "Isolates: Isolate.run for one CPU-heavy job or native call, splitting work where no isolate is available, a typed worker for a long-lived one, what can be sent, plugins in an isolate, and Android background work and foreground services."
+description: "Isolates: Isolate.run for one CPU-heavy job or native call, a stream of results from one job, splitting work by a time budget where no isolate is available, a typed worker for a long-lived one, what can be sent (errors included), stopping an isolate, plugins in an isolate, and Android background work and foreground services."
 ---
 
 # Isolates
@@ -12,8 +12,17 @@ description: "Isolates: Isolate.run for one CPU-heavy job or native call, splitt
   isolate. The web has no isolates: `compute` runs the function on the main thread there, so a
   long loop yields with `await Future<void>.delayed(Duration.zero)` between chunks. See
   "Choosing".
+- One job that produces many results (files found, images compressed one by one) is a `Stream`
+  from `isolateStream`: values and errors arrive in order, the stream ends when the isolate does,
+  and cancelling it kills the isolate. Not a hand-made `Isolate.spawn` with a "done" string. See
+  "A stream of results".
 - A job takes its data as arguments and captures nothing else. A closure written in an instance
   method captures `this`: copy the fields it needs into local variables first. See "Sending data".
+- An error crosses as it is: send `(error, stackTrace)`, both objects. No text joined with a
+  separator and parsed back. See "Sending data".
+- Code in an isolate stops by returning or with `Isolate.exit`; `Isolate.current.kill()` lets the
+  code after it run on. An app never calls `exit` or kills its root isolate. See "Health and
+  stopping".
 - Statics, top-level variables, `Dependencies`, error handlers and `Controller.observer` exist once
   per isolate. Build what an isolate needs in its entry point from plain data; never send a
   service. See "State is per isolate".
@@ -36,6 +45,14 @@ description: "Isolates: Isolate.run for one CPU-heavy job or native call, splitt
   `Isolate.run` throws the same error (checked: an `ArgumentError` arrives as an `ArgumentError`);
   an uncaught asynchronous error inside it arrives as a `RemoteError`, which carries only the
   error's and the stack's text.
+- **When it pays.** The spawn itself is cheap; the work has to be long enough to show. Measured in
+  an AOT build on an M-series Mac: an empty `Isolate.run` took 0.04 ms, `jsonDecode` took 0.6 ms
+  for 100 KB and 4.9 ms for 1 MB (a frame is 16 ms at 60 Hz, 8 ms at 120 Hz). A phone is slower:
+  measure in profile mode on the slowest target device, and move the work once it costs a visible
+  part of a frame. A size threshold of a few KB moves nothing that mattered.
+- **Many results from one job: `isolateStream(() => findImages(path))`.** The values arrive as a
+  stream while the job runs; the stream ends with the isolate and fails if it dies. See "A stream
+  of results".
 - **`compute(fn, message)`** (`package:flutter/foundation.dart`) is `Isolate.run` with a debug
   label on native platforms. On the web it awaits once and then calls `fn` on the main thread
   (`_isolates_web.dart`), so a long job still freezes the page there: make the job smaller, or
@@ -58,15 +75,20 @@ description: "Isolates: Isolate.run for one CPU-heavy job or native call, splitt
   microtasks, which all run before the next event, so a "lazy" stream over a list lets nothing in
   (checked: a zero-duration timer scheduled before a 200-item loop fired after all 200 items with
   each of these, and after the first 20 with `Future.delayed(Duration.zero)` every 20 items).
-  Frames and input wait the same way, since the engine delivers them as events. One synchronous
-  call (a single `jsonDecode`) cannot be split: only the work after it can.
+  Frames and input wait the same way, since the engine delivers them as events. Yield by time, not
+  by a count of items: a `Stopwatch` measures the chunk, and the loop yields once it has run for
+  the budget, so one slow item cannot stretch a chunk past a frame. Keep the budget under half a
+  frame (4 ms covers 120 Hz). One synchronous call (a single `jsonDecode`) cannot be split: only
+  the work after it can.
 - **No `Isolate.spawnUri` in an app.** It starts a new isolate group from a URI, and in an AOT
   build (every Flutter release build) the URI must point to a precompiled AOT snapshot (checked: a
   `dart compile exe` program failed with "does not contain a valid AOT snapshot" for a `.dart`
   file that the JIT ran). Use `Isolate.run` or `Isolate.spawn`.
 - **No isolate for I/O.** Files, sockets and `http` are already asynchronous: the waiting happens
   outside Dart and does not block the event loop. An isolate helps with the Dart code that runs
-  long after the bytes arrive (decoding the response, not downloading it).
+  long after the bytes arrive (decoding the response, not downloading it). A download inside an
+  isolate copies every byte back to the caller and takes the HTTP client's cancellation and
+  progress out of reach.
 - An isolate is an implementation detail of a repository or data provider, behind its interface:
   its methods already return `Future`s. Tests replace the repository; `Isolate.run` does not run
   on fake time (see `docs/rules/testing.md`).
@@ -84,6 +106,14 @@ description: "Isolates: Isolate.run for one CPU-heavy job or native call, splitt
   `Isolate.run(() => value + 1)` inside a class with a `ReceivePort` field throws `ArgumentError`
   ("object is unsendable"); after `final v = value;` the same call with `v` works. Pass a
   top-level or static function, or copy into locals first.
+- Arguments go in one record or class, typed: `Isolate.spawn(_main, (port, path, token))`, not a
+  `List<dynamic>` read back with `args[1] as String`.
+- **Errors cross as they are.** An exception object and its `StackTrace` can be sent like any
+  other object: `port.send((error, stackTrace))` (checked: a custom exception arrived with its
+  fields, the stack as a `StackTrace`; `Isolate.run` does the same). Send the pair, and add it on
+  the receiving side with `addError(error, stackTrace)` or `completeError`. Only an error that
+  holds something unsendable (a port, a socket) makes `send` throw `ArgumentError`: then send
+  `RemoteError('$error', '$stackTrace')`. No error text joined with a separator and split again.
 - Large binary results: return them from `Isolate.run` (no copy). Bytes going into a worker go in
   a `TransferableTypedData.fromList(...)`: creating it copies the bytes once, sending it takes
   constant time, and the receiver calls `materialize()` once (SDK doc).
@@ -101,6 +131,52 @@ pass dependencies through constructors anyway (see "Pure DI, not a service locat
   arguments (a file path, a config, a token) and give it its own error reporting.
 - Pass data, not services: a repository holds clients, ports and controllers that cannot be sent,
   and a copy of one would not share anything with the original.
+
+## A stream of results
+
+One job, many results, in order, while the user watches them arrive: the files of a folder with
+their thumbnails, the images of a gallery compressed one by one, the lines of a large file parsed.
+`isolate_stream.dart` (in Examples) runs a `Stream` function on a new isolate:
+
+```dart
+Stream<ImageFile> compressedImages(String folder) {
+  final token = RootIsolateToken.instance!; // read here: it is null in any other isolate
+  return isolateStream(() async* {
+    BackgroundIsolateBinaryMessenger.ensureInitialized(token);
+    await for (final file in Directory(folder).list()) {
+      if (isImage(file.path)) yield await compress(file.path);
+    }
+  }, debugName: 'Compress $folder');
+}
+```
+
+A repository returns it as is, and the controller or bloc listens with `await for` or
+`emit.forEach`. What `isolateStream` does that a hand-made `Isolate.spawn` usually misses:
+
+- **The input goes in the spawn argument.** Everything the job needs is known when it starts, so
+  there is no handshake. Sending the isolate's own `SendPort` back (`Completer<SendPort>`) is
+  needed only when the owner keeps sending it requests: that is a worker (see "A worker
+  isolate").
+- **The end is the isolate's exit, not a message.** The job's stream ending (or its error) ends
+  the isolate with `Isolate.exit()`, and its `onExit` message closes the stream. All values sent
+  before it arrive first (checked with 100,000 messages). A "done" string can be sent too early:
+  a recursive helper that sends it at the end of every level ends the stream after the first
+  subfolder.
+- **A dead isolate fails the stream.** `onError` and `onExit` go to the same port, so an uncaught
+  error (a throwing timer) arrives as a `RemoteError` and the stream ends. Without them, an
+  `await for` over the port waits forever and keeps the port, and the isolate holding it, open.
+- **`Isolate.exit()` at the end, not just `return`.** An isolate lives while it has an open port
+  or a pending timer. A job that leaves one behind, or an error object holding a `ReceivePort`,
+  keeps the isolate running and the stream open after the last value (checked: the stream never
+  ended until the entry point called `Isolate.exit()`).
+- **Cancelling kills the isolate.** Cancelling a subscription to a `ReceivePort` only closes the
+  port: the isolate keeps working and its messages go nowhere (checked: after `take(3)`, the
+  isolate still answered a ping). `isolateStream` kills it with `Isolate.immediate` in `onCancel`
+  (checked: without that call, it sent 38 more messages in the time it otherwise sent 10). A
+  screen that closes stops the compression it started.
+- **No backpressure.** Pausing the subscription buffers values on the owner's side; the isolate
+  keeps producing. For a job whose output does not fit in memory, write to a file in the isolate
+  and stream the paths, or use a worker and ask for the next batch.
 
 ## A worker isolate
 
@@ -142,6 +218,17 @@ pass dependencies through constructors anyway (see "Pure DI, not a service locat
   `kill(priority: Isolate.immediate)` ends it at once (checked). Stop in two steps: a stop message
   and a grace period for the isolate to finish what it holds, then `Isolate.immediate`. A request
   still running when the stop message arrives completes normally (checked).
+- **Inside the isolate, `Isolate.current.kill()` is not a `return`.** It too waits for the next
+  event, so the code after it keeps running (checked: four more messages arrived after it). Stop
+  by returning from the entry point with no port left open, or with `Isolate.exit(port, last)`:
+  it sends one last message (handed over without copying) and ends the isolate at once, without
+  running pending `finally` blocks.
+- **Never `exit(0)` and never kill the root isolate in an app.** Both end the whole app, and the
+  user sees a crash. Stop the work, not the program.
+- **`Future.timeout` does not stop the work.** It completes the returned future after the limit;
+  the original keeps running and its result is ignored (`Future.timeout` doc example). To stop a
+  job after a timeout, kill its isolate (`isolateStream` cancels, a worker's `close`), or check a
+  cancellation flag in the loop.
 
 ## Plugins in an isolate
 
@@ -250,7 +337,128 @@ behavior changes, `Service` reference); the native code is Kotlin and not compil
 - Teardown is a reverse-order list where every step is caught, as `Disposer` does (see
   "Releasing resources" in `docs/rules/repositories.md`).
 
+## Mistakes to avoid
+
+- **Listening to a `ReceivePort` twice.** It is a single-subscription stream (checked: the second
+  `listen` throws `StateError`). `asBroadcastStream()` lets two listeners in but drops what
+  arrives before each one listens.
+- **Code after `await for` over a port.** The loop ends only when the port closes; a `return`
+  after it is never reached while the isolate lives. End the loop on the last message, or let
+  `isolateStream` end the stream.
+- **A string message as a signal** (`'kill'`, `'done'`, `'error'`). It can collide with data, it
+  is sent too early from a recursive helper, and it carries no error. Use typed records or
+  classes, and `onExit` for the end.
+- **An error turned into an empty result.** An isolate that catches its error and sends `[]` or
+  `null` hands the caller a "successful" empty answer (a video saved without its sound). Send the
+  error; the caller decides.
+- **An isolate nobody stops.** Setting the field that held the `Isolate` to `null` does not end
+  it, and neither does cancelling the stream over its port. Kill it in the owner's `dispose` or
+  `onCancel`.
+- **An open sink in an isolate.** `File.openWrite()` holds a file handle until `close()`; an
+  isolate that ends without awaiting `close()` loses the buffered bytes (checked: 0 of 1,000
+  bytes reached the file from `Isolate.run`, all 1,000 with `await sink.close()`). Await
+  `close()` before sending the result.
+- **Sending a big result back from `Isolate.spawn`.** `send` copies it (checked: the object that
+  came back was not `identical` to the one sent, and the item the isolate added to its list was
+  missing from the original). Return it with
+  `Isolate.exit(port, result)` or `Isolate.run`, which hand it over, or send a file path.
+
 ## Examples
+
+### `isolate_stream.dart`
+
+Tested: streams 10,000 values in order and ends, a closure over a local works, an error arrives
+as the same object after the values before it and ends the stream, an error holding a port
+arrives as a `RemoteError`, an uncaught error in a timer fails and ends the stream, a job that
+leaves a periodic timer running still ends, cancelling stops the work in the isolate (and the
+test fails when the kill is removed), a pause buffers without losing values.
+
+```dart
+// file: isolate_stream.dart
+import 'dart:async';
+import 'dart:isolate';
+
+/// Runs [job] on a new isolate and streams the values it emits.
+///
+/// The stream ends when [job]'s stream is done, fails with its error (the same object, when it
+/// can be sent), and fails with a [RemoteError] when the isolate dies of an uncaught error.
+/// Cancelling the subscription kills the isolate. Like `Isolate.run`, [job] must capture only
+/// what it needs: a top-level or static function, or a closure over local variables.
+///
+/// The isolate does not wait for the listener: while the subscription is paused, its values are
+/// buffered here.
+Stream<T> isolateStream<T>(Stream<T> Function() job, {String? debugName}) {
+  final controller = StreamController<T>();
+  RawReceivePort? port;
+  Isolate? isolate;
+  var cancelled = false;
+
+  void close() {
+    port?.close(); // an open port keeps this isolate alive
+    port = null;
+  }
+
+  controller
+    ..onListen = () async {
+      final receive = port = RawReceivePort()
+        ..handler = (message) {
+          switch (message) {
+            case (final T value,):
+              controller.add(value);
+            case (final Object error, final StackTrace stackTrace):
+              controller.addError(error, stackTrace);
+            case [final Object? error, final Object? stack]: // onError: two strings, then exit
+              final remote = RemoteError('$error', '$stack');
+              controller.addError(remote, remote.stackTrace);
+            case null: // onExit: every value was sent before it
+              close();
+              unawaited(controller.close());
+          }
+        };
+      try {
+        isolate = await Isolate.spawn<(SendPort, Stream<T> Function())>(
+          _run<T>,
+          (receive.sendPort, job),
+          onError: receive.sendPort,
+          onExit: receive.sendPort,
+          debugName: debugName,
+        );
+        if (cancelled) isolate?.kill(priority: Isolate.immediate);
+      } on Object catch (error, stackTrace) {
+        close();
+        controller.addError(error, stackTrace);
+        unawaited(controller.close());
+      }
+    }
+    ..onCancel = () {
+      cancelled = true;
+      // Nobody listens any more: stop the work.
+      isolate?.kill(priority: Isolate.immediate);
+      close();
+    };
+  return controller.stream;
+}
+
+/// The isolate's entry point: sends every value as a one-element record and an error as
+/// `(error, stackTrace)`, then ends the isolate. `Isolate.exit` ends it even when the job left a
+/// timer or an open port behind, and its `onExit` message tells the owner the stream is done.
+Future<void> _run<T>((SendPort, Stream<T> Function()) argument) async {
+  final (port, job) = argument;
+  try {
+    await for (final value in job()) {
+      port.send((value,));
+    }
+  } on Object catch (error, stackTrace) {
+    try {
+      port.send((error, stackTrace));
+    } on Object {
+      // The error holds something that cannot be sent (a port, a socket): send its text.
+      port.send((RemoteError('$error', '$stackTrace'), stackTrace));
+    }
+  }
+  Isolate.exit();
+}
+```
 
 ### `isolate_worker.dart`
 
@@ -402,32 +610,37 @@ final class IsolateWorker<Request extends Object, Response extends Object?> {
 
 ### `map_in_chunks.dart`
 
-Tested: a timer scheduled before the call runs after exactly the first 100 items; the same items
-through `Stream.fromIterable`, `await null` or `Future.microtask` let no timer in; a chunk size of
-0 throws `ArgumentError`.
+Tested: with items of 1 ms each and a 4 ms budget, a timer scheduled before the call runs after 4
+to 6 items, not after all 40; one 10 ms item ends its chunk (the timer runs after it); a budget of
+zero throws `ArgumentError`.
 
 ```dart
 // file: map_in_chunks.dart
 /// Maps [items] with [convert] on the current isolate, and lets the event loop run timers, input
-/// and frames after every [chunkSize] items.
+/// and frames each time [budget] has passed.
+///
+/// A time budget, not a count of items: one slow item cannot stretch a chunk past a frame. Keep
+/// [budget] under half a frame (16 ms at 60 Hz, 8 ms at 120 Hz) so the frame has time too.
 ///
 /// For when no isolate is available (the web) or [convert] needs objects that cannot be sent;
 /// elsewhere use `Isolate.run`.
 Future<List<R>> mapInChunks<T, R>(
   List<T> items,
   R Function(T item) convert, {
-  int chunkSize = 100,
+  Duration budget = const Duration(milliseconds: 4),
 }) async {
-  if (chunkSize < 1) {
-    throw ArgumentError.value(chunkSize, 'chunkSize', 'must be at least 1');
+  if (budget <= Duration.zero) {
+    throw ArgumentError.value(budget, 'budget', 'must be positive');
   }
   final results = <R>[];
+  final chunk = Stopwatch()..start();
   for (var i = 0; i < items.length; i++) {
     results.add(convert(items[i]));
-    if ((i + 1) % chunkSize == 0 && i + 1 < items.length) {
+    if (chunk.elapsed >= budget && i + 1 < items.length) {
       // An event, not a microtask: `await null`, `Future.microtask`, `Stream.fromIterable` and
       // `async*` continue before any timer, input or frame gets its turn.
       await Future<void>.delayed(Duration.zero);
+      chunk.reset();
     }
   }
   return results;
