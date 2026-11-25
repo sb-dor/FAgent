@@ -12,6 +12,7 @@ import 'package:flutter_code_agent/project_creation/data/project_template.dart';
 import 'package:flutter_code_agent/project_creation/models/creation_step.dart';
 import 'package:flutter_code_agent/project_creation/models/new_member_request.dart';
 import 'package:flutter_code_agent/project_creation/models/new_project_request.dart';
+import 'package:flutter_code_agent/project_rules/data/state_management_rule.dart';
 import 'package:l/l.dart';
 import 'package:path/path.dart' as p;
 import 'package:yaml/yaml.dart';
@@ -41,7 +42,7 @@ const Duration _rollbackWait = Duration(seconds: 5);
 final class ProjectCreationRepositoryImpl implements IProjectCreationRepository {
   /// Creates the repository. [flutter] gives the `flutter` executable of the SDK the form shows
   /// (`null` when there is none); [writeRules] writes the enabled built-in rules into a project
-  /// folder and returns their names; [loadAsset] reads a file of the app's assets
+  /// folder, except those named in its `without`, and returns their names; [loadAsset] reads a file of the app's assets
   /// (`rootBundle.loadString` in the app); [startProcess] starts the commands; [home] defaults to
   /// `$HOME`; [now] gives the date of the first `CHANGELOG.md` entry; [dartVersion] gives the Dart
   /// version of that SDK (for example `3.14.0`), which a monorepo needs for its SDK constraint;
@@ -68,7 +69,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   final Future<String?> Function() _dartVersion;
   final Future<String?> Function() _flutterVersion;
   final ShellEnvironment _environment;
-  final Future<List<String>> Function(String projectPath) _writeRules;
+  final Future<List<String>> Function(String projectPath, {Set<String> without}) _writeRules;
   final Future<String> Function(String key) _loadAsset;
   final DaemonProcessStarter _startProcess;
   final DateTime Function() _now;
@@ -368,7 +369,12 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         );
       }
       // An added app shares the monorepo's packages and gets the reporter they were made with.
-      if (member != null) run.memberReporter = await _sharedCrashReporter(root);
+      if (member != null) {
+        run
+          ..memberReporter = await _sharedCrashReporter(root)
+          // The same state management as the apps already there (their pubspec.yaml).
+          ..memberStateManagement = _stateManagementOf(root);
+      }
     }
     switch (run.steps[index].kind) {
       case CreationStepKind.workspace:
@@ -463,6 +469,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
       case CreationStepKind.skeleton:
         if (member != null) {
           final reporter = run.memberReporter!;
+          final stateManagement = run.memberStateManagement ?? StateManagement.control;
           await _writeAppSkeleton(
             run,
             index,
@@ -470,6 +477,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
             package: member.packageName,
             monorepo: true,
             crashReporter: reporter,
+            stateManagement: stateManagement,
           );
           // A root without `build_runner` cannot build the workspace; the member has it.
           final atRoot = _dependsOn(_rootPubspec(root), 'build_runner');
@@ -482,6 +490,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
             // Only the member's files: the rest of the repository is the user's.
             fixIn: member.path,
             crashReporter: reporter,
+            stateManagement: stateManagement,
           );
           run.noteReporter(reporter);
           return;
@@ -499,6 +508,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           package: monorepo ? request.appPackageName : request.name,
           monorepo: monorepo,
           crashReporter: request.crashReporter,
+          stateManagement: request.stateManagement,
         );
         await _installSkeleton(
           run,
@@ -511,6 +521,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           fixIn: root,
           packagesWritten: true,
           crashReporter: request.crashReporter,
+          stateManagement: request.stateManagement,
         );
         run.noteReporter(request.crashReporter);
       case CreationStepKind.analyze:
@@ -519,7 +530,11 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
           'analyze',
         ], workingDirectory: member?.path ?? root);
       case CreationStepKind.rules:
-        for (final name in await _writeRules(root)) {
+        // The project gets the rule of its state management package, not the other one.
+        for (final name in await _writeRules(
+          root,
+          without: run.request.stateManagement.otherRuleNames,
+        )) {
           run.addLine(index, '✎ docs/rules/$name.md');
         }
       case CreationStepKind.firstCommit:
@@ -537,8 +552,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
   /// run wrote the [packagesWritten], in `packages/ui` and, in a monorepo, in the shared packages),
   /// `pub get` at the root, `build_runner` in [buildIn] (over the whole [workspace] or that package
   /// alone), and the imports sorted in [fixIn]. With [addRootBuildRunner] the root gets
-  /// `build_runner` first. The `pub add`s have the packages of [crashReporter]; an app in `apps/`
-  /// depends on the shared packages by path.
+  /// `build_runner` first. The `pub add`s have the packages of [crashReporter] and of
+  /// [stateManagement]; an app in `apps/` depends on the shared packages by path.
   Future<void> _installSkeleton(
     _Run run,
     int index, {
@@ -547,6 +562,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required bool workspace,
     required String fixIn,
     required CrashReporter crashReporter,
+    required StateManagement stateManagement,
     bool packagesWritten = false,
     bool addRootBuildRunner = false,
   }) async {
@@ -560,6 +576,7 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
         uiPath: oneApp ? 'packages/ui' : p.join('..', '..', 'packages', 'ui'),
         sharedPackagesPath: oneApp ? null : p.join('..', '..', 'packages'),
         crashReporter: crashReporter,
+        stateManagement: stateManagement,
       ),
     ], workingDirectory: appPath);
     // The packages declare their own dependencies; an add leaves the user's ones alone.
@@ -809,6 +826,12 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     run.addLine(index, '✎ $crashReporterConfigPath');
   }
 
+  /// The state management of the project at [root]: that of its `pubspec.yaml` files.
+  static StateManagement _stateManagementOf(String root) {
+    final rule = stateManagementRuleOf(root);
+    return StateManagement.values.firstWhere((value) => value.ruleName == rule);
+  }
+
   /// The crash reporter [crashReporterConfigPath] of the monorepo at [root] names. Fails the step
   /// when the monorepo lacks its shared packages (made before them) or the file names none.
   Future<CrashReporter> _sharedCrashReporter(String root) async {
@@ -973,7 +996,8 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     return was;
   }
 
-  /// Copies the template with the package name filled in, the files of [crashReporter], and the
+  /// Copies the template with the package name filled in, the files of [crashReporter] and of
+  /// [stateManagement] (its observer, startup and `build.yaml`), and the
   /// telemetry module with its tests next to its glue, then keeps the Sentry DSN out of git and
   /// edits `pubspec.yaml`: gen-l10n on and, in a one-app project, `packages/ui` as a workspace
   /// member and the shader of its shimmer. In a [monorepo] only the app's files go to [appPath],
@@ -986,9 +1010,13 @@ final class ProjectCreationRepositoryImpl implements IProjectCreationRepository 
     required String package,
     required bool monorepo,
     required CrashReporter crashReporter,
+    required StateManagement stateManagement,
   }) async {
     final label = monorepo ? '${p.split(p.relative(appPath, from: run.root)).join('/')}/' : '';
-    final reporterFiles = crashReporterTemplateFiles(crashReporter);
+    final reporterFiles = <String, String>{
+      ...crashReporterTemplateFiles(crashReporter),
+      ...stateManagementTemplateFiles(stateManagement),
+    };
     await _copyTemplate(
       run,
       index,
@@ -1209,6 +1237,10 @@ final class _Run {
 
   /// The crash reporter of an add with the skeleton, read from the monorepo before its first step.
   CrashReporter? memberReporter;
+
+  /// The state management of an add with the skeleton, read from the monorepo's apps before its
+  /// first step.
+  StateManagement? memberStateManagement;
 
   /// The root's `pubspec.lock` before an add; `null` when there was none.
   Uint8List? savedLock;

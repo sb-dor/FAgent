@@ -74,6 +74,29 @@ enum CrashReporter {
   logOnly,
 }
 
+/// The package a project's business logic is written with. The project gets the rule of this one
+/// only (`docs/rules/controllers.md` or `docs/rules/bloc.md`) and, with the architecture skeleton,
+/// its observer and packages.
+enum StateManagement {
+  /// `package:control`: controllers with `handle(...)`.
+  control,
+
+  /// `package:bloc` and `flutter_bloc`: one event, one `on<>`, the global sequential queue.
+  bloc;
+
+  /// The name of the built-in rule (`docs/rules/<ruleName>.md`) a project with this one gets.
+  String get ruleName => switch (this) {
+    StateManagement.control => 'controllers',
+    StateManagement.bloc => 'bloc',
+  };
+
+  /// The rules a project with this one leaves out: those of the others.
+  Set<String> get otherRuleNames => <String>{
+    for (final other in StateManagement.values)
+      if (other != this) other.ruleName,
+  };
+}
+
 /// What the New project wizard asks for.
 @freezed
 abstract class NewProjectRequest with _$NewProjectRequest {
@@ -120,6 +143,10 @@ abstract class NewProjectRequest with _$NewProjectRequest {
 
     /// Where the skeleton's app reports its errors; only the architecture skeleton has one.
     @Default(CrashReporter.sentry) CrashReporter crashReporter,
+
+    /// The state management package: decides the rule the project gets and, with the skeleton,
+    /// its observer and packages.
+    @Default(StateManagement.control) StateManagement stateManagement,
   }) = _NewProjectRequest;
 
   const NewProjectRequest._();

@@ -155,6 +155,7 @@ void main() {
     expect(ruleFiles.map(name).toSet(), <String>{
       'architecture',
       'controllers',
+      'bloc',
       'repositories',
       'dependencies',
       'widgets',

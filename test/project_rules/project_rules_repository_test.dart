@@ -83,6 +83,71 @@ void main() {
     },
   );
 
+  group('state management rules', () {
+    setUp(() {
+      skills = MemorySkillsRepository(
+        items: [
+          memoryRule('architecture', description: 'Layout and layers.'),
+          memoryRule('controllers', description: 'control.'),
+          memoryRule('bloc', description: 'bloc.'),
+        ],
+        texts: {
+          'rule:builtin:architecture': '# Arch\n',
+          'rule:builtin:controllers': '# Controllers\n',
+          'rule:builtin:bloc': '# Bloc\n',
+        },
+      );
+      repository = ProjectRulesRepositoryImpl(skills: skills, projects: projects);
+    });
+
+    test('writeBuiltinRules leaves out the rules it is told to', () async {
+      final written = await repository.writeBuiltinRules(
+        project.path,
+        without: const <String>{'controllers'},
+      );
+
+      expect(written, <String>['architecture', 'bloc']);
+      expect(File(p.join(project.path, 'docs/rules/controllers.md')).existsSync(), isFalse);
+      expect(read('AGENTS.md'), isNot(contains('controllers.md')));
+    });
+
+    test('builtinRules of a project on flutter_bloc checks bloc and not controllers', () async {
+      File(p.join(project.path, 'pubspec.yaml')).writeAsStringSync(
+        'name: shop\ndependencies:\n  flutter_bloc: ^9.1.1\n  bloc_concurrency: ^0.3.0\n',
+      );
+
+      final rules = await repository.builtinRules(projectRoot: project.path);
+
+      expect(
+        <String, bool>{for (final rule in rules) rule.name: rule.enabled},
+        <String, bool>{'architecture': true, 'controllers': false, 'bloc': true},
+      );
+    });
+
+    test('builtinRules of a monorepo whose app uses bloc checks bloc', () async {
+      File(p.join(project.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: shop\nworkspace:\n  - apps/app\n');
+      File(p.join(project.path, 'apps', 'app', 'pubspec.yaml'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('name: shop_app\ndependencies:\n  bloc: ^9.2.1\n');
+
+      final rules = await repository.builtinRules(projectRoot: project.path);
+
+      expect(rules.singleWhere((rule) => rule.name == 'bloc').enabled, isTrue);
+      expect(rules.singleWhere((rule) => rule.name == 'controllers').enabled, isFalse);
+    });
+
+    test('builtinRules of any other project checks controllers and not bloc', () async {
+      File(p.join(project.path, 'pubspec.yaml'))
+          .writeAsStringSync('name: shop\ndependencies:\n  control:\n    git: x\n');
+
+      final rules = await repository.builtinRules(projectRoot: project.path);
+
+      expect(rules.singleWhere((rule) => rule.name == 'bloc').enabled, isFalse);
+      expect(rules.singleWhere((rule) => rule.name == 'controllers').enabled, isTrue);
+    });
+  });
+
   test('writeBuiltinRules without an enabled rule writes nothing', () async {
     await skills.setEnabled('rule:builtin:architecture', enabled: false);
 

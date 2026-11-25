@@ -47,7 +47,7 @@ final class FakeProjectRules implements IProjectRulesRepository {
   Future<bool> canHaveRules(String projectRoot) async => !goneFolders.contains(projectRoot);
 
   @override
-  Future<List<ProjectRule>> builtinRules() async => rules;
+  Future<List<ProjectRule>> builtinRules({String? projectRoot}) async => rules;
 
   @override
   Future<void> write(String projectRoot, List<ProjectRule> rules) async {
@@ -57,10 +57,13 @@ final class FakeProjectRules implements IProjectRulesRepository {
   }
 
   @override
-  Future<List<String>> writeBuiltinRules(String projectPath) async {
+  Future<List<String>> writeBuiltinRules(
+    String projectPath, {
+    Set<String> without = const {},
+  }) async {
     final enabled = <ProjectRule>[
       for (final rule in rules)
-        if (rule.enabled) rule,
+        if (rule.enabled && !without.contains(rule.name)) rule,
     ];
     if (enabled.isNotEmpty) await write(projectPath, enabled);
     return <String>[for (final rule in enabled) rule.name];

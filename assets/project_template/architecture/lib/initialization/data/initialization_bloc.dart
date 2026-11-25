@@ -1,0 +1,88 @@
+import 'dart:async';
+
+import 'package:bloc/bloc.dart';
+import 'package:bloc_concurrency/bloc_concurrency.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:l/l.dart';
+import 'package:{{package}}/_core/telemetry/bloc_observer.dart';
+import 'package:{{package}}/_core/telemetry/error_util.dart';
+import 'package:{{package}}/initialization/data/initialize_dependencies.dart';
+import 'package:{{package}}/initialization/models/dependencies.dart';
+
+/// Ephemerally initializes the app and prepares it for use.
+Future<Dependencies>? _$initializeApp;
+
+/// Initializes the app and prepares it for use.
+Future<Dependencies> $initializeApp({
+  void Function(int progress, String message)? onProgress,
+  Future<void> Function(Dependencies dependencies)? onSuccess,
+  void Function(Object error, StackTrace stackTrace)? onError,
+}) => _$initializeApp ??= Future<Dependencies>(() async {
+  late final WidgetsBinding binding;
+  try {
+    binding = WidgetsFlutterBinding.ensureInitialized()..deferFirstFrame();
+    await _catchExceptions();
+    // One queue per bloc and one observer for all of them (docs/rules/bloc.md): a bloc copies
+    // `Bloc.transformer` when it is created, so both are set before the first one.
+    Bloc.transformer = sequential();
+    Bloc.observer = const AppBlocObserver();
+    final dependencies = await $initializeDependencies(onProgress: onProgress)
+        .timeout(const Duration(minutes: 1));
+    await onSuccess?.call(dependencies);
+    return dependencies;
+  } on Object catch (error, stackTrace) {
+    onError?.call(error, stackTrace);
+    // A failed step is already reported (fatal) before the error log closed; this is for the rest.
+    if (error is! InitializationException) {
+      ErrorUtil.logError(error, stackTrace, hint: 'STARTUP ERROR', fatal: true).ignore();
+    }
+    rethrow;
+  } finally {
+    binding.addPostFrameCallback((_) {
+      // Closes splash screen, and show the app layout.
+      binding.allowFirstFrame();
+    });
+    _$initializeApp = null;
+  }
+});
+
+/// Disposes the app and releases all resources.
+@visibleForTesting
+Future<void> $disposeApp(Dependencies dependencies) async {
+  // Close what the dependencies own, in reverse order of creation.
+  // Last: the closing above may still report.
+  await dependencies.closeErrorLog();
+}
+
+/// Whether [_catchExceptions] already installed the handlers. A retried start runs it again, and a
+/// second install would wrap the first handler and report every error twice.
+bool _handlersInstalled = false;
+
+Future<void> _catchExceptions() async {
+  if (_handlersInstalled) return;
+  _handlersInstalled = true;
+  try {
+    PlatformDispatcher.instance.onError = (error, stackTrace) {
+      ErrorUtil.logError(error, stackTrace, hint: 'ROOT ERROR').ignore();
+      return true;
+    };
+
+    final sourceFlutterError = FlutterError.onError;
+    FlutterError.onError = (details) {
+      if (details.silent) {
+        // The framework marks these as not worth a report (a failed image load, a layout notice).
+        l.w('FLUTTER ERROR (silent) | ${details.exceptionAsString()}', details.stack);
+      } else {
+        ErrorUtil.logError(
+          details.exception,
+          details.stack ?? StackTrace.current,
+          hint: 'FLUTTER ERROR',
+        ).ignore();
+      }
+      sourceFlutterError?.call(details);
+    };
+  } on Object catch (error, stackTrace) {
+    ErrorUtil.logError(error, stackTrace).ignore();
+  }
+}

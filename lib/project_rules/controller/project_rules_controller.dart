@@ -78,7 +78,7 @@ final class ProjectRulesController extends StateController<ProjectRulesState>
     ProjectRulesState.offer(
       projectId: project.id,
       root: project.path,
-      rules: await _repository.builtinRules(),
+      rules: await _repository.builtinRules(projectRoot: project.path),
     ),
   );
 

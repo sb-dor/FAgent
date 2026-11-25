@@ -565,13 +565,14 @@ final class _Rules implements IProjectRulesRepository {
   Future<bool> canHaveRules(String projectRoot) => throw UnimplementedError();
 
   @override
-  Future<List<ProjectRule>> builtinRules() => throw UnimplementedError();
+  Future<List<ProjectRule>> builtinRules({String? projectRoot}) => throw UnimplementedError();
 
   @override
   Future<void> write(String projectRoot, List<ProjectRule> rules) => throw UnimplementedError();
 
   @override
-  Future<List<String>> writeBuiltinRules(String projectPath) => throw UnimplementedError();
+  Future<List<String>> writeBuiltinRules(String projectPath, {Set<String> without = const {}}) =>
+      throw UnimplementedError();
 
   @override
   Future<void> markOffered(int projectId) async => calls.add('markOffered $projectId');

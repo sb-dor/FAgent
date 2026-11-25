@@ -14,8 +14,13 @@ description: "Project layout and layers, and the shape of list, creation, deleti
   member of `apps/` is laid out as an app, every member of `packages/` as a package. A project
   that already has another layout (`lib/src/`, `common/`, `feature/`) keeps it. See "Project
   structure".
-- A feature has `models/`, `data/` (repository), `controller/`, `widgets/`. Name files
-  `<feature>_<role>.dart`.
+- A project has one state management package, chosen when it is created: `control` (its rule is
+  `docs/rules/controllers.md`) or `bloc` (its rule is `docs/rules/bloc.md`). `docs/rules/` holds
+  only the rule of the one the project uses. In a bloc project read "bloc" wherever these rules say
+  "controller", `bloc/` for `controller/`, and the section of the same name in `bloc.md` wherever
+  they point to `controllers.md`. Never mix the two, and never add a third.
+- A feature has `models/`, `data/` (repository), `controller/` (`bloc/` in a bloc project),
+  `widgets/`. Name files `<feature>_<role>.dart`.
 - Dependencies point one way: widgets -> controller -> repository. A widget never touches a
   repository.
 - Data providers only when needed: a repository with one simple source queries it and converts
@@ -38,7 +43,9 @@ description: "Project layout and layers, and the shape of list, creation, deleti
   a few places; when a field is added later, the compiler then points at every place that must
   fill it, instead of the field silently staying `null`.
 - A control used by two or more features goes to `lib/_core/widget/`.
-- No Provider, Riverpod, MobX, GetX or BLoC for widget state.
+- No Provider, Riverpod, MobX, GetX, bloc or `Cubit` for widget state (form fields, toggles,
+  selections): it lives in the widget. The project's controllers or blocs are for asynchronous work
+  that can fail.
 - Law of Demeter: talk to your direct collaborators, not to their insides (`car.start()`, not
   `car.engine.start()`). See "Law of Demeter".
 - Single source of truth: every piece of data has one owner (a database, a repository, an app-wide

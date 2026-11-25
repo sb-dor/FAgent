@@ -17,7 +17,6 @@ const List<String> projectTemplateFiles = <String>[
   // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles),
   // the crash reporter is the one chosen (crashReporterTemplateFiles).
   'lib/_core/telemetry/app_zone.dart',
-  'lib/_core/telemetry/controller_observer.dart',
   'lib/_core/telemetry/error_util.dart',
   'lib/_core/telemetry/expected_failure.dart',
   'lib/_core/telemetry/telemetry_setup.dart',
@@ -92,13 +91,11 @@ const List<String> projectTemplateFiles = <String>[
   'lib/initialization/models/dependencies.dart',
   'lib/initialization/widget/dependencies_scope.dart',
   'lib/initialization/widget/app.dart',
-  'lib/initialization/data/initialization.dart',
   'lib/initialization/data/initialize_dependencies.dart',
   'lib/home/widgets/home_screen.dart',
   'test/widget_test.dart',
   'l10n.yaml',
   'analysis_options.yaml',
-  'build.yaml',
   'config/.gitkeep',
   'Makefile',
   'CHANGELOG.md',
@@ -130,7 +127,6 @@ const List<String> projectTemplateAppFiles = <String>[
   // The glue of the error pipeline; the module next to it is FAgent's own (telemetryModuleFiles),
   // the crash reporter is the one chosen (crashReporterTemplateFiles).
   'lib/_core/telemetry/app_zone.dart',
-  'lib/_core/telemetry/controller_observer.dart',
   'lib/_core/telemetry/error_util.dart',
   'lib/_core/telemetry/expected_failure.dart',
   'lib/_core/telemetry/telemetry_setup.dart',
@@ -188,12 +184,10 @@ const List<String> projectTemplateAppFiles = <String>[
   'lib/initialization/models/dependencies.dart',
   'lib/initialization/widget/dependencies_scope.dart',
   'lib/initialization/widget/app.dart',
-  'lib/initialization/data/initialization.dart',
   'lib/initialization/data/initialize_dependencies.dart',
   'lib/home/widgets/home_screen.dart',
   'test/widget_test.dart',
   'l10n.yaml',
-  'build.yaml',
   'config/.gitkeep',
 ];
 
@@ -343,6 +337,35 @@ Map<String, String> crashReporterTemplateFiles(CrashReporter reporter) => <Strin
         'test/_core/telemetry/crash_reporter_test.dart',
   },
 };
+
+/// The files of [stateManagement] an app with the skeleton gets besides [projectTemplateFiles]:
+/// the template file (relative to [projectTemplateRoot]) and where it goes in the app. Each has the
+/// observer of its package, the startup that installs it, and the `build.yaml` that generates
+/// freezed where that package keeps its states (`controller/` or `bloc/`).
+Map<String, String> stateManagementTemplateFiles(
+  StateManagement stateManagement,
+) => switch (stateManagement) {
+  StateManagement.control => const <String, String>{
+    'lib/_core/telemetry/controller_observer.dart': 'lib/_core/telemetry/controller_observer.dart',
+    'lib/initialization/data/initialization.dart': 'lib/initialization/data/initialization.dart',
+    'build.yaml': 'build.yaml',
+  },
+  StateManagement.bloc => const <String, String>{
+    'lib/_core/telemetry/bloc_observer.dart': 'lib/_core/telemetry/bloc_observer.dart',
+    'lib/initialization/data/initialization_bloc.dart':
+        'lib/initialization/data/initialization.dart',
+    'build_bloc.yaml': 'build.yaml',
+  },
+};
+
+/// The packages [stateManagement] adds to the skeleton's `pub add`.
+List<String> stateManagementPubAddArguments(StateManagement stateManagement) =>
+    switch (stateManagement) {
+      StateManagement.control => const <String>[
+        'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',
+      ],
+      StateManagement.bloc => const <String>['bloc', 'flutter_bloc', 'bloc_concurrency'],
+    };
 
 /// The packages [reporter] adds to the skeleton's `pub add`. Crashlytics keeps Sentry for the
 /// platforms `firebase_crashlytics` does not support (Windows, Linux).
@@ -605,7 +628,8 @@ const String controlGitUrl = 'https://github.com/PlugFox/control.git';
 const String controlGitRef = '685a9bc6ef60c987b99b5526e125813adba54e2a';
 
 /// The arguments of the one `flutter pub add` that installs the packages of the skeleton with
-/// [crashReporter]. [uiPath] is where `packages/ui` is, relative to the package that depends on it.
+/// [crashReporter] and [stateManagement]. [uiPath] is where `packages/ui` is, relative to the
+/// package that depends on it.
 ///
 /// With [sharedPackagesPath] (where a monorepo's `packages/` is, relative to the app) the app gets
 /// [monorepoSharedPackages] by path instead of its own `lib/_core/` copies, and leaves the packages
@@ -614,6 +638,7 @@ List<String> skeletonPubAddArgumentsFor({
   required String uiPath,
   String? sharedPackagesPath,
   CrashReporter crashReporter = CrashReporter.sentry,
+  StateManagement stateManagement = StateManagement.control,
 }) {
   final shared = sharedPackagesPath != null;
   return <String>[
@@ -651,7 +676,7 @@ List<String> skeletonPubAddArgumentsFor({
     // Flutter 3.47 deprecated the SDK's Material and Cupertino: the template imports these.
     'material_ui',
     'cupertino_ui',
-    'control@{git: {url: $controlGitUrl, ref: $controlGitRef}}',
+    ...stateManagementPubAddArguments(stateManagement),
     // The workspace member with the shared UI (`packages/ui`, listed under `workspace:`).
     'ui@{path: $uiPath}',
     if (shared)

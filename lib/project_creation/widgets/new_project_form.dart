@@ -72,6 +72,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
   ProjectStructure _structure = ProjectStructure.single;
   late NewProjectTemplate _template;
   CrashReporter _crashReporter = CrashReporter.sentry;
+  StateManagement _stateManagement = StateManagement.control;
   bool _gitInit = true;
   bool _openChat = true;
 
@@ -277,6 +278,7 @@ class _NewProjectFormState extends State<NewProjectForm> {
         appFolder: _appFolder.text,
         appPackage: _monorepo ? _appPackage.text : null,
         crashReporter: _crashReporter,
+        stateManagement: _stateManagement,
       ),
     );
   }
@@ -406,6 +408,8 @@ class _NewProjectFormState extends State<NewProjectForm> {
           ],
         ],
         gap,
+        _stateManagementField(context),
+        gap,
         Wrap(
           spacing: 18,
           runSpacing: 4,
@@ -527,6 +531,32 @@ class _NewProjectFormState extends State<NewProjectForm> {
               selected: reporter == _crashReporter,
               exclusive: true,
               onTap: () => setState(() => _crashReporter = reporter),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// The state management of the project: the rule it gets, and the skeleton's observer.
+  Widget _stateManagementField(BuildContext context) {
+    final localization = Localization.of(context);
+    return CreationField(
+      label: localization.newProjectStateManagement,
+      child: Wrap(
+        key: const ValueKey<String>('new-project-state-management'),
+        spacing: 6,
+        runSpacing: 6,
+        children: <Widget>[
+          for (final (value, label) in <(StateManagement, String)>[
+            (StateManagement.control, localization.newProjectStateManagementControl),
+            (StateManagement.bloc, localization.newProjectStateManagementBloc),
+          ])
+            OptionChip(
+              key: ValueKey<String>('state-management-${value.name}'),
+              label: label,
+              selected: value == _stateManagement,
+              exclusive: true,
+              onTap: () => setState(() => _stateManagement = value),
             ),
         ],
       ),

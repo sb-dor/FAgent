@@ -12,6 +12,7 @@ void main() {
       unorderedEquals(<String>[
         'rules/architecture.md',
         'rules/controllers.md',
+        'rules/bloc.md',
         'rules/repositories.md',
         'rules/dependencies.md',
         'rules/widgets.md',

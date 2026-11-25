@@ -677,6 +677,38 @@ void main() {
     });
   }
 
+  testWidgets('state management: control first, Bloc goes into the request', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+    final control = find.byKey(const ValueKey<String>('state-management-control'));
+    final bloc = find.byKey(const ValueKey<String>('state-management-bloc'));
+
+    expect(find.text('State management'), findsOneWidget);
+    expect(control, findsOneWidget);
+    await tester.ensureVisible(bloc);
+    await tester.tap(bloc);
+    await tester.pumpAndSettle();
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.stateManagement, StateManagement.bloc);
+    await disposeTestApp(tester, dependencies);
+  });
+
+  testWidgets('state management: control by default, also for a package', (tester) async {
+    await openDialog(tester);
+    await typeName(tester, 'avera_booking');
+    await tester.tap(find.byKey(const ValueKey<String>('type-package')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey<String>('state-management-control')), findsOneWidget);
+    await tester.tap(createButton());
+    await tester.pumpAndSettle();
+
+    expect(memory.requests.single.stateManagement, StateManagement.control);
+    await disposeTestApp(tester, dependencies);
+  });
+
   testWidgets('crash reports: also in a monorepo', (tester) async {
     await openDialog(tester);
     await typeName(tester, 'shop');

@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_code_agent/project_rules/data/project_rules_files.dart';
+import 'package:flutter_code_agent/project_rules/data/state_management_rule.dart';
 import 'package:flutter_code_agent/project_rules/models/project_rule.dart';
 import 'package:flutter_code_agent/projects/data/projects_repository.dart';
 import 'package:flutter_code_agent/skills/data/skills_repository.dart';
@@ -16,8 +17,10 @@ abstract interface class IProjectRulesRepository {
   /// Whether the project folder [projectRoot] exists, so rules can be written into it.
   Future<bool> canHaveRules(String projectRoot);
 
-  /// The built-in rules, in library order, with their switches.
-  Future<List<ProjectRule>> builtinRules();
+  /// The built-in rules, in library order, with their switches. For the project at [projectRoot]
+  /// only the rule of its state management package (`controllers` or `bloc`, from its
+  /// `pubspec.yaml`) is on; the other one is off.
+  Future<List<ProjectRule>> builtinRules({String? projectRoot});
 
   /// Writes [rules] into the project in [projectRoot] and updates its `AGENTS.md` and `CLAUDE.md`.
   /// `docs/rules` appears only once everything else is written, so a failure leaves the project
@@ -26,11 +29,12 @@ abstract interface class IProjectRulesRepository {
   /// Throws [FileSystemException] when the folder is gone or a file cannot be written.
   Future<void> write(String projectRoot, List<ProjectRule> rules);
 
-  /// Writes the enabled [builtinRules] into the project in [projectPath] as [write] does, and
-  /// returns their names; with none enabled it writes nothing and returns an empty list.
+  /// Writes the enabled [builtinRules] into the project in [projectPath] as [write] does, except the
+  /// rules named in [without], and returns their names; with none left it writes nothing and
+  /// returns an empty list.
   ///
   /// Throws [FileSystemException] as [write] does.
-  Future<List<String>> writeBuiltinRules(String projectPath);
+  Future<List<String>> writeBuiltinRules(String projectPath, {Set<String> without = const {}});
 
   /// Remembers that the rules were offered to project [projectId].
   Future<void> markOffered(int projectId);
@@ -56,8 +60,9 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
       FileSystemEntity.isDirectorySync(projectRoot);
 
   @override
-  Future<List<ProjectRule>> builtinRules() async {
+  Future<List<ProjectRule>> builtinRules({String? projectRoot}) async {
     final library = await _skills.watch().first;
+    final stateManagement = projectRoot == null ? null : stateManagementRuleOf(projectRoot);
     return <ProjectRule>[
       for (final rule in library.rules)
         if (rule.source == SkillSource.builtin)
@@ -65,8 +70,13 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
             id: rule.id,
             name: rule.name,
             description: rule.description,
-            // The global switch: new projects and the offer have no project exception yet.
-            enabled: rule.enabledGlobally,
+            // The global switch: new projects and the offer have no project exception yet. A
+            // project gets the rule of its own state management package only.
+            enabled:
+                rule.enabledGlobally &&
+                (stateManagement == null ||
+                    !stateManagementRuleNames.contains(rule.name) ||
+                    rule.name == stateManagement),
           ),
     ];
   }
@@ -105,10 +115,13 @@ final class ProjectRulesRepositoryImpl implements IProjectRulesRepository {
   }
 
   @override
-  Future<List<String>> writeBuiltinRules(String projectPath) async {
+  Future<List<String>> writeBuiltinRules(
+    String projectPath, {
+    Set<String> without = const {},
+  }) async {
     final rules = [
       for (final rule in await builtinRules())
-        if (rule.enabled) rule,
+        if (rule.enabled && !without.contains(rule.name)) rule,
     ];
     if (rules.isNotEmpty) await write(projectPath, rules);
     return <String>[for (final rule in rules) rule.name];

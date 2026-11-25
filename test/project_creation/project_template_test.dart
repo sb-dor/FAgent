@@ -315,6 +315,70 @@ void main() {
       );
     });
 
+    test('the state management files: control gets its observer, bloc its own', () {
+      expect(stateManagementTemplateFiles(StateManagement.control).values, <String>[
+        'lib/_core/telemetry/controller_observer.dart',
+        'lib/initialization/data/initialization.dart',
+        'build.yaml',
+      ]);
+      expect(stateManagementTemplateFiles(StateManagement.bloc), <String, String>{
+        'lib/_core/telemetry/bloc_observer.dart': 'lib/_core/telemetry/bloc_observer.dart',
+        'lib/initialization/data/initialization_bloc.dart':
+            'lib/initialization/data/initialization.dart',
+        'build_bloc.yaml': 'build.yaml',
+      });
+      for (final list in <List<String>>[projectTemplateFiles, projectTemplateAppFiles]) {
+        for (final value in StateManagement.values) {
+          expect(list, isNot(contains(anyOf(stateManagementTemplateFiles(value).values))));
+        }
+      }
+    });
+
+    test('every state management file is an asset', () async {
+      for (final value in StateManagement.values) {
+        for (final file in stateManagementTemplateFiles(value).keys) {
+          expect(
+            await rootBundle.loadString('$projectTemplateRoot$file'),
+            isNotEmpty,
+            reason: file,
+          );
+        }
+      }
+    });
+
+    test('the bloc startup sets the queue and the observer, the control one its observer', () {
+      final control = File('${projectTemplateRoot}lib/initialization/data/initialization.dart')
+          .readAsStringSync();
+      final bloc = File('${projectTemplateRoot}lib/initialization/data/initialization_bloc.dart')
+          .readAsStringSync();
+      expect(control, contains('Controller.observer = const ControllerObserver();'));
+      expect(bloc, isNot(contains('control')));
+      expect(
+        bloc,
+        allOf(
+          contains('Bloc.transformer = sequential();'),
+          contains('Bloc.observer = const AppBlocObserver();'),
+          contains("import 'package:{{package}}/_core/telemetry/bloc_observer.dart';"),
+        ),
+      );
+      expect(
+        File('${projectTemplateRoot}build_bloc.yaml').readAsStringSync(),
+        allOf(contains('lib/**/bloc/*.dart'), isNot(contains('controller'))),
+      );
+    });
+
+    test('the bloc skeleton adds bloc packages instead of control', () {
+      final control = skeletonPubAddArgumentsFor(uiPath: 'packages/ui');
+      final bloc = skeletonPubAddArgumentsFor(
+        uiPath: 'packages/ui',
+        stateManagement: StateManagement.bloc,
+      );
+      expect(control.where((argument) => argument.startsWith('control@')), hasLength(1));
+      expect(control, isNot(contains('flutter_bloc')));
+      expect(bloc, containsAll(<String>['bloc', 'flutter_bloc', 'bloc_concurrency']));
+      expect(bloc.where((argument) => argument.startsWith('control')), isEmpty);
+    });
+
     test('no old log or error stubs', () {
       for (final list in <List<String>>[
         projectTemplateFiles,
@@ -340,7 +404,6 @@ void main() {
           list,
           containsAll(<String>[
             'lib/_core/telemetry/error_util.dart',
-            'lib/_core/telemetry/controller_observer.dart',
             'lib/_core/telemetry/app_zone.dart',
             'lib/_core/telemetry/expected_failure.dart',
             'lib/_core/telemetry/telemetry_setup.dart',

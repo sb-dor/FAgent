@@ -51,7 +51,7 @@ void main() {
       flutter: () async => flutter,
       environment: environment,
       // No built-in rules: the skeleton is what this test checks.
-      writeRules: (_) async => const <String>[],
+      writeRules: (_, {without = const <String>{}}) async => const <String>[],
       loadAsset: (key) => io.File(key).readAsString(),
       dartVersion: () async => found.dartVersion,
       flutterVersion: () async => found.version,
@@ -144,6 +144,146 @@ void main() {
     },
     skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
     timeout: const Timeout(Duration(minutes: 10)),
+  );
+
+  test(
+    'a bloc project gets the bloc skeleton, and the examples of bloc.md build and pass',
+    () async {
+      final (repository, flutter, environment) = await realRepository();
+      final root = io.Directory.systemTemp.createTempSync('new_project_bloc_test');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final request = NewProjectRequest(
+        name: 'bloc_probe',
+        org: 'com.example',
+        parent: root.path,
+        platforms: const <FlutterPlatform>{FlutterPlatform.macos},
+        gitInit: false,
+        stateManagement: StateManagement.bloc,
+      );
+
+      final runs = await repository.create(request).toList();
+      expectFinished(runs.last);
+      final project = p.join(root.path, 'bloc_probe');
+      String read(String relative) => io.File(p.join(project, relative)).readAsStringSync();
+      expect(read('pubspec.yaml'), allOf(contains('flutter_bloc:'), isNot(contains('control:'))));
+      expect(read('lib/initialization/data/initialization.dart'), contains('sequential()'));
+
+      Future<void> run(String executable, List<String> arguments) async {
+        final result = await io.Process.run(
+          executable,
+          arguments,
+          workingDirectory: project,
+          environment: environment.variables,
+        );
+        expect(
+          result.exitCode,
+          0,
+          reason: '$executable ${arguments.join(' ')}\n${result.stdout}\n${result.stderr}',
+        );
+      }
+
+      // The first `dart` block under [heading] of bloc.md.
+      final rule = io.File('assets/knowledge/rules/bloc.md').readAsStringSync();
+      String block(String heading) {
+        final section = rule.substring(rule.indexOf('## $heading\n'));
+        final start = section.indexOf('```dart\n') + '```dart\n'.length;
+        return section.substring(start, section.indexOf('\n```', start));
+      }
+
+      void write(String relative, String text) => io.File(p.join(project, relative))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync(text);
+
+      write('lib/products/data/products_repository.dart', '''
+import 'package:bloc_probe/products/models/products_data.dart';
+
+/// Pages of products.
+abstract interface class IProductsRepository {
+  /// The page [number], from 1.
+  Future<ProductsPage> page(int number);
+}
+''');
+      write('lib/products/models/products_data.dart', '''
+import 'package:meta/meta.dart';
+
+/// One page of products.
+@immutable
+final class ProductsPage {
+  /// Creates a page.
+  const ProductsPage({required this.rows, required this.hasMore});
+
+  /// The products of the page.
+  final List<String> rows;
+
+  /// Whether a page follows.
+  final bool hasMore;
+}
+
+/// The products on screen.
+@immutable
+final class ProductsData {
+  /// Creates the data.
+  const ProductsData({required this.rows, required this.nextPage, required this.hasMore});
+
+  /// The data of the first page.
+  factory ProductsData.firstPage(ProductsPage page) =>
+      ProductsData(rows: page.rows, nextPage: 2, hasMore: page.hasMore);
+
+  /// No products yet.
+  static const ProductsData empty = ProductsData(rows: <String>[], nextPage: 1, hasMore: true);
+
+  /// The products loaded so far.
+  final List<String> rows;
+
+  /// The page to load next.
+  final int nextPage;
+
+  /// Whether a page follows.
+  final bool hasMore;
+
+  /// These products and those of [page].
+  ProductsData withPage(ProductsPage page) => ProductsData(
+    rows: <String>[...rows, ...page.rows],
+    nextPage: nextPage + 1,
+    hasMore: page.hasMore,
+  );
+}
+''');
+      // The rule's imports are package:bloc and freezed_annotation; the model files sort between.
+      final bloc = block('One file per bloc').replaceFirst(
+        "import 'package:freezed_annotation/freezed_annotation.dart';",
+        "import 'package:bloc_probe/products/data/products_repository.dart';\n"
+            "import 'package:bloc_probe/products/models/products_data.dart';\n"
+            "import 'package:freezed_annotation/freezed_annotation.dart';",
+      );
+      write('lib/products/bloc/products_bloc.dart', '$bloc\n');
+      write('test/products/products_bloc_test.dart', '''
+import 'package:bloc_probe/products/bloc/products_bloc.dart';
+import 'package:bloc_probe/products/data/products_repository.dart';
+import 'package:bloc_probe/products/models/products_data.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
+
+const ProductsPage page1 = ProductsPage(rows: <String>['tea'], hasMore: false);
+final ProductsData someRows = ProductsData.firstPage(
+  const ProductsPage(rows: <String>['coffee'], hasMore: true),
+);
+
+${block('Testing a bloc')}
+''');
+
+      await run(flutter, const <String>['pub', 'add', 'dev:mocktail']);
+      await run('dart', const <String>[
+        'run',
+        'build_runner',
+        'build',
+        '--delete-conflicting-outputs',
+      ]);
+      await run(flutter, const <String>['analyze']);
+      await run(flutter, const <String>['test']);
+    },
+    skip: enabled ? false : 'set FLUTTER_RUN_TEST=1 to run (needs the network)',
+    timeout: const Timeout(Duration(minutes: 15)),
   );
 
   test(

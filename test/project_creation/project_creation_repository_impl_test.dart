@@ -132,8 +132,12 @@ void main() {
   /// Every project path `writeRules` was called with.
   late List<String> rulesWritten;
 
-  Future<List<String>> writeRules(String projectPath) async {
+  /// The rules each `writeRules` call was told to leave out.
+  late List<Set<String>> rulesLeftOut;
+
+  Future<List<String>> writeRules(String projectPath, {Set<String> without = const {}}) async {
     rulesWritten.add(projectPath);
+    rulesLeftOut.add(without);
     if (ruleNames.isNotEmpty) {
       Directory(p.join(projectPath, 'docs', 'rules')).createSync(recursive: true);
     }
@@ -217,6 +221,7 @@ void main() {
     flutterVersion = '3.50.0';
     ruleNames = <String>['a'];
     rulesWritten = <String>[];
+    rulesLeftOut = <Set<String>>[];
     started = <ScriptedDaemonProcess>[];
     script = finish;
   });
@@ -236,6 +241,7 @@ void main() {
       FlutterPlatform.android,
     },
     CrashReporter crashReporter = CrashReporter.sentry,
+    StateManagement stateManagement = StateManagement.control,
   }) => NewProjectRequest(
     name: 'avera_booking',
     org: 'com.example',
@@ -245,6 +251,7 @@ void main() {
     template: template,
     gitInit: gitInit,
     crashReporter: crashReporter,
+    stateManagement: stateManagement,
   );
 
   NewProjectRequest monorepo({
@@ -455,10 +462,37 @@ void main() {
         hasLength(
           projectTemplateFiles.length +
               crashReporterTemplateFiles(CrashReporter.sentry).length +
+              stateManagementTemplateFiles(StateManagement.control).length +
               telemetryModuleFiles.length +
               telemetryModuleTestFiles.length,
         ),
       );
+    });
+
+    test('a bloc skeleton gets the bloc observer, startup and build.yaml', () async {
+      await build().create(request(gitInit: false, stateManagement: StateManagement.bloc)).toList();
+
+      String read(String relative) => File(p.join(path(), relative)).readAsStringSync();
+      expect(
+        read('lib/_core/telemetry/bloc_observer.dart'),
+        contains('final class AppBlocObserver'),
+      );
+      expect(
+        File(p.join(path(), 'lib/_core/telemetry/controller_observer.dart')).existsSync(),
+        isFalse,
+      );
+      expect(
+        read('lib/initialization/data/initialization.dart'),
+        allOf(
+          contains('Bloc.observer = const AppBlocObserver();'),
+          contains("import 'package:avera_booking/_core/telemetry/bloc_observer.dart';"),
+        ),
+      );
+      expect(
+        File(p.join(path(), 'lib/initialization/data/initialization_bloc.dart')).existsSync(),
+        isFalse,
+      );
+      expect(read('build.yaml'), contains('lib/**/bloc/*.dart'));
     });
 
     group('platform files', () {
@@ -924,6 +958,10 @@ void main() {
       final runs = await build().create(request()).toList();
 
       expect(rulesWritten, <String>[path()]);
+      // A control project (the default) leaves out the bloc rule.
+      expect(rulesLeftOut, <Set<String>>[
+        <String>{'bloc'},
+      ]);
       expect(rulesAtAdd, isTrue);
       expect(step(runs.last, CreationStepKind.rules).output, <String>['✎ docs/rules/a.md']);
       final kinds = runs.last.steps.map((step) => step.kind).toList();
@@ -931,6 +969,14 @@ void main() {
         kinds.indexOf(CreationStepKind.rules),
         kinds.indexOf(CreationStepKind.firstCommit) - 1,
       );
+    });
+
+    test('a bloc project leaves out the controllers rule', () async {
+      await build().create(request(stateManagement: StateManagement.bloc)).toList();
+
+      expect(rulesLeftOut, <Set<String>>[
+        <String>{'controllers'},
+      ]);
     });
 
     test('no rule written lists nothing', () async {
@@ -1464,6 +1510,24 @@ void main() {
       monorepoOnDisk();
       lockIgnored = false;
       script = resolving;
+    });
+
+    test('an app added to a bloc monorepo gets the bloc skeleton', () async {
+      File(file('apps/app/pubspec.yaml'))
+        ..parent.createSync(recursive: true)
+        ..writeAsStringSync('name: shop_app\ndependencies:\n  flutter_bloc: ^9.1.1\n');
+
+      await build().addMember(member()).toList();
+
+      expect(File(file('apps/admin/lib/_core/telemetry/bloc_observer.dart')).existsSync(), isTrue);
+      expect(
+        File(file('apps/admin/lib/_core/telemetry/controller_observer.dart')).existsSync(),
+        isFalse,
+      );
+      final pubAdd = commands().firstWhere(
+        (command) => (command[1]! as List<String>).take(2).join(' ') == 'pub add',
+      );
+      expect(pubAdd[1], containsAll(<String>['bloc', 'flutter_bloc', 'bloc_concurrency']));
     });
 
     test('add flutter app with the skeleton', () async {
