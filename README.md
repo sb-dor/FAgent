@@ -18,6 +18,24 @@
   <img alt="A chat with the agent: the project sidebar, the conversation with tool calls and the plan, and the Changes pane with a diff" src="docs/images/chat.png">
 </picture>
 
+## Quick start
+
+On macOS with Flutter 3.47+ and Node.js 22+ (20+ is enough for Codex alone):
+
+```bash
+git clone https://github.com/sb-dor/FAgent.git && cd FAgent
+flutter pub get && dart run build_runner build --delete-conflicting-outputs
+flutter run -d macos
+```
+
+Then, in the app:
+
+1. **Settings → Agents**: **Sign in** to Claude Code, Codex or Gemini CLI with your own subscription
+   or API key. The first start downloads the agent's adapter with `npx`, which takes a minute.
+2. **Open project** with a Flutter project's folder, or make one with **New project**.
+3. Ask the agent in the chat. **Run** starts your app; the agent sees its logs and errors and can
+   hot reload it.
+
 ## What it is
 
 FAgent is an open-source Flutter desktop app. It does not ship its own AI: it drives the coding
